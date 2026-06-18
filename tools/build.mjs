@@ -38,8 +38,9 @@ for (const dir of ["js", "audio"]) {
 }
 
 // Stamp index.html: inject build meta + version every js/css URL.
+const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
 let html = readFileSync(path.join(ROOT, "index.html"), "utf8");
-html = html.replace("</head>", `  <meta name="build" content="${V}">\n</head>`);
+html = html.replace("</head>", `  <meta name="build" content="${V}">\n  <meta name="ver" content="${pkg.version}">\n</head>`);
 html = html.replace(/(href|src)="(js\/[^"]+\.js|styles\.css)"/g,
   (_, attr, url) => `${attr}="${url}?v=${V}"`);
 writeFileSync(path.join(DIST, "index.html"), html);

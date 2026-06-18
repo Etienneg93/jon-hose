@@ -115,6 +115,7 @@
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.bodyW = this.stats.bodyW;
       this.alive = true;
+      this.nearShop = false;
     }
     applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
 
@@ -173,20 +174,30 @@
         this.water = Math.min(S.maxWater, this.water + S.waterRegen * dt);
       }
 
-      // ---- hydrant refill: stand next to one for a strong top-up at ANY
-      // water level (works even right after spraying).
+      // ---- hydrant: stand next to one to refill water and (out of combat) heal HP.
       this.nearHydrant = null;
-      if (game.hydrants && this.water < S.maxWater) {
+      if (game.hydrants) {
         for (const h of game.hydrants) {
           if (Math.abs(this.x - h.x) < JH.HYDRANT.range && Math.abs(this.y - h.y) < 24) {
             this.nearHydrant = h;
-            this.water = Math.min(S.maxWater, this.water + JH.HYDRANT.refill * dt);
-            if (Math.random() < 0.5)
-              game.particles.push(new Particle({
-                x: h.x + (Math.random() - 0.5) * 6, y: h.y, z: 8 + Math.random() * 8,
-                vx: (this.x - h.x) * 1.5, vy: 0, vz: 30,
-                life: 0.4, color: JH.PAL.waterHi, size: 2, grav: 120,
-              }));
+            if (this.water < S.maxWater) {
+              this.water = Math.min(S.maxWater, this.water + JH.HYDRANT.refill * dt);
+              if (Math.random() < 0.5)
+                game.particles.push(new Particle({
+                  x: h.x + (Math.random() - 0.5) * 6, y: h.y, z: 8 + Math.random() * 8,
+                  vx: (this.x - h.x) * 1.5, vy: 0, vz: 30,
+                  life: 0.4, color: JH.PAL.waterHi, size: 2, grav: 120,
+                }));
+            }
+            if (!game.waveActive && this.hp < S.maxHp) {
+              this.hp = Math.min(S.maxHp, this.hp + JH.HYDRANT.healRate * dt);
+              if (Math.random() < 0.5)
+                game.particles.push(new Particle({
+                  x: h.x + (Math.random() - 0.5) * 8, y: h.y, z: 8 + Math.random() * 12,
+                  vx: (this.x - h.x) * 1.2, vy: 0, vz: 25,
+                  life: 0.5, color: "#44ff88", size: 2, grav: 100,
+                }));
+            }
             break;
           }
         }
@@ -325,6 +336,49 @@
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
       });
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
+
+      // Overhead HP + H₂O bars
+      const barW = 28;
+      const bx = Math.round(sx - barW / 2);
+      const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
+      const wFrac  = Math.max(0, this.water / this.stats.maxWater);
+      const barTop = Math.round(sy - this.stats.bodyH - 12);
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
+      // HP
+      ctx.fillStyle = "#442222";
+      ctx.fillRect(bx, barTop, barW, 3);
+      ctx.fillStyle = hpFrac > 0.5 ? "#44cc44" : hpFrac > 0.25 ? "#ddaa22" : "#ee3333";
+      ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
+      // H₂O
+      ctx.fillStyle = "#1a3344";
+      ctx.fillRect(bx, barTop + 4, barW, 3);
+      ctx.fillStyle = "#66bbff";
+      ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // label
+      ctx.font = "bold 6px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#9be8ff";
+      ctx.fillText("H₂O", sx, barTop + 4 + 3 + 6);
+      ctx.textAlign = "left";
+
+      // Floating coin count above bars when standing near the vendor
+      if (this.nearShop) {
+        const coinY = barTop - 12;
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.fillRect(bx - 1, coinY - 1, barW + 2, 9);
+        ctx.fillStyle = "#ffd23f";
+        ctx.fillRect(bx + 1, coinY, 5, 5);
+        ctx.fillStyle = "#caa015";
+        ctx.fillRect(bx + 1, coinY + 3, 5, 1);
+        ctx.fillStyle = "#fff7c2";
+        ctx.fillRect(bx + 2, coinY + 1, 2, 2);
+        ctx.font = "bold 6px monospace";
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#ffd23f";
+        ctx.fillText(Math.floor(this.suds), bx + 8, coinY + 6);
+        ctx.textAlign = "left";
+      }
     }
 
     // Hose-whip swing arc that visualises melee reach.

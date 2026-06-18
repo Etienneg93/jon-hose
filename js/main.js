@@ -6,7 +6,22 @@
   "use strict";
   const JH = window.JH;
 
+  // Size the canvas drawing buffer to physical pixels so all rendering
+  // (including canvas text) is crisp at the actual screen resolution.
+  // The context transform keeps all game coordinates in 480×270 logical px.
+  function fitCanvas() {
+    const el = document.getElementById("game");
+    const ctx = el.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    el.width  = Math.round(el.offsetWidth  * dpr);
+    el.height = Math.round(el.offsetHeight * dpr);
+    ctx.setTransform(el.width / JH.VIEW_W, 0, 0, el.height / JH.VIEW_H, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+  }
+
   function boot() {
+    fitCanvas();
+    window.addEventListener("resize", fitCanvas);
     JH.Game.init();
     JH.Game.showScreen("screen-title");
 

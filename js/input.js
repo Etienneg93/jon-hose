@@ -16,9 +16,7 @@
     ArrowLeft: "left", KeyA: "left",
     ArrowRight: "right", KeyD: "right",
     KeyJ: "spray", Space: "spray",
-    KeyK: "whack",
     ShiftLeft: "dash", ShiftRight: "dash", KeyL: "dash",
-    KeyI: "jump",
     Enter: "confirm", KeyE: "confirm",   // confirm doubles as "interact" with the shop NPC
     Escape: "pause",
   };
@@ -75,9 +73,7 @@
         if (down(15)) s.right = true;
         if (down(0)) s.spray = true;  // A
         if (down(7)) s.spray = true;  // RT
-        if (down(2)) s.whack = true;  // X
         if (down(1)) s.dash = true;   // B
-        if (down(3)) s.jump = true;   // Y
         if (down(9)) { s.confirm = true; s.pause = true; } // Start
       }
 

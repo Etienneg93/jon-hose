@@ -110,6 +110,8 @@
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
       this.showScreen("hud");
+      document.getElementById("hud-wave").textContent = "Hosetown";
+      document.getElementById("hud-wave-label").classList.add("hidden");
       JH.Music.reset();
       JH.Music.start();
       this.banner("GET HOSING!", 1.4);
@@ -134,8 +136,6 @@
       const left = JH.Camera.x + 20, right = JH.Camera.x + JH.VIEW_W - 20;
       this.bounds = { minX: left, maxX: right };
       this.dropBudget = { suds: 0, items: 0 };
-
-      document.getElementById("hud-wave").textContent = wave.name;
 
       if (wave.wall) {
         // Barricade encounter: wall on the right, enemies keep coming.
@@ -171,6 +171,11 @@
     waveCleared_() {
       JH.Music.setTrack("level");
       this.waveActive = false;
+      const clearedWave = JH.LEVEL1.waves[this.waveIndex];
+      if (clearedWave) {
+        document.getElementById("hud-wave").textContent = clearedWave.name;
+        document.getElementById("hud-wave-label").classList.remove("hidden");
+      }
       this.wall = null;           // barricade (if any) is down — open the path
       JH.Camera.unlock();
       // Second Wind: heal a chunk when the area is cleared.
@@ -241,25 +246,6 @@
       const pl = this.player;
       const list = document.getElementById("shop-list");
       list.innerHTML = "";
-
-      // --- Repeatable heal: 15 Suds for 35% max HP ---
-      const HEAL_COST = 15, HEAL_FRAC = 0.35;
-      const full = pl.hp >= pl.stats.maxHp;
-      const canHeal = !full && pl.suds >= HEAL_COST;
-      const svc = document.createElement("div");
-      svc.className = "shop-service " + (full ? "owned" : canHeal ? "buyable" : "cant");
-      svc.innerHTML =
-        '<div class="tn-top"><span class="tn-name">🩹 Patch-Up Kit</span>' +
-        '<span class="tn-cost">' + (full ? "FULL HP" : "💧" + HEAL_COST) + "</span></div>" +
-        '<div class="tn-desc">Restore 35% HP on the spot — buy as often as you can afford.</div>';
-      svc.addEventListener("click", () => {
-        if (pl.hp < pl.stats.maxHp && pl.suds >= HEAL_COST) {
-          pl.suds -= HEAL_COST;
-          pl.hp = Math.min(pl.stats.maxHp, pl.hp + pl.stats.maxHp * HEAL_FRAC);
-          this.audio.play("buy"); this.renderShop();
-        } else this.audio.play("hurt");
-      });
-      list.appendChild(svc);
 
       U.branches.forEach((branch) => {
         const col = document.createElement("div");
@@ -363,8 +349,9 @@
         this.shopNpc.update(dt);
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
+        this.player.nearShop = this.nearShop;
         if (this.nearShop && this.input.pressed("confirm")) { this.openShop(); return; }
-      } else { this.nearShop = false; }
+      } else { this.nearShop = false; this.player.nearShop = false; }
 
       // --- separation so enemies don't fully stack
       this.separate();
@@ -424,15 +411,6 @@
 
     updateHUD() {
       if (!this.player) return;
-      const hp = clamp(this.player.hp / this.player.stats.maxHp, 0, 1);
-      const w = clamp(this.player.water / this.player.stats.maxWater, 0, 1);
-      document.getElementById("bar-hp").style.width = (hp * 100) + "%";
-      const wbar = document.getElementById("bar-water");
-      wbar.style.width = (w * 100) + "%";
-      // Colour the meter by pressure tier (matches doSpray): green = full power,
-      // yellow = reduced, red = low. Lets the player see when they hit hardest.
-      const tier = w >= 0.67 ? "full" : (w >= 0.33 ? "mid" : "low");
-      if (wbar.dataset.tier !== tier) { wbar.className = "bar-fill water " + tier; wbar.dataset.tier = tier; }
       document.getElementById("hud-suds").textContent = Math.floor(this.player.suds);
     },
 

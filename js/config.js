@@ -31,7 +31,7 @@
     { x: 2700, y: JH.DEPTH_MIN + 10 },
     { x: 3500, y: JH.DEPTH_MAX - 12 },
   ];
-  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // boost rate when below lowFrac of tank
+  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
 
   // Walk-up shop vendor between fights.
   JH.SHOP = { range: 28 };

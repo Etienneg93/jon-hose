@@ -31,19 +31,10 @@
 
       <!-- HUD (during play) -->
       <section id="hud" class="hidden">
-        <div class="hud-row">
-          <div class="meter">
-            <span class="meter-label">HP</span>
-            <div class="bar"><div id="bar-hp" class="bar-fill hp"></div></div>
-          </div>
-          <div class="meter">
-            <span class="meter-label">H₂O</span>
-            <div class="bar"><div id="bar-water" class="bar-fill water"></div></div>
-          </div>
-        </div>
+
         <div class="hud-row hud-right">
-          <span class="suds">💧 <span id="hud-suds">0</span></span>
-          <span class="wave" id="hud-wave">WAVE 1</span>
+          <span class="suds"><span class="suds-coin"></span><span id="hud-suds">0</span></span>
+          <span class="wave"><span class="wave-label hidden" id="hud-wave-label">Last Wave cleared: </span><span id="hud-wave">Hosetown</span></span>
         </div>
         <div id="banner" class="banner hidden"></div>
       </section>
@@ -98,8 +89,9 @@
     // Display the deployed build id (injected by tools/build.mjs); "dev" locally.
     (function () {
       var m = document.querySelector('meta[name="build"]');
+      var v = document.querySelector('meta[name="ver"]');
       var el = document.getElementById("build-tag");
-      if (el) el.textContent = "build " + (m ? m.content : "dev");
+      if (el) el.textContent = (v ? "v" + v.content + " · " : "") + (m ? m.content : "dev");
     })();
   </script>
 </body>
