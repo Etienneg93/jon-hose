@@ -1,0 +1,13 @@
+# build output (CI rebuilds it; Pages serves it)
+dist/
+
+# node
+node_modules/
+npm-debug.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/

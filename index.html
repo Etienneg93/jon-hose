@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jon Hose — Beat 'em Up</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="stage">
+    <!-- The game renders here at a fixed logical resolution, scaled up by CSS. -->
+    <canvas id="game" width="480" height="270"></canvas>
+
+    <!-- All UI overlays live on top of the canvas and are toggled via .hidden -->
+    <div id="ui">
+
+      <!-- TITLE -->
+      <section id="screen-title" class="overlay">
+        <h1 class="logo">JON&nbsp;HOSE</h1>
+        <p class="tagline">Spray first. Ask questions never.</p>
+        <div class="menu">
+          <button class="btn" data-action="start">PRESS START</button>
+        </div>
+        <div class="audio-ctl">
+          <button class="mute-btn" data-mute aria-label="Mute">🔊</button>
+          <input type="range" class="vol-slider" min="0" max="100" value="50" data-vol aria-label="Volume" />
+          <span class="vol-pct" data-volpct>50%</span>
+        </div>
+        <p class="hint">Move: WASD / Arrows &nbsp;·&nbsp; Spray: J / Space &nbsp;·&nbsp; Whack: K &nbsp;·&nbsp; Dash: Shift &nbsp;·&nbsp; Jump: I</p>
+      </section>
+
+      <!-- HUD (during play) -->
+      <section id="hud" class="hidden">
+        <div class="hud-row">
+          <div class="meter">
+            <span class="meter-label">HP</span>
+            <div class="bar"><div id="bar-hp" class="bar-fill hp"></div></div>
+          </div>
+          <div class="meter">
+            <span class="meter-label">H₂O</span>
+            <div class="bar"><div id="bar-water" class="bar-fill water"></div></div>
+          </div>
+        </div>
+        <div class="hud-row hud-right">
+          <span class="suds">💧 <span id="hud-suds">0</span></span>
+          <span class="wave" id="hud-wave">WAVE 1</span>
+        </div>
+        <div id="banner" class="banner hidden"></div>
+      </section>
+
+      <!-- SHOP (opened by walking up to the vendor) -->
+      <section id="screen-shop" class="overlay hidden">
+        <h2>OLD&nbsp;SPIGOT'S&nbsp;DEPOT</h2>
+        <p class="shop-suds">💧 Suds: <span id="shop-suds">0</span></p>
+        <div id="shop-list" class="shop-list"><!-- skill tree populated by game.js --></div>
+        <button class="btn" data-action="resume">BACK TO THE STREET ▶</button>
+      </section>
+
+      <!-- GAME OVER -->
+      <section id="screen-over" class="overlay hidden">
+        <h2 class="over">GAME OVER</h2>
+        <p id="over-stats" class="stats"></p>
+        <button class="btn" data-action="retry">TRY AGAIN</button>
+      </section>
+
+      <!-- WIN -->
+      <section id="screen-win" class="overlay hidden">
+        <h2 class="win">LEVEL CLEAR!</h2>
+        <p id="win-stats" class="stats"></p>
+        <button class="btn" data-action="retry">PLAY AGAIN</button>
+      </section>
+
+      <!-- PAUSE -->
+      <section id="screen-pause" class="overlay hidden">
+        <h2>PAUSED</h2>
+        <button class="btn" data-action="resume-pause">RESUME</button>
+        <div class="audio-ctl">
+          <button class="mute-btn" data-mute aria-label="Mute">🔊</button>
+          <input type="range" class="vol-slider" min="0" max="100" value="50" data-vol aria-label="Volume" />
+          <span class="vol-pct" data-volpct>50%</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="build-tag" class="build-tag">dev</div>
+
+  <!-- Load order matters: namespace + config first, bootstrap last. -->
+  <script src="js/config.js"></script>
+  <script src="js/assets.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/upgrades.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+  <script>
+    // Display the deployed build id (injected by tools/build.mjs); "dev" locally.
+    (function () {
+      var m = document.querySelector('meta[name="build"]');
+      var el = document.getElementById("build-tag");
+      if (el) el.textContent = "build " + (m ? m.content : "dev");
+    })();
+  </script>
+</body>
+</html>
