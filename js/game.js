@@ -110,6 +110,7 @@
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
       this.showScreen("hud");
+      JH.Music.reset();
       JH.Music.start();
       this.banner("GET HOSING!", 1.4);
     },
@@ -146,6 +147,7 @@
         this.dropBudget = { suds: 14, items: 7 };             // anti-farm cap
         this.banner("BARRICADE! SMASH THROUGH", 1.6);
       } else if (wave.boss) {
+        JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
         const bdef = (bt === "switch") ? JH.SWITCH : JH.BOSS;
         this.dropBudget = { suds: 10, items: 5 };             // caps summon farming
@@ -167,6 +169,7 @@
     },
 
     waveCleared_() {
+      JH.Music.setTrack("level");
       this.waveActive = false;
       this.wall = null;           // barricade (if any) is down — open the path
       JH.Camera.unlock();
@@ -292,6 +295,7 @@
 
     // ------------------------------------------------------- end states
     win() {
+      JH.Music.setTrack("level");
       this.state = "win";
       document.getElementById("win-stats").textContent =
         "Suds banked: " + Math.floor(this.player.suds) +

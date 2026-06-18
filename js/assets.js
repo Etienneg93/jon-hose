@@ -75,31 +75,93 @@
   JH.AudioFX = AudioFX;
 
   // ---------------------------------------------------- Background music
-  // Looping track. `volume` is the MASTER volume (also scales SFX above);
-  // `muted` silences everything. Both persist in localStorage. Playback can
-  // only begin after a user gesture (browser autoplay policy) — call start()
-  // from a click/keypress.
+  // Two-track player: `level` theme plays during exploration/waves; `boss`
+  // theme during boss fights. Quick fade (~0.3s) cross-switches on demand.
+  // `volume` and `muted` are MASTER controls shared with SFX above.
   const Music = {
-    el: null, volume: 0.5, muted: false, started: false,
-    src: "audio/jon-hose-rush.mp3",
+    volume: 0.5, muted: false, started: false,
+    current: "level",
+    fadeDur: 0.3,                 // seconds — quick "cut-ish" fade
+    _timer: null,                 // active fade interval handle
+    tracks: {
+      level: { src: "audio/jon-hose-main.mp3", el: null, gain: 1 },
+      boss:  { src: "audio/jon-hose-rush.mp3", el: null, gain: 0 },
+    },
+
     init() {
       this.load();
-      try {
-        this.el = new Audio(this.src);
-        this.el.loop = true;
-        this.el.preload = "auto";
-      } catch (e) { this.el = null; }
+      for (const name in this.tracks) {
+        const t = this.tracks[name];
+        try {
+          t.el = new Audio(t.src);
+          t.el.loop = true;
+          t.el.preload = "auto";
+        } catch (e) { t.el = null; }
+      }
+      this.current = "level";
+      this.tracks.level.gain = 1;
+      this.tracks.boss.gain = 0;
       this.apply();
     },
-    apply() { if (this.el) this.el.volume = this.muted ? 0 : this.volume; },
-    start() {
-      if (!this.el) return;
-      this.started = true;
-      if (!this.muted && this.el.paused) {
-        const p = this.el.play();
-        if (p && p.catch) p.catch(() => {});   // ignore autoplay rejections
+
+    // Effective element volume = master * per-track fade gain (0 when muted).
+    apply() {
+      for (const name in this.tracks) {
+        const t = this.tracks[name];
+        if (t.el) t.el.volume = this.muted ? 0 : this.volume * t.gain;
       }
     },
+
+    _play(t) {
+      if (!t || !t.el || !t.el.paused) return;
+      const p = t.el.play();
+      if (p && p.catch) p.catch(() => {});   // ignore autoplay rejections
+    },
+
+    start() {
+      this.started = true;
+      if (this.muted) return;
+      this._play(this.tracks[this.current]);
+    },
+
+    // Quick fade (~0.3s): fade the current track out, start the target.
+    // No-op if already on `name`.
+    setTrack(name) {
+      if (!this.tracks[name] || name === this.current) return;
+      const from = this.tracks[this.current];
+      const to = this.tracks[name];
+      this.current = name;
+      if (this._timer) { clearInterval(this._timer); this._timer = null; }
+      const t0 = performance.now();
+      this._timer = setInterval(() => {
+        const k = Math.min(1, (performance.now() - t0) / (this.fadeDur * 1000));
+        if (from) from.gain = 1 - k;
+        this.apply();
+        if (k >= 1) {
+          clearInterval(this._timer); this._timer = null;
+          if (from && from.el && from !== to && !from.el.paused) from.el.pause();
+          if (from) from.gain = 0;
+          if (to) {
+            to.gain = 1;
+            if (to.el) { try { to.el.currentTime = 0; } catch (e) {} }
+            if (this.started && !this.muted) this._play(to);
+          }
+          this.apply();
+        }
+      }, 16);
+    },
+
+    // Back to the level theme at full gain; stop/rewind boss; cancel fades.
+    reset() {
+      if (this._timer) { clearInterval(this._timer); this._timer = null; }
+      this.current = "level";
+      this.tracks.level.gain = 1;
+      this.tracks.boss.gain = 0;
+      const b = this.tracks.boss.el;
+      if (b && !b.paused) { try { b.currentTime = 0; } catch (e) {} b.pause(); }
+      this.apply();
+    },
+
     setVolume(v) {
       this.volume = Math.max(0, Math.min(1, v));
       if (this.volume > 0) this.muted = false;
