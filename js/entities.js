@@ -105,7 +105,7 @@
       this.water = this.stats.maxWater;
       this.suds = 0;
       this.sudsEarned = 0;
-      this.dashTimer = 0; this.dashCdTimer = 0;
+      this.dashTimer = 0; this.dashCdTimer = 0; this.dashBoostTimer = 0;
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
       this.regenLock = 0;
@@ -131,10 +131,19 @@
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
       let mx = (In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0);
-      let my = (In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0);
+      // Suppress vertical movement when near shop — up/down is used for shop navigation.
+      let my = this.nearShop ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
       // Facing is LOCKED while spraying so you can back-pedal and keep aim.
       if (mx !== 0 && !wantSpray) this.facing = mx > 0 ? 1 : -1;
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
+
+      // ---- dash boost timer + trailing particles
+      if (this.dashBoostTimer > 0) {
+        this.dashBoostTimer -= dt;
+        if (this.dashTimer <= 0 && Math.random() < 0.4)
+          burst(game, this.x - this.facing * 4, this.y, 4, JH.PAL.water, 1,
+            { speed: 28, life: 0.35, up: 8, grav: 150, size: 2 });
+      }
 
       // ---- dash
       if (In.pressed("dash") && this.dashCdTimer <= 0 && (mx || my)) {
@@ -142,6 +151,7 @@
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
         this._dashX = mx || this.facing; this._dashY = my;
         game.audio.play("jump");
+        if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
       }
@@ -151,6 +161,8 @@
         mx = this._dashX; my = this._dashY; speed = S.dashSpeed;
       } else if (this.spraying) {
         speed *= 0.55; // slow while hosing
+      } else if (this.dashBoostTimer > 0 && S.dashBoost > 0) {
+        speed += S.dashBoost;
       }
       const len = Math.hypot(mx, my) || 1;
       this.x += (mx / len) * speed * dt;
@@ -172,7 +184,8 @@
 
       // ---- water regen (after a short delay since last spray)
       if (!this.spraying && this.regenLock <= 0 && this.water < S.maxWater) {
-        this.water = Math.min(S.maxWater, this.water + S.waterRegen * dt);
+        const moveBon = ((mx !== 0 || my !== 0) && S.moveRegen > 0) ? S.moveRegen : 0;
+        this.water = Math.min(S.maxWater, this.water + (S.waterRegen + moveBon) * dt);
       }
 
       // ---- hydrant: stand next to one to refill water and (out of combat) heal HP.
@@ -210,6 +223,7 @@
 
       // ---- animation
       const moving = (mx || my) && this.dashTimer <= 0;
+      this.walking = moving;
       this.state = this.spraying ? "spray" : (moving ? "walk" : "idle");
       this.animate(dt, moving);
     }
@@ -221,15 +235,14 @@
       this.sprayDry = dry;
       this.regenLock = S.regenDelay;
 
-      // Water PRESSURE falls in tiers as the tank drains, cutting BOTH the
-      // beam's damage and its range:
-      //   100–67% full power · 67–33% slight drop · 33–0% low · empty = sputter
+      // Water PRESSURE tiers:
+      //   80–100% bonus power · 25–80% full · <25% low · empty = sputter
       const frac = S.maxWater > 0 ? this.water / S.maxWater : 0;
       let dmgScale, rangeMult;
       if (dry)               { dmgScale = 0.18; rangeMult = 0.35; }
-      else if (frac >= 0.67) { dmgScale = 1.00; rangeMult = 1.00; }
-      else if (frac >= 0.33) { dmgScale = 0.70; rangeMult = 0.80; }
-      else                   { dmgScale = 0.45; rangeMult = 0.55; }
+      else if (frac >= 0.80) { dmgScale = 1.20; rangeMult = 1.00; }
+      else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
+      else                   { dmgScale = 0.40; rangeMult = 0.55; }
       if (!dry) this.water = Math.max(0, this.water - S.waterDrain * dt);
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
@@ -265,21 +278,44 @@
       }
 
       // Damage every enemy along the beam line within the depth band.
-      // (The hose is a continuous AoE line; pierce just flavours the look.)
       let didHit = false;
+      const hitEnemies = [];
+      let healAmt = 0;
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (Geo.inHitArc(this, e, this.facing, reach, S.sprayWidth)) {
           const mult = e.def ? (e.def.waterMult || 1) : 1;
-          e.takeDamage(S.sprayDamage * dmgScale * mult * dt, game, this.facing, 0);
+          const dmg = S.sprayDamage * dmgScale * mult * dt;
+          e.takeDamage(dmg, game, this.facing, 0);
           e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
           if (Math.random() < 0.5)
             burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
               { speed: 70, life: 0.25, size: 2 });
           didHit = true;
+          if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate;
+          if (S.splitStream) hitEnemies.push(e);
         }
       }
-      // Closed Loop: siphon water back while connecting.
+      // Vampiric Hose: convert a fraction of spray damage into HP.
+      if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
+      // Split Stream: 30% damage arc to the nearest neighbor of each hit enemy.
+      if (S.splitStream && hitEnemies.length > 0) {
+        for (const primary of hitEnemies) {
+          let nearest = null, nearDist = 80;
+          for (const e of game.enemies) {
+            if (e.dead || e === primary) continue;
+            const d = Math.hypot(e.x - primary.x, e.y - primary.y);
+            if (d < nearDist) { nearest = e; nearDist = d; }
+          }
+          if (nearest) {
+            const m2 = nearest.def ? (nearest.def.waterMult || 1) : 1;
+            nearest.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.30, game, this.facing, 0);
+            burst(game, nearest.x, nearest.y, nearest.z + 8, JH.PAL.waterHi, 2,
+              { speed: 55, life: 0.22, size: 2 });
+          }
+        }
+      }
+      // Closed Loop: reduce effective drain while hosing a target.
       if (didHit && !dry && S.waterReturn > 0)
         this.water = Math.min(S.maxWater, this.water + S.waterReturn * dt);
 
@@ -319,6 +355,11 @@
 
     takeHit(dmg, game, fromX) {
       if (this.invulnTimer > 0 || this.dashTimer > 0) return;
+      if (this.stats.dodgeChance > 0 && Math.random() < this.stats.dodgeChance) {
+        burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
+        this.invulnTimer = 0.3;
+        return;
+      }
       this.hp -= dmg;
       this.invulnTimer = this.stats.invuln;
       this.hurt();
@@ -335,6 +376,8 @@
       Assets.draw(ctx, "jon", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
+        waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
+        walking: this.walking,
       });
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
 
@@ -343,7 +386,7 @@
       const bx = Math.round(sx - barW / 2);
       const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
       const wFrac  = Math.max(0, this.water / this.stats.maxWater);
-      const barTop = Math.round(sy - this.stats.bodyH - 12);
+      const barTop = Math.round(sy - this.stats.bodyH - 20);
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
       // HP
@@ -360,7 +403,7 @@
       ctx.font = "bold 6px monospace";
       ctx.textAlign = "center";
       ctx.fillStyle = "#9be8ff";
-      ctx.fillText("H₂O", sx, barTop + 4 + 3 + 6);
+      ctx.fillText("H₂O", sx, barTop + 13);
       ctx.textAlign = "left";
 
       // Floating coin count above bars when standing near the vendor
@@ -446,9 +489,13 @@
       if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * 1.3);
       if (d.emberDmg)  d.emberDmg  = Math.round(d.emberDmg * 1.3);
       if (d.speed)     d.speed    *= 1.12;
+      if (d.bodyW)     d.bodyW = Math.round(d.bodyW * 1.22);
+      if (d.bodyH)     d.bodyH = Math.round(d.bodyH * 1.16);
       d.suds = Math.round(d.suds * 1.4);
       this.def = d;
       this.hp = this.maxHp = d.hp;
+      this.bodyW = d.bodyW;
+      this.bodyH = d.bodyH;
     }
 
     // Generic chase toward the player; subclasses override think().
@@ -500,19 +547,19 @@
 
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
-      Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
-      if (this.elite) {   // red aura ring marks the tougher act-2 foes
+      Assets.shadow(ctx, sx, sy, this.bodyW * (this.elite ? 0.85 : 0.7));
+      if (this.elite) {
         ctx.save();
-        ctx.strokeStyle = "rgba(255,80,80,0.75)";
-        ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(255,190,80,0.16)";
         ctx.beginPath();
-        ctx.ellipse(sx, sy, this.bodyW * 0.62, this.bodyW * 0.26, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.ellipse(Math.round(sx), Math.round(sy - 1), this.bodyW * 0.72, this.bodyW * 0.26, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
       Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
-        hurt: this.flashTimer > 0, wind: this.state === "wind",
+        hurt: this.flashTimer > 0, wind: this.state === "wind", elite: this.elite,
+        scale: this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
@@ -559,6 +606,29 @@
     }
   }
   JH.Charger = Charger;
+  // Add draw override to Charger after class definition
+  Charger.prototype.draw = function(ctx, cam) {
+    if (this.state === "wind") {
+      const d = this.def;
+      const range = d.chargeSpeed * d.chargeDur;
+      const band  = 18;
+      const sx = this.x - cam;
+      const sy = Geo.feetScreenY(this.y, 0);
+      const x0 = sx + this.facing * this.bodyW * 0.5;
+      const x1 = x0 + this.facing * range;
+      const xL = Math.min(x0, x1), xW = Math.abs(x1 - x0);
+      const yT = sy - band, yH = band * 2;
+      const flash = (Math.floor(this.t * 10) & 1);
+      ctx.save();
+      ctx.fillStyle = "rgba(160,80,240,0.10)";
+      ctx.fillRect(xL, yT, xW, yH);
+      ctx.strokeStyle = flash ? "#c080ff" : "rgba(160,80,240,0.30)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(xL, yT, xW, yH);
+      ctx.restore();
+    }
+    JH.Enemy.prototype.draw.call(this, ctx, cam);
+  };
 
   // ---- Pyro: ranged ember thrower, flammable ----
   class Pyro extends Enemy {
@@ -614,8 +684,15 @@
       return !this.dead;
     }
     draw(ctx, cam) {
-      Assets.draw(ctx, "ember", this.x - cam, Geo.feetScreenY(this.y, this.z), 1,
-        { size: 4, t: this.t });
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      const flash = (Math.floor(this.t * 12) & 1);
+      ctx.save();
+      ctx.strokeStyle = flash ? "#ff8800" : "#cc2200";
+      ctx.lineWidth = flash ? 1.5 : 1;
+      ctx.globalAlpha = flash ? 1.0 : 0.5;
+      ctx.strokeRect(sx - 5, sy - 7, 10, 9);
+      ctx.restore();
+      Assets.draw(ctx, "ember", sx, sy, 1, { size: 4, t: this.t });
     }
   }
   JH.Ember = Ember;

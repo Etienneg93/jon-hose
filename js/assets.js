@@ -188,19 +188,21 @@
     draw(ctx, key, x, y, facing, opt) {
       const fn = painters[key];
       if (!fn) return;
+      opt = opt || {};
       facing = facing < 0 ? -1 : 1;
       x = Math.round(x); y = Math.round(y);
       ctx.save();
       // Local-space pixel helper. Floors to integers for crisp pixels and
       // mirrors horizontally when facing left.
+      const scale = opt.scale || 1;
       const p = (lx, ly, w, h, color) => {
-        w = Math.round(w); h = Math.round(h);
-        let sx = facing === 1 ? x + Math.round(lx) : x - Math.round(lx) - w;
-        const sy = y - Math.round(ly) - h;
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        let sx = facing === 1 ? x + Math.round(lx * scale) : x - Math.round(lx * scale) - w;
+        const sy = y - Math.round(ly * scale) - h;
         ctx.fillStyle = color;
         ctx.fillRect(sx, sy, w, h);
       };
-      fn(p, opt || {}, ctx, x, y, facing);
+      fn(p, opt, ctx, x, y, facing);
       ctx.restore();
     },
   };
@@ -218,52 +220,96 @@
   Assets.shadow = shadow;
 
   // Walk-cycle leg offset from a frame counter (0..3).
-  const legStep = (frame) => [0, 2, 0, -2][frame & 3];
+  const legStep = (frame) => [2, 1, -2, -1][frame & 3];
 
   // ============================ JON ===================================
   Assets.register("jon", (p, opt) => {
     const f = opt.frame | 0;
     const state = opt.state || "idle";
     const spraying = state === "spray";
-    const moving = state === "walk";
-    const bob = moving ? Math.abs(legStep(f)) * 0.4 : 0;
+    const moving = state === "walk" || (state === "spray" && opt.walking);
+    const bob = moving ? Math.abs(legStep(f)) * 0.5 : 0;
     const ls = moving ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return; // flash on hurt
+    const wf = Math.max(0, Math.min(1, opt.waterFrac == null ? 1 : opt.waterFrac));
+    if (opt.hurt && (f & 1)) return;
 
-    // Legs
-    p(-6 + ls, 0, 5, 8, PAL.pants);
-    p(1 - ls, 0, 5, 8, PAL.pantsDk);
-    p(-6 + ls, 0, 5, 2, PAL.pantsDk);  // shoes
-    p(1 - ls, 0, 5, 2, PAL.pantsDk);
+    // Boots — dark leather, thick soles, toe cap shine
+    p(-7+ls, 0, 6, 4, "#1a0e06");
+    p( 1-ls, 0, 6, 4, "#1a0e06");
+    p(-6+ls, 1, 4, 3, "#30200e");
+    p( 2-ls, 1, 4, 3, "#30200e");
+    p(-5+ls, 2, 2, 1, "#4a3018");
+    p( 3-ls, 2, 2, 1, "#4a3018");
 
-    // Backpack tank (on the back = behind, drawn first-ish on left side)
-    p(-9, 9 + bob, 6, 13, PAL.tankDk);
-    p(-8, 10 + bob, 4, 11, PAL.tank);
-    p(-8, 18 + bob, 4, 2, PAL.tankHi);   // highlight band
-    p(-9, 22 + bob, 6, 2, PAL.tankDk);   // cap
+    // Jeans — two separate leg columns, mid-blue with highlight stripe
+    p(-7+ls, 4, 6, 9, "#1a2860");
+    p( 1-ls, 4, 6, 9, "#1a2860");
+    p(-6+ls, 5, 4, 8, "#263a8c");
+    p( 2-ls, 5, 4, 8, "#263a8c");
+    p(-5+ls, 7, 2, 5, "#3252b8");
+    p( 2-ls, 7, 2, 5, "#3252b8");
 
-    // Torso (shirt)
-    p(-6, 8 + bob, 12, 11, PAL.jonShirt);
-    p(-6, 8 + bob, 12, 2, PAL.jonShirtDk);
-    p(-6, 16 + bob, 12, 2, PAL.jonShirtDk);
+    // Backpack water tank — sits on his back (left side for right-facing)
+    // Tank body: dark shell with teal face panel
+    p(-12, 11+bob, 8, 17, "#152230");
+    p(-11, 12+bob, 6, 14, PAL.tankDk);
+    p(-11, 13+bob, 3, Math.max(1, Math.round(12*wf)), PAL.water);
+    p(-11, 25+bob, 3, 1, PAL.tankHi);
+    p(-12, 27+bob, 8, 1, "#152230");
+    // Hose outlet fitting
+    p( -6, 18+bob, 2, 3, "#0e1418");
+    p( -5, 19+bob, 1, 2, "#7a9090");
 
-    // Head
-    p(-4, 19 + bob, 9, 8, PAL.skin);
-    p(-4, 25 + bob, 9, 3, "#3a2a1c");    // hair
-    p(-4, 19 + bob, 2, 6, PAL.skinDk);   // jaw shade
-    p(3, 22 + bob, 2, 2, "#1a1a1a");     // eye (faces right)
+    // Torso — dark grey work shirt, shaded
+    p(-7, 12+bob, 12, 10, "#1a1c1e");
+    p(-6, 13+bob, 10,  9, PAL.jonShirt);
+    p(-4, 13+bob,  7,  8, "#5e6268");
+    p(-7, 21+bob, 12,  1, "#111315");
+    // Belt line
+    p(-6, 12+bob, 10, 1, "#111315");
 
-    // Arm + hose nozzle
+    // Head — face base + jaw shadows
+    p(-5, 23+bob, 10, 9, PAL.skin);
+    p(-5, 23+bob,  2, 7, PAL.skinDark);
+    p( 4, 23+bob,  1, 6, PAL.skinDark);
+    // Black hair — top 3 rows + temple tails down to eye level
+    p(-5, 29+bob, 10, 3, "#111111");
+    p(-5, 25+bob,  2, 4, "#111111");
+    p( 4, 25+bob,  1, 4, "#111111");
+    // Eyebrows
+    p(-3, 28+bob,  2, 1, "#111111");
+    p( 1, 28+bob,  2, 1, "#111111");
+    // Eyes — 2×2 white with dark iris at bottom-right of each
+    p(-3, 26+bob,  2, 2, "#f0f0e8");
+    p(-2, 26+bob,  1, 1, "#0c0c0c");
+    p( 1, 26+bob,  2, 2, "#f0f0e8");
+    p( 2, 26+bob,  1, 1, "#0c0c0c");
+    // Mouth — single warm line
+    p(-2, 24+bob,  5, 1, "#c07040");
+
+    // Supply hose — continuous rubber from tank outlet to nozzle
+    p(-5, 17+bob, 6, 2, "#2a2a2a");
+    p( 1, 16+bob, 7, 2, "#383838");
+
+    // Shirt cuff — light strip at sleeve/arm junction
+    p(4, 14+bob, 2, 5, "#c8d0d8");
+
+    // Front arm + gold nozzle
     if (spraying) {
-      p(5, 13 + bob, 7, 4, PAL.skin);        // arm forward
-      p(11, 13 + bob, 4, 5, PAL.hose);       // nozzle body
-      p(15, 14 + bob, 3, 3, PAL.hoseDk);     // nozzle tip
+      p( 5, 14+bob, 7, 4, PAL.skin);
+      p( 5, 14+bob, 2, 4, PAL.skinDark);
+      p(10, 13+bob, 6, 6, "#e8a800");
+      p(11, 14+bob, 2, 4, "#f4c800");
+      p(10, 13+bob, 1, 6, "#7a5a10");
+      p(15, 14+bob, 1, 4, "#7a5a10");
     } else {
-      p(4, 10 + bob, 4, 4, PAL.skin);        // arm at side
+      p( 5, 14+bob, 5, 4, PAL.skin);
+      p( 5, 14+bob, 2, 4, PAL.skinDark);
+      p( 7, 15+bob, 5, 4, "#e8a800");
+      p( 8, 16+bob, 2, 2, "#f4c800");
+      p( 7, 15+bob, 1, 4, "#7a5a10");
+      p(11, 16+bob, 1, 2, "#7a5a10");
     }
-    // Hose line curving from tank to hand
-    p(-3, 12 + bob, 3, 2, PAL.hose);
-    p(0, 11 + bob, 4, 2, PAL.hoseDk);
   });
 
   // ============================ MOOK ==================================
@@ -271,14 +317,19 @@
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     if (opt.hurt && (f & 1)) return;
-    p(-5 + ls, 0, 4, 7, PAL.mookDk);
-    p(1 - ls, 0, 4, 7, PAL.mookDk);
-    p(-6, 7, 12, 10, PAL.mook);            // torso
-    p(-6, 7, 12, 2, PAL.mookDk);
-    p(-3, 17, 8, 7, PAL.skin);             // head
-    p(-3, 21, 8, 3, "#222");               // beanie
-    p(2, 19, 2, 2, "#111");                // eye
-    p(opt.wind ? 6 : 4, 9, opt.wind ? 6 : 4, 4, PAL.mookDk); // arm/wind-up
+    const elite = !!opt.elite;
+    p(-6 + ls, 0, 5, 8, PAL.mookDk);
+    p(1 - ls, 0, 5, 8, PAL.mookDk);
+    p(-7, 7, 14, 11, elite ? "#b85a5a" : PAL.mook);       // torso
+    p(-7, 7, 14, 2, PAL.mookDk);
+    if (elite) {
+      p(-9, 10, 4, 7, PAL.mookDk);                         // bulked shoulder
+      p(6, 10, 4, 7, PAL.mookDk);
+    }
+    p(-4, 18, 9, 8, PAL.skin);                              // head
+    p(-4, 22, 9, 3, elite ? "#111" : "#222");               // beanie
+    p(2, 20, 2, 2, "#111");                                 // eye
+    p(opt.wind ? 6 : 4, 9, opt.wind ? 7 : 5, 5, PAL.mookDk); // arm/wind-up
   });
 
   // ========================== CHARGER ================================
@@ -287,16 +338,19 @@
     const charging = opt.state === "charge";
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     if (opt.hurt && (f & 1)) return;
-    p(-5 + ls, 0, 4, 7, PAL.chargerDk);
-    p(1 - ls, 0, 4, 7, PAL.chargerDk);
-    p(-7, 7, 14, 11, PAL.charger);
-    p(-7, 7, 14, 2, PAL.chargerDk);
-    p(-3, 18, 8, 7, PAL.skin);
-    p(-3, 22, 8, 3, "#3a1f5a");
+    const elite = !!opt.elite;
+    p(-6 + ls, 0, 5, 8, PAL.chargerDk);
+    p(1 - ls, 0, 5, 8, PAL.chargerDk);
+    p(-9, 7, 18, 12, elite ? "#8d5bca" : PAL.charger);
+    p(-9, 7, 18, 2, PAL.chargerDk);
+    p(-9, 17, 18, 2, "#2a1740");
+    p(-4, 19, 9, 8, PAL.skin);
+    p(-4, 23, 9, 3, "#3a1f5a");
     p(2, 20, 2, 2, "#fff");                // angry eye
     // Shoulders forward when charging
-    p(charging ? 7 : 5, 10, charging ? 7 : 4, 6, PAL.chargerDk);
-    if (opt.wind) p(-7, 24, 14, 2, "#fff"); // tell flash
+    p(charging ? 7 : 5, 10, charging ? 8 : 5, 7, PAL.chargerDk);
+    if (elite) p(-11, 11, 4, 7, PAL.chargerDk);
+    if (opt.wind) p(-9, 25, 18, 2, "#fff"); // tell flash
   });
 
   // ============================ PYRO ==================================
@@ -304,18 +358,23 @@
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     if (opt.hurt && (f & 1)) return;
-    p(-5 + ls, 0, 4, 7, PAL.pyroDk);
-    p(1 - ls, 0, 4, 7, PAL.pyroDk);
-    p(-6, 7, 12, 10, PAL.pyro);
-    p(-6, 7, 12, 2, PAL.pyroDk);
-    p(-3, 17, 8, 7, PAL.skin);
+    const elite = !!opt.elite;
+    p(-6 + ls, 0, 5, 8, PAL.pyroDk);
+    p(1 - ls, 0, 5, 8, PAL.pyroDk);
+    p(-7, 7, 14, 11, elite ? "#ff9d4a" : PAL.pyro);
+    p(-7, 7, 14, 2, PAL.pyroDk);
+    if (elite) {
+      p(-9, 10, 4, 7, PAL.pyroDk);
+      p(6, 10, 4, 7, PAL.pyroDk);
+    }
+    p(-4, 18, 9, 8, PAL.skin);
     p(2, 19, 2, 2, "#111");
     // Flickering flame crown (procedural).
     const flick = (Math.sin((opt.t || 0) * 18) + 1) * 0.5;
-    p(-3, 24, 3, 3 + flick * 3, PAL.flame);
-    p(1, 24, 3, 4 + (1 - flick) * 3, PAL.pyro);
-    p(-1, 24, 2, 2 + flick * 2, "#fff");
-    p(opt.wind ? 6 : 4, 9, 5, 4, PAL.pyroDk);  // throwing arm
+    p(-4, 25, 4, 3 + flick * (elite ? 4 : 3), PAL.flame);
+    p(1, 25, 4, 4 + (1 - flick) * (elite ? 4 : 3), PAL.pyro);
+    p(-1, 25, 2, 2 + flick * 2, "#fff");
+    p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
   });
 
   // ============================ BOSS ==================================
@@ -378,9 +437,16 @@
 
   // =========================== EMBER (pyro shot) ======================
   Assets.register("ember", (p, opt) => {
-    const s = opt.size || 3;
+    const s = opt.size || 4;
+    const flick = (Math.floor((opt.t || 0) * 14) & 1);
+    // Outer dark fire ring (flickers between two reds)
+    p(-s / 2 - 1, -1, s + 2, s + 2, flick ? "#c83200" : "#8c1e00");
+    // Main flame body
     p(-s / 2, 0, s, s, PAL.flame);
-    p(-s / 2 + 1, s * 0.3, s - 1, 1, "#fff");
+    // Pale yellow inner glow
+    p(-s / 2 + 1, Math.round(s * 0.25), s - 2, Math.round(s * 0.5), "#fff8a0");
+    // White hot core
+    p(-1, Math.round(s * 0.5), 2, 1, "#ffffff");
   });
 
   // ============================= PICKUPS ==============================

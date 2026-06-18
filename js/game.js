@@ -30,6 +30,7 @@
     elapsed: 0, kills: 0,
     shakeAmt: 0,
     bannerTimer: 0,
+    shopCursor: 0,
     acc: 0, lastT: 0, running: false,
 
     // ------------------------------------------------------------- setup
@@ -103,7 +104,7 @@
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
-      this.shopNpc = null; this.nearShop = false;
+      this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
       this.wall = null; this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.elapsed = 0; this.kills = 0; this.shakeAmt = 0;
@@ -350,7 +351,24 @@
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
         this.player.nearShop = this.nearShop;
-        if (this.nearShop && this.input.pressed("confirm")) { this.openShop(); return; }
+        if (this.nearShop) {
+          const U = JH.Upgrades;
+          const sel = U.nodes.filter((n) => U.isAvailable(n.id));
+          if (sel.length > 0) {
+            if (this.input.pressed("up"))   this.shopCursor = (this.shopCursor - 1 + sel.length) % sel.length;
+            if (this.input.pressed("down")) this.shopCursor = (this.shopCursor + 1) % sel.length;
+            if (this.input.pressed("confirm")) {
+              const node = sel[this.shopCursor];
+              if (node && U.buy(node.id, this.player)) {
+                this.audio.play("buy");
+                const newSel = U.nodes.filter((n) => U.isAvailable(n.id));
+                this.shopCursor = Math.min(this.shopCursor, Math.max(0, newSel.length - 1));
+              } else {
+                this.audio.play("hurt");
+              }
+            }
+          }
+        }
       } else { this.nearShop = false; this.player.nearShop = false; }
 
       // --- separation so enemies don't fully stack
@@ -411,6 +429,8 @@
 
     updateHUD() {
       if (!this.player) return;
+      const hud = document.getElementById("hud");
+      if (hud) hud.style.visibility = (this.state === "play" && this.nearShop) ? "hidden" : "";
       document.getElementById("hud-suds").textContent = Math.floor(this.player.suds);
     },
 
@@ -461,6 +481,9 @@
         if (boss) this.drawBossBar(ctx, boss);
       }
       ctx.restore();
+
+      // Hover shop panel — drawn outside shake transform so it stays stable.
+      if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
     },
 
     drawHydrants(ctx, cam) {
@@ -491,13 +514,6 @@
       ctx.font = "bold 7px monospace";
       ctx.fillStyle = "#ffd23f";
       ctx.fillText("SHOP", sx + 6, baseY - 8);
-      if (this.nearShop) {
-        const yy = baseY + Math.sin(n.t * 6) * 1.5;
-        ctx.fillStyle = "rgba(0,0,0,0.65)";
-        ctx.fillRect(sx - 26, yy - 8, 64, 12);
-        ctx.fillStyle = "#fff";
-        ctx.fillText("PRESS E / ↵", sx + 6, yy + 1);
-      }
       ctx.textAlign = "left";
     },
 
@@ -510,6 +526,107 @@
       ctx.beginPath();
       ctx.moveTo(x + 14, 50); ctx.lineTo(x + 26, 56); ctx.lineTo(x + 14, 62);
       ctx.closePath(); ctx.fill();
+    },
+
+    drawHoverShop(ctx) {
+      const U = JH.Upgrades, pl = this.player;
+      const selectable = U.nodes.filter((n) => U.isAvailable(n.id));
+      if (selectable.length > 0)
+        this.shopCursor = Math.max(0, Math.min(selectable.length - 1, this.shopCursor));
+
+      const PX = 280, PY = 6, PW = 194, PH = 258, MID = PX + PW / 2;
+
+      // Panel background + border
+      ctx.fillStyle = "rgba(8,12,20,0.94)";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = "#ffd23f";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      // Header
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffd23f";
+      ctx.font = "bold 7px monospace";
+      ctx.fillText("OLD SPIGOT'S DEPOT", MID, PY + 9);
+      // Coin + suds count
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(Math.round(MID - 22), PY + 13, 5, 5);
+      ctx.fillStyle = "#caa015";
+      ctx.fillRect(Math.round(MID - 22), PY + 16, 5, 1);
+      ctx.fillStyle = "#fff7c2";
+      ctx.fillRect(Math.round(MID - 21), PY + 14, 2, 2);
+      ctx.fillStyle = "#9be8ff";
+      ctx.font = "6px monospace";
+      ctx.fillText(Math.floor(pl.suds) + " suds", MID + 2, PY + 19);
+      ctx.textAlign = "left";
+      // Separator
+      ctx.fillStyle = "#334455";
+      ctx.fillRect(PX + 4, PY + 22, PW - 8, 1);
+
+      let ry = PY + 26;
+      U.branches.forEach((branch) => {
+        const nodes = U.nodesByBranch(branch);
+        ctx.fillStyle = "#445566";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("── " + branch + " ──", MID, ry + 5);
+        ctx.textAlign = "left";
+        ry += 7;
+
+        nodes.forEach((n) => {
+          const owned = U.isOwned(n.id);
+          const locked = U.isLocked(n.id);
+          const avail = U.isAvailable(n.id);
+          const afford = avail && pl.suds >= n.cost;
+          const selIdx = selectable.findIndex((s) => s.id === n.id);
+          const isCursor = selIdx >= 0 && selIdx === this.shopCursor;
+
+          if (isCursor) {
+            ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
+            ctx.fillRect(PX + 2, ry, PW - 4, 11);
+          }
+
+          ctx.font = "bold 6px monospace";
+          ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
+          const mark = owned ? "✓" : locked ? "▸" : "•";
+          ctx.fillText(mark + " " + n.name, PX + 5, ry + 8);
+
+          if (!owned) {
+            ctx.textAlign = "right";
+            ctx.fillStyle = locked ? "#3a4a5a" : afford ? "#ffd23f" : "#cc4444";
+            ctx.fillText(locked ? "?" : n.cost, PX + PW - 4, ry + 8);
+            ctx.textAlign = "left";
+          }
+          ry += 11;
+        });
+      });
+
+      // Separator
+      ctx.fillStyle = "#334455";
+      ctx.fillRect(PX + 4, ry + 1, PW - 8, 1);
+      ry += 4;
+
+      // Description of selected node
+      const curNode = selectable[this.shopCursor];
+      if (curNode) {
+        ctx.fillStyle = "#778899";
+        ctx.font = "5px monospace";
+        const d = curNode.desc;
+        const wrap = d.length > 34 ? d.lastIndexOf(" ", 34) : -1;
+        if (wrap > 0) {
+          ctx.fillText(d.slice(0, wrap), PX + 5, ry + 5);
+          ctx.fillText(d.slice(wrap + 1), PX + 5, ry + 11);
+        } else {
+          ctx.fillText(d, PX + 5, ry + 5);
+        }
+      }
+
+      // Footer hint
+      ctx.fillStyle = selectable.length ? "#445566" : "#44aa44";
+      ctx.font = "5px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(selectable.length ? "▲▼ SELECT   [E] BUY" : "FULLY KITTED OUT!", MID, PY + PH - 5);
+      ctx.textAlign = "left";
     },
 
     drawBossBar(ctx, boss) {

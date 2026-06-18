@@ -38,6 +38,9 @@
     { id: "rc2", branch: "REACH", tier: 2, req: ["rc1"], cost: 85,
       name: "Fire-Marshal Spec", desc: "+30 range, +30 knockback. Blow 'em back.",
       apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
+    { id: "rc3", branch: "REACH", tier: 3, req: ["rc2"], cost: 140,
+      name: "Split Stream", desc: "Hits arc to a nearby enemy for 30% damage.",
+      apply: (s) => { s.splitStream = true; } },
 
     // ---- TANK ---------------------------------------------------------
     { id: "tk1", branch: "TANK", tier: 1, req: [], cost: 25,
@@ -47,24 +50,30 @@
       name: "Quick Prime", desc: "+10 regen/sec, faster recovery after spraying.",
       apply: (s) => { s.waterRegen += 10; s.regenDelay = Math.max(0.15, s.regenDelay - 0.3); } },
     { id: "tk3", branch: "TANK", tier: 3, req: ["tk2"], cost: 95,
-      name: "Closed Loop", desc: "Hosing an enemy siphons water back into the tank.",
-      apply: (s) => { s.waterReturn += 16; } },
+      name: "Closed Loop", desc: "-10 water drain/sec while hosing a target.",
+      apply: (s) => { s.waterReturn += 10; } },
 
     // ---- MOBILITY -----------------------------------------------------
     { id: "mb1", branch: "MOBILITY", tier: 1, req: [], cost: 40,
       name: "Gripper Soles", desc: "+18 move speed.",
       apply: (s) => { s.moveSpeed += 18; } },
     { id: "mb2", branch: "MOBILITY", tier: 2, req: ["mb1"], cost: 85,
-      name: "Hydro-Dash", desc: "-0.2s dash cooldown. Dash leaves a slick puddle.",
-      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashPuddle = true; } },
+      name: "Hydro-Dash", desc: "-0.2s dash cooldown. Dash boosts speed +28 for 3s.",
+      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashPuddle = true; s.dashBoost = 28; s.dashBoostDur = 3; } },
+    { id: "mb3", branch: "MOBILITY", tier: 3, req: ["mb2"], cost: 110,
+      name: "Kinetic Tap", desc: "+10 water/sec regen while moving.",
+      apply: (s) => { s.moveRegen += 10; } },
 
     // ---- VITALITY -----------------------------------------------------
     { id: "vt1", branch: "VITALITY", tier: 1, req: [], cost: 25,
       name: "Wetsuit", desc: "+30 max HP.",
       apply: (s) => { s.maxHp += 30; } },
     { id: "vt2", branch: "VITALITY", tier: 2, req: ["vt1"], cost: 60,
-      name: "Second Wind", desc: "+30 max HP. Clearing a wave heals 30%.",
-      apply: (s) => { s.maxHp += 30; s.clearHeal = Math.max(s.clearHeal, 0.3); } },
+      name: "Second Wind", desc: "+30 max HP. 5% chance to dodge incoming damage.",
+      apply: (s) => { s.maxHp += 30; s.dodgeChance = Math.max(s.dodgeChance, 0.05); } },
+    { id: "vt3", branch: "VITALITY", tier: 3, req: ["vt2"], cost: 120,
+      name: "Vampiric Hose", desc: "Heal 10% of spray damage dealt.",
+      apply: (s) => { s.vampiricRate += 0.10; } },
   ];
 
   const BRANCHES = ["PRESSURE", "REACH", "TANK", "MOBILITY", "VITALITY"];

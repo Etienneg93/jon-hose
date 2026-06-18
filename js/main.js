@@ -29,14 +29,18 @@
     const unlock = () => { JH.AudioFX.resume(); JH.Music.start(); window.removeEventListener("keydown", unlock); };
     window.addEventListener("keydown", unlock);
 
-    // Allow Enter/Space/E to start from the title, confirm end screens,
-    // and leave the shop. (Opening the shop is handled in-game by walking
-    // up to the vendor and pressing E/Enter.)
+    // Allow Space on the title only. End screens use Enter/E so holding
+    // Space to spray through the boss kill cannot instantly restart.
     window.addEventListener("keydown", (e) => {
-      if (e.code !== "Enter" && e.code !== "Space" && e.code !== "KeyE") return;
+      if (e.repeat) return;
       const s = JH.Game.state;
-      if (s === "title" || s === "over" || s === "win") JH.Game.startGame();
-      else if (s === "shop") JH.Game.closeShop();
+      if (s === "title") {
+        if (e.code === "Enter" || e.code === "Space" || e.code === "KeyE") JH.Game.startGame();
+      } else if (s === "over" || s === "win") {
+        if (e.code === "Enter" || e.code === "KeyE") JH.Game.startGame();
+      } else if (s === "shop") {
+        if (e.code === "Enter" || e.code === "KeyE") JH.Game.closeShop();
+      }
     });
   }
 

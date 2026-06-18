@@ -39,7 +39,7 @@
   // Colour palette (kept central so procedural art + UI stay in sync).
   JH.PAL = {
     skin: "#f1c08a", skinDark: "#c98f5a",
-    jonShirt: "#2f6db5", jonShirtDk: "#1d4a80",
+    jonShirt: "#4a4d52", jonShirtDk: "#2e3033",
     pants: "#33384a", pantsDk: "#23273a",
     tank: "#3fb0c9", tankDk: "#2a7a8c", tankHi: "#bdf0ff",
     hose: "#1f6f3f", hoseDk: "#134d2a",
@@ -71,7 +71,7 @@
     waterDrain: 36,         // units/sec while spraying (~2.8s per full tank)
     waterRegen: 14,         // units/sec passive recovery (steady, not too quick)
     regenDelay: 0.5,        // sec after spraying before regen kicks in
-    sprayDamage: 58,        // dmg/sec at FULL pressure (beats melee's ~53 DPS)
+    sprayDamage: 50,        // dmg/sec at FULL pressure (80-100% tank = bonus tier)
     sprayRange: 78,         // stream reach (px)
     sprayWidth: 18,         // depth half-band the stream covers
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
@@ -87,6 +87,13 @@
     meleeRange: 26,
     meleeCd: 0.34,
     meleeKnock: 110,
+
+    dodgeChance: 0,         // fraction chance to negate a hit entirely (Second Wind)
+    vampiricRate: 0,        // fraction of spray damage converted to HP (Vampiric Hose)
+    splitStream: false,     // spray arcs to a nearby secondary target (Split Stream)
+    moveRegen: 0,           // extra water regen/sec while moving (Kinetic Tap)
+    dashBoost: 0,           // extra move speed px/sec after dashing (Hydro-Dash)
+    dashBoostDur: 0,        // seconds the post-dash speed boost lasts
 
     bodyW: 16, bodyH: 30,   // collision box (px), feet-anchored
   };
@@ -106,7 +113,7 @@
     pyro: {
       name: "Pyro", hp: 36, speed: 38, touchDmg: 10, contactCd: 0.7,
       shootRange: 150, shootCd: 1.6, emberSpeed: 130, emberDmg: 9,
-      suds: 14, waterMult: 2.2, /* doused fast */ bodyW: 16, bodyH: 28, color: "pyro",
+      suds: 14, waterMult: 1.5, bodyW: 16, bodyH: 28, color: "pyro",
     },
   };
 
