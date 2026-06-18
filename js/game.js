@@ -284,7 +284,7 @@
       JH.Music.setTrack("level");
       this.state = "win";
       document.getElementById("win-stats").textContent =
-        "Suds banked: " + Math.floor(this.player.suds) +
+        "Suds banked: " + Math.floor(this.player.sudsEarned) +
         "\nEnemies hosed: " + this.kills +
         "\nTime: " + this.elapsed.toFixed(1) + "s";
       this.showScreen("screen-win");

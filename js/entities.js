@@ -104,6 +104,7 @@
       this.hp = this.stats.maxHp;
       this.water = this.stats.maxWater;
       this.suds = 0;
+      this.sudsEarned = 0;
       this.dashTimer = 0; this.dashCdTimer = 0;
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
@@ -769,7 +770,7 @@
     collect(game) {
       this.dead = true;
       const pl = game.player;
-      if (this.kind === "suds") { pl.suds += this.value; game.audio.play("coin"); }
+      if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
       else if (this.kind === "health") { pl.hp = Math.min(pl.stats.maxHp, pl.hp + this.value); game.audio.play("buy"); }
       else if (this.kind === "water_can") { pl.water = Math.min(pl.stats.maxWater, pl.water + this.value); game.audio.play("buy"); }
       burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : (this.kind === "health" ? JH.PAL.hpPk : JH.PAL.water), 6, { speed: 60, life: 0.3 });
