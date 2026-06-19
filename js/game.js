@@ -32,6 +32,7 @@
     bannerTimer: 0,
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
+    devMenu: false, devCursor: 0,
 
     // ------------------------------------------------------------- setup
     init() {
@@ -78,6 +79,41 @@
       });
       this.syncAudioUI = sync;
       sync();
+
+      // ---- secret dev menu: backtick toggles wave-select overlay ----
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Backquote") {
+          e.preventDefault();
+          if (this.state === "title" || this.state === "over" || this.state === "win")
+            this.startGame();
+          this.devMenu = !this.devMenu;
+          if (this.devMenu) this.devCursor = 0;
+          return;
+        }
+        if (!this.devMenu) return;
+        const count = JH.LEVEL1.waves.length;
+        if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
+        if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
+        if (e.code === "Enter" || e.code === "NumpadEnter") { e.preventDefault(); this.devGotoWave(this.devCursor); }
+        if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
+      });
+    },
+
+    devGotoWave(i) {
+      const waves = JH.LEVEL1.waves;
+      i = Math.max(0, Math.min(waves.length - 1, i));
+      this.startGame();
+      // Position player just before the wave trigger
+      const px = Math.max(60, WAVE_TRIGGERS[i] - 80);
+      this.player.x = px;
+      this.player.y = JH.DEPTH_MAX * 0.5;
+      this.player.suds = 999;   // enough to test any upgrade
+      // Snap camera so startWave locks the right arena window
+      JH.Camera.x = Math.max(0, px - Math.floor(JH.VIEW_W * 0.38));
+      JH.Camera.locked = false;
+      this.waveIndex = i - 1;
+      this.startWave(i);
+      this.devMenu = false;
     },
 
     // -------------------------------------------------------- overlays
@@ -333,6 +369,7 @@
       }
       if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
 
+      if (this.devMenu) return;
       if (this.state !== "play") { this.updateHUD(); return; }
 
       this.elapsed += dt;
@@ -484,6 +521,56 @@
 
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
+      // Dev menu drawn last so it's always on top.
+      if (this.devMenu) this.drawDevMenu(this.ctx);
+    },
+
+    drawDevMenu(ctx) {
+      const waves = JH.LEVEL1.waves;
+      const W = 224, ROW = 11, PAD = 14;
+      const H = PAD + waves.length * ROW + PAD;
+      const PX = Math.round((JH.VIEW_W - W) / 2);
+      const PY = Math.round((JH.VIEW_H - H) / 2);
+      const MID = PX + W / 2;
+
+      // Background panel
+      ctx.fillStyle = "rgba(4,7,14,0.95)";
+      ctx.fillRect(PX, PY, W, H);
+      ctx.strokeStyle = "#ffd23f";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(PX, PY, W, H);
+
+      // Header
+      ctx.fillStyle = "#ffd23f";
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("DEV — JUMP TO WAVE", MID, PY + 9);
+
+      // Wave rows
+      waves.forEach((wave, i) => {
+        const ry = PY + PAD + i * ROW;
+        const sel = i === this.devCursor;
+        if (sel) {
+          ctx.fillStyle = "rgba(255,210,63,0.18)";
+          ctx.fillRect(PX + 3, ry, W - 6, ROW - 1);
+        }
+        const tag  = wave.boss ? "BOSS " : wave.wall ? "WALL " : "     ";
+        ctx.fillStyle = sel ? "#ffd23f" : wave.boss ? "#ff9f40" : wave.wall ? "#c06030" : "#99b0c0";
+        ctx.font = (sel ? "bold " : "") + "6px monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(tag + wave.name, PX + 8, ry + ROW - 3);
+        // wave index on the right
+        ctx.fillStyle = sel ? "#ffd23f" : "#445566";
+        ctx.textAlign = "right";
+        ctx.fillText("#" + (i + 1), PX + W - 6, ry + ROW - 3);
+      });
+
+      // Footer hint
+      ctx.fillStyle = "#445566";
+      ctx.font = "5px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("↑↓  navigate    Enter  warp    `  close", MID, PY + H - 4);
+      ctx.textAlign = "left";
     },
 
     drawHydrants(ctx, cam) {
