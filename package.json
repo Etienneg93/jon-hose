@@ -1,7 +1,7 @@
 {
   "name": "jon-hose",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Jon Hose - The Game",
   "scripts": {
     "dev": "npx --yes serve@14 -l 5173 .",

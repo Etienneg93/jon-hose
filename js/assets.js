@@ -459,22 +459,64 @@
   });
 
   // ============================= PICKUPS ==============================
-  Assets.register("suds", (p, opt) => {
-    const bob = Math.sin((opt.t || 0) * 6) * 1.5;
-    p(-3, 4 + bob, 6, 6, PAL.suds);     // coin
-    p(-3, 7 + bob, 6, 1, "#caa015");
-    p(-1, 6 + bob, 2, 2, "#fff7c2");
-  });
+  // Coin spritesheet: coins-chests-etc-2-0.png
+  // Spin animation: 6 frames at x=64, stride 16px, each frame 16x16
+  // Row y=16 = gold, y=32 = silver, y=64 = bronze
+  const COIN_SRC_X = 64, COIN_FRAMES = 6, COIN_W = 16, COIN_H = 16;
+  const COIN_Y = { gold: 16, silver: 32, bronze: 64 };
+  let _coinSheet = null, _coinSheetTried = false;
+  function getCoinSheet() {
+    if (_coinSheetTried) return _coinSheet;
+    _coinSheetTried = true;
+    _coinSheet = new Image(); _coinSheet._ready = false;
+    _coinSheet.onload = () => { _coinSheet._ready = true; };
+    _coinSheet.src = "sprites/coins-chests-etc-2-0.png";
+    return _coinSheet;
+  }
+  function registerCoin(key, srcY, fallbackColor) {
+    Assets.register(key, (p, opt, ctx, x, y) => {
+      const bob = Math.sin((opt.t || 0) * 6) * 1.5;
+      const sheet = getCoinSheet();
+      if (sheet && sheet._ready) {
+        const frame = Math.floor((opt.t || 0) * 8) % COIN_FRAMES;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sheet, COIN_SRC_X + frame * COIN_W, srcY, COIN_W, COIN_H,
+          x - 8, Math.round(y - 20 - bob), COIN_W, COIN_H);
+        return;
+      }
+      p(-3, 4 + bob, 6, 6, fallbackColor);
+      p(-3, 7 + bob, 6, 1, "#caa015");
+      p(-1, 6 + bob, 2, 2, "#fff7c2");
+    });
+  }
+  registerCoin("suds_gold",   COIN_Y.gold,   PAL.suds);
+  registerCoin("suds_silver", COIN_Y.silver, "#a0a8c0");
+  registerCoin("suds_bronze", COIN_Y.bronze, "#c87030");
   Assets.register("water_can", (p, opt) => {
     const bob = Math.sin((opt.t || 0) * 6) * 1.5;
     p(-4, 2 + bob, 8, 9, PAL.waterDk);
     p(-3, 3 + bob, 6, 7, PAL.water);
     p(-2, 8 + bob, 4, 1, PAL.waterHi);
   });
-  Assets.register("health", (p, opt) => {
+  let _kibbleImg = null, _kibbleTried = false;
+  function getKibble() {
+    if (_kibbleTried) return _kibbleImg;
+    _kibbleTried = true;
+    _kibbleImg = new Image(); _kibbleImg._ready = false;
+    _kibbleImg.onload = () => { _kibbleImg._ready = true; };
+    _kibbleImg.src = "sprites/Kibble.png";
+    return _kibbleImg;
+  }
+  Assets.register("health", (p, opt, ctx, x, y) => {
     const bob = Math.sin((opt.t || 0) * 6) * 1.5;
+    const img = getKibble();
+    if (img && img._ready) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, x - 8, Math.round(y - 20 - bob), 16, 16);
+      return;
+    }
     p(-4, 2 + bob, 8, 8, "#fff");
-    p(-1, 3 + bob, 2, 6, PAL.hpPk);    // red cross
+    p(-1, 3 + bob, 2, 6, PAL.hpPk);
     p(-3, 5 + bob, 6, 2, PAL.hpPk);
   });
 

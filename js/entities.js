@@ -29,6 +29,19 @@
   }
   JH.burst = burst;
 
+  function spawnSudsStream(game, x, y, total) {
+    const coins = [];
+    let rem = total;
+    while (rem >= 10) { coins.push(10); rem -= 10; }
+    while (rem >= 5)  { coins.push(5);  rem -= 5;  }
+    while (rem >= 1)  { coins.push(1);  rem -= 1;  }
+    coins.forEach((val, i) => {
+      const ox = (Math.random() - 0.5) * 60;
+      const oy = (Math.random() - 0.5) * 28;
+      setTimeout(() => game.spawnPickup("suds", x + ox, y + oy, val), i * 45);
+    });
+  }
+
   class Particle {
     constructor(o) { Object.assign(this, o); this.t = 0; this.maxLife = o.life; }
     update(dt) {
@@ -115,6 +128,8 @@
       this.sprayEmitAcc = 0;       // fractional particle emitter for the stream
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
+      this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
+      this.kibbleRegen = 0;        // HP/s during regen
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
@@ -140,6 +155,10 @@
 
       // ---- dash boost timer + trailing particles
       if (this.concertaTimer > 0) this.concertaTimer -= dt;
+      if (this.kibbleTimer > 0) {
+        this.kibbleTimer -= dt;
+        this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
+      }
 
       if (this.dashBoostTimer > 0) {
         this.dashBoostTimer -= dt;
@@ -387,12 +406,18 @@
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
+      if (this.kibbleTimer > 0) {
+        ctx.save();
+        ctx.shadowColor = "#44ee66";
+        ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
+      }
       Assets.draw(ctx, "jon", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
         walking: this.walking,
       });
+      if (this.kibbleTimer > 0) ctx.restore();
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
 
       // DEBUG: collision box
@@ -428,11 +453,18 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
-      // Concerta indicator
+      // Status indicators above bars — stacked if both active
+      let indY = barTop - 2;
+      if (this.kibbleTimer > 0) {
+        ctx.fillStyle = "#44ff77";
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillText("KIBBLE " + this.kibbleTimer.toFixed(1) + "s", sx, indY);
+        indY -= 7;
+      }
       if (this.concertaTimer > 0) {
         ctx.fillStyle = "#ff88ff";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
-        ctx.fillText("FOCUSED " + this.concertaTimer.toFixed(1) + "s", sx, barTop - 2);
+        ctx.fillText("FOCUSED " + this.concertaTimer.toFixed(1) + "s", sx, indY);
       }
       // label
       ctx.font = "bold 6px monospace";
@@ -851,7 +883,7 @@
       }
       for (let i = 0; i < 5; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }), i * 90);
-      game.spawnPickup("suds", this.x, this.y, this.def.suds);
+      spawnSudsStream(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
@@ -883,7 +915,13 @@
       this.dead = true;
       const pl = game.player;
       if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
-      else if (this.kind === "health") { pl.hp = Math.min(pl.stats.maxHp, pl.hp + this.value); game.audio.play("buy"); }
+      else if (this.kind === "health") {
+        pl.kibbleTimer = 6.0;
+        pl.kibbleRegen = this.value / 6.0;
+        game.audio.play("buy");
+        game.banner("KIBBLE REGEN!", 1.6);
+        burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
+      }
       else if (this.kind === "water_can") { pl.water = Math.min(pl.stats.maxWater, pl.water + this.value); game.audio.play("buy"); }
       else if (this.kind === "pill") {
         pl.concertaTimer = Math.max(pl.concertaTimer, JH.CONCERTA.dur);
@@ -891,12 +929,14 @@
         game.banner("FOCUSED!", 1.6);
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.pill, 14, { speed: 90, life: 0.55, up: 60 });
       }
-      if (this.kind !== "pill")
-        burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : (this.kind === "health" ? JH.PAL.hpPk : JH.PAL.water), 6, { speed: 60, life: 0.3 });
+      if (this.kind !== "pill" && this.kind !== "health")
+        burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : JH.PAL.water, 6, { speed: 60, life: 0.3 });
     }
     draw(ctx, cam) {
       if (this.t > this.life && (Math.floor(this.t * 8) & 1)) return; // blink before despawn
-      const key = this.kind === "suds" ? "suds" : this.kind === "health" ? "health" : this.kind === "pill" ? "pill" : "water_can";
+      const key = this.kind === "suds"
+        ? (this.value >= 10 ? "suds_gold" : this.value >= 5 ? "suds_silver" : "suds_bronze")
+        : this.kind === "health" ? "health" : this.kind === "pill" ? "pill" : "water_can";
       Assets.shadow(ctx, this.x - cam, Geo.feetScreenY(this.y, 0), 5);
       Assets.draw(ctx, key, this.x - cam, Geo.feetScreenY(this.y, this.z), 1, { t: this.t });
     }
@@ -1155,7 +1195,7 @@
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 6; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }), i * 90);
-      game.spawnPickup("suds", this.x, this.y, this.def.suds);
+      spawnSudsStream(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
@@ -1455,7 +1495,7 @@
       game.audio.play("win");
       for (let i = 0; i < 7; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }), i * 90);
-      game.spawnPickup("suds", this.x, this.y, this.def.suds);
+      spawnSudsStream(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
@@ -1775,7 +1815,7 @@
       for (let i = 0; i < 9; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
           Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }), i * 80);
-      game.spawnPickup("suds", this.x, this.y, this.def.suds);
+      spawnSudsStream(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
