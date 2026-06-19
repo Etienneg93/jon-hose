@@ -80,7 +80,10 @@
       this.syncAudioUI = sync;
       sync();
 
-      // ---- secret dev menu: backtick toggles wave-select overlay ----
+      // ---- dev menu: localhost-only, backtick toggles wave-select overlay ----
+      const h = window.location.hostname;
+      const isDev = h === "localhost" || h === "127.0.0.1" || h === "";
+      if (!isDev) return;
       window.addEventListener("keydown", (e) => {
         if (e.code === "Backquote") {
           e.preventDefault();
