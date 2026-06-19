@@ -12,6 +12,10 @@ npm run preview   # build then serve ./dist at http://localhost:5174
 
 There is no test suite or linter. The game also runs by opening `index.html` directly via `file://` — no server needed.
 
+## Versioning
+
+**Before every commit, bump `"version"` in `package.json`.** The title screen displays it via a `<meta name="ver">` tag stamped by `npm run build`; in dev it just shows "dev". Use semver loosely: patch for fixes/tweaks, minor for new content (waves, enemies, bosses).
+
 ## Architecture
 
 Plain `<script>` tags with no bundler or ES modules — the game runs from `file://` as-is. Everything shares a single global namespace `JH` (set on `window`).
