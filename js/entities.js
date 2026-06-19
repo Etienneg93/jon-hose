@@ -114,6 +114,7 @@
       this.sprayTick = 0;
       this.sprayEmitAcc = 0;       // fractional particle emitter for the stream
       this.meleeFxTimer = 0;       // drives the melee swing arc
+      this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
@@ -138,6 +139,8 @@
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
 
       // ---- dash boost timer + trailing particles
+      if (this.concertaTimer > 0) this.concertaTimer -= dt;
+
       if (this.dashBoostTimer > 0) {
         this.dashBoostTimer -= dt;
         if (this.dashTimer <= 0 && Math.random() < 0.4)
@@ -230,7 +233,7 @@
 
     doSpray(dt, game) {
       const S = this.stats;
-      const dry = this.water <= 0;
+      const dry = this.water <= 0 && this.concertaTimer <= 0;
       this.spraying = true;
       this.sprayDry = dry;
       this.regenLock = S.regenDelay;
@@ -243,7 +246,8 @@
       else if (frac >= 0.80) { dmgScale = 1.20; rangeMult = 1.00; }
       else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      if (!dry) this.water = Math.max(0, this.water - S.waterDrain * dt);
+      if (!dry && this.concertaTimer <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
+      if (this.concertaTimer > 0) this.water = Math.min(S.maxWater, this.water + S.maxWater * dt);
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
@@ -326,6 +330,16 @@
         if (fwd > 0 && fwd - this.bodyW * 0.5 - wall.bodyW * 0.5 <= reach)
           wall.takeDamage(S.sprayDamage * dmgScale * dt, game);
       }
+      // Garden boxes: face each box and match its depth to water it.
+      if (game.gardens) {
+        for (const garden of game.gardens) {
+          if (garden.done) continue;
+          const fwd = (garden.x - this.x) * this.facing;
+          if (fwd > 0 && fwd - this.bodyW * 0.5 - 21 <= reach
+              && Math.abs(garden.y - this.y) < S.sprayWidth + 8)
+            garden.addGrow(S.sprayDamage * dmgScale * dt, game);
+        }
+      }
     }
 
     doMelee(game) {
@@ -397,8 +411,18 @@
       // H₂O
       ctx.fillStyle = "#1a3344";
       ctx.fillRect(bx, barTop + 4, barW, 3);
-      ctx.fillStyle = "#66bbff";
+      if (this.concertaTimer > 0) {
+        ctx.fillStyle = (Math.floor(this.t * 8) & 1) ? "#ff88ff" : "#cc44cc";
+      } else {
+        ctx.fillStyle = "#66bbff";
+      }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // Concerta indicator
+      if (this.concertaTimer > 0) {
+        ctx.fillStyle = "#ff88ff";
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillText("FOCUSED " + this.concertaTimer.toFixed(1) + "s", sx, barTop - 2);
+      }
       // label
       ctx.font = "bold 6px monospace";
       ctx.textAlign = "center";
@@ -850,11 +874,18 @@
       if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
       else if (this.kind === "health") { pl.hp = Math.min(pl.stats.maxHp, pl.hp + this.value); game.audio.play("buy"); }
       else if (this.kind === "water_can") { pl.water = Math.min(pl.stats.maxWater, pl.water + this.value); game.audio.play("buy"); }
-      burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : (this.kind === "health" ? JH.PAL.hpPk : JH.PAL.water), 6, { speed: 60, life: 0.3 });
+      else if (this.kind === "pill") {
+        pl.concertaTimer = Math.max(pl.concertaTimer, JH.CONCERTA.dur);
+        game.audio.play("pill");
+        game.banner("FOCUSED!", 1.6);
+        burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.pill, 14, { speed: 90, life: 0.55, up: 60 });
+      }
+      if (this.kind !== "pill")
+        burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : (this.kind === "health" ? JH.PAL.hpPk : JH.PAL.water), 6, { speed: 60, life: 0.3 });
     }
     draw(ctx, cam) {
       if (this.t > this.life && (Math.floor(this.t * 8) & 1)) return; // blink before despawn
-      const key = this.kind === "suds" ? "suds" : (this.kind === "health" ? "health" : "water_can");
+      const key = this.kind === "suds" ? "suds" : this.kind === "health" ? "health" : this.kind === "pill" ? "pill" : "water_can";
       Assets.shadow(ctx, this.x - cam, Geo.feetScreenY(this.y, 0), 5);
       Assets.draw(ctx, key, this.x - cam, Geo.feetScreenY(this.y, this.z), 1, { t: this.t });
     }
@@ -1419,6 +1450,326 @@
   }
   JH.QuakeBoss = QuakeBoss;
 
+  // ============================================= ROCK (neighbor projectile)
+  // Arcs from neighbor to a LOCKED target position (similar to Switch cable hits).
+  // A blinking ellipse telegraphs the landing spot during flight.
+  class Rock {
+    constructor(x, y, targetX, targetY, dmg, travelTime) {
+      this.startX = x; this.startY = y;
+      this.x = x; this.y = y; this.z = 0;
+      this.targetX = targetX; this.targetY = targetY;
+      this.dmg = dmg; this.travelTime = travelTime || 0.7;
+      this.t = 0; this.dead = false; this.hit = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      const prog = Math.min(1, this.t / this.travelTime);
+      this.x = this.startX + (this.targetX - this.startX) * prog;
+      this.y = this.startY + (this.targetY - this.startY) * prog;
+      this.z = 38 * 4 * prog * (1 - prog);   // parabolic arc, peak 38 at midpoint
+      if (prog >= 1 && !this.hit) {
+        this.hit = true;
+        burst(game, this.targetX, this.targetY, 0, JH.PAL.rock, 6, { speed: 70, life: 0.4, up: 28 });
+        game.shake(3);
+        const pl = game.player;
+        if (pl.alive && Math.abs(pl.x - this.targetX) < 18 && Math.abs(pl.y - this.targetY) < 18)
+          pl.takeHit(this.dmg, game, this.targetX);
+        this.dead = true;
+        return false;
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      if (this.dead) return;
+      const prog = Math.min(1, this.t / this.travelTime);
+      // Telegraph ellipse at target position
+      const tx = this.targetX - cam, ty = Geo.feetScreenY(this.targetY, 0);
+      const blink = Math.floor(this.t * 10) & 1;
+      ctx.save();
+      ctx.strokeStyle = blink ? "#ff8800" : "#ffd23f"; ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.25 + 0.5 * prog;
+      ctx.beginPath(); ctx.ellipse(tx, ty, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.10 + 0.12 * prog; ctx.fillStyle = "#ff8800";
+      ctx.beginPath(); ctx.ellipse(tx, ty, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      // Rock sprite travelling in arc
+      JH.Assets.draw(ctx, "rock", this.x - cam, Geo.feetScreenY(this.y, this.z), 1, { t: this.t });
+      ctx.restore();
+    }
+  }
+  JH.Rock = Rock;
+
+  // ================================================= GARDEN BOX
+  class GardenBox {
+    constructor(x, y, idx) {
+      this.x = x; this.y = (y != null) ? y : JH.DEPTH_MAX * 0.5; this.z = 0;
+      this.idx = idx || 0;
+      this.grow = 0; this.growMax = JH.GARDEN.growMax;
+      this.bodyW = 42; this.dead = false; this.done = false; this.t = 0; this.hitFx = 0;
+    }
+    addGrow(amt, game) {
+      if (this.done) return;
+      this.grow = Math.min(this.growMax, this.grow + amt);
+      this.hitFx = 0.12;
+      if (this.grow >= this.growMax) {
+        this.done = true;
+        game.audio.play("win"); game.shake(4);
+        burst(game, this.x, this.y, 20, "#5a9a40", 18, { speed: 80, life: 0.7, up: 60 });
+        burst(game, this.x, this.y, 10, "#fff7a0", 10, { speed: 60, life: 0.5, up: 40 });
+        // Every box drops a pill; first box also unlocks elite drops and shows banner
+        if (!game.concertaUnlocked) {
+          game.concertaUnlocked = true;
+          game.banner("CONCERTA UNLOCKED!", 4.0);
+        }
+        game.spawnPickup("pill", this.x, this.y, 1);
+        game.gardensCleared = (game.gardensCleared || 0) + 1;
+      }
+    }
+    update(dt) { this.t += dt; if (this.hitFx > 0) this.hitFx -= dt; }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      const sy = Geo.feetScreenY(this.y, 0) - 4;
+      const gf = this.grow / this.growMax;
+      JH.Assets.draw(ctx, "garden_box", sx, sy, 1, { growFrac: gf });
+      // Growth bar (rises with the plants)
+      const w = 44, bx = sx - w / 2, by = sy - 28 - Math.round(gf * 16);
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 7);
+      ctx.fillStyle = "#1a3a10"; ctx.fillRect(bx, by, w, 5);
+      ctx.fillStyle = this.done ? "#55cc44" : (this.hitFx > 0 ? "#aaffaa" : "#3a9a28");
+      ctx.fillRect(bx, by, this.done ? w : Math.round(w * gf), 5);
+    }
+  }
+  JH.GardenBox = GardenBox;
+
+  // ============================================= NEIGHBOR NPC
+  // Stationary rock-thrower. Wind-up phase tracks the player then locks aim;
+  // a telegraph ellipse appears at the target during both wind-up AND flight.
+  class NeighborNPC extends Enemy {
+    constructor(x, y) {
+      super("neighbor", x, y);
+      this.facing = 1;
+      this.state = "idle";
+      this.cdTimer = 1.8;    // initial delay before first throw
+      this._windTimer = 0;
+      this._windDur = 0;
+      this._rockTarget = null;
+    }
+    think(dt, game) {
+      const pl = game.player;
+      this.facing = pl.x >= this.x ? 1 : -1;
+
+      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
+
+      if (this._windTimer > 0) {
+        this._windTimer -= dt;
+        this.state = "wind";
+        // Track player during first 60% of wind-up, then lock
+        if (this._windTimer > this._windDur * 0.4)
+          this._rockTarget = { x: pl.x, y: pl.y };
+        if (this._windTimer <= 0) {
+          const tgt = this._rockTarget || { x: pl.x, y: pl.y };
+          const dist = Math.max(1, Math.hypot(tgt.x - this.x, tgt.y - this.y));
+          game.embers.push(new Rock(
+            this.x + this.facing * 10, this.y,
+            tgt.x, tgt.y, this.def.rockDmg,
+            Math.max(0.42, dist / this.def.rockSpeed)
+          ));
+          game.audio.play("whack");
+          this.cdTimer = this.def.rockCd;
+          this.state = "idle";
+        }
+        return;
+      }
+
+      // Teleport to a random spot in the arena, keeping a safe distance from the player
+      const b = game.bounds;
+      const MIN_DIST = 90;
+      let tx, ty, tries = 0;
+      do {
+        tx = b.minX + 20 + Math.random() * (b.maxX - b.minX - 40);
+        ty = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
+      } while (Math.hypot(tx - pl.x, ty - pl.y) < MIN_DIST && ++tries < 12);
+      this.x = tx; this.y = ty;
+      this.facing = pl.x >= this.x ? 1 : -1;
+      this._windDur = this._windTimer = 0.55;
+      this._rockTarget = { x: pl.x, y: pl.y };
+      this.state = "wind";
+    }
+    draw(ctx, cam) {
+      // She vanishes between throws — only materialises during wind-up
+      if (this.state !== "wind") return;
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      JH.Assets.shadow(ctx, sx, sy, 11);
+      JH.Assets.draw(ctx, "neighbor", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
+        state: this.state, t: this.t, hurt: this.flashTimer > 0,
+      });
+      // Wind-up telegraph at locked target position
+      if (this.state === "wind" && this._rockTarget && this._windDur > 0) {
+        const tx = this._rockTarget.x - cam, ty = Geo.feetScreenY(this._rockTarget.y, 0);
+        const prog = Math.min(1, 1 - this._windTimer / this._windDur);
+        const blink = Math.floor(this.t * 10) & 1;
+        ctx.save();
+        ctx.strokeStyle = blink ? "#ff8800" : "#ffd23f"; ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.35 + 0.45 * prog;
+        ctx.beginPath(); ctx.ellipse(tx, ty, 10, 4, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.15 * prog; ctx.fillStyle = "#ff8800";
+        ctx.beginPath(); ctx.ellipse(tx, ty, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1; ctx.restore();
+      }
+    }
+    die(game) {
+      if (this.dead) return;
+      this.dead = true;
+      burst(game, this.x, this.y, 10, JH.PAL.neighbor, 8, { speed: 70, life: 0.4, up: 50 });
+      // No loot, no kill count
+    }
+  }
+  JH.NeighborNPC = NeighborNPC;
+
+  // ========================================== GK9000 (true final boss)
+  // A standing switch chassis — tall and meaner — with an embedded angry face.
+  // Adds a depth-row surge on top of the Switch's cable attacks.
+  class GK9000Boss extends SwitchBoss {
+    constructor(x, y) {
+      super(x, y);
+      this.def = JH.GK9000;
+      this.type = "gk9000";
+      this.hp = this.maxHp = JH.GK9000.hp;
+      this.bodyW = JH.GK9000.bodyW; this.bodyH = JH.GK9000.bodyH;
+      this._doRow = false; this._rowY = 0;
+      this.cdTimer = 1.6;
+    }
+    think(dt, game) {
+      this._bounds = game.bounds;
+      const pl = game.player, d = this.def;
+      const enraged = this.hp / this.maxHp < d.enrageAt;
+      if (this.fireFx > 0) this.fireFx -= dt;
+
+      // Hover right of center
+      const hoverX = (game.bounds.minX + game.bounds.maxX) / 2 + 70;
+      const mv = d.speed * dt;
+      this.x += Math.max(-mv, Math.min(mv, hoverX - this.x));
+      this.y += (pl.y - this.y) * 0.4 * dt;
+      this.y = Geo.clampDepth(this.y);
+      this.facing = pl.x >= this.x ? 1 : -1;
+
+      if (this.state === "tele") {
+        this.windTimer -= dt;
+        if (this.windTimer > this.atkDur * 0.4) {
+          if (this._doLine && this.lines.length > 0) this.lines[0] = { x: pl.x, y: Geo.clampDepth(pl.y) };
+          if (this._doWhip && this.whipTargets.length > 0) this.whipTargets[0] = pl.x;
+          if (this._doRow) this._rowY = Geo.clampDepth(pl.y);
+        }
+        if (this.windTimer <= 0) {
+          if (this._doLine) {
+            for (const lt of this.lines)
+              if (Math.abs(pl.x - lt.x) <= d.whipBand && (pl.z || 0) < 18)
+                pl.takeHit(d.lineDmg, game, this.x);
+          }
+          if (this._doWhip) {
+            for (const wx of this.whipTargets)
+              if (Math.abs(pl.x - wx) <= d.whipBand && (pl.z || 0) < 18)
+                pl.takeHit(d.whipDmg, game, this.x);
+          }
+          if (this._doRow && Math.abs(pl.y - this._rowY) <= d.rowBand && (pl.z || 0) < 20)
+            pl.takeHit(d.rowDmg, game, this.x);
+          this.fireFx = 0.22; game.shake(9); game.audio.play("whack");
+          this.state = "fire"; this.cdTimer = enraged ? 0.85 : 1.55;
+        }
+        return;
+      }
+      if (this.state === "fire") { if (this.fireFx <= 0) this.state = "hover"; return; }
+      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "hover"; return; }
+      if (this.spawnGrace <= 0) {
+        this._atkPhase++;
+        this._doLine = false; this._doWhip = false; this._doRow = false;
+        this.lines = []; this.whipTargets = [];
+        if (!enraged) {
+          const phase = this._atkPhase % 3;
+          if (phase === 0) {
+            this._doLine = true;
+            this.lines = [{ x: pl.x, y: Geo.clampDepth(pl.y) }];
+            this.atkDur = this.windTimer = d.lineWind;
+          } else if (phase === 1) {
+            this._doWhip = true;
+            this.whipTargets = [pl.x];
+            this.atkDur = this.windTimer = d.whipWind;
+          } else {
+            this._doRow = true; this._rowY = Geo.clampDepth(pl.y);
+            this.atkDur = this.windTimer = d.rowWind;
+          }
+        } else {
+          const r = Math.floor(Math.random() * 4);
+          if (r === 0) {
+            this._doLine = true;
+            this.lines = [
+              { x: pl.x, y: Geo.clampDepth(pl.y) },
+              { x: pl.x + (Math.random() < 0.5 ? -55 : 55), y: Geo.clampDepth(pl.y) },
+            ];
+            this.atkDur = this.windTimer = d.lineWind * 0.72;
+          } else if (r === 1) {
+            this._doWhip = true;
+            this.whipTargets = [pl.x, pl.x + (Math.random() < 0.5 ? -55 : 55)];
+            this.atkDur = this.windTimer = d.whipWind * 0.72;
+          } else if (r === 2) {
+            this._doRow = true; this._rowY = Geo.clampDepth(pl.y);
+            this.atkDur = this.windTimer = d.rowWind * 0.70;
+          } else {
+            this._doRow = true; this._doWhip = true;
+            this._rowY = Geo.clampDepth(pl.y); this.whipTargets = [pl.x];
+            this.atkDur = this.windTimer = d.rowWind * 0.78;
+          }
+        }
+        this.state = "tele"; game.audio.play("jump");
+      }
+    }
+    draw(ctx, cam) {
+      this.drawCables(ctx, cam);
+      if (this._doLine && (this.state === "tele" || this.fireFx > 0)) this.drawLines(ctx, cam);
+      if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
+      if (this._doRow && (this.state === "tele" || this.fireFx > 0)) this.drawDepthRow(ctx, cam);
+      JH.Enemy.prototype.draw.call(this, ctx, cam);
+    }
+    drawDepthRow(ctx, cam) {
+      const d = this.def;
+      const strike = this.fireFx > 0;
+      const prog = this.atkDur ? 1 - this.windTimer / this.atkDur : 1;
+      const sy = Geo.feetScreenY(this._rowY, 0);
+      const band = d.rowBand;
+      ctx.save();
+      ctx.fillStyle = strike ? "rgba(255,130,0,0.65)" : "rgba(255,80,0," + (0.10 + 0.26 * prog) + ")";
+      ctx.fillRect(0, sy - band, JH.VIEW_W, band * 2);
+      ctx.strokeStyle = strike ? "#ffcc44" : ((Math.floor(this.t * 12) & 1) ? "#ff8800" : "#ffd23f");
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(0, sy - band, JH.VIEW_W, band * 2);
+      // Arm slam coming from the boss toward the row
+      if (!strike) {
+        const cx = this.x - cam, cy = Geo.feetScreenY(this.y, 0) - this.bodyH * 0.5;
+        ctx.strokeStyle = JH.PAL.cable; ctx.lineWidth = prog > 0.55 ? 3 : 2; ctx.lineCap = "round";
+        const targY = sy;
+        const armY = prog < 0.55 ? cy - 40 * Math.min(1, prog / 0.20)
+                                  : cy - 40 + (targY - (cy - 40)) * ((prog - 0.55) / 0.45);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.quadraticCurveTo(cx, (cy + armY) / 2, cx, armY);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    die(game) {
+      if (this.dead) return;
+      this.dead = true;
+      game.audio.play("win");
+      for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
+      for (let i = 0; i < 9; i++)
+        setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
+          Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }), i * 80);
+      game.spawnPickup("suds", this.x, this.y, this.def.suds);
+      game.onEnemyKilled(this);
+    }
+  }
+  JH.GK9000Boss = GK9000Boss;
+
   // Factory used by the spawner.
   JH.makeEnemy = function (type, x, y) {
     if (type === "charger") return new Charger(type, x, y);
@@ -1426,6 +1777,8 @@
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
+    if (type === "gk9000") return new GK9000Boss(x, y);
+    if (type === "neighbor") return new NeighborNPC(x, y);
     return new Enemy(type, x, y);
   };
 })();

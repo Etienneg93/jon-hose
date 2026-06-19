@@ -10,7 +10,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920];
+  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920, 5440, 5960, 6480, 7000];
 
   const Game = {
     canvas: null, ctx: null,
@@ -94,12 +94,25 @@
           return;
         }
         if (!this.devMenu) return;
-        const count = JH.LEVEL1.waves.length;
+        const count = JH.LEVEL1.waves.length + 1;  // +1 for cutscene test entry
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
-        if (e.code === "Enter" || e.code === "NumpadEnter") { e.preventDefault(); this.devGotoWave(this.devCursor); }
+        if (e.code === "Enter" || e.code === "NumpadEnter") {
+          e.preventDefault();
+          if (this.devCursor >= JH.LEVEL1.waves.length) this.devTriggerCutscene();
+          else this.devGotoWave(this.devCursor);
+        }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
       });
+    },
+
+    devTriggerCutscene() {
+      this.startGame();
+      this.state = "cutscene";
+      this.cutscene = { phase: 0, nextWave: 10 };
+      document.getElementById("hud").classList.add("hidden");
+      document.getElementById("banner").classList.add("hidden");
+      this.devMenu = false;
     },
 
     devGotoWave(i) {
@@ -144,7 +157,10 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
-      this.wall = null; this.dropBudget = { suds: 0, items: 0 };
+      this.wall = null; this.gardens = []; this.gardenPool = []; this.gardenSpawnTimer = 0;
+      this.gardensCleared = 0; this.concertaUnlocked = false;
+      this.cutscene = null;
+      this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.elapsed = 0; this.kills = 0; this.shakeAmt = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
@@ -177,7 +193,20 @@
       this.bounds = { minX: left, maxX: right };
       this.dropBudget = { suds: 0, items: 0 };
 
-      if (wave.wall) {
+      if (wave.garden) {
+        // Garden event: 4 planter boxes spread across arena at alternating depths.
+        // Player must approach each box's depth to water it. Neighbor throws rocks!
+        const xs = [left + 70, left + 172, left + 274, left + 370];
+        const ys = [JH.DEPTH_MIN + 14, JH.DEPTH_MAX - 14, JH.DEPTH_MIN + 22, JH.DEPTH_MAX - 22];
+        this.gardens = xs.map((x, i) => new JH.GardenBox(x, ys[i], i));
+        this.gardenSpawnTimer = 1.4;
+        this.gardenPool = [];
+        this.dropBudget = { suds: 0, items: 0 };
+        // Neighbor stands near the left side, periodically hurls rocks
+        const nb = this.spawnEnemy("neighbor", left + 28, JH.DEPTH_MAX * 0.4);
+        nb.spawnGrace = 1.0;
+        this.banner("WATER ALL 4 CROPS!  DODGE THE ROCKS!", 2.8);
+      } else if (wave.wall) {
         // Barricade encounter: wall on the right, enemies keep coming.
         this.bounds = { minX: left, maxX: right - 26 };       // can't pass the wall
         this.wall = new JH.Wall(right - 6, wave.wallHp || JH.WALL.hp);
@@ -189,7 +218,7 @@
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
-        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : JH.BOSS;
+        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : bt === "gk9000" ? JH.GK9000 : JH.BOSS;
         this.dropBudget = { suds: 10, items: 5 };             // caps summon farming
         this.banner(bdef.name.toUpperCase(), 1.8);
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
@@ -211,12 +240,23 @@
     waveCleared_() {
       JH.Music.setTrack("level");
       this.waveActive = false;
+
+      // After Quake Walker (index 9), play his ally cutscene before continuing.
+      if (this.waveIndex === 9) {
+        JH.Camera.unlock();
+        this.state = "cutscene";
+        this.cutscene = { phase: 0, nextWave: 10 };
+        document.getElementById("hud").classList.add("hidden");
+        document.getElementById("banner").classList.add("hidden");
+        return;
+      }
+
       const clearedWave = JH.LEVEL1.waves[this.waveIndex];
       if (clearedWave) {
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      this.wall = null;           // barricade (if any) is down — open the path
+      this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
       // Second Wind: heal a chunk when the area is cleared.
       if (this.player.stats.clearHeal > 0) {
@@ -232,9 +272,117 @@
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[next] + 30 };
       if (this.waveIndex >= 1) {
         this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[next] - 150, JH.DEPTH_MIN + 6);
-        this.banner("AREA CLEAR! ▶  SHOP AHEAD", 1.6);
+        // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
+        const delay = Math.max(0, this.bannerTimer - 1.0);
+        if (delay > 0) setTimeout(() => this.banner("AREA CLEAR! ▶  SHOP AHEAD", 1.6), delay * 1000);
+        else this.banner("AREA CLEAR! ▶  SHOP AHEAD", 1.6);
       } else {
         this.banner("AREA CLEAR! ▶", 1.2);
+      }
+    },
+
+    // ------------------------------------------------------- cutscene
+    afterCutscene(nextWaveIdx) {
+      this.cutscene = null;
+      this.state = "play";
+      const clearedWave = JH.LEVEL1.waves[9];
+      if (clearedWave) {
+        document.getElementById("hud-wave").textContent = clearedWave.name;
+        document.getElementById("hud-wave-label").classList.remove("hidden");
+      }
+      if (this.player.stats.clearHeal > 0)
+        this.player.hp = Math.min(this.player.stats.maxHp,
+          this.player.hp + this.player.stats.maxHp * this.player.stats.clearHeal);
+      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
+      this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
+      this.showScreen("hud");
+      this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
+    },
+
+    drawCutscene(ctx) {
+      const cs = this.cutscene;
+      if (!cs) return;
+      const lines = [
+        ["...You're stronger than I expected.", "I underestimated you."],
+        ["The quake in my heart...", "You've silenced it."],
+        ["I'll fight by your side.", "Let's save this world."],
+      ];
+      const phase = clamp(cs.phase, 0, lines.length - 1);
+
+      // Full-screen dark overlay
+      ctx.fillStyle = "rgba(0,0,0,0.88)";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+
+      // Portrait box (MGS-style, left side)
+      const PX = 10, PY = 10, PW = 96, PH = 108;
+      ctx.fillStyle = "#111a11";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = "#e0902f";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      // Quake Walker portrait (talking = first 2s of each phase)
+      const talking = (cs.timer || 0) < 2.0;
+      this.drawQuakePortrait(ctx, PX, PY, PW, PH, talking, cs.timer || 0);
+
+      // Character name tag
+      ctx.fillStyle = "#e0902f";
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("QUAKE WALKER", PX, PY + PH + 9);
+
+      // Dialogue box
+      const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
+      ctx.fillStyle = "#080d08";
+      ctx.fillRect(DX, DY, DW, DH);
+      ctx.strokeStyle = "#2a4a2a";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(DX, DY, DW, DH);
+
+      // Dialogue text lines
+      ctx.fillStyle = "#cceecc";
+      ctx.font = "6px monospace";
+      const dl = lines[phase];
+      ctx.fillText(dl[0], DX + 6, DY + 18);
+      if (dl[1]) ctx.fillText(dl[1], DX + 6, DY + 30);
+
+      // Blinking advance prompt
+      if (Math.floor(performance.now() / 500) % 2) {
+        ctx.fillStyle = "#557755";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ E ]  ADVANCE", DX + DW - 4, DY + DH - 5);
+        ctx.textAlign = "left";
+      }
+
+      // Phase dots
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillStyle = i <= phase ? "#e0902f" : "#3a3020";
+        ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
+      }
+    },
+
+    drawQuakePortrait(ctx, px, py, pw, ph, talking, t) {
+      const mouthOpen = talking && (Math.floor(t * 7) & 1);
+      const img = JH.getQuakePortrait ? JH.getQuakePortrait(mouthOpen) : null;
+      if (img && img._ready) {
+        ctx.drawImage(img, px, py, pw, ph);
+      } else {
+        // Procedural fallback while images load
+        const cx = px + pw / 2, cy = py + ph - 4;
+        const C = JH.PAL.quakeBody, D = JH.PAL.quakeDk, HI = JH.PAL.quakeHi;
+        const f = (lx, ly, w, h, col) => {
+          ctx.fillStyle = col;
+          ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+        };
+        f(-38, 0, 76, 28, C); f(-38, 0, 76, 6, D); f(-38, 22, 76, 6, D);
+        f(-26, 6, 52, 14, "#3a3e45");
+        f(-48, 10, 12, 26, D); f(36, 10, 12, 26, D);
+        f(-22, 28, 44, 36, C); f(-22, 28, 44, 7, D);
+        f(-18, 40, 12, 10, "#ff5a5a"); f( 6, 40, 12, 10, "#ff5a5a");
+        f(-14, 34, 28, 4, D);
+        f(-20, 58, 6, 4, HI); f(14, 58, 6, 4, HI);
+        f(-20, 26, 4, 4, HI); f(16, 26, 4, 4, HI);
       }
     },
 
@@ -257,6 +405,9 @@
     // spawns (boss summons + wall-zone reinforcements) share a per-encounter
     // budget, so steady killing is rewarded but idle farming dries up.
     dropLoot(e) {
+      // Concerta pill: 8% chance from elite enemies once the garden unlocks it
+      if (e.elite && !e.isBoss && this.concertaUnlocked && Math.random() < 0.08)
+        this.spawnPickup("pill", e.x, e.y, 1);
       if (e.infinite) {
         const b = this.dropBudget;
         if (b && b.suds > 0) { this.spawnPickup("suds", e.x, e.y, e.def.suds); b.suds--; }
@@ -373,6 +524,21 @@
       if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
 
       if (this.devMenu) return;
+
+      // Cutscene: only E (confirm) advances the dialogue.
+      if (this.state === "cutscene") {
+        const cs = this.cutscene;
+        if (cs) {
+          cs.timer = (cs.timer || 0) + dt;
+          if (this.input.pressed("confirm") && (cs.timer || 0) > 0.3) {
+            cs.phase++;
+            cs.timer = 0;
+            if (cs.phase >= 3) this.afterCutscene(cs.nextWave);
+          }
+        }
+        return;
+      }
+
       if (this.state !== "play") { this.updateHUD(); return; }
 
       this.elapsed += dt;
@@ -439,6 +605,15 @@
             }
           }
           if (!this.wall || this.wall.dead) this.waveCleared_();
+        } else if (wave && wave.garden) {
+          for (const g of this.gardens) g.update(dt);
+          if (this.gardens.length > 0 && this.gardens.every((g) => g.done)) {
+            // All boxes watered — the neighbor disappears for good, wave clears
+            for (const e of this.enemies) {
+              if (e.type === "neighbor" && !e.dead) e.die(this);
+            }
+            this.waveCleared_();
+          }
         } else if (this.enemies.length === 0) {
           this.waveCleared_();
         }
@@ -495,6 +670,9 @@
         // barricade (if a wall encounter is active)
         if (this.wall) this.wall.draw(ctx, cam);
 
+        // garden boxes (if a garden encounter is active)
+        if (this.gardens) for (const g of this.gardens) g.draw(ctx, cam);
+
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
 
@@ -524,6 +702,8 @@
 
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
+      // Cutscene overlay (drawn after everything else).
+      if (this.state === "cutscene" && this.cutscene) this.drawCutscene(this.ctx);
       // Dev menu drawn last so it's always on top.
       if (this.devMenu) this.drawDevMenu(this.ctx);
     },
@@ -531,7 +711,7 @@
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
       const W = 224, ROW = 11, PAD = 14;
-      const H = PAD + waves.length * ROW + PAD;
+      const H = PAD + (waves.length + 1) * ROW + PAD;
       const PX = Math.round((JH.VIEW_W - W) / 2);
       const PY = Math.round((JH.VIEW_H - H) / 2);
       const MID = PX + W / 2;
@@ -567,6 +747,16 @@
         ctx.textAlign = "right";
         ctx.fillText("#" + (i + 1), PX + W - 6, ry + ROW - 3);
       });
+
+      // Extra entry: cutscene test
+      const csRy = PY + PAD + waves.length * ROW;
+      const csSel = this.devCursor === waves.length;
+      if (csSel) { ctx.fillStyle = "rgba(255,120,255,0.18)"; ctx.fillRect(PX + 3, csRy, W - 6, ROW - 1); }
+      ctx.fillStyle = csSel ? "#ff88ff" : "#667788";
+      ctx.font = (csSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+      ctx.fillText("✦  QUAKE CUTSCENE", PX + 8, csRy + ROW - 3);
+      ctx.fillStyle = csSel ? "#ff88ff" : "#445566"; ctx.textAlign = "right";
+      ctx.fillText("CS", PX + W - 6, csRy + ROW - 3);
 
       // Footer hint
       ctx.fillStyle = "#445566";

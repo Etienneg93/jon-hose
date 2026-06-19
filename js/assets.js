@@ -563,6 +563,151 @@
     p(-9, 22 + bob, 2, 3, "#dddddd");     // bushy beard
   });
 
+  // ========================= GK9000 (final boss) ======================
+  // A big STANDING switch chassis with an angry middle-aged face embedded.
+  Assets.register("gk9000", (p, opt) => {
+    const t = opt.t || 0;
+    if (opt.hurt && (Math.floor(t * 8) & 1)) return;
+    const C = PAL.gk9000Body, D = PAL.gk9000Dk;
+    // Outer chassis
+    p(-22, 0, 44, 60, D);
+    p(-20, 2, 40, 56, C);
+    p(-20, 56, 40, 3, "#39455c");   // top bevel
+    p(-22, 0, 44, 2, "#0a0c14");    // base strip
+    // Rack ears
+    p(-24, 8, 2, 44, "#0a0c10"); p(22, 8, 2, 44, "#0a0c10");
+    // Three rows of ports near top
+    for (let row = 0; row < 3; row++) {
+      for (let i = 0; i < 8; i++) {
+        const px = -18 + i * 4.5;
+        const py = 42 + row * 5;
+        const on = (Math.floor(t * 5 + i + row * 3) % 4 !== 0);
+        p(px, py, 3, 3, on ? PAL.gk9000Led : "#1a0808");
+      }
+    }
+    // Face embedded in middle section (ly 20-42)
+    p(-11, 22, 22, 20, PAL.gk9000Face);          // skin base
+    p(-10, 22, 20, 5, PAL.gk9000Stubble);         // chin stubble band
+    // Stubble texture patches (lighter flecks)
+    p(-9, 22, 2, 4, PAL.gk9000Face); p(-5, 23, 2, 3, PAL.gk9000Face);
+    p(-1, 22, 2, 4, PAL.gk9000Face); p( 3, 23, 2, 3, PAL.gk9000Face);
+    p( 6, 22, 2, 4, PAL.gk9000Face);
+    // Mouth grimace
+    p(-7, 27, 14, 2, "#1a1010");
+    p(-6, 28, 3, 2, "#0a0808"); p(3, 28, 3, 2, "#0a0808"); // teeth gaps
+    // Nose
+    p(-2, 29, 4, 5, "#9a8070");
+    // Brow ridge
+    p(-10, 39, 8, 3, "#2a2020"); p(2, 39, 8, 3, "#2a2020");
+    // Eye sockets
+    p(-9, 33, 7, 6, "#0a0808"); p(2, 33, 7, 6, "#0a0808");
+    // Glowing red eyes
+    p(-8, 34, 5, 4, "#dd1100"); p(3, 34, 5, 4, "#dd1100");
+    p(-7, 35, 2, 2, "#ff6644"); p(4, 35, 2, 2, "#ff6644");
+    // Vent slashes on body
+    p(-18, 10, 5, 2, "#0a0c10"); p(-18, 13, 5, 1, "#0a0c10");
+    p( 13, 10, 5, 2, "#0a0c10"); p( 13, 13, 5, 1, "#0a0c10");
+    // Status LEDs — all red/angry
+    p(-19, 5, 3, 3, PAL.gk9000Led); p(16, 5, 3, 3, "#ff3a3a");
+    p(-19, 18, 3, 3, PAL.gk9000Led); p(16, 18, 3, 3, "#ff3a3a");
+  });
+
+  // ====================== THE NEIGHBOR (garden enemy) =================
+  // Fully sun-covered: long trousers, long sleeves, gloves, head-wrap, sunglasses
+  // and a large conical kasa (rice-paddy hat). Wind pose: arm raised high with rock.
+  Assets.register("neighbor", (p, opt) => {
+    const wind = opt.state === "wind";
+    if (opt.hurt && (Math.floor((opt.t || 0) * 8) & 1)) return;
+    const G = PAL.neighbor, GD = PAL.neighborDk;
+    // Covered shoes
+    p(-5, 0, 4, 4, GD); p(1, 0, 4, 4, GD);
+    // Long trousers
+    p(-5, 4, 4, 13, GD); p(1, 4, 4, 13, GD);
+    // Torso (long-sleeve blouse)
+    p(-6, 17, 12, 11, G);
+    p(-6, 17, 12, 2, GD);   // collar shadow
+    p(-6, 26, 12, 2, GD);   // hem shadow
+    // Back arm (always down)
+    p(-10, 18, 4, 10, GD);
+    p(-11, 18, 3, 5, "#0e1a34");  // glove
+    // Front arm — raised dramatically when winding up to throw
+    if (wind) {
+      p(6, 22, 4, 13, GD);         // raised arm
+      p(5, 33, 5, 5, "#0e1a34");   // glove (visible above hat brim)
+      // Rock held aloft — pokes up above the hat
+      p(3, 38, 8, 5, PAL.rock);
+      p(4, 39, 6, 3, PAL.rockDk);
+      p(5, 40, 2, 2, "#c0b098");   // highlight
+    } else {
+      p(6, 17, 4, 10, GD);
+      p(6, 17, 3, 5, "#0e1a34");   // glove at rest
+    }
+    // Head covering (fully wraps face — only sunglasses visible)
+    p(-4, 28, 9, 10, G);
+    p(-4, 28, 9, 2, GD);
+    // Sunglasses — sole facial feature, dark rectangular lenses
+    p(-4, 33, 4, 2, "#070707"); p(1, 33, 4, 2, "#070707");
+    p(-1, 33, 2, 1, "#181818");  // bridge
+    // Highlight glint on lens
+    p(-3, 34, 1, 1, "#3a3a4a"); p(2, 34, 1, 1, "#3a3a4a");
+    // Kasa (rice-paddy hat) — smooth conical taper, 2px rise per step
+    p(-15, 38, 30, 2, "#c8b860");   // brim
+    p(-13, 40, 26, 2, "#ddc870");
+    p(-11, 42, 22, 2, "#d4bc60");
+    p( -9, 44, 18, 2, "#c8b040");
+    p( -7, 46, 14, 2, "#bea428");
+    p( -5, 48, 10, 2, "#b09c28");
+    p( -3, 50,  7, 2, "#a09020");
+    p( -2, 52,  5, 2, "#907820");
+    p( -1, 54,  3, 2, "#806818");
+    p(  0, 56,  2, 3, "#705a18");   // tip
+  });
+
+  // ========================= ROCK (neighbor projectile) ===============
+  Assets.register("rock", (p, opt) => {
+    p(-3, 0, 6, 6, PAL.rock);
+    p(-2, 1, 4, 4, PAL.rockDk);
+    p(-1, 2, 2, 2, "#aaa090");
+  });
+
+  // ========================= GARDEN BOX ===============================
+  Assets.register("garden_box", (p, opt) => {
+    const gf = Math.max(0, Math.min(1, opt.growFrac || 0));
+    // Wooden planter box
+    p(-20, 0, 40, 10, "#5a3b22"); p(-18, 2, 36, 8, "#4a2c18");
+    p(-19, 9, 40, 1, "#7a5230");  // top edge highlight
+    // Soil
+    p(-18, 2, 36, 2, "#3a2010");
+    if (gf > 0) {
+      const h = Math.round(gf * 16);
+      // Potato plant (left)
+      p(-14, 8, 3, h, "#4a7a30");
+      p(-16, 7 + h, 7, 4, "#5a9a40");
+      // Buckwheat (right)
+      p(5, 8, 3, h, "#6a8a3a");
+      p(3, 7 + h, 7, 4, "#8ab040");
+      if (gf > 0.5) {
+        // Flowers appearing
+        p(-13, 9 + h, 2, 2, "#fff7a0");
+        p(  7, 9 + h, 2, 2, "#ffe0b0");
+      }
+      if (gf > 0.8) {
+        // Produce visible in soil
+        p(-15, 6, 4, 3, "#c8a060");   // potato
+        p(  5, 6, 4, 3, "#e0e0a0");   // buckwheat seed head
+      }
+    }
+  });
+
+  // ========================= CONCERTA PILL ============================
+  Assets.register("pill", (p, opt) => {
+    const bob = Math.sin((opt.t || 0) * 7) * 1.5;
+    p(-5, 2 + bob, 10, 4, "#ff66ff");  // pink half
+    p(-5, 6 + bob, 10, 4, "#ffffff");  // white half
+    p(-5, 5 + bob, 10, 1, "#aa00aa");  // seam line
+    p(-2, 3 + bob,  3, 3, "#ffbbff");  // shine
+  });
+
   // Hydrant prop (level decoration / water source marker)
   Assets.register("hydrant", (p) => {
     p(-4, 0, 8, 3, "#7a1010");
@@ -572,4 +717,16 @@
     p(-5, 7, 2, 2, "#7a1010");
     p(3, 7, 2, 2, "#7a1010");
   });
+  // =================== QUAKE WALKER CUTSCENE PORTRAIT ================
+  // Pre-load both mouth-closed and mouth-open JPGs immediately.
+  {
+    function makeImg(src) {
+      const img = new Image(); img._ready = false;
+      img.onload = () => { img._ready = true; };
+      img.src = src; return img;
+    }
+    const _closed = makeImg("sprites/quake_walker_portrait.jpg");
+    const _open   = makeImg("sprites/quake_walker_portrait_mouthopen.jpg");
+    JH.getQuakePortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
 })();

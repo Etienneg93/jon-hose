@@ -12,8 +12,6 @@ npm run preview   # build then serve ./dist at http://localhost:5174
 
 There is no test suite or linter. The game also runs by opening `index.html` directly via `file://` — no server needed.
 
-Deploying is `git push`; `.github/workflows/deploy.yml` publishes to GitHub Pages automatically. `dist/` is git-ignored and rebuilt by CI.
-
 ## Architecture
 
 Plain `<script>` tags with no bundler or ES modules — the game runs from `file://` as-is. Everything shares a single global namespace `JH` (set on `window`).
@@ -48,11 +46,7 @@ screenX  = worldX - camera.x
 screenY  = JH.FLOOR_TOP + worldY - z   (feet-baseline anchor, FLOOR_TOP=168)
 ```
 
-Logical resolution is **480×270** (16:9). The canvas buffer is sized to physical pixels (`canvas.width = offsetWidth * devicePixelRatio`) and `ctx.setTransform` maps to 480×270 logical coords. The canvas CSS-fills the entire browser window — on a 2560×1440 display, 1 logical pixel ≈ 5.3×5.3 physical pixels. `imageSmoothingEnabled = false` for crisp nearest-neighbor scaling.
-
-### Canvas rendering note
-
-**Do not use hardcoded pixel sizes for canvas text or UI assuming a small screen.** The game fills the full browser window. Canvas font sizes (e.g., `"6px monospace"`) will render as ~32px physical on a 1440p display.
+Logical resolution is **480×270** (16:9). `ctx.setTransform` maps all drawing to this logical space regardless of the physical display — use logical units everywhere. `imageSmoothingEnabled = false` for crisp nearest-neighbor scaling.
 
 ### Game loop
 

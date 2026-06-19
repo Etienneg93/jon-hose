@@ -20,7 +20,7 @@
   JH.FLOOR_TOP = 168;       // screen-y of the back edge of the floor
   JH.DEPTH_MIN = 0;
   JH.DEPTH_MAX = 86;        // floor depth span in px
-  JH.LEVEL_LEN = 5460;      // world length of level 1 (logical px)
+  JH.LEVEL_LEN = 7400;      // world length of level 1 (logical px)
   JH.ZONE2_START = 4100;    // world-x where the ruined district (Act 3) begins
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
@@ -33,6 +33,9 @@
     { x: 3500, y: JH.DEPTH_MAX - 12 },
     { x: 4350, y: JH.DEPTH_MAX - 12 },   // ruined district
     { x: 4820, y: JH.DEPTH_MIN + 12 },
+    { x: 5300, y: JH.DEPTH_MAX - 12 },
+    { x: 5900, y: JH.DEPTH_MIN + 10 },
+    { x: 6700, y: JH.DEPTH_MAX - 14 },
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
 
@@ -57,6 +60,11 @@
     rubble: "#6a5f52", rubbleDk: "#473f36",
     suds: "#ffd23f", hpPk: "#ff5a5a",
     shadow: "rgba(0,0,0,0.35)",
+    gk9000Body: "#1e2535", gk9000Dk: "#0c0f18", gk9000Face: "#8a7a6a", gk9000Stubble: "#5a5050",
+    gk9000Led: "#ff3a3a",
+    neighbor: "#3a5888", neighborDk: "#243a66",
+    rock: "#7a6a58", rockDk: "#4e4030",
+    pill: "#ff77ff",
   };
 
   // ---- Player base stats (pre-upgrade) --------------------------------
@@ -120,6 +128,12 @@
       shootRange: 150, shootCd: 1.6, emberSpeed: 130, emberDmg: 9,
       suds: 14, waterMult: 1.5, bodyW: 16, bodyH: 28, color: "pyro",
     },
+    neighbor: {
+      name: "The Neighbor", hp: 280, speed: 0, touchDmg: 0, contactCd: 99,
+      rockCd: 2.4, rockSpeed: 148, rockDmg: 14,
+      meleeDmg: 0, meleeRange: 0, meleeWind: 0.4,
+      suds: 0, waterMult: 1.3, bodyW: 14, bodyH: 28, color: "neighbor",
+    },
   };
 
   JH.BOSS = {
@@ -143,6 +157,22 @@
   // Destructible barricade encounter: smash the wall while enemies keep coming,
   // then walk through to the next zone.
   JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
+
+  // Garden event: spray water on the planter to grow crops. Neighbor throws rocks.
+  JH.GARDEN = { growMax: 280, spawnEvery: 2.2, maxAlive: 2 };
+
+  // Concerta pill: unlimited water spray for a few seconds.
+  JH.CONCERTA = { dur: 4.5 };
+
+  // GK9000 — a powered-up standing switch with an embedded middle-aged face.
+  // Adds a floor-row depth slam on top of the Switch's arsenal.
+  JH.GK9000 = {
+    name: "GK9000", hp: 1800, speed: 28, bodyW: 44, bodyH: 60,
+    touchDmg: 18, contactCd: 0.9, suds: 480, color: "gk9000Body",
+    lineDmg: 26, lineBand: 13, lineWind: 0.82, enrageAt: 0.38,
+    whipDmg: 24, whipBand: 16, whipWind: 0.78,
+    rowDmg: 22, rowBand: 18, rowWind: 0.92,
+  };
 
   // True final boss — "Quake Walker", one of Jon's nemeses. A hulking bruiser
   // who STOMPS the ground: each stomp sends shockwaves rolling along the floor
@@ -174,7 +204,12 @@
       { name: "THE SWITCH", boss: true, bossType: "switch" }, // act-2 boss: The Switch of Doom
       // ---- Act 3: the ruined district — broken buildings & debris ----
       { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
-      { name: "FINAL BOSS", boss: true, bossType: "quake" }, // true finale: Quake Walker
+      { name: "QUAKE WALKER", boss: true, bossType: "quake" },
+      // ---- Act 4: the aftermath — Quake Walker turns ally ----
+      { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
+      { name: "THE GARDEN", garden: true, spawns: [{ type: "mook", count: 2 }] },
+      { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
+      { name: "GK9000", boss: true, bossType: "gk9000" },    // true finale
     ],
   };
 
@@ -189,5 +224,6 @@
     die:    { type: "saw", freq: 70, dur: 0.4, gain: 0.16 },
     win:    { type: "square", freq: 990, dur: 0.5, gain: 0.14 },
     jump:   { type: "square", freq: 480, dur: 0.09, gain: 0.08 },
+    pill:   { type: "square", freq: 1400, dur: 0.45, gain: 0.14 },
   };
 })();
