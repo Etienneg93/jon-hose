@@ -889,9 +889,14 @@
       this.isBoss = true;
       this.state = "hover";
       this.lines = [];          // active danger-line depths
+      this.whipTargets = [];    // active column X positions
+      this._doLine = false; this._doWhip = false;
+      this._atkPhase = 0;
+      this._bounds = null;
       this.windTimer = 0; this.atkDur = 0; this.cdTimer = 1.4; this.fireFx = 0;
     }
     think(dt, game) {
+      this._bounds = game.bounds;
       const pl = game.player, d = this.def;
       const enraged = this.hp / this.maxHp < d.enrageAt;
       if (this.fireFx > 0) this.fireFx -= dt;
@@ -906,28 +911,70 @@
 
       if (this.state === "tele") {
         this.windTimer -= dt;
-        if (this.windTimer > this.atkDur * 0.4) this.lines[0] = Geo.clampDepth(pl.y); // aim, then lock
+        // Track player during first 60% of wind-up, then lock aim
+        if (this.windTimer > this.atkDur * 0.4) {
+          if (this._doLine && this.lines.length > 0) this.lines[0] = { x: pl.x, y: Geo.clampDepth(pl.y) };
+          if (this._doWhip && this.whipTargets.length > 0) this.whipTargets[0] = pl.x;
+        }
         if (this.windTimer <= 0) {
-          for (const ly of this.lines)
-            if (Math.abs(pl.y - ly) <= d.lineBand && (pl.z || 0) < 18)
-              pl.takeHit(d.lineDmg, game, this.x);
+          if (this._doLine) {
+            for (const lt of this.lines)
+              if (Math.abs(pl.x - lt.x) <= d.whipBand && (pl.z || 0) < 18)
+                pl.takeHit(d.lineDmg, game, this.x);
+          }
+          if (this._doWhip) {
+            for (const wx of this.whipTargets)
+              if (Math.abs(pl.x - wx) <= d.whipBand && (pl.z || 0) < 18)
+                pl.takeHit(d.whipDmg, game, this.x);
+          }
           this.fireFx = 0.22; game.shake(7); game.audio.play("whack");
-          this.state = "fire"; this.cdTimer = enraged ? 1.1 : 1.9;
+          this.state = "fire"; this.cdTimer = enraged ? 1.0 : 1.8;
         }
         return;
       }
       if (this.state === "fire") { if (this.fireFx <= 0) this.state = "hover"; return; }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "hover"; return; }
-      if (this.spawnGrace <= 0) {                // begin a new line attack
-        this.atkDur = this.windTimer = enraged ? 0.72 : d.lineWind;
-        this.lines = [Geo.clampDepth(pl.y)];
-        if (enraged) this.lines.push(Geo.clampDepth(pl.y + (Math.random() < 0.5 ? -30 : 30)));
+      if (this.spawnGrace <= 0) {
+        this._atkPhase++;
+        if (!enraged) {
+          // Alternate: vertical cable slam (line) and horizontal cable whip (column)
+          if (this._atkPhase % 2 !== 0) {
+            this._doLine = true; this._doWhip = false;
+            this.lines = [{ x: pl.x, y: Geo.clampDepth(pl.y) }]; this.whipTargets = [];
+            this.atkDur = this.windTimer = d.lineWind;
+          } else {
+            this._doLine = false; this._doWhip = true;
+            this.lines = []; this.whipTargets = [pl.x];
+            this.atkDur = this.windTimer = d.whipWind;
+          }
+        } else {
+          // Enraged: randomly pick two verticals, two horizontals, or one of each
+          const r = Math.floor(Math.random() * 3);
+          if (r === 0) {
+            this._doLine = true; this._doWhip = false;
+            const off = Math.random() < 0.5 ? -30 : 30;
+            this.lines = [
+              { x: pl.x, y: Geo.clampDepth(pl.y) },
+              { x: pl.x + (Math.random() < 0.5 ? -50 : 50), y: Geo.clampDepth(pl.y + off) },
+            ];
+            this.whipTargets = [];
+          } else if (r === 1) {
+            this._doLine = false; this._doWhip = true;
+            this.lines = [];
+            this.whipTargets = [pl.x, pl.x + (Math.random() < 0.5 ? -50 : 50)];
+          } else {
+            this._doLine = true; this._doWhip = true;
+            this.lines = [{ x: pl.x, y: Geo.clampDepth(pl.y) }]; this.whipTargets = [pl.x];
+          }
+          this.atkDur = this.windTimer = d.lineWind * 0.72;
+        }
         this.state = "tele"; game.audio.play("jump");
       }
     }
     draw(ctx, cam) {
       this.drawCables(ctx, cam);
-      if (this.state === "tele" || this.fireFx > 0) this.drawLines(ctx, cam);
+      if (this._doLine && (this.state === "tele" || this.fireFx > 0)) this.drawLines(ctx, cam);
+      if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
     }
     // Doc-Ock cables waving out of the chassis.
@@ -949,18 +996,113 @@
       }
       ctx.restore();
     }
-    // Full-width danger line(s) at the targeted depth row.
+    // Floor-spot slam — tentacle drives to the locked (x,y) position on the ground.
     drawLines(ctx, cam) {
+      const cx = this.x - cam;
+      const cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.5;
       const band = this.def.lineBand, strike = this.fireFx > 0;
       const prog = this.atkDur ? 1 - this.windTimer / this.atkDur : 1;
       ctx.save();
-      for (const ly of this.lines) {
-        const sy = Geo.feetScreenY(ly, 0);
-        ctx.fillStyle = strike ? "rgba(120,240,255,0.6)" : "rgba(255,60,60," + (0.12 + 0.3 * prog) + ")";
-        ctx.fillRect(0, sy - band, JH.VIEW_W, band * 2);
-        ctx.strokeStyle = strike ? "#dffaff" : ((Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f");
+      // Danger zone: floor ellipse at each locked position
+      for (const lt of this.lines) {
+        const sx = lt.x - cam;
+        const sy = Geo.feetScreenY(lt.y, 0);
+        const rx = this.def.whipBand * 2, ry = band;
+        if (strike) {
+          ctx.fillStyle = "rgba(120,240,255,0.65)";
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = "#dffaff"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        } else {
+          const blink = (Math.floor(this.t * 12) & 1);
+          ctx.globalAlpha = 0.55;
+          ctx.strokeStyle = blink ? "#ff5a5a" : "#ffd23f"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = 0.12 + 0.22 * prog;
+          ctx.fillStyle = "#ff5a5a";
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx * prog, ry * prog, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+      // Arm animation
+      if (!strike) {
+        // 0–20%: raise up; 20–55%: hold at peak; 55–100%: slam diagonally to target
+        ctx.strokeStyle = JH.PAL.cable; ctx.lineCap = "round";
+        for (const lt of this.lines) {
+          const sx = lt.x - cam;
+          const sy = Geo.feetScreenY(lt.y, 0);
+          let armEndX, armEndY, ctrlX, ctrlY;
+          if (prog < 0.20) {
+            armEndX = cx; armEndY = cy - 50 * (prog / 0.20);
+            ctrlX = cx + Math.sin(this.t * 9) * 8; ctrlY = (cy + armEndY) / 2;
+          } else if (prog < 0.55) {
+            armEndX = cx; armEndY = cy - 50;
+            ctrlX = cx + Math.sin(this.t * 7) * 4; ctrlY = cy - 25;
+          } else {
+            const sp = (prog - 0.55) / 0.45;
+            armEndX = cx + (sx - cx) * sp;
+            armEndY = (cy - 50) + (sy - (cy - 50)) * sp;
+            // Control point stays near raised position — creates whip arc toward target
+            ctrlX = cx; ctrlY = cy - 30;
+          }
+          ctx.lineWidth = prog >= 0.55 ? 3 : 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.quadraticCurveTo(ctrlX, ctrlY, armEndX, armEndY);
+          ctx.stroke();
+          ctx.fillStyle = (Math.floor(this.t * 6) % 2) ? "#ff5a5a" : JH.PAL.switchLed;
+          const hs = prog >= 0.55 ? 2 : 1.5;
+          ctx.fillRect(Math.round(armEndX - hs), Math.round(armEndY - hs), hs * 2, hs * 2);
+        }
+      }
+      ctx.restore();
+    }
+    // Full-height danger column(s) at the targeted world X.
+    drawColumns(ctx, cam) {
+      const cx = this.x - cam;
+      const cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.5;
+      const band = this.def.whipBand, strike = this.fireFx > 0;
+      const prog = this.atkDur ? 1 - this.windTimer / this.atkDur : 1;
+      ctx.save();
+      const floorY0 = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 20;
+      const floorH = Geo.feetScreenY(JH.DEPTH_MAX, 0) - floorY0;
+      for (const wx of this.whipTargets) {
+        const sx = wx - cam;
+        ctx.fillStyle = strike ? "rgba(255,200,60,0.65)" : "rgba(255,130,0," + (0.10 + 0.28 * prog) + ")";
+        ctx.fillRect(sx - band, floorY0, band * 2, floorH);
+        ctx.strokeStyle = strike ? "#ffe880" : ((Math.floor(this.t * 12) & 1) ? "#ff8800" : "#ffd23f");
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(0, sy - band, JH.VIEW_W, band * 2);
+        ctx.strokeRect(sx - band, floorY0, band * 2, floorH);
+      }
+      if (!strike) {
+        // Phase 0–20 %: arm retracts right (pull-back)
+        // Phase 20–55 %: arm HOLDS at pull-back peak (telegraph pause)
+        // Phase 55–100%: arm WHIPS left to target column
+        const retractX = cx + this.bodyW * 0.5 + 20;
+        ctx.strokeStyle = JH.PAL.cable; ctx.lineWidth = 2; ctx.lineCap = "round";
+        for (const wx of this.whipTargets) {
+          const tx = wx - cam;
+          let armEndX, ctrlY;
+          if (prog < 0.20) {
+            armEndX = cx + (retractX - cx) * (prog / 0.20);
+            ctrlY = cy + Math.sin(this.t * 9) * 6;
+          } else if (prog < 0.55) {
+            armEndX = retractX;
+            ctrlY = cy + Math.sin(this.t * 7) * 4;    // gentle sway at rest
+          } else {
+            const wp = (prog - 0.55) / 0.45;
+            armEndX = retractX + (tx - retractX) * wp;
+            ctrlY = cy;                                 // straight horizontal on whip
+          }
+          ctx.lineWidth = prog >= 0.55 ? 3 : 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.quadraticCurveTo((cx + armEndX) / 2, ctrlY, armEndX, cy);
+          ctx.stroke();
+          ctx.fillStyle = (Math.floor(this.t * 6) % 2) ? "#ff5a5a" : JH.PAL.switchLed;
+          const hs = prog >= 0.55 ? 2 : 1.5;
+          ctx.fillRect(Math.round(armEndX - hs), Math.round(cy - hs), hs * 2, hs * 2);
+        }
       }
       ctx.restore();
     }
@@ -1098,6 +1240,9 @@
       this._leapStartX = 0; this._leapStartY = 0; this._leapProgress = 0;
     }
     think(dt, game) {
+      // Keep boss inside the wave arena — spray knockback uses global level bounds.
+      this.x = clamp(this.x, game.bounds.minX + 24, game.bounds.maxX - 24);
+
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       const enraged = this.hp / this.maxHp < d.enrageAt;

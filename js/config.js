@@ -137,6 +137,7 @@
     name: "The Switch of Doom", hp: 1000, speed: 30, bodyW: 48, bodyH: 30,
     touchDmg: 14, contactCd: 0.9, suds: 240, color: "switchBody",
     lineDmg: 22, lineBand: 11, lineWind: 0.95, enrageAt: 0.45,
+    whipDmg: 20, whipBand: 14, whipWind: 0.90,
   };
 
   // Destructible barricade encounter: smash the wall while enemies keep coming,
