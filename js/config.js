@@ -86,7 +86,7 @@
     regenDelay: 0.5,        // sec after spraying before regen kicks in
     sprayDamage: 50,        // dmg/sec at FULL pressure (80-100% tank = bonus tier)
     sprayRange: 78,         // stream reach (px)
-    sprayWidth: 18,         // depth half-band the stream covers
+    sprayWidth: 12,         // depth half-band the stream covers
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
     pierce: 0,              // extra targets the stream passes through (nozzle)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
@@ -108,7 +108,7 @@
     dashBoost: 0,           // extra move speed px/sec after dashing (Hydro-Dash)
     dashBoostDur: 0,        // seconds the post-dash speed boost lasts
 
-    bodyW: 16, bodyH: 30,   // collision box (px), feet-anchored
+    bodyW: 20, bodyH: 34,   // collision box (px), feet-anchored
   };
 
   // ---- Enemy archetypes ----------------------------------------------

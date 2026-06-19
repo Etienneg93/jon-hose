@@ -23,7 +23,7 @@ Plain `<script>` tags with no bundler or ES modules — the game runs from `file
 **Script load order** (defined in `index.html` and must be respected):
 
 ```
-config → assets → input → world → entities → upgrades → game → main
+config → quake-frames → assets → input → world → entities → upgrades → game → main
 ```
 
 ### Files
@@ -31,7 +31,9 @@ config → assets → input → world → entities → upgrades → game → mai
 | File | Responsibility |
 |------|----------------|
 | `js/config.js` | **Single source of truth for all tunables.** Player stats, enemy archetypes, boss data, wave definitions, palette, SFX descriptors. Adjust game balance here only. |
-| `js/assets.js` | `JH.Assets` — procedural pixel-art draw functions + WebAudio SFX/music. Sprites registered by name (`jon`, `mook`, `charger`, `pyro`, `boss`, `switch`, `shopkeeper`, `hydrant`, pickups). |
+| `js/quake-frames.js` | Auto-generated frame atlas for the Quake Walker boss (`JH.QUAKE_FRAMES`). Sets frame rects + anchor points for sprite-sheet blitting. Must load before `assets.js`. |
+| `js/jon-frames.js` | Auto-generated frame atlas for Jon (`JH.JON`). **Not loaded in `index.html` yet** — `sprites/jon-frames.png` doesn't exist. WIP infrastructure for the Jon sprite-sheet migration. |
+| `js/assets.js` | `JH.Assets` — sprite registry + WebAudio SFX/music. Painters are either procedural (pixel rects via `p()`) or image-blit (via `drawImage` + a frame atlas). Sprites registered by name (`jon`, `mook`, `charger`, `pyro`, `boss`, `quake`, `switch`, `shopkeeper`, `hydrant`, pickups). |
 | `js/input.js` | Keyboard + gamepad → normalized input state consumed each frame. |
 | `js/world.js` | `JH.Geo` (coordinate math, hit detection), `JH.Camera`, `JH.Background` (parallax). All spatial helpers live here. |
 | `js/entities.js` | `Entity` base, `Player`, `Enemy`, `Boss`, `Particle`, pickups, `ShopNPC`. Every entity implements `update(dt, game)` and `draw(ctx, cam)`. |
@@ -66,7 +68,7 @@ The `shop` HTML overlay state still exists but the primary shop interaction is a
 
 ### Wave system
 
-`WAVE_TRIGGERS` in `game.js` is an array of worldX positions. When the player crosses a trigger, the next wave from `JH.LEVEL1.waves` starts. After clearing a wave, `waveCleared_()` spawns a `ShopNPC` 150px before the next trigger. Wave types: normal spawns, `boss: true` (mid-boss or final boss), `wall: true` (barricade + continuous spawns), `tough: true` (all enemies spawn as elites).
+`WAVE_TRIGGERS` in `game.js` is an array of worldX positions. When the player crosses a trigger, the next wave from `JH.LEVEL1.waves` starts. After clearing a wave, `waveCleared_()` spawns a `ShopNPC` 150px before the next trigger. Wave types: normal spawns, `boss: true` (mid-boss or final boss — use `bossType: "quake"` etc. to select a specific boss class; defaults to the standard `Boss`), `wall: true` (barricade + continuous spawns), `tough: true` (all enemies spawn as elites).
 
 ### Upgrade tree (`js/upgrades.js`)
 
@@ -88,6 +90,13 @@ New player stats added to `JH.PLAYER` (must always have zero/false defaults for 
 - `dashBoost` / `dashBoostDur` — speed boost after dashing (Hydro-Dash)
 - `waterReturn` — water refunded per sec while hitting a target (Closed Loop)
 
+### Disabled features (do not recommend or implement unless asked)
+
+- **Jump** — `jumpV`, `vz`, and jump physics exist in `entities.js` and `config.js` but `jump` has no key binding in `input.js`. The action is declared in ACTIONS but is unreachable by the player.
+- **Melee/whack** — `meleeDamage`, `meleeTimer`, `drawMeleeArc` etc. exist in `entities.js`/`config.js` but `whack` has no key binding. Also unreachable.
+
+Neither feature should appear in sprite frame requirements, UI hints, or design suggestions.
+
 ### Assets API
 
 ```js
@@ -100,7 +109,7 @@ Assets.draw(ctx, key, x, y, facing, opts)
 Assets.shadow(ctx, sx, sy, radius)  // elliptical floor shadow
 ```
 
-Painters are registered with `Assets.register(key, fn)` where `fn(p, opt, ctx, x, y, facing)`. The `p(lx, ly, w, h, color)` helper draws a mirroring-aware filled rect: `ly=0` = feet, positive `ly` = upward from feet.
+Painters are registered with `Assets.register(key, fn)` where `fn(p, opt, ctx, x, y, facing)`. The `p(lx, ly, w, h, color)` helper draws a mirroring-aware filled rect: `ly=0` = feet, positive `ly` = upward from feet. Painters can also blit real sprite sheets with `ctx.drawImage` — the quake boss does this using `JH.QUAKE_FRAMES` (loaded by `quake-frames.js`). Both painter styles coexist; the API surface is the same.
 
 ### Elite enemies
 
@@ -121,7 +130,7 @@ Act 2 waves (`tough: true`) spawn enemies with `this.elite = true`. Elites get:
 ### Extending the game
 
 - **Balance:** edit numbers only in `js/config.js`.
-- **New enemy type:** add archetype to `JH.ENEMIES` in `config.js`, implement AI subclass in `entities.js`, add painter in `assets.js` with `Assets.register(key, fn)`.
+- **New enemy type:** add archetype to `JH.ENEMIES` in `config.js`, implement AI subclass in `entities.js`, add painter in `assets.js` with `Assets.register(key, fn)`. For a new boss, also handle the `bossType` string in the `spawnEnemy_()` factory in `game.js`.
 - **New wave:** add entry to `JH.LEVEL1.waves` in `config.js` and a matching X-position to `WAVE_TRIGGERS` in `game.js`.
 - **New upgrade node:** add to `NODES` array in `upgrades.js`. Any new player stat the node sets must first be declared with a zero/false default in `JH.PLAYER` in `config.js`.
 - **Hover shop:** `drawHoverShop()` in `game.js` reads `JH.Upgrades.nodes` and `JH.Upgrades.branches` directly — adding nodes to upgrades.js automatically appears in the shop.

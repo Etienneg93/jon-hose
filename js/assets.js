@@ -223,93 +223,34 @@
   const legStep = (frame) => [2, 1, -2, -1][frame & 3];
 
   // ============================ JON ===================================
-  Assets.register("jon", (p, opt) => {
-    const f = opt.frame | 0;
+  // ---- Jon sprite image cache (preloaded at startup)
+  const _jonImgs = {};
+  ["idle", "fire", "walk0", "walk1", "walk2", "walk3"].forEach(name => {
+    const img = new Image();
+    img.src = `sprites/jon/${name}.png`;
+    _jonImgs[name] = img;
+  });
+
+  const JON_H = 58;  // target display height in logical pixels
+
+  Assets.register("jon", (p, opt, ctx, x, y, facing) => {
+    const f = opt.frame & 3;
     const state = opt.state || "idle";
-    const spraying = state === "spray";
-    const moving = state === "walk" || (state === "spray" && opt.walking);
-    const bob = moving ? Math.abs(legStep(f)) * 0.5 : 0;
-    const ls = moving ? legStep(f) : 0;
-    const wf = Math.max(0, Math.min(1, opt.waterFrac == null ? 1 : opt.waterFrac));
     if (opt.hurt && (f & 1)) return;
 
-    // Boots — dark leather, thick soles, toe cap shine
-    p(-7+ls, 0, 6, 4, "#1a0e06");
-    p( 1-ls, 0, 6, 4, "#1a0e06");
-    p(-6+ls, 1, 4, 3, "#30200e");
-    p( 2-ls, 1, 4, 3, "#30200e");
-    p(-5+ls, 2, 2, 1, "#4a3018");
-    p( 3-ls, 2, 2, 1, "#4a3018");
+    const imgName = state === "fire" ? "fire" : state === "walk" ? `walk${f}` : "idle";
+    const img = _jonImgs[imgName];
+    if (!img || !img.complete || !img.naturalWidth) return;
 
-    // Jeans — two separate leg columns, mid-blue with highlight stripe
-    p(-7+ls, 4, 6, 9, "#1a2860");
-    p( 1-ls, 4, 6, 9, "#1a2860");
-    p(-6+ls, 5, 4, 8, "#263a8c");
-    p( 2-ls, 5, 4, 8, "#263a8c");
-    p(-5+ls, 7, 2, 5, "#3252b8");
-    p( 2-ls, 7, 2, 5, "#3252b8");
+    const scale = JON_H / img.naturalHeight;
+    const dw = Math.round(img.naturalWidth * scale);
 
-    // Backpack water tank — sits on his back (left side for right-facing)
-    // Tank body: dark shell with teal face panel
-    p(-12, 11+bob, 8, 17, "#152230");
-    p(-11, 12+bob, 6, 14, PAL.tankDk);
-    p(-11, 13+bob, 3, Math.max(1, Math.round(12*wf)), PAL.water);
-    p(-11, 25+bob, 3, 1, PAL.tankHi);
-    p(-12, 27+bob, 8, 1, "#152230");
-    // Hose outlet fitting
-    p( -6, 18+bob, 2, 3, "#0e1418");
-    p( -5, 19+bob, 1, 2, "#7a9090");
-
-    // Torso — dark grey work shirt, shaded
-    p(-7, 12+bob, 12, 10, "#1a1c1e");
-    p(-6, 13+bob, 10,  9, PAL.jonShirt);
-    p(-4, 13+bob,  7,  8, "#5e6268");
-    p(-7, 21+bob, 12,  1, "#111315");
-    // Belt line
-    p(-6, 12+bob, 10, 1, "#111315");
-
-    // Head — face base + jaw shadows
-    p(-5, 23+bob, 10, 9, PAL.skin);
-    p(-5, 23+bob,  2, 7, PAL.skinDark);
-    p( 4, 23+bob,  1, 6, PAL.skinDark);
-    // Black hair — top 3 rows + temple tails down to eye level
-    p(-5, 29+bob, 10, 3, "#111111");
-    p(-5, 25+bob,  2, 4, "#111111");
-    p( 4, 25+bob,  1, 4, "#111111");
-    // Eyebrows
-    p(-3, 28+bob,  2, 1, "#111111");
-    p( 1, 28+bob,  2, 1, "#111111");
-    // Eyes — 2×2 white with dark iris at bottom-right of each
-    p(-3, 26+bob,  2, 2, "#f0f0e8");
-    p(-2, 26+bob,  1, 1, "#0c0c0c");
-    p( 1, 26+bob,  2, 2, "#f0f0e8");
-    p( 2, 26+bob,  1, 1, "#0c0c0c");
-    // Mouth — single warm line
-    p(-2, 24+bob,  5, 1, "#c07040");
-
-    // Supply hose — continuous rubber from tank outlet to nozzle
-    p(-5, 17+bob, 6, 2, "#2a2a2a");
-    p( 1, 16+bob, 7, 2, "#383838");
-
-    // Shirt cuff — light strip at sleeve/arm junction
-    p(4, 14+bob, 2, 5, "#c8d0d8");
-
-    // Front arm + gold nozzle
-    if (spraying) {
-      p( 5, 14+bob, 7, 4, PAL.skin);
-      p( 5, 14+bob, 2, 4, PAL.skinDark);
-      p(10, 13+bob, 6, 6, "#e8a800");
-      p(11, 14+bob, 2, 4, "#f4c800");
-      p(10, 13+bob, 1, 6, "#7a5a10");
-      p(15, 14+bob, 1, 4, "#7a5a10");
-    } else {
-      p( 5, 14+bob, 5, 4, PAL.skin);
-      p( 5, 14+bob, 2, 4, PAL.skinDark);
-      p( 7, 15+bob, 5, 4, "#e8a800");
-      p( 8, 16+bob, 2, 2, "#f4c800");
-      p( 7, 15+bob, 1, 4, "#7a5a10");
-      p(11, 16+bob, 1, 2, "#7a5a10");
-    }
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -JON_H, dw, JON_H);
+    ctx.restore();
   });
 
   // ============================ MOOK ==================================

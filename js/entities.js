@@ -227,7 +227,7 @@
       // ---- animation
       const moving = (mx || my) && this.dashTimer <= 0;
       this.walking = moving;
-      this.state = this.spraying ? "spray" : (moving ? "walk" : "idle");
+      this.state = (this.spraying && !moving) ? "fire" : (moving ? "walk" : "idle");
       this.animate(dt, moving);
     }
 
@@ -251,7 +251,7 @@
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
-      const oz = this.z + 16;                  // nozzle height
+      const oz = this.z + (this.state === "walk" ? 28 : 34); // lower when walk-firing
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       const beam = S.beam | 0;                 // concentration tier 0..3
 
@@ -395,12 +395,23 @@
       });
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
 
+      // DEBUG: collision box
+      if (JH.DEBUG_HITBOX) {
+        const bw = this.stats.bodyW, bh = this.stats.bodyH, lift = 3;
+        ctx.strokeStyle = "#ff00ff"; ctx.lineWidth = 1;
+        ctx.strokeRect(Math.round(sx - bw / 2), Math.round(sy - bh - lift), bw, bh);
+        ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(sx - 3, sy - lift); ctx.lineTo(sx + 3, sy - lift);
+        ctx.moveTo(sx, sy - lift - 3); ctx.lineTo(sx, sy - lift + 3);
+        ctx.stroke();
+      }
+
       // Overhead HP + H₂O bars
       const barW = 28;
       const bx = Math.round(sx - barW / 2);
       const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
       const wFrac  = Math.max(0, this.water / this.stats.maxWater);
-      const barTop = Math.round(sy - this.stats.bodyH - 20);
+      const barTop = Math.round(sy - this.stats.bodyH - 34);
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
       // HP

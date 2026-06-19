@@ -273,9 +273,12 @@
       if (this.waveIndex >= 1) {
         this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[next] - 150, JH.DEPTH_MIN + 6);
         // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
+        const isBoss = !!(clearedWave && clearedWave.boss);
+        const clearText = isBoss ? "BOSS DOWN!" : "AREA CLEAR! ▶  SHOP AHEAD";
+        const clearDur  = isBoss ? 2.0 : 1.6;
         const delay = Math.max(0, this.bannerTimer - 1.0);
-        if (delay > 0) setTimeout(() => this.banner("AREA CLEAR! ▶  SHOP AHEAD", 1.6), delay * 1000);
-        else this.banner("AREA CLEAR! ▶  SHOP AHEAD", 1.6);
+        if (delay > 0) setTimeout(() => this.banner(clearText, clearDur), delay * 1000);
+        else this.banner(clearText, clearDur);
       } else {
         this.banner("AREA CLEAR! ▶", 1.2);
       }
