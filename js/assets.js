@@ -434,7 +434,8 @@
   function proceduralQuake(p, opt) {
     const f = opt.frame | 0;
     const walking = opt.state === "walk";
-    const stomp = opt.state === "tele" || opt.state === "strike";
+    const stomp = opt.state === "tele" || opt.state === "strike"
+              || opt.state === "leapWind" || opt.state === "leaping" || opt.state === "leapLand";
     const ls = walking ? legStep(f) * 1.6 : 0;
     if (opt.hurt && (f & 1)) return;
     const C = PAL.quakeBody, D = PAL.quakeDk, HI = PAL.quakeHi;
@@ -473,8 +474,8 @@
   }
   function quakeFrame(opt) {
     const F = JH.QUAKE_FRAMES && JH.QUAKE_FRAMES.frames; if (!F) return null;
-    if (opt.state === "tele") return F.stompUp;
-    if (opt.state === "strike") return F.stompDown;
+    if (opt.state === "tele" || opt.state === "leapWind" || opt.state === "leaping") return F.stompUp;
+    if (opt.state === "strike" || opt.state === "leapLand") return F.stompDown;
     if (opt.state === "walk") { const a = JH.QUAKE_FRAMES.anims.walk; return F[a[(opt.frame | 0) % a.length]]; }
     return F.idle;
   }

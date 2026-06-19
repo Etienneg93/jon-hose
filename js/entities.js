@@ -1050,18 +1050,34 @@
     }
     draw(ctx, cam) {
       const sx = this.x - cam;
-      if (sx < -16 || sx > JH.VIEW_W + 16) return;
-      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 2;
-      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 3;
-      const fade = Math.max(0.25, 1 - this.traveled / this.range);
+      if (sx < -20 || sx > JH.VIEW_W + 20) return;
+      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 4;
+      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 4;
+      const fade = Math.max(0.15, 1 - this.traveled / this.range);
+      const pulse = 0.65 + 0.35 * Math.abs(Math.sin(this.t * 24));
+      const sxi = Math.round(sx);
       ctx.save();
-      // a jagged dust crest sweeping across all lanes
-      ctx.globalAlpha = (0.45 + 0.3 * Math.sin(this.t * 30)) * fade;
-      ctx.fillStyle = "#d8b483";
-      ctx.fillRect(Math.round(sx - 2), yT, 4, yB - yT);
-      ctx.globalAlpha = 0.3 * fade;
-      ctx.fillStyle = JH.PAL.rubbleDk;
-      ctx.fillRect(Math.round(sx - 5), yT, 10, yB - yT);
+      // Wide amber glow — tapered (floor perspective: wider at screen bottom)
+      ctx.globalAlpha = 0.28 * fade;
+      ctx.fillStyle = "#e0902f";
+      ctx.beginPath();
+      ctx.moveTo(sxi - 1, yT); ctx.lineTo(sxi + 1, yT);
+      ctx.lineTo(sxi + 7, yB); ctx.lineTo(sxi - 7, yB);
+      ctx.closePath(); ctx.fill();
+      // Mid orange
+      ctx.globalAlpha = 0.68 * pulse * fade;
+      ctx.fillStyle = "#ff6a18";
+      ctx.beginPath();
+      ctx.moveTo(sxi - 0.5, yT); ctx.lineTo(sxi + 0.5, yT);
+      ctx.lineTo(sxi + 3, yB); ctx.lineTo(sxi - 3, yB);
+      ctx.closePath(); ctx.fill();
+      // Bright white-yellow core
+      ctx.globalAlpha = 0.95 * pulse * fade;
+      ctx.fillStyle = "#fff8b0";
+      ctx.beginPath();
+      ctx.moveTo(sxi, yT); ctx.lineTo(sxi, yT);
+      ctx.lineTo(sxi + 1.5, yB); ctx.lineTo(sxi - 1.5, yB);
+      ctx.closePath(); ctx.fill();
       ctx.restore();
     }
   }
@@ -1078,6 +1094,8 @@
       this.isBoss = true;
       this.state = "walk";
       this.windTimer = 0; this.atkDur = 0; this.cdTimer = 1.2; this.strikeFx = 0;
+      this._atkPhase = 0; this.leapTarget = null;
+      this._leapStartX = 0; this._leapStartY = 0; this._leapProgress = 0;
     }
     think(dt, game) {
       const pl = game.player, d = this.def;
@@ -1086,20 +1104,18 @@
       const spd = enraged ? d.speed * 1.4 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
 
-      // --- WIND-UP: raise the leg, ground ring fills, then STOMP ---
+      // --- STOMP WIND-UP ---
       if (this.state === "tele") {
         this.windTimer -= dt;
         if (this.windTimer > this.atkDur * 0.4) this.facing = dx >= 0 ? 1 : -1;
         if (this.windTimer <= 0) {
           game.shake(11); game.audio.play("whack");
-          // direct hit around his feet — don't be standing on him (or dash out)
           if (Math.abs(pl.x - this.x) < d.stompRadius && Math.abs(dy) < 26)
             pl.takeHit(d.stompDmg, game, this.x);
-          // shockwaves roll out both ways — DASH through them to dodge
           const ws = enraged ? d.waveSpeed * 1.3 : d.waveSpeed;
           game.embers.push(new Shockwave(this.x, -1, ws, d));
           game.embers.push(new Shockwave(this.x, 1, ws, d));
-          if (enraged) {                              // a trailing pair, lagging — dash again
+          if (enraged) {
             game.embers.push(new Shockwave(this.x, -1, ws * 0.55, d));
             game.embers.push(new Shockwave(this.x, 1, ws * 0.55, d));
           }
@@ -1114,7 +1130,47 @@
       }
       if (this.state === "strike") { if (this.strikeFx <= 0) this.state = "walk"; return; }
 
-      // --- advance toward the player between stomps, then stomp again ---
+      // --- LEAP WIND-UP: target circle appears at landing spot ---
+      if (this.state === "leapWind") {
+        this.windTimer -= dt;
+        if (this.windTimer > this.atkDur * 0.3)
+          this.facing = (this.leapTarget.x - this.x) >= 0 ? 1 : -1;
+        if (this.windTimer <= 0) {
+          this._leapStartX = this.x; this._leapStartY = this.y;
+          this._leapProgress = 0;
+          this.state = "leaping";
+          game.audio.play("jump");
+        }
+        return;
+      }
+
+      // --- LEAPING: parabolic arc across the arena ---
+      if (this.state === "leaping") {
+        this._leapProgress += dt / d.leapDur;
+        const prog = Math.min(1, this._leapProgress);
+        this.x = this._leapStartX + (this.leapTarget.x - this._leapStartX) * prog;
+        this.y = this._leapStartY + (this.leapTarget.y - this._leapStartY) * prog;
+        this.z = d.leapPeak * 4 * prog * (1 - prog);
+        this.facing = (this.leapTarget.x - this._leapStartX) >= 0 ? 1 : -1;
+        if (prog >= 1) {
+          this.z = 0;
+          game.shake(14); game.audio.play("whack");
+          const ldist = Math.hypot(pl.x - this.x, pl.y - this.y);
+          if (ldist < d.leapRadius) pl.takeHit(d.leapDmg, game, this.x);
+          for (let i = 0; i < 22; i++)
+            burst(game, this.x + (Math.random() - 0.5) * 28, this.y + (Math.random() - 0.5) * 22, 0,
+              Math.random() < 0.4 ? JH.PAL.rubble : "#d8a860", 1, { speed: 190, life: 0.6, up: 100, grav: 250 });
+          this.strikeFx = 0.32;
+          this.state = "leapLand";
+          this.cdTimer = enraged ? 1.1 : 1.9;
+        }
+        return;
+      }
+
+      // --- LEAP LANDING: brief recovery pose ---
+      if (this.state === "leapLand") { if (this.strikeFx <= 0) this.state = "walk"; return; }
+
+      // --- walk toward player, then pick next attack ---
       this.facing = dx >= 0 ? 1 : -1;
       if (this.cdTimer > 0) {
         this.cdTimer -= dt;
@@ -1123,20 +1179,49 @@
         this.state = "walk";
         return;
       }
-      if (!this._hinted) { game.banner("DASH THROUGH THE QUAKE!", 2); this._hinted = true; }
-      this.atkDur = this.windTimer = enraged ? d.stompWind * 0.7 : d.stompWind;
-      this.state = "tele";
-      game.audio.play("jump");
+
+      this._atkPhase++;
+      const doLeap = enraged ? (this._atkPhase % 2 === 0) : (this._atkPhase % 3 === 0);
+      if (doLeap) {
+        const mid = (game.bounds.minX + game.bounds.maxX) * 0.5;
+        const tx = clamp(
+          this.x < mid ? game.bounds.maxX - 50 : game.bounds.minX + 50,
+          game.bounds.minX + 30, game.bounds.maxX - 30
+        );
+        this.leapTarget = { x: tx, y: pl.y };
+        this.atkDur = this.windTimer = enraged ? d.leapWind * 0.75 : d.leapWind;
+        this.state = "leapWind";
+        if (!this._leapHinted) { game.banner("GET OUT OF THE WAY!", 2); this._leapHinted = true; }
+      } else {
+        if (!this._hinted) { game.banner("DASH THROUGH THE QUAKE!", 2); this._hinted = true; }
+        this.atkDur = this.windTimer = enraged ? d.stompWind * 0.7 : d.stompWind;
+        this.state = "tele";
+        game.audio.play("jump");
+      }
     }
 
     draw(ctx, cam) {
       if (this.state === "tele") this.drawTelegraph(ctx, cam);
+      if (this.state === "leapWind" && this.leapTarget) this.drawLeapTelegraph(ctx, cam);
+      // Ghost shadow at landing spot while airborne
+      if (this.state === "leaping" && this.leapTarget) {
+        const tsx = this.leapTarget.x - cam;
+        const tsy = Geo.feetScreenY(this.leapTarget.y, 0);
+        const w = this.bodyW * 0.65;
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.beginPath();
+        ctx.ellipse(Math.round(tsx), Math.round(tsy), w, w * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       JH.Enemy.prototype.draw.call(this, ctx, cam);
-      if (this.state === "tele") {
+      if (this.state === "tele" || this.state === "leapWind") {
         const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
         ctx.fillStyle = (Math.floor(this.t * 10) & 1) ? "#ff5a5a" : "#fff";
         ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
-        ctx.fillText("!", sx, sy); ctx.textAlign = "left";
+        ctx.fillText(this.state === "leapWind" ? "!!" : "!", sx, sy);
+        ctx.textAlign = "left";
       }
     }
     drawTelegraph(ctx, cam) {
@@ -1151,6 +1236,30 @@
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = "#ff5a5a";
       ctx.beginPath(); ctx.ellipse(sx, sy, r * prog, r * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    drawLeapTelegraph(ctx, cam) {
+      const tx = this.leapTarget.x - cam;
+      const ty = Geo.feetScreenY(this.leapTarget.y, 0);
+      const prog = this.atkDur > 0 ? 1 - this.windTimer / this.atkDur : 1;
+      const r = this.def.leapRadius;
+      const blink = (Math.floor(this.t * 14) & 1);
+      ctx.save();
+      ctx.strokeStyle = blink ? "#ff5a5a" : "#ffd23f";
+      ctx.lineWidth = 1.5;
+      // Outer ring
+      ctx.globalAlpha = 0.65;
+      ctx.beginPath(); ctx.ellipse(tx, ty, r, r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      // Crosshair
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath();
+      ctx.moveTo(tx - r - 6, ty); ctx.lineTo(tx + r + 6, ty);
+      ctx.moveTo(tx, ty - r * 0.5 - 6); ctx.lineTo(tx, ty + r * 0.5 + 6);
+      ctx.stroke();
+      // Fill progress
+      ctx.globalAlpha = 0.18 + 0.2 * prog;
+      ctx.fillStyle = "#ff5a5a";
+      ctx.beginPath(); ctx.ellipse(tx, ty, r * prog, r * 0.45 * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     die(game) {

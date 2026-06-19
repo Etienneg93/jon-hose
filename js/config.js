@@ -152,6 +152,7 @@
     touchDmg: 16, contactCd: 1.0, suds: 320, color: "quakeBody",
     stompWind: 0.8, stompDmg: 26, stompRadius: 36,   // direct hit around his feet
     waveDmg: 18, waveSpeed: 150, waveRange: 340, enrageAt: 0.4,
+    leapWind: 0.65, leapDur: 0.38, leapDmg: 32, leapRadius: 52, leapPeak: 58,
   };
 
   // ---- Level 1 waves --------------------------------------------------
