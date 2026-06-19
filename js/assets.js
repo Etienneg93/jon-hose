@@ -428,6 +428,73 @@
     p(24, 8, 2, 12, "#0a0d14");
   });
 
+  // ========================= QUAKE WALKER (boss 3) ====================
+  // Uses the real sprite-sheet frames (sprites/quake-frames.png) when loaded;
+  // falls back to a procedural steel-bruiser drawing otherwise.
+  function proceduralQuake(p, opt) {
+    const f = opt.frame | 0;
+    const walking = opt.state === "walk";
+    const stomp = opt.state === "tele" || opt.state === "strike";
+    const ls = walking ? legStep(f) * 1.6 : 0;
+    if (opt.hurt && (f & 1)) return;
+    const C = PAL.quakeBody, D = PAL.quakeDk, HI = PAL.quakeHi;
+    const lift = stomp ? 9 : 0;
+    p(-15 + ls, 0, 12, 20, D);
+    p(3 - ls, lift, 12, 20, D);
+    p(-15 + ls, 0, 12, 5, "#15171b");
+    p(3 - ls, lift, 12, 5, "#15171b");
+    p(-19, 18, 38, 30, C);
+    p(-19, 18, 38, 4, D);
+    p(-19, 44, 38, 4, D);
+    p(-17, 24, 34, 5, HI);
+    p(-14, 31, 28, 10, "#3a3e45");
+    p(-25, 40, 9, 13, D);
+    p(16, 40, 9, 13, D);
+    p(-27, 24, 9, 15, D);
+    p(18, 24, 9, 15, D);
+    p(-9, 48, 18, 12, C);
+    p(-9, 48, 18, 3, D);
+    p(2, 53, 5, 3, "#ff5a5a");
+    p(-7, 53, 5, 3, "#ff5a5a");
+    p(-17, 20, 2, 2, HI); p(15, 20, 2, 2, HI);
+  }
+
+  // Lazy-load the atlas (works regardless of script order).
+  let _qImg = null, _qTried = false;
+  function quakeImg() {
+    if (_qTried) return _qImg;
+    _qTried = true;
+    if (JH.QUAKE_FRAMES) {
+      _qImg = new Image(); _qImg._ready = false;
+      _qImg.onload = () => { _qImg._ready = true; };
+      _qImg.src = JH.QUAKE_FRAMES.sheet;
+    }
+    return _qImg;
+  }
+  function quakeFrame(opt) {
+    const F = JH.QUAKE_FRAMES && JH.QUAKE_FRAMES.frames; if (!F) return null;
+    if (opt.state === "tele") return F.stompUp;
+    if (opt.state === "strike") return F.stompDown;
+    if (opt.state === "walk") { const a = JH.QUAKE_FRAMES.anims.walk; return F[a[(opt.frame | 0) % a.length]]; }
+    return F.idle;
+  }
+  Assets.register("quake", (p, opt, ctx, x, y, facing) => {
+    const img = quakeImg();
+    if (img && img._ready) {
+      const fr = quakeFrame(opt);
+      if (fr) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.translate(Math.round(x), Math.round(y));
+        if (facing < 0) ctx.scale(-1, 1);
+        ctx.drawImage(img, fr.x, fr.y, fr.w, fr.h, Math.round(-fr.ax), -fr.h, fr.w, fr.h);
+        ctx.restore();
+        return;
+      }
+    }
+    proceduralQuake(p, opt);
+  });
+
   // ===================== WATER DROPLET (projectile) ===================
   Assets.register("water", (p, opt) => {
     const s = opt.size || 3;

@@ -10,7 +10,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860];
+  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920];
 
   const Game = {
     canvas: null, ctx: null,
@@ -150,7 +150,7 @@
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
-        const bdef = (bt === "switch") ? JH.SWITCH : JH.BOSS;
+        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : JH.BOSS;
         this.dropBudget = { suds: 10, items: 5 };             // caps summon farming
         this.banner(bdef.name.toUpperCase(), 1.8);
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);

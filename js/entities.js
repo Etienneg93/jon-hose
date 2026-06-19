@@ -1023,12 +1023,155 @@
   }
   JH.Wall = Wall;
 
+  // ============================================== QUAKE SHOCKWAVE
+  // A tremor that rolls along the FLOOR from a stomp. Spans the whole depth
+  // band and only hits a GROUNDED player — jump over it. Runs through the
+  // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)).
+  class Shockwave {
+    constructor(x, dir, speed, def) {
+      this.x = x; this.dir = dir; this.speed = speed;
+      this.dmg = def.waveDmg; this.range = def.waveRange;
+      this.traveled = 0; this.t = 0; this.dead = false; this.hit = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      const step = this.speed * dt * this.dir;
+      this.x += step; this.traveled += Math.abs(step);
+      const pl = game.player;
+      // Sweeps across all lanes — DASH through it (dash i-frames) to dodge.
+      if (!this.hit && pl.alive && Math.abs(pl.x - this.x) < 11) {
+        pl.takeHit(this.dmg, game, this.x); this.hit = true; game.shake(4);
+      }
+      if (Math.random() < 0.7)
+        burst(game, this.x, JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), 0,
+          Math.random() < 0.5 ? JH.PAL.rubble : "#caa470", 1, { speed: 45, life: 0.35, up: 70, grav: 240 });
+      if (this.traveled > this.range) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      if (sx < -16 || sx > JH.VIEW_W + 16) return;
+      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 2;
+      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 3;
+      const fade = Math.max(0.25, 1 - this.traveled / this.range);
+      ctx.save();
+      // a jagged dust crest sweeping across all lanes
+      ctx.globalAlpha = (0.45 + 0.3 * Math.sin(this.t * 30)) * fade;
+      ctx.fillStyle = "#d8b483";
+      ctx.fillRect(Math.round(sx - 2), yT, 4, yB - yT);
+      ctx.globalAlpha = 0.3 * fade;
+      ctx.fillStyle = JH.PAL.rubbleDk;
+      ctx.fillRect(Math.round(sx - 5), yT, 10, yB - yT);
+      ctx.restore();
+    }
+  }
+  JH.Shockwave = Shockwave;
+
+  // ================================================ QUAKE WALKER (boss 3)
+  class QuakeBoss extends Enemy {
+    constructor(x, y) {
+      super("mook", x, y);
+      this.def = JH.QUAKE;
+      this.type = "quake";
+      this.hp = this.maxHp = JH.QUAKE.hp;
+      this.bodyW = JH.QUAKE.bodyW; this.bodyH = JH.QUAKE.bodyH;
+      this.isBoss = true;
+      this.state = "walk";
+      this.windTimer = 0; this.atkDur = 0; this.cdTimer = 1.2; this.strikeFx = 0;
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      const enraged = this.hp / this.maxHp < d.enrageAt;
+      const spd = enraged ? d.speed * 1.4 : d.speed;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+
+      // --- WIND-UP: raise the leg, ground ring fills, then STOMP ---
+      if (this.state === "tele") {
+        this.windTimer -= dt;
+        if (this.windTimer > this.atkDur * 0.4) this.facing = dx >= 0 ? 1 : -1;
+        if (this.windTimer <= 0) {
+          game.shake(11); game.audio.play("whack");
+          // direct hit around his feet — don't be standing on him (or dash out)
+          if (Math.abs(pl.x - this.x) < d.stompRadius && Math.abs(dy) < 26)
+            pl.takeHit(d.stompDmg, game, this.x);
+          // shockwaves roll out both ways — DASH through them to dodge
+          const ws = enraged ? d.waveSpeed * 1.3 : d.waveSpeed;
+          game.embers.push(new Shockwave(this.x, -1, ws, d));
+          game.embers.push(new Shockwave(this.x, 1, ws, d));
+          if (enraged) {                              // a trailing pair, lagging — dash again
+            game.embers.push(new Shockwave(this.x, -1, ws * 0.55, d));
+            game.embers.push(new Shockwave(this.x, 1, ws * 0.55, d));
+          }
+          for (let i = 0; i < 16; i++)
+            burst(game, this.x + (Math.random() - 0.5) * 34, this.y + (Math.random() - 0.5) * 30, 2,
+              Math.random() < 0.5 ? JH.PAL.rubble : "#caa470", 1, { speed: 130, life: 0.45, up: 60 });
+          this.strikeFx = 0.24;
+          this.state = "strike";
+          this.cdTimer = enraged ? 1.0 : 1.8;
+        }
+        return;
+      }
+      if (this.state === "strike") { if (this.strikeFx <= 0) this.state = "walk"; return; }
+
+      // --- advance toward the player between stomps, then stomp again ---
+      this.facing = dx >= 0 ? 1 : -1;
+      if (this.cdTimer > 0) {
+        this.cdTimer -= dt;
+        this.x += (dx / (dist || 1)) * spd * dt;
+        this.y += (dy / (dist || 1)) * spd * dt * 0.6;
+        this.state = "walk";
+        return;
+      }
+      if (!this._hinted) { game.banner("DASH THROUGH THE QUAKE!", 2); this._hinted = true; }
+      this.atkDur = this.windTimer = enraged ? d.stompWind * 0.7 : d.stompWind;
+      this.state = "tele";
+      game.audio.play("jump");
+    }
+
+    draw(ctx, cam) {
+      if (this.state === "tele") this.drawTelegraph(ctx, cam);
+      JH.Enemy.prototype.draw.call(this, ctx, cam);
+      if (this.state === "tele") {
+        const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
+        ctx.fillStyle = (Math.floor(this.t * 10) & 1) ? "#ff5a5a" : "#fff";
+        ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+        ctx.fillText("!", sx, sy); ctx.textAlign = "left";
+      }
+    }
+    drawTelegraph(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const prog = this.atkDur ? 1 - this.windTimer / this.atkDur : 1;
+      const r = this.def.stompRadius;
+      ctx.save();
+      ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#ff5a5a";
+      ctx.beginPath(); ctx.ellipse(sx, sy, r * prog, r * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    die(game) {
+      if (this.dead) return;
+      this.dead = true;
+      game.audio.play("win");
+      for (let i = 0; i < 7; i++)
+        setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }), i * 90);
+      game.spawnPickup("suds", this.x, this.y, this.def.suds);
+      game.onEnemyKilled(this);
+    }
+  }
+  JH.QuakeBoss = QuakeBoss;
+
   // Factory used by the spawner.
   JH.makeEnemy = function (type, x, y) {
     if (type === "charger") return new Charger(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
+    if (type === "quake") return new QuakeBoss(x, y);
     return new Enemy(type, x, y);
   };
 })();

@@ -83,13 +83,27 @@
       for (let x = -40; x < JH.LEVEL_LEN + 200; ) {
         const w = 24 + Math.floor(rA() * 30);
         const h = 40 + Math.floor(rA() * 70);
-        const b = { x, w, h, c: rA() > 0.5 ? "#1b2740" : "#202d4a", windows: [] };
-        // Bake the window grid in BUILDING-LOCAL coords (offset from the
-        // building's top-left) with a fixed lit/dark pattern, so the lights
-        // scroll smoothly with the building instead of shimmering in place.
-        for (let wy = 6; wy < h - 6; wy += 9) {
+        const broken = x > JH.ZONE2_START;       // Act 3: ruined district
+        const b = {
+          x, w, h, broken, jag: null, windows: [],
+          c: broken ? (rA() > 0.5 ? "#241f24" : "#2b242a")
+                    : (rA() > 0.5 ? "#1b2740" : "#202d4a"),
+        };
+        if (broken) {
+          // Collapsed skyline: per-slice top heights, with the odd big gap.
+          b.jag = [];
+          for (let sx = 0; sx < w; sx += 5) {
+            const drop = Math.floor(rA() * 24) + (rA() > 0.85 ? Math.floor(rA() * 34) : 0);
+            b.jag.push({ x: sx, w: Math.min(5, w - sx), h: Math.max(7, h - drop) });
+          }
+        }
+        // Windows baked in BUILDING-LOCAL coords so they scroll with the
+        // building. Ruined buildings: only lower floors, mostly blown out.
+        const wy0 = broken ? Math.floor(h * 0.42) : 6;
+        for (let wy = wy0; wy < h - 6; wy += 9) {
           for (let wx = 4; wx < w - 4; wx += 8) {
-            if (rA() > 0.35) b.windows.push({ x: wx, y: wy, lit: rA() > 0.5 });
+            if (rA() > (broken ? 0.55 : 0.35))
+              b.windows.push({ x: wx, y: wy, lit: broken ? rA() > 0.82 : rA() > 0.5 });
           }
         }
         this.buildings.push(b);
@@ -105,6 +119,13 @@
       // Hydrants are interactive now and drawn by the Game layer (so their
       // active-refill FX can sort with actors); none drawn here.
       this.props = [];
+      // Debris piles scattered through the ruined district (Act 3).
+      this.debris = [];
+      const rC = rng(7);
+      for (let x = JH.ZONE2_START + 40; x < JH.LEVEL_LEN; ) {
+        this.debris.push({ x, y: JH.DEPTH_MIN + rC() * (JH.DEPTH_MAX - JH.DEPTH_MIN), s: 0.7 + rC() * 0.9 });
+        x += 70 + rC() * 150;
+      }
     },
 
     draw(ctx) {
@@ -128,6 +149,17 @@
       ctx.arc(W - 58, 36, 12, 0, Math.PI * 2);
       ctx.fill();
 
+      // Ruined-district smog haze — fades in as you approach Act 3.
+      const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500));
+      if (zoneT > 0) {
+        ctx.fillStyle = "rgba(70,45,30," + (0.5 * zoneT).toFixed(3) + ")";
+        ctx.fillRect(0, 0, W, top);
+        const g = ctx.createLinearGradient(0, top - 44, 0, top);
+        g.addColorStop(0, "rgba(150,70,25,0)");
+        g.addColorStop(1, "rgba(150,70,25," + (0.4 * zoneT).toFixed(3) + ")");
+        ctx.fillStyle = g; ctx.fillRect(0, top - 44, W, 44);
+      }
+
       // Far skyline (slow parallax)
       const pFar = cam * 0.25;
       for (const b of this.farBuildings) {
@@ -142,11 +174,16 @@
         const sx = b.x - pNear;
         if (sx + b.w < 0 || sx > W) continue;
         ctx.fillStyle = b.c;
-        ctx.fillRect(Math.round(sx), top - b.h, b.w, b.h);
+        if (b.broken && b.jag) {
+          for (const s of b.jag) ctx.fillRect(Math.round(sx + s.x), top - s.h, s.w, s.h);
+        } else {
+          ctx.fillRect(Math.round(sx), top - b.h, b.w, b.h);
+        }
         // Windows are anchored to the building, so they scroll with it.
         const by = top - b.h;
         for (const win of b.windows) {
-          ctx.fillStyle = win.lit ? "rgba(255,210,63,0.5)" : "rgba(120,160,220,0.22)";
+          ctx.fillStyle = win.lit ? "rgba(255,210,63,0.5)"
+                                  : (b.broken ? "rgba(38,34,30,0.55)" : "rgba(120,160,220,0.22)");
           ctx.fillRect(Math.round(sx + win.x), by + win.y, 3, 4);
         }
       }
@@ -166,6 +203,19 @@
       ctx.fillStyle = "#39405440";
       ctx.fillRect(0, top + 2, W, 6);
 
+      // Ruined-district floor: dust tint + scattered debris piles.
+      if (zoneT > 0) {
+        ctx.fillStyle = "rgba(74,64,50," + (0.5 * zoneT).toFixed(3) + ")";
+        ctx.fillRect(0, top, W, H - top);
+      }
+      if (this.debris) {
+        for (const d of this.debris) {
+          const dx = d.x - cam;
+          if (dx < -30 || dx > W + 30) continue;
+          this.drawDebris(ctx, dx, Geo.feetScreenY(d.y, 0), d.s);
+        }
+      }
+
       // Props (full parallax, depth-sorted by being part of bg here)
       for (const pr of this.props) {
         const sx = pr.x - cam;
@@ -173,6 +223,17 @@
         JH.Assets.shadow(ctx, sx, Geo.feetScreenY(pr.y, 0), 8);
         JH.Assets.draw(ctx, pr.key, sx, Geo.feetScreenY(pr.y, 0), 1, {});
       }
+    },
+
+    // A small rubble heap with a bit of bent rebar — floor dressing for Act 3.
+    drawDebris(ctx, sx, sy, s) {
+      ctx.fillStyle = JH.PAL.rubbleDk;
+      ctx.fillRect(Math.round(sx - 9 * s), Math.round(sy - 2), Math.round(18 * s), Math.round(4 * s));
+      ctx.fillStyle = JH.PAL.rubble;
+      ctx.fillRect(Math.round(sx - 6 * s), Math.round(sy - 6 * s), Math.round(7 * s), Math.round(6 * s));
+      ctx.fillRect(Math.round(sx + 1), Math.round(sy - 4 * s), Math.round(5 * s), Math.round(4 * s));
+      ctx.fillStyle = "#2c2620";
+      ctx.fillRect(Math.round(sx - 1), Math.round(sy - 9 * s), Math.max(1, Math.round(2 * s)), Math.round(9 * s));
     },
   };
   JH.Background = Background;

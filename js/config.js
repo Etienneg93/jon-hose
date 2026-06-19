@@ -20,7 +20,8 @@
   JH.FLOOR_TOP = 168;       // screen-y of the back edge of the floor
   JH.DEPTH_MIN = 0;
   JH.DEPTH_MAX = 86;        // floor depth span in px
-  JH.LEVEL_LEN = 4380;      // world length of level 1 (logical px)
+  JH.LEVEL_LEN = 5460;      // world length of level 1 (logical px)
+  JH.ZONE2_START = 4100;    // world-x where the ruined district (Act 3) begins
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
   // level). Spread along the street so you're never far from a top-up.
@@ -30,6 +31,8 @@
     { x: 1900, y: JH.DEPTH_MAX - 14 },
     { x: 2700, y: JH.DEPTH_MIN + 10 },
     { x: 3500, y: JH.DEPTH_MAX - 12 },
+    { x: 4350, y: JH.DEPTH_MAX - 12 },   // ruined district
+    { x: 4820, y: JH.DEPTH_MIN + 12 },
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
 
@@ -50,6 +53,8 @@
     boss: "#4a5d3a", bossDk: "#2e3a24",
     switchBody: "#2a3346", switchDk: "#11151e", switchLed: "#6cff9a", cable: "#41506b",
     wall: "#8a6b46", wallDk: "#5c4327", wallHi: "#b08a5c",
+    quakeBody: "#4a4f57", quakeDk: "#2c3036", quakeHi: "#e0902f",
+    rubble: "#6a5f52", rubbleDk: "#473f36",
     suds: "#ffd23f", hpPk: "#ff5a5a",
     shadow: "rgba(0,0,0,0.35)",
   };
@@ -138,6 +143,17 @@
   // then walk through to the next zone.
   JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
 
+  // True final boss — "Quake Walker", one of Jon's nemeses. A hulking bruiser
+  // who STOMPS the ground: each stomp sends shockwaves rolling along the floor
+  // in both directions. They hit you only while GROUNDED — JUMP over them.
+  // (Distinct from Big Drip's zone slam and the Switch's depth-line.)
+  JH.QUAKE = {
+    name: "Quake Walker", hp: 1200, speed: 22, bodyW: 50, bodyH: 60,
+    touchDmg: 16, contactCd: 1.0, suds: 320, color: "quakeBody",
+    stompWind: 0.8, stompDmg: 26, stompRadius: 36,   // direct hit around his feet
+    waveDmg: 18, waveSpeed: 150, waveRange: 340, enrageAt: 0.4,
+  };
+
   // ---- Level 1 waves --------------------------------------------------
   // Each wave: list of {type, count}. Gate progress until cleared, then
   // open the shop (except before the boss, which is its own finale).
@@ -153,7 +169,10 @@
       { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
         spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] }, // spawn pool while wall stands
-      { name: "FINAL BOSS", boss: true, bossType: "switch" }, // finale: The Switch of Doom
+      { name: "THE SWITCH", boss: true, bossType: "switch" }, // act-2 boss: The Switch of Doom
+      // ---- Act 3: the ruined district — broken buildings & debris ----
+      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "FINAL BOSS", boss: true, bossType: "quake" }, // true finale: Quake Walker
     ],
   };
 
