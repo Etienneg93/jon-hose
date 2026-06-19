@@ -33,7 +33,7 @@ mkdirSync(DIST, { recursive: true });
 
 // Copy the static payload.
 cpSync(path.join(ROOT, "styles.css"), path.join(DIST, "styles.css"));
-for (const dir of ["js", "audio"]) {
+for (const dir of ["js", "audio", "sprites"]) {
   cpSync(path.join(ROOT, dir), path.join(DIST, dir), { recursive: true });
 }
 

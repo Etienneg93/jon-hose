@@ -41,9 +41,10 @@ iteration loop. (Cloudflare Pages works off the same repo too.)
 | Talk to vendor    | `E` / `Enter`           | —                  |
 | Confirm / Pause   | `Enter` / `Esc`         | Start              |
 
-The hose is your only weapon — there's no melee or jump; the kit is **move, spray, dash**.
+The hose is your only weapon
 Spraying costs water, and the beam weakens as the tank drains (sputters when empty), so back
-off to recharge or top up at a **fire hydrant**. **Dash** has brief invulnerability — it's
+off to recharge or top up at a **fire hydrant**. 
+**Dash** has brief invulnerability — it's
 your dodge.
 
 **Audio:** the title track *Jon Hose Rush* (`audio/jon-hose-rush.mp3`) loops in the
