@@ -4,7 +4,7 @@
    Each node is bought ONCE, costs Suds, and may require earlier nodes in
    its branch. `owned` tracks purchased node ids; computeStats() folds the
    apply() of every owned node onto the base JH.PLAYER block. Some nodes
-   set flags (beam / pierce / waterReturn / clearHeal / dashPuddle) that
+   set flags (beam / waterReturn / dashPuddle) that
    the player logic reads directly.
 
    Branches:
@@ -29,7 +29,7 @@
       apply: (s) => { s.sprayDamage += 13; s.beam = Math.max(s.beam, 2); s.sprayWidth -= 2; } },
     { id: "pw3", branch: "PRESSURE", tier: 3, req: ["pw2"], cost: 140,
       name: "Hydro Lance", desc: "+18 dmg. A cutting beam that punches through the whole line.",
-      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.pierce += 99; s.knockback += 20; } },
+      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
 
     // ---- REACH --------------------------------------------------------
     { id: "rc1", branch: "REACH", tier: 1, req: [], cost: 45,

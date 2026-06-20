@@ -39,6 +39,11 @@
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
 
+  // Forgiving floor collision for Act-3 rubble piles. Per-pile ellipse footprint
+  // (scaled by the pile's own size `s`), kept a touch smaller than the art so you
+  // only bump on a clear overlap and can slide/step around in depth.
+  JH.DEBRIS = { collide: true, rx: 9, ry: 7 }; // rx/ry = half-extents in worldX / depth at s=1
+
   // Walk-up shop vendor between fights.
   JH.SHOP = { range: 28 };
 
@@ -63,6 +68,7 @@
     gk9000Body: "#1e2535", gk9000Dk: "#0c0f18", gk9000Face: "#8a7a6a", gk9000Stubble: "#5a5050",
     gk9000Led: "#ff3a3a",
     neighbor: "#3a5888", neighborDk: "#243a66",
+    soundwave: "#40e0ff",
     rock: "#7a6a58", rockDk: "#4e4030",
     pill: "#ff77ff",
   };
@@ -89,10 +95,8 @@
     sprayWidth: 12,         // VISUAL depth half-band of the droplet spray (tightens with Pressure)
     sprayHitBand: 18,       // DAMAGE depth half-band — decoupled from visual so hits stay forgiving up/down
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
-    pierce: 0,              // extra targets the stream passes through (nozzle)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
-    clearHeal: 0,           // fraction of max HP healed on wave clear (Second Wind)
     dashPuddle: false,      // dash leaves a slick water puddle (Hydro-Dash)
 
     // Melee fallback (no water cost) — deliberately weak so the hose wins at
@@ -133,6 +137,8 @@
       name: "The Neighbor", hp: 280, speed: 0, touchDmg: 0, contactCd: 99,
       rockCd: 2.4, rockSpeed: 148, rockDmg: 14,
       meleeDmg: 0, meleeRange: 0, meleeWind: 0.4,
+      soundwaveDmg: 20, soundwaveSpeed: 120, soundwaveArcs: 3, soundwaveBand: 14,
+      speakerWindup: 0.5, speakerHold: 0.8, speakerChance: 0.33,
       suds: 0, waterMult: 1.3, bodyW: 14, bodyH: 28, color: "neighbor",
     },
   };
@@ -160,7 +166,7 @@
   JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
 
   // Garden event: spray water on the planter to grow crops. Neighbor throws rocks.
-  JH.GARDEN = { growMax: 280, spawnEvery: 2.2, maxAlive: 2 };
+  JH.GARDEN = { growMax: 280 };
 
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
@@ -177,7 +183,7 @@
 
   // True final boss — "Quake Walker", one of Jon's nemeses. A hulking bruiser
   // who STOMPS the ground: each stomp sends shockwaves rolling along the floor
-  // in both directions. They hit you only while GROUNDED — JUMP over them.
+  // in both directions. DASH through them — i-frames negate the hit.
   // (Distinct from Big Drip's zone slam and the Switch's depth-line.)
   JH.QUAKE = {
     name: "Quake Walker", hp: 1200, speed: 22, bodyW: 50, bodyH: 60,
@@ -208,7 +214,7 @@
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
       // ---- Act 4: the aftermath — Quake Walker turns ally ----
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
-      { name: "THE GARDEN", garden: true, spawns: [{ type: "mook", count: 2 }] },
+      { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
       { name: "GK9000", boss: true, bossType: "gk9000" },    // true finale
     ],
@@ -222,9 +228,11 @@
     hurt:   { type: "saw", freq: 90, dur: 0.18, gain: 0.14 },
     coin:   { type: "square", freq: 880, dur: 0.07, gain: 0.10 },
     buy:    { type: "square", freq: 660, dur: 0.12, gain: 0.12 },
+    upgrade:{ type: "square", freq: 523, dur: 0.3,  gain: 0.14 },
     die:    { type: "saw", freq: 70, dur: 0.4, gain: 0.16 },
     win:    { type: "square", freq: 990, dur: 0.5, gain: 0.14 },
     jump:   { type: "square", freq: 480, dur: 0.09, gain: 0.08 },
     pill:   { type: "square", freq: 1400, dur: 0.45, gain: 0.14 },
+    blast:  { type: "saw", freq: 55, dur: 0.35, gain: 0.18 },
   };
 })();

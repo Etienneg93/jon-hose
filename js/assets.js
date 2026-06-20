@@ -63,7 +63,7 @@
         const osc = this.ctx.createOscillator();
         osc.type = def.type === "saw" ? "sawtooth" : def.type;
         osc.frequency.setValueAtTime(def.freq, t);
-        if (name === "coin" || name === "win" || name === "buy")
+        if (name === "coin" || name === "win" || name === "buy" || name === "upgrade")
           osc.frequency.exponentialRampToValueAtTime(def.freq * 1.6, t + def.dur);
         if (name === "hurt" || name === "die")
           osc.frequency.exponentialRampToValueAtTime(def.freq * 0.5, t + def.dur);
@@ -596,45 +596,73 @@
   });
 
   // ====================== THE NEIGHBOR (garden enemy) =================
-  // Fully sun-covered: long trousers, long sleeves, gloves, head-wrap, sunglasses
-  // and a large conical kasa (rice-paddy hat). Wind pose: arm raised high with rock.
-  Assets.register("neighbor", (p, opt) => {
-    const wind = opt.state === "wind";
+  // Image-blit painter backed by neighbor-frames.js atlas.
+  // Falls back to procedural if the sheet isn't loaded yet.
+  let _nbImg = null, _nbTried = false;
+  function neighborImg() {
+    if (_nbTried) return _nbImg;
+    _nbTried = true;
+    if (JH.NEIGHBOR_FRAMES) {
+      _nbImg = new Image(); _nbImg._ready = false;
+      _nbImg.onload = () => { _nbImg._ready = true; };
+      _nbImg.src = JH.NEIGHBOR_FRAMES.sheet;
+    }
+    return _nbImg;
+  }
+  function neighborFrame(state) {
+    const F = JH.NEIGHBOR_FRAMES && JH.NEIGHBOR_FRAMES.frames;
+    if (!F) return null;
+    if (state === "rockReady")  return F.idle;
+    if (state === "rockReach")  return F.rockReach;
+    if (state === "rockRaise")  return F.rockRaise;
+    if (state === "speakerRaise") return F.speakerRaise;
+    if (state === "speakerBlast") return F.speakerBlast;
+    return F.idle;
+  }
+  Assets.register("neighbor", (p, opt, ctx, x, y, facing) => {
     if (opt.hurt && (Math.floor((opt.t || 0) * 8) & 1)) return;
+    const img = neighborImg();
+    if (img && img._ready) {
+      const fr = neighborFrame(opt.state);
+      if (fr) {
+        const S = JH.NEIGHBOR_FRAMES.scale;
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.translate(Math.round(x), Math.round(y));
+        if (facing !== (fr.df || 1)) ctx.scale(-1, 1);
+        ctx.drawImage(img, fr.x, fr.y, fr.w, fr.h,
+          Math.round(-fr.ax * S), -Math.round(fr.h * S),
+          Math.round(fr.w * S), Math.round(fr.h * S));
+        ctx.restore();
+        return;
+      }
+    }
+    // ---- procedural fallback ----
+    const wind = opt.state === "rockReach" || opt.state === "rockRaise" || opt.state === "rockReady";
     const G = PAL.neighbor, GD = PAL.neighborDk;
-    // Covered shoes
     p(-5, 0, 4, 4, GD); p(1, 0, 4, 4, GD);
-    // Long trousers
     p(-5, 4, 4, 13, GD); p(1, 4, 4, 13, GD);
-    // Torso (long-sleeve blouse)
     p(-6, 17, 12, 11, G);
-    p(-6, 17, 12, 2, GD);   // collar shadow
-    p(-6, 26, 12, 2, GD);   // hem shadow
-    // Back arm (always down)
+    p(-6, 17, 12, 2, GD);
+    p(-6, 26, 12, 2, GD);
     p(-10, 18, 4, 10, GD);
-    p(-11, 18, 3, 5, "#0e1a34");  // glove
-    // Front arm — raised dramatically when winding up to throw
+    p(-11, 18, 3, 5, "#0e1a34");
     if (wind) {
-      p(6, 22, 4, 13, GD);         // raised arm
-      p(5, 33, 5, 5, "#0e1a34");   // glove (visible above hat brim)
-      // Rock held aloft — pokes up above the hat
+      p(6, 22, 4, 13, GD);
+      p(5, 33, 5, 5, "#0e1a34");
       p(3, 38, 8, 5, PAL.rock);
       p(4, 39, 6, 3, PAL.rockDk);
-      p(5, 40, 2, 2, "#c0b098");   // highlight
+      p(5, 40, 2, 2, "#c0b098");
     } else {
       p(6, 17, 4, 10, GD);
-      p(6, 17, 3, 5, "#0e1a34");   // glove at rest
+      p(6, 17, 3, 5, "#0e1a34");
     }
-    // Head covering (fully wraps face — only sunglasses visible)
     p(-4, 28, 9, 10, G);
     p(-4, 28, 9, 2, GD);
-    // Sunglasses — sole facial feature, dark rectangular lenses
     p(-4, 33, 4, 2, "#070707"); p(1, 33, 4, 2, "#070707");
-    p(-1, 33, 2, 1, "#181818");  // bridge
-    // Highlight glint on lens
+    p(-1, 33, 2, 1, "#181818");
     p(-3, 34, 1, 1, "#3a3a4a"); p(2, 34, 1, 1, "#3a3a4a");
-    // Kasa (rice-paddy hat) — smooth conical taper, 2px rise per step
-    p(-15, 38, 30, 2, "#c8b860");   // brim
+    p(-15, 38, 30, 2, "#c8b860");
     p(-13, 40, 26, 2, "#ddc870");
     p(-11, 42, 22, 2, "#d4bc60");
     p( -9, 44, 18, 2, "#c8b040");
@@ -643,11 +671,34 @@
     p( -3, 50,  7, 2, "#a09020");
     p( -2, 52,  5, 2, "#907820");
     p( -1, 54,  3, 2, "#806818");
-    p(  0, 56,  2, 3, "#705a18");   // tip
+    p(  0, 56,  2, 3, "#705a18");
   });
 
   // ========================= ROCK (neighbor projectile) ===============
-  Assets.register("rock", (p, opt) => {
+  // Sprite sheet: sprites/neighbor/rocks.png — 3x2 grid, 24x24 cells, 6 variants.
+  const ROCK_CELL = 24, ROCK_COLS = 3, ROCK_SCALE = 0.38;
+  let _rockSheet = null, _rockSheetTried = false;
+  function rockSheetImg() {
+    if (_rockSheetTried) return _rockSheet;
+    _rockSheetTried = true;
+    _rockSheet = new Image(); _rockSheet._ready = false;
+    _rockSheet.onload = () => { _rockSheet._ready = true; };
+    _rockSheet.src = "sprites/neighbor/rocks.png";
+    return _rockSheet;
+  }
+  Assets.register("rock", (p, opt, ctx, x, y) => {
+    const img = rockSheetImg();
+    if (img && img._ready) {
+      const v = (opt.variant || 0) % 6;
+      const col = v % ROCK_COLS, row = Math.floor(v / ROCK_COLS);
+      const dw = Math.round(ROCK_CELL * ROCK_SCALE);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, col * ROCK_CELL, row * ROCK_CELL, ROCK_CELL, ROCK_CELL,
+        Math.round(x - dw / 2), Math.round(y - dw / 2), dw, dw);
+      ctx.restore();
+      return;
+    }
     p(-3, 0, 6, 6, PAL.rock);
     p(-2, 1, 4, 4, PAL.rockDk);
     p(-1, 2, 2, 2, "#aaa090");

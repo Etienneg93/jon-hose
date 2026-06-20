@@ -11,6 +11,8 @@
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
   const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920, 5440, 5960, 6480, 7000];
+  if (WAVE_TRIGGERS.length !== JH.LEVEL1.waves.length)
+    console.warn("WAVE_TRIGGERS length (" + WAVE_TRIGGERS.length + ") !== waves length (" + JH.LEVEL1.waves.length + ") — progression will break");
 
   const Game = {
     canvas: null, ctx: null,
@@ -149,6 +151,19 @@
       this.bannerTimer = dur || 1.4;
     },
 
+    // Celebratory feedback when an upgrade node is purchased: rising chime,
+    // a name banner, and a suds-coloured sparkle burst at the player.
+    upgradeFx(node) {
+      this.audio.play("upgrade");
+      if (node && node.name) this.banner(node.name.toUpperCase() + " ACQUIRED!", 1.3);
+      const p = this.player;
+      if (p) {
+        JH.burst(this, p.x, p.y, 18, JH.PAL.suds,    16, { speed: 70, life: 0.6, up: 70, size: 2 });
+        JH.burst(this, p.x, p.y, 24, JH.PAL.waterHi, 10, { speed: 50, life: 0.5, up: 55, size: 2 });
+      }
+      this.shake(3);
+    },
+
     // ------------------------------------------------------- new game
     startGame() {
       JH.Upgrades.reset();
@@ -157,7 +172,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
-      this.wall = null; this.gardens = []; this.gardenPool = []; this.gardenSpawnTimer = 0;
+      this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null;
       this.dropBudget = { suds: 0, items: 0 };
@@ -199,8 +214,6 @@
         const xs = [left + 70, left + 172, left + 274, left + 370];
         const ys = [JH.DEPTH_MIN + 14, JH.DEPTH_MAX - 14, JH.DEPTH_MIN + 22, JH.DEPTH_MAX - 22];
         this.gardens = xs.map((x, i) => new JH.GardenBox(x, ys[i], i));
-        this.gardenSpawnTimer = 1.4;
-        this.gardenPool = [];
         this.dropBudget = { suds: 0, items: 0 };
         // Neighbor stands near the left side, periodically hurls rocks
         const nb = this.spawnEnemy("neighbor", left + 28, JH.DEPTH_MAX * 0.4);
@@ -258,11 +271,6 @@
       }
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
-      // Second Wind: heal a chunk when the area is cleared.
-      if (this.player.stats.clearHeal > 0) {
-        this.player.hp = Math.min(this.player.stats.maxHp,
-          this.player.hp + this.player.stats.maxHp * this.player.stats.clearHeal);
-      }
       // The LAST wave (final boss) wins; a mid-boss just continues.
       if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
 
@@ -293,9 +301,6 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      if (this.player.stats.clearHeal > 0)
-        this.player.hp = Math.min(this.player.stats.maxHp,
-          this.player.hp + this.player.stats.maxHp * this.player.stats.clearHeal);
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
       this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
       this.showScreen("hud");
@@ -459,7 +464,7 @@
             '<span class="tn-cost">' + (owned ? "✔" : "💧" + n.cost) + "</span></div>" +
             '<div class="tn-desc">' + (locked ? "🔒 " : "") + n.desc + "</div>";
           if (avail) node.addEventListener("click", () => {
-            if (U.buy(n.id, this.player)) { this.audio.play("buy"); this.renderShop(); }
+            if (U.buy(n.id, this.player)) { this.upgradeFx(n); this.renderShop(); }
             else this.audio.play("hurt");
           });
           col.appendChild(node);
@@ -569,7 +574,7 @@
             if (this.input.pressed("confirm")) {
               const node = sel[this.shopCursor];
               if (node && U.buy(node.id, this.player)) {
-                this.audio.play("buy");
+                this.upgradeFx(node);
                 const newSel = U.nodes.filter((n) => U.isAvailable(n.id));
                 this.shopCursor = Math.min(this.shopCursor, Math.max(0, newSel.length - 1));
               } else {
@@ -634,6 +639,7 @@
       for (let i = 0; i < a.length; i++) {
         for (let j = i + 1; j < a.length; j++) {
           const e1 = a[i], e2 = a[j];
+          if (e1.isBoss || e2.isBoss) continue;
           const dx = e2.x - e1.x, dy = e2.y - e1.y;
           const minX = (e1.bodyW + e2.bodyW) * 0.5, minY = 10;
           if (Math.abs(dx) < minX && Math.abs(dy) < minY) {

@@ -29,6 +29,27 @@
   }
   JH.burst = burst;
 
+  // Forgiving floor collision with Act-3 rubble. Treats each pile as a small
+  // ellipse on the floor plane (scaled by the pile's own size `s`) and slides
+  // the actor out to the nearest edge. Used by the player and walking enemies;
+  // bosses override update() and skip this, so they crush rubble underfoot.
+  // Small radii + the depth axis let actors step around piles, not get walled.
+  function resolveDebris(ent) {
+    const D = JH.DEBRIS, list = JH.Background && JH.Background.debris;
+    if (!D || !D.collide || !list) return;
+    for (const d of list) {
+      const dx = ent.x - d.x;
+      if (dx > 48 || dx < -48) continue;             // cheap x cull
+      const rx = D.rx * d.s, ry = D.ry * d.s;
+      const nx = dx / rx, ny = (ent.y - d.y) / ry;   // position in ellipse space
+      const dist = Math.hypot(nx, ny);
+      if (dist >= 1 || dist === 0) continue;         // outside (or dead-centre: skip)
+      ent.x = d.x + (nx / dist) * rx;                // snap to the ellipse boundary
+      ent.y = d.y + (ny / dist) * ry;
+    }
+  }
+  JH.resolveDebris = resolveDebris;
+
   function denominateCoins(total) {
     const coins = []; let rem = total;
     while (rem >= 10) { coins.push(10); rem -= 10; }
@@ -174,7 +195,12 @@
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
 
       // ---- dash boost timer + trailing particles
-      if (this.concertaTimer > 0) this.concertaTimer -= dt;
+      if (this.concertaTimer > 0) {
+        this.concertaTimer -= dt;
+        // Concerta refills the tank really fast for its whole duration —
+        // spraying or not (the spray drain is also suppressed while active).
+        this.water = Math.min(S.maxWater, this.water + S.maxWater * dt);
+      }
       if (this.kibbleTimer > 0) {
         this.kibbleTimer -= dt;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
@@ -191,7 +217,7 @@
       if (In.pressed("dash") && this.dashCdTimer <= 0 && (mx || my)) {
         this.dashTimer = S.dashTime; this.dashCdTimer = S.dashCd;
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
-        this._dashX = mx || this.facing; this._dashY = my;
+        this._dashX = mx; this._dashY = my;
         game.audio.play("jump");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
@@ -259,6 +285,9 @@
         }
       }
 
+      // ---- debris (Act 3): soft push-out of rubble piles, then re-clamp.
+      resolveDebris(this);
+
       // ---- bounds (game gates rightward progress during fights)
       this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
       this.y = Geo.clampDepth(this.y);
@@ -286,7 +315,7 @@
       else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
       if (!dry && this.concertaTimer <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
-      if (this.concertaTimer > 0) this.water = Math.min(S.maxWater, this.water + S.maxWater * dt);
+      // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
@@ -431,12 +460,18 @@
         ctx.shadowColor = "#44ee66";
         ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
       }
+      if (this.concertaTimer > 0) {
+        ctx.save();
+        ctx.shadowColor = "#cc44ff";
+        ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
+      }
       Assets.draw(ctx, "jon", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
         walking: this.walking,
       });
+      if (this.concertaTimer > 0) ctx.restore();
       if (this.kibbleTimer > 0) ctx.restore();
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
 
@@ -591,6 +626,7 @@
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
       this.think(dt, game);
+      resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
       // contact damage
       const pl = game.player;
       if (!this.dead && pl.alive && Geo.bodiesOverlap(this, pl) && this.contactTimer <= 0
@@ -953,7 +989,6 @@
       else if (this.kind === "pill") {
         pl.concertaTimer = Math.max(pl.concertaTimer, JH.CONCERTA.dur);
         game.audio.play("pill");
-        game.banner("FOCUSED!", 1.6);
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.pill, 14, { speed: 90, life: 0.55, up: 60 });
       }
       if (this.kind !== "pill" && this.kind !== "health")
@@ -1532,11 +1567,14 @@
   // Arcs from neighbor to a LOCKED target position (similar to Switch cable hits).
   // A blinking ellipse telegraphs the landing spot during flight.
   class Rock {
-    constructor(x, y, targetX, targetY, dmg, travelTime) {
+    constructor(x, y, targetX, targetY, dmg, travelTime, startZ) {
       this.startX = x; this.startY = y;
-      this.x = x; this.y = y; this.z = 0;
+      this.x = x; this.y = y;
+      this.startZ = startZ || 0;
+      this.z = this.startZ;
       this.targetX = targetX; this.targetY = targetY;
       this.dmg = dmg; this.travelTime = travelTime || 0.7;
+      this.variant = Math.floor(Math.random() * 6);
       this.t = 0; this.dead = false; this.hit = false;
     }
     update(dt, game) {
@@ -1544,7 +1582,8 @@
       const prog = Math.min(1, this.t / this.travelTime);
       this.x = this.startX + (this.targetX - this.startX) * prog;
       this.y = this.startY + (this.targetY - this.startY) * prog;
-      this.z = 38 * 4 * prog * (1 - prog);   // parabolic arc, peak 38 at midpoint
+      // Arc descends from startZ to 0, with a gentle bonus peak early in flight
+      this.z = this.startZ * (1 - prog) + 20 * 4 * prog * (1 - prog);
       if (prog >= 1 && !this.hit) {
         this.hit = true;
         burst(game, this.targetX, this.targetY, 0, JH.PAL.rock, 6, { speed: 70, life: 0.4, up: 28 });
@@ -1571,11 +1610,83 @@
       ctx.beginPath(); ctx.ellipse(tx, ty, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       // Rock sprite travelling in arc
-      JH.Assets.draw(ctx, "rock", this.x - cam, Geo.feetScreenY(this.y, this.z), 1, { t: this.t });
+      JH.Assets.draw(ctx, "rock", this.x - cam, Geo.feetScreenY(this.y, this.z), 1, { t: this.t, variant: this.variant });
       ctx.restore();
     }
   }
   JH.Rock = Rock;
+
+  // ============================================= SOUNDWAVE (neighbor speaker attack)
+  // Travels horizontally in the facing direction. Damages player once per arc if
+  // they are within the locked depth band (soundwaveBand) when the arc passes.
+  class Soundwave {
+    constructor(x, y, facing, def) {
+      this.originX = x; this.y = y; this.facing = facing;
+      this.def = def;
+      this.speed = def.soundwaveSpeed;
+      this.band = def.soundwaveBand;
+      const n = def.soundwaveArcs;
+      // Each arc starts at the origin and is staggered by a launch delay so they
+      // all visually originate from the speaker before fanning out.
+      this.arcs = [];
+      for (let i = 0; i < n; i++) {
+        this.arcs.push({ offset: 0, delay: (n - 1 - i) * 0.09, hit: false });
+      }
+      this.t = 0;
+      this.dead = false;
+      this.maxReach = 300;
+    }
+    update(dt, game) {
+      this.t += dt;
+      const pl = game.player;
+      for (const arc of this.arcs) {
+        if (this.t < arc.delay) continue;
+        arc.offset += this.speed * dt * this.facing;
+        const arcX = this.originX + arc.offset;
+        if (!arc.hit && pl.alive) {
+          const dx = Math.abs(pl.x - arcX);
+          const dy = Math.abs(pl.y - this.y);
+          if (dx < 8 && dy < this.band) {
+            arc.hit = true;
+            pl.takeHit(this.def.soundwaveDmg, game, arcX);
+          }
+        }
+      }
+      if (Math.abs(this.arcs[this.arcs.length - 1].offset) > this.maxReach) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      if (this.dead) return;
+      ctx.save();
+      for (let i = 0; i < this.arcs.length; i++) {
+        const arc = this.arcs[i];
+        if (this.t < arc.delay) continue;
+        const ax = this.originX + arc.offset - cam;
+        const ay = Geo.feetScreenY(this.y, 0);
+        const frac = Math.abs(arc.offset) / 300;
+        const alpha = arc.hit ? 0 : Math.max(0, 0.85 - frac * 0.7);
+        const width = 3 + i * 1;
+        const arcH = 10 + i * 4;
+        ctx.save();
+        ctx.translate(Math.round(ax), Math.round(ay - 6));
+        ctx.scale(this.facing, 1);
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = JH.PAL.soundwave;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 6, arcH, 0, -Math.PI * 0.6, Math.PI * 0.6);
+        ctx.stroke();
+        ctx.globalAlpha = alpha * 0.35;
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+  }
+  JH.Soundwave = Soundwave;
 
   // ================================================= GARDEN BOX
   class GardenBox {
@@ -1584,6 +1695,7 @@
       this.idx = idx || 0;
       this.grow = 0; this.growMax = JH.GARDEN.growMax;
       this.bodyW = 42; this.dead = false; this.done = false; this.t = 0; this.hitFx = 0;
+      this.doneFx = 0;   // countdown that drives the "GREAT!" pop on completion
     }
     addGrow(amt, game) {
       if (this.done) return;
@@ -1591,6 +1703,7 @@
       this.hitFx = 0.12;
       if (this.grow >= this.growMax) {
         this.done = true;
+        this.doneFx = 1.6;
         game.audio.play("win"); game.shake(4);
         burst(game, this.x, this.y, 20, "#5a9a40", 18, { speed: 80, life: 0.7, up: 60 });
         burst(game, this.x, this.y, 10, "#fff7a0", 10, { speed: 60, life: 0.5, up: 40 });
@@ -1603,7 +1716,7 @@
         game.gardensCleared = (game.gardensCleared || 0) + 1;
       }
     }
-    update(dt) { this.t += dt; if (this.hitFx > 0) this.hitFx -= dt; }
+    update(dt) { this.t += dt; if (this.hitFx > 0) this.hitFx -= dt; if (this.doneFx > 0) this.doneFx -= dt; }
     draw(ctx, cam) {
       const sx = this.x - cam;
       const sy = Geo.feetScreenY(this.y, 0) - 4;
@@ -1615,22 +1728,46 @@
       ctx.fillStyle = "#1a3a10"; ctx.fillRect(bx, by, w, 5);
       ctx.fillStyle = this.done ? "#55cc44" : (this.hitFx > 0 ? "#aaffaa" : "#3a9a28");
       ctx.fillRect(bx, by, this.done ? w : Math.round(w * gf), 5);
+
+      // Floating prompt centred on the plant: encouragement while watering,
+      // then a "GREAT!" pop that rises and fades on completion.
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.font = "bold 7px monospace";
+      if (this.done && this.doneFx > 0) {
+        const k = this.doneFx / 1.6;                 // 1 → 0
+        const ty = by - 6 - (1 - k) * 14;            // rises as it fades
+        ctx.globalAlpha = Math.min(1, k * 1.4);
+        ctx.fillStyle = "#0a2a08"; ctx.fillText("GREAT!", sx + 1, ty + 1);
+        ctx.fillStyle = "#7dff5a"; ctx.fillText("GREAT!", sx, ty);
+      } else if (!this.done && this.hitFx > 0) {
+        const ty = by - 6 + Math.sin(this.t * 6) * 1.5;
+        ctx.globalAlpha = 0.92;
+        ctx.fillStyle = "#062033"; ctx.fillText("Keep watering!", sx + 1, ty + 1);
+        ctx.fillStyle = "#bfefff"; ctx.fillText("Keep watering!", sx, ty);
+      }
+      ctx.restore();
     }
   }
   JH.GardenBox = GardenBox;
 
   // ============================================= NEIGHBOR NPC
-  // Stationary rock-thrower. Wind-up phase tracks the player then locks aim;
-  // a telegraph ellipse appears at the target during both wind-up AND flight.
+  // Rock-thrower / speaker-blaster hybrid. Ghosts between throws; materialises
+  // for both attacks. Rock: 3-frame wind-up (rockReach→rockRaise) then flies.
+  // Speaker: raise speaker (telegraph depth band) → blast (stay visible ~0.8s
+  // while soundwaves travel) → vanish. 66/33 rock/speaker, never speaker twice.
   class NeighborNPC extends Enemy {
     constructor(x, y) {
       super("neighbor", x, y);
       this.facing = 1;
-      this.state = "idle";
-      this.cdTimer = 1.8;    // initial delay before first throw
+      this.state = "idle";           // idle | rockReady | rockReach | rockRaise | speakerRaise | speakerBlast
+      this.cdTimer = 1.8;
       this._windTimer = 0;
       this._windDur = 0;
       this._rockTarget = null;
+      this._lastWasSpeaker = false;
+      this._speakerHoldTimer = 0;
+      this._speakerDepth = 0;        // locked y-row for soundwave telegraph
     }
     think(dt, game) {
       const pl = game.player;
@@ -1638,10 +1775,39 @@
 
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
-      if (this._windTimer > 0) {
+      // ---- speaker raise wind-up ----
+      if (this.state === "speakerRaise") {
         this._windTimer -= dt;
-        this.state = "wind";
-        // Track player during first 60% of wind-up, then lock
+        if (this._windTimer <= 0) {
+          this.state = "speakerBlast";
+          this._speakerHoldTimer = this.def.speakerHold;
+          game.embers.push(new Soundwave(
+            this.x + this.facing * 10, this._speakerDepth, this.facing, this.def
+          ));
+          game.audio.play("blast");
+        }
+        return;
+      }
+
+      // ---- speaker hold (visible while arcs travel) ----
+      if (this.state === "speakerBlast") {
+        this._speakerHoldTimer -= dt;
+        if (this._speakerHoldTimer <= 0) {
+          this.cdTimer = this.def.rockCd;
+          this.state = "idle";
+          this._lastWasSpeaker = true;
+        }
+        return;
+      }
+
+      // ---- rock wind-up (3 frames: rockReady → rockReach → rockRaise) ----
+      if (this.state === "rockReady" || this.state === "rockReach" || this.state === "rockRaise") {
+        this._windTimer -= dt;
+        const frac = this._windTimer / this._windDur;
+        // rockReady (idle pose) for first third, rockReach for middle, rockRaise for last third
+        if (this.state === "rockReady" && frac < 0.67) this.state = "rockReach";
+        if (this.state === "rockReach" && frac < 0.33) this.state = "rockRaise";
+        // Track player for first 60% of wind-up, lock aim after
         if (this._windTimer > this._windDur * 0.4)
           this._rockTarget = { x: pl.x, y: pl.y };
         if (this._windTimer <= 0) {
@@ -1650,16 +1816,18 @@
           game.embers.push(new Rock(
             this.x + this.facing * 10, this.y,
             tgt.x, tgt.y, this.def.rockDmg,
-            Math.max(0.42, dist / this.def.rockSpeed)
+            Math.max(0.42, dist / this.def.rockSpeed),
+            52  // startZ: hand height when arm is raised
           ));
           game.audio.play("whack");
           this.cdTimer = this.def.rockCd;
           this.state = "idle";
+          this._lastWasSpeaker = false;
         }
         return;
       }
 
-      // Teleport to a random spot in the arena, keeping a safe distance from the player
+      // ---- choose next attack and teleport ----
       const b = game.bounds;
       const MIN_DIST = 90;
       let tx, ty, tries = 0;
@@ -1669,20 +1837,29 @@
       } while (Math.hypot(tx - pl.x, ty - pl.y) < MIN_DIST && ++tries < 12);
       this.x = tx; this.y = ty;
       this.facing = pl.x >= this.x ? 1 : -1;
-      this._windDur = this._windTimer = 0.55;
-      this._rockTarget = { x: pl.x, y: pl.y };
-      this.state = "wind";
+
+      const doSpeaker = !this._lastWasSpeaker && Math.random() < this.def.speakerChance;
+      if (doSpeaker) {
+        this._windDur = this._windTimer = this.def.speakerWindup;
+        this._speakerDepth = this.y;  // blast along neighbor's own depth row
+        this.state = "speakerRaise";
+      } else {
+        this._windDur = this._windTimer = 0.66;
+        this._rockTarget = { x: pl.x, y: pl.y };
+        this.state = "rockReady";
+      }
     }
     draw(ctx, cam) {
-      // She vanishes between throws — only materialises during wind-up
-      if (this.state !== "wind") return;
+      const visible = this.state !== "idle";
+      if (!visible) return;
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       JH.Assets.shadow(ctx, sx, sy, 11);
       JH.Assets.draw(ctx, "neighbor", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, t: this.t, hurt: this.flashTimer > 0,
       });
-      // Wind-up telegraph at locked target position
-      if (this.state === "wind" && this._rockTarget && this._windDur > 0) {
+
+      // Rock wind-up: telegraph ellipse at locked target
+      if ((this.state === "rockReady" || this.state === "rockReach" || this.state === "rockRaise") && this._rockTarget && this._windDur > 0) {
         const tx = this._rockTarget.x - cam, ty = Geo.feetScreenY(this._rockTarget.y, 0);
         const prog = Math.min(1, 1 - this._windTimer / this._windDur);
         const blink = Math.floor(this.t * 10) & 1;
@@ -1694,12 +1871,30 @@
         ctx.beginPath(); ctx.ellipse(tx, ty, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1; ctx.restore();
       }
+
+      // Speaker wind-up: telegraph a blinking horizontal depth band
+      if (this.state === "speakerRaise" && this._windDur > 0) {
+        const blink = Math.floor(this.t * 10) & 1;
+        const bandY = Geo.feetScreenY(this._speakerDepth, 0);
+        const prog = Math.min(1, 1 - this._windTimer / this._windDur);
+        ctx.save();
+        ctx.strokeStyle = blink ? JH.PAL.soundwave : "#ffffff";
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.25 + 0.5 * prog;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(this.x - cam, bandY);
+        ctx.lineTo(this.x - cam + this.facing * 300, bandY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1; ctx.restore();
+      }
     }
+    takeDamage() { /* invulnerable — only leaves when all crops are watered */ }
     die(game) {
       if (this.dead) return;
       this.dead = true;
       burst(game, this.x, this.y, 10, JH.PAL.neighbor, 8, { speed: 70, life: 0.4, up: 50 });
-      // No loot, no kill count
     }
   }
   JH.NeighborNPC = NeighborNPC;
