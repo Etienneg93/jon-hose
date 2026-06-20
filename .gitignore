@@ -11,3 +11,9 @@ Thumbs.db
 desktop.ini
 *.swp
 .vscode/
+
+# local planning / instruction docs (kept local, not shipped)
+Planner/
+CLAUDE.md
+DEPLOY.md
+IMPROVEMENT_PLAN.md
