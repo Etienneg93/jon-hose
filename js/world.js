@@ -14,6 +14,11 @@
   "use strict";
   const JH = (window.JH = window.JH || {});
 
+  // Debris pile sprite (Act 3 floor dressing). 309×272 source art.
+  const _debrisImg = new Image(); _debrisImg._ready = false;
+  _debrisImg.onload = () => { _debrisImg._ready = true; };
+  _debrisImg.src = "sprites/environment/debris.png";
+
   // ----------------------------------------------------------- geometry
   const Geo = {
     feetScreenY: (worldY, z) => JH.FLOOR_TOP + worldY - (z || 0),
@@ -225,15 +230,22 @@
       }
     },
 
-    // A small rubble heap with a bit of bent rebar — floor dressing for Act 3.
+    // Rubble heap floor dressing for Act 3. Blits debris.png (309×272) at ~1/10
+    // scale; falls back to procedural rects if the image isn't loaded yet.
     drawDebris(ctx, sx, sy, s) {
-      ctx.fillStyle = JH.PAL.rubbleDk;
-      ctx.fillRect(Math.round(sx - 9 * s), Math.round(sy - 2), Math.round(18 * s), Math.round(4 * s));
-      ctx.fillStyle = JH.PAL.rubble;
-      ctx.fillRect(Math.round(sx - 6 * s), Math.round(sy - 6 * s), Math.round(7 * s), Math.round(6 * s));
-      ctx.fillRect(Math.round(sx + 1), Math.round(sy - 4 * s), Math.round(5 * s), Math.round(4 * s));
-      ctx.fillStyle = "#2c2620";
-      ctx.fillRect(Math.round(sx - 1), Math.round(sy - 9 * s), Math.max(1, Math.round(2 * s)), Math.round(9 * s));
+      if (_debrisImg._ready) {
+        const dw = Math.round(309 * 0.075 * s);
+        const dh = Math.round(272 * 0.075 * s);
+        ctx.drawImage(_debrisImg, Math.round(sx - dw / 2), Math.round(sy - dh), dw, dh);
+      } else {
+        ctx.fillStyle = JH.PAL.rubbleDk;
+        ctx.fillRect(Math.round(sx - 9 * s), Math.round(sy - 2), Math.round(18 * s), Math.round(4 * s));
+        ctx.fillStyle = JH.PAL.rubble;
+        ctx.fillRect(Math.round(sx - 6 * s), Math.round(sy - 6 * s), Math.round(7 * s), Math.round(6 * s));
+        ctx.fillRect(Math.round(sx + 1), Math.round(sy - 4 * s), Math.round(5 * s), Math.round(4 * s));
+        ctx.fillStyle = "#2c2620";
+        ctx.fillRect(Math.round(sx - 1), Math.round(sy - 9 * s), Math.max(1, Math.round(2 * s)), Math.round(9 * s));
+      }
     },
   };
   JH.Background = Background;

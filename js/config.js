@@ -39,10 +39,9 @@
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
 
-  // Forgiving floor collision for Act-3 rubble piles. Per-pile ellipse footprint
-  // (scaled by the pile's own size `s`), kept a touch smaller than the art so you
-  // only bump on a clear overlap and can slide/step around in depth.
-  JH.DEBRIS = { collide: true, rx: 9, ry: 7 }; // rx/ry = half-extents in worldX / depth at s=1
+  // Floor collision for Act-3 rubble piles. Ellipse footprint scaled by pile's `s`.
+  // rx/ry are a touch larger than the sprite so the visual edge always blocks.
+  JH.DEBRIS = { collide: true, rx: 13, ry: 10 }; // rx/ry = half-extents in worldX / depth at s=1
 
   // Walk-up shop vendor between fights.
   JH.SHOP = { range: 28 };

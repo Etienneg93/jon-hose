@@ -720,15 +720,7 @@
 
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
-      Assets.shadow(ctx, sx, sy, this.bodyW * (this.elite ? 0.85 : 0.7));
-      if (this.elite) {
-        ctx.save();
-        ctx.fillStyle = "rgba(255,190,80,0.16)";
-        ctx.beginPath();
-        ctx.ellipse(Math.round(sx), Math.round(sy - 1), this.bodyW * 0.72, this.bodyW * 0.26, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
       Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.flashTimer > 0, wind: this.state === "wind", elite: this.elite,
@@ -737,10 +729,15 @@
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 4;
+        const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
+        if (this.elite) {
+          ctx.fillStyle = "#f0b830";
+          ctx.fillRect(bx - 1, by - 1, w + 2, 5);
+        }
         ctx.fillStyle = "rgba(0,0,0,0.6)";
-        ctx.fillRect(Math.round(sx - w / 2), Math.round(sy - this.bodyH - 8), w, 3);
+        ctx.fillRect(bx, by, w, 3);
         ctx.fillStyle = "#ff5a5a";
-        ctx.fillRect(Math.round(sx - w / 2), Math.round(sy - this.bodyH - 8), w * (this.hp / this.maxHp), 3);
+        ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 3);
       }
     }
   }
