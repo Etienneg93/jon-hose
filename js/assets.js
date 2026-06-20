@@ -743,6 +743,19 @@
   });
 
   // Hydrant prop (level decoration / water source marker)
+  // ========================= TARGET DUMMY ============================
+  Assets.register("dummy", (p, opt) => {
+    if (opt.hurt && ((opt.frame | 0) & 1)) return;
+    p(-4, 0, 8, 3, "#4a2e12");            // base block
+    p(-2, 3, 4, 13, "#7a5028");           // wooden post
+    p(-8, 14, 16, 2, "#7a5028");          // crossbar arms
+    p(-9, 13, 2, 4, "#5a3a18");           // left arm tip
+    p(7, 13, 2, 4, "#5a3a18");            // right arm tip
+    p(-4, 17, 8, 11, "#cc5c18");          // head bag (orange)
+    p(-3, 18, 6, 9, "#aa4010");           // center target
+    p(-1, 22, 2, 2, "#ff8030");           // bullseye
+  });
+
   Assets.register("hydrant", (p) => {
     p(-4, 0, 8, 3, "#7a1010");
     p(-3, 3, 6, 9, "#c81f1f");

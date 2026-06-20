@@ -323,6 +323,23 @@
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       const beam = S.beam | 0;                 // concentration tier 0..3
 
+      // Hydro Lance (beam=3) pierces the whole line; default stops at first target.
+      const pierce = beam >= 3;
+      let blocker = null;
+      if (!pierce) {
+        let minFwd = Infinity;
+        for (const e of game.enemies) {
+          if (e.dead) continue;
+          if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+          const fwd = (e.x - ox) * this.facing;
+          if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+        }
+      }
+      // Particles die at the blocker's near face so the stream visually stops there.
+      const blockDist = blocker
+        ? Math.max(4, (blocker.x - ox) * this.facing - (blocker.bodyW || 14) * 0.5)
+        : reach;
+
       // Emit a CONTAINED stream of droplets shaped like a beam. Climbing the
       // Pressure branch makes it DENSER (more particles) and TIGHTER (less
       // spread) — a loose hose spray sharpens into a concentrated jet.
@@ -342,48 +359,81 @@
           vx: this.facing * (170 + Math.random() * 110),
           vy: perpY * 0.9,                     // gentle outward drift = soft cone
           vz: perpZ * 0.4 - 4,
-          life: reach / 210 + Math.random() * 0.12,   // travel length tracks the Reach upgrade
+          life: blockDist / 210 + Math.random() * (pierce ? 0.12 : 0.04),
           color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
           size: dry ? 1 : (beam >= 2 ? 3 : 2),         // chunkier droplets at high Pressure
           grav: dry ? 220 : 70,
         }));
       }
 
-      // Damage every enemy along the beam line within the depth band.
+      // Damage enemies: non-pierce hits only the closest (blocker), pierce hits all.
       let didHit = false;
       const hitEnemies = [];
       let healAmt = 0;
       for (const e of game.enemies) {
         if (e.dead) continue;
-        if (Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) {
-          const mult = e.def ? (e.def.waterMult || 1) : 1;
-          const dmg = S.sprayDamage * dmgScale * mult * dt;
-          e.takeDamage(dmg, game, this.facing, 0);
-          e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
-          if (Math.random() < 0.5)
-            burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
-              { speed: 70, life: 0.25, size: 2 });
-          didHit = true;
-          if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate;
-          if (S.splitStream) hitEnemies.push(e);
+        if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+        if (!pierce && e !== blocker) continue;
+        const mult = e.def ? (e.def.waterMult || 1) : 1;
+        const dmg = S.sprayDamage * dmgScale * mult * dt;
+        e.takeDamage(dmg, game, this.facing, 0);
+        e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
+        if (Math.random() < 0.5)
+          burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
+            { speed: 70, life: 0.25, size: 2 });
+        // Splash: water drips down at the impact point when the stream stops here.
+        if (!pierce) {
+          for (let i = 0; i < 3; i++) {
+            game.particles.push(new Particle({
+              x: e.x + (Math.random() - 0.5) * 8,
+              y: e.y + (Math.random() - 0.5) * 6,
+              z: e.z + 10 + Math.random() * 8,
+              vx: this.facing * (8 + Math.random() * 24) + (Math.random() - 0.5) * 18,
+              vy: (Math.random() - 0.5) * 20,
+              vz: 12 + Math.random() * 22,
+              life: 0.22 + Math.random() * 0.14,
+              color: Math.random() > 0.4 ? JH.PAL.waterHi : JH.PAL.water,
+              size: 1,
+              grav: 290,
+            }));
+          }
         }
+        didHit = true;
+        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate;
+        if (S.splitStream) hitEnemies.push(e);
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
-      // Split Stream: 30% damage arc to the nearest neighbor of each hit enemy.
+      // Split Stream: 30% damage arc to all nearby enemies of each hit enemy.
       if (S.splitStream && hitEnemies.length > 0) {
         for (const primary of hitEnemies) {
-          let nearest = null, nearDist = 80;
           for (const e of game.enemies) {
-            if (e.dead || e === primary) continue;
+            if (e.dead || e === primary || hitEnemies.includes(e)) continue;
             const d = Math.hypot(e.x - primary.x, e.y - primary.y);
-            if (d < nearDist) { nearest = e; nearDist = d; }
-          }
-          if (nearest) {
-            const m2 = nearest.def ? (nearest.def.waterMult || 1) : 1;
-            nearest.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.30, game, this.facing, 0);
-            burst(game, nearest.x, nearest.y, nearest.z + 8, JH.PAL.waterHi, 2,
-              { speed: 55, life: 0.22, size: 2 });
+            if (d > 80) continue;
+            const m2 = e.def ? (e.def.waterMult || 1) : 1;
+            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.30, game, this.facing, 0);
+            // Chain visual: thin stream of particles from primary to secondary.
+            const cx = e.x - primary.x, cy = e.y - primary.y;
+            const chainLen = Math.hypot(cx, cy) || 1;
+            const nx = cx / chainLen, ny = cy / chainLen;
+            for (let i = 0; i < 3; i++) {
+              const t = Math.random();
+              game.particles.push(new Particle({
+                x: primary.x + cx * t + (Math.random() - 0.5) * 4,
+                y: primary.y + cy * t + (Math.random() - 0.5) * 4,
+                z: primary.z + 8 + (Math.random() - 0.5) * 5,
+                vx: nx * (40 + Math.random() * 35),
+                vy: ny * (40 + Math.random() * 35),
+                vz: (Math.random() - 0.5) * 12,
+                life: 0.14 + Math.random() * 0.09,
+                color: Math.random() > 0.3 ? JH.PAL.waterHi : JH.PAL.water,
+                size: 1,
+                grav: 50,
+              }));
+            }
+            burst(game, e.x, e.y, e.z + 8, JH.PAL.waterHi, 2,
+              { speed: 40, life: 0.18, size: 1 });
           }
         }
       }
@@ -2044,7 +2094,31 @@
   JH.GK9000Boss = GK9000Boss;
 
   // Factory used by the spawner.
+  // ---- Target Dummy: stationary, unkillable, regens HP after taking damage ----
+  class TargetDummy extends Enemy {
+    constructor(x, y) {
+      super("dummy", x, y);
+      this.regenTimer = 0;
+    }
+    takeDamage(dmg, game, dirX, knock) {
+      if (this.dead) return;
+      this.hp = Math.max(1, this.hp - dmg);
+      this.hurt();
+      this.regenTimer = 2.5;
+    }
+    die() {}   // unkillable — absorbs all damage and resets
+    update(dt, game) {
+      this.basePhysics(dt);
+      if (this.spawnGrace > 0) this.spawnGrace -= dt;
+      if (this.regenTimer > 0) this.regenTimer -= dt;
+      else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 500 * dt);
+      if (game.player) this.facing = game.player.x >= this.x ? 1 : -1;
+      this.animate(dt, false);
+    }
+  }
+
   JH.makeEnemy = function (type, x, y) {
+    if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
     if (type === "boss") return new Boss(x, y);

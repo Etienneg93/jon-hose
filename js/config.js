@@ -63,6 +63,7 @@
     wall: "#8a6b46", wallDk: "#5c4327", wallHi: "#b08a5c",
     quakeBody: "#4a4f57", quakeDk: "#2c3036", quakeHi: "#e0902f",
     rubble: "#6a5f52", rubbleDk: "#473f36",
+    dummy: "#cc5c18",
     suds: "#ffd23f", hpPk: "#ff5a5a",
     shadow: "rgba(0,0,0,0.35)",
     gk9000Body: "#1e2535", gk9000Dk: "#0c0f18", gk9000Face: "#8a7a6a", gk9000Stubble: "#5a5050",
@@ -132,6 +133,10 @@
       name: "Pyro", hp: 36, speed: 38, touchDmg: 10, contactCd: 0.7,
       shootRange: 150, shootCd: 1.6, emberSpeed: 130, emberDmg: 9,
       suds: 14, waterMult: 1.5, bodyW: 16, bodyH: 28, color: "pyro",
+    },
+    dummy: {
+      name: "Target Dummy", hp: 9999, speed: 0, touchDmg: 0, contactCd: 99,
+      suds: 0, waterMult: 1, bodyW: 14, bodyH: 30, color: "dummy",
     },
     neighbor: {
       name: "The Neighbor", hp: 280, speed: 0, touchDmg: 0, contactCd: 99,

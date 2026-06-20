@@ -96,12 +96,13 @@
           return;
         }
         if (!this.devMenu) return;
-        const count = JH.LEVEL1.waves.length + 1;  // +1 for cutscene test entry
+        const count = JH.LEVEL1.waves.length + 2;  // +1 cutscene, +1 target range
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
         if (e.code === "Enter" || e.code === "NumpadEnter") {
           e.preventDefault();
-          if (this.devCursor >= JH.LEVEL1.waves.length) this.devTriggerCutscene();
+          if (this.devCursor === JH.LEVEL1.waves.length) this.devTriggerCutscene();
+          else if (this.devCursor === JH.LEVEL1.waves.length + 1) this.devGotoRange();
           else this.devGotoWave(this.devCursor);
         }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
@@ -131,6 +132,33 @@
       JH.Camera.locked = false;
       this.waveIndex = i - 1;
       this.startWave(i);
+      this.devMenu = false;
+    },
+
+    devGotoRange() {
+      this.startGame();
+      const py = Math.round(JH.DEPTH_MAX * 0.5);
+      this.player.x = 100;
+      this.player.y = py;
+      this.player.suds = 999;
+      JH.Camera.x = 0;
+      JH.Camera.locked = false;
+      // Use last wave index so checkWaveTrigger never fires in this range.
+      this.waveIndex = JH.LEVEL1.waves.length - 1;
+      this.waveActive = false;
+      this.bounds = { minX: 8, maxX: 900 };
+      // Isolated dummy for basic pierce / splash testing
+      this.spawnEnemy("dummy", 320, py);
+      // Group of three: two in-line (pierce) + one off-depth (split stream)
+      const gx = 460, gy = py;
+      this.spawnEnemy("dummy", gx,      gy);       // front  — primary target
+      this.spawnEnemy("dummy", gx + 40, gy);       // behind — pierce target
+      this.spawnEnemy("dummy", gx,      gy - 28);  // off-depth — split stream target
+      // Hydrant just in front of the group
+      this.hydrants.push({ x: gx - 55, y: gy, t: 0 });
+      // Shop NPC visible from spawn
+      this.shopNpc = new JH.ShopNPC(220, JH.DEPTH_MIN + 6);
+      this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
     },
 
@@ -720,7 +748,7 @@
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
       const W = 224, ROW = 11, PAD = 14;
-      const H = PAD + (waves.length + 1) * ROW + PAD;
+      const H = PAD + (waves.length + 2) * ROW + PAD;
       const PX = Math.round((JH.VIEW_W - W) / 2);
       const PY = Math.round((JH.VIEW_H - H) / 2);
       const MID = PX + W / 2;
@@ -766,6 +794,16 @@
       ctx.fillText("✦  QUAKE CUTSCENE", PX + 8, csRy + ROW - 3);
       ctx.fillStyle = csSel ? "#ff88ff" : "#445566"; ctx.textAlign = "right";
       ctx.fillText("CS", PX + W - 6, csRy + ROW - 3);
+
+      // Target range entry
+      const rangeRy = PY + PAD + (waves.length + 1) * ROW;
+      const rangeSel = this.devCursor === waves.length + 1;
+      if (rangeSel) { ctx.fillStyle = "rgba(100,220,100,0.18)"; ctx.fillRect(PX + 3, rangeRy, W - 6, ROW - 1); }
+      ctx.fillStyle = rangeSel ? "#80ff80" : "#667788";
+      ctx.font = (rangeSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+      ctx.fillText("⊕  TARGET RANGE", PX + 8, rangeRy + ROW - 3);
+      ctx.fillStyle = rangeSel ? "#80ff80" : "#445566"; ctx.textAlign = "right";
+      ctx.fillText("DEV", PX + W - 6, rangeRy + ROW - 3);
 
       // Footer hint
       ctx.fillStyle = "#445566";
