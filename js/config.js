@@ -86,7 +86,8 @@
     regenDelay: 0.5,        // sec after spraying before regen kicks in
     sprayDamage: 50,        // dmg/sec at FULL pressure (80-100% tank = bonus tier)
     sprayRange: 78,         // stream reach (px)
-    sprayWidth: 12,         // depth half-band the stream covers
+    sprayWidth: 12,         // VISUAL depth half-band of the droplet spray (tightens with Pressure)
+    sprayHitBand: 18,       // DAMAGE depth half-band — decoupled from visual so hits stay forgiving up/down
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
     pierce: 0,              // extra targets the stream passes through (nozzle)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)

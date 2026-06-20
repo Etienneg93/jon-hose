@@ -326,7 +326,7 @@
       let healAmt = 0;
       for (const e of game.enemies) {
         if (e.dead) continue;
-        if (Geo.inHitArc(this, e, this.facing, reach, S.sprayWidth)) {
+        if (Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) {
           const mult = e.def ? (e.def.waterMult || 1) : 1;
           const dmg = S.sprayDamage * dmgScale * mult * dt;
           e.takeDamage(dmg, game, this.facing, 0);
