@@ -413,14 +413,14 @@
         this.spawnPickup("pill", e.x, e.y, 1);
       if (e.infinite) {
         const b = this.dropBudget;
-        if (b && b.suds > 0) { this.spawnPickup("suds", e.x, e.y, e.def.suds); b.suds--; }
+        if (b && b.suds > 0) { JH.spawnSudsCoins(this, e.x, e.y, e.def.suds); b.suds--; }
         if (b && b.items > 0) {
           const r = Math.random();
           if (r < 0.25) { this.spawnPickup("health", e.x + 6, e.y, 25); b.items--; }
           else if (r < 0.5) { this.spawnPickup("water_can", e.x - 6, e.y, 40); b.items--; }
         }
       } else {
-        this.spawnPickup("suds", e.x, e.y, e.def.suds);
+        JH.spawnSudsCoins(this, e.x, e.y, e.def.suds);
         const r = Math.random();
         if (r < 0.18) this.spawnPickup("health", e.x + 6, e.y, 25);
         else if (r < 0.45) this.spawnPickup("water_can", e.x - 6, e.y, 40);

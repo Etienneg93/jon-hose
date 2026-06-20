@@ -29,16 +29,36 @@
   }
   JH.burst = burst;
 
-  function spawnSudsStream(game, x, y, total) {
-    const coins = [];
-    let rem = total;
+  function denominateCoins(total) {
+    const coins = []; let rem = total;
     while (rem >= 10) { coins.push(10); rem -= 10; }
     while (rem >= 5)  { coins.push(5);  rem -= 5;  }
     while (rem >= 1)  { coins.push(1);  rem -= 1;  }
-    coins.forEach((val, i) => {
-      const ox = (Math.random() - 0.5) * 60;
-      const oy = (Math.random() - 0.5) * 28;
+    return coins;
+  }
+
+  // Regular enemy drop: staggered scatter on the ground
+  function spawnSudsCoins(game, x, y, total) {
+    denominateCoins(total).forEach((val, i) => {
+      const ox = (Math.random() - 0.5) * 40;
+      const oy = (Math.random() - 0.5) * 20;
       setTimeout(() => game.spawnPickup("suds", x + ox, y + oy, val), i * 45);
+    });
+  }
+  JH.spawnSudsCoins = spawnSudsCoins;
+
+  // Boss kill: coins arc upward and land
+  function spawnCoinFountain(game, x, y, total) {
+    denominateCoins(total).forEach((val, i) => {
+      setTimeout(() => {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 70 + Math.random() * 110;
+        const p = new JH.Pickup("suds", x, y, val);
+        p.z = 10; p.vz = 220 + Math.random() * 140;
+        p.vx = Math.cos(angle) * speed;
+        p.vy = Math.sin(angle) * speed * 0.35;
+        game.pickups.push(p);
+      }, i * 30);
     });
   }
 
@@ -883,7 +903,7 @@
       }
       for (let i = 0; i < 5; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }), i * 90);
-      spawnSudsStream(game, this.x, this.y, this.def.suds);
+      spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
@@ -893,13 +913,20 @@
   class Pickup {
     constructor(kind, x, y, value) {
       this.kind = kind; this.x = x; this.y = y; this.z = 30; this.vz = 60;
+      this.vx = 0; this.vy = 0;
       this.value = value; this.dead = false; this.t = 0; this.life = 12; this.grounded = false;
     }
     update(dt, game) {
       this.t += dt;
       if (!this.grounded) {
         this.vz -= 360 * dt; this.z += this.vz * dt;
-        if (this.z <= 0) { this.z = 0; this.vz *= -0.4; if (Math.abs(this.vz) < 12) { this.z = 0; this.grounded = true; } }
+        this.x += this.vx * dt;
+        this.y = Math.max(JH.DEPTH_MIN, Math.min(JH.DEPTH_MAX, this.y + this.vy * dt));
+        if (this.z <= 0) {
+          this.z = 0; this.vz *= -0.4;
+          this.vx *= 0.25; this.vy *= 0.25;
+          if (Math.abs(this.vz) < 12) { this.z = 0; this.grounded = true; }
+        }
       }
       const pl = game.player;
       // gentle magnet when close
@@ -1195,7 +1222,7 @@
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 6; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }), i * 90);
-      spawnSudsStream(game, this.x, this.y, this.def.suds);
+      spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
@@ -1495,7 +1522,7 @@
       game.audio.play("win");
       for (let i = 0; i < 7; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }), i * 90);
-      spawnSudsStream(game, this.x, this.y, this.def.suds);
+      spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
@@ -1815,7 +1842,7 @@
       for (let i = 0; i < 9; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
           Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }), i * 80);
-      spawnSudsStream(game, this.x, this.y, this.def.suds);
+      spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
   }
