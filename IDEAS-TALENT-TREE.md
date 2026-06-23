@@ -166,6 +166,100 @@ Each combo talent requires **Tier 3 in both specified branches** (or at minimum 
 
 ---
 
+## Store Consumables
+
+### Input Philosophy First
+
+The current in-combat kit is three actions: **Move, Spray (hold), Dash**. That's the whole game — and it's intentionally tight. Any consumable design should respect that. The guiding rule:
+
+> **Default to passive or auto-trigger. Only add a button if the active moment genuinely can't be replicated any other way — and if we do, it's ONE button total.**
+
+Three tiers of "how active is this?":
+
+| Tier | Mechanism | New button needed? |
+|---|---|---|
+| **Passive** | Always-on stat or auto-triggers on a condition | No |
+| **Context E** | Press `E` when NOT near a vendor | No (reuses existing key) |
+| **Quick-Use slot** | One equippable active item, one new key (`K` / gamepad `X`) | Yes — but only one, ever |
+
+---
+
+### Passive Consumables (bought at shop, apply immediately or carry silently)
+
+These are the safest to add — zero new inputs, zero HUD clutter beyond an icon.
+
+**Patch-Up Kit** *(already exists — 15 Suds → 35% HP)*
+Keep as-is. The gold standard for the model.
+
+**Pressure Canister** *(~20 Suds)*
+Instantly tops the tank to 100%. Like a pocket hydrant. Buy it between waves, it fires the moment you hand over the Suds. No button. Useful before a boss.
+
+**Repair Tape** *(~30 Suds)*
+A passive carry item: the first time HP drops below 15% this wave, auto-heals 25 HP. Consumed on use. Only one can be held at a time. No button — the trigger is the damage threshold.
+
+**Overflow Valve** *(~25 Suds)*
+Passive carry: if you'd top up water past max (e.g. at a hydrant when already at 90%), the overflow is stored and added as a flat +20 damage bonus on your next 3 spray ticks before draining. Rewards greedy hydrant use rather than wasting it.
+
+**Anti-Ember Wrap** *(~20 Suds)*
+Passive: reduces incoming Pyro ember damage by 40% for the next wave. A situational buy when you know a Pyro wave is coming. Consumed at wave end.
+
+---
+
+### Context-E Consumables (use `E` when away from vendor)
+
+`E` already means "talk to vendor." When no vendor is in range, `E` is dead — that's a free hook for a single active item without adding a button.
+
+**Stim Canteen** *(~35 Suds)*
+Carried active. Press `E` in the field to drink: +20% spray damage for 8 seconds, small visual indicator (brief glow on the beam). One per purchase, can carry one at a time. The HUD shows a canteen icon when you have one.
+
+**Emergency Splice** *(~40 Suds)*
+Carried active. Press `E` to trigger: instantly resets dash cooldown and grants 1.5 seconds of i-frames without moving. Panic button for when you're cornered and the dash is on cooldown. One use.
+
+> **Risk with context-E:** if the player is near a vendor they can't accidentally "drink" — but the UI tooltip should make the context crystal clear ("E: Talk" vs "E: Use Canteen"). Only one context-E item can be carried at a time to avoid a selection problem.
+
+---
+
+### Quick-Use Slot (one new button: `K` keyboard / `X` gamepad)
+
+Only introduce this if there's demand for more than one active consumable type simultaneously. The slot holds **one item** — no inventory screen, no cycling. What's equipped is what fires.
+
+**Soap Bomb** *(~50 Suds)*
+Throw a soap grenade at the nearest enemy (auto-aims to closest target in range). On hit: applies a slippery puddle that lasts 4 seconds — enemies in the zone move 30% slower and take 5% more knockback. A single throw, one use. Works brilliantly with Reach builds.
+
+**Hydrant Tab** *(~45 Suds)*
+Drop a portable mini-hydrant at Jon's feet. Lasts 6 seconds, refills water at half the rate of a real hydrant. Useful when you've run past the last real hydrant and need a top-up in a fight.
+
+> If the quick-use slot is added, the HUD gets a small slot icon (bottom-right corner, near the water meter). It shows the item icon + a use count. Nothing else changes in the control layout.
+
+---
+
+### What to Avoid
+
+- **Multi-item inventory with a cycle button.** Picking from 3 consumables mid-fight kills focus. If it needs a menu, it belongs in the shop only.
+- **Timed-window inputs** (hold Dash + Spray to activate a consumable). Chord inputs collide with the core game feel — spraying and dashing are already load-bearing.
+- **Per-wave auto-resupply.** If consumables refill for free each wave they stop being decisions. They should feel like a resource spend, not a cooldown.
+- **More than one active button total.** If both Context-E and Quick-Use exist simultaneously, document clearly that only one active item can be held of each type. The player should never have to think "which button fires my consumable."
+
+---
+
+### Suggested Shop Layout at Old Spigot
+
+```
+┌─────────────────── OLD SPIGOT ───────────────────┐
+│  SKILL TREE          │  SUPPLIES (Suds)           │
+│  [existing nodes]    │  Patch-Up Kit      15 Suds │
+│                      │  Pressure Canister 20 Suds │
+│                      │  Repair Tape       30 Suds │
+│                      │  Stim Canteen      35 Suds │
+│                      │  Soap Bomb         50 Suds │
+│                      │  (stock varies by act)     │
+└──────────────────────────────────────────────────-┘
+```
+
+Stock rotates by act — not every item is available every wave. This keeps the shop feeling fresh without adding items to the permanent pool all at once.
+
+---
+
 ## Open Questions
 
 1. Should TP carry over between levels (persistent run progression) or reset per level (roguelite feel per run)?
