@@ -260,6 +260,68 @@ Stock rotates by act — not every item is available every wave. This keeps the 
 
 ---
 
+## World Travel — Jon Becomes a Remote
+
+When Jon moves between levels (the inter-level transition screen), he **transforms into a TV remote control** and navigates the level select map in that form. Think of it as diegetic in-universe logic: the Jon Hose Cinematic Universe runs on cable infrastructure, and the remote is how you change the channel to a new world.
+
+### Transition Sequence Idea
+1. Level-clear screen fades. Jon does a brief "warping out" animation — his sprite flickers and compresses into a chunky TV remote shape (pixel art, same color palette as Jon's gear).
+2. The remote slides across a schematic **"channel map"** — a horizontal strip of level thumbnails styled like a TV guide grid. The remote's cursor blinks on the next level.
+3. Remote zips into the next thumbnail. Cut to Jon re-materializing on the new street, remote shape expanding back into his sprite.
+
+### Mechanical Hook (optional)
+During the remote travel screen, the player could steer the remote left/right across the channel map to **pick which level to tackle next** (if a non-linear level select is added to the roadmap). Pressing a wrong channel could land on a **bonus/secret level** — a scrapped broadcast, a shopping channel fight, a test pattern dungeon.
+
+### Remote as a Buff Carrier
+Any **passive buffs or consumables** active when Jon enters a transition carry over as "saved channels" — shown as small indicator lights on the remote sprite. Purely cosmetic, but rewards players who notice it.
+
+### Visual Design Notes
+- Remote sprite: rectangular, 3 buttons visible (matches Jon's 3-action kit — spray, dash, move), antenna on top. Fits the pixel resolution cleanly at ~12×24px.
+- Could flicker between channels briefly to convey "surfing" — a short static/noise particle burst before landing on the destination.
+- The channel map background: scanlines, a vignette, the level names styled as TV show titles ("ACT 1: STREET BEAT", "ACT 2: PIPE DREAM").
+
+---
+
+## The Cauliflower Whisperer (NPC)
+
+A second roaming NPC alongside Old Spigot — a deeply strange street sage who communes with cauliflowers and translates their wisdom into combat buffs. He appears less predictably than Old Spigot: sometimes at the back of a wave-clear zone, sometimes just... standing in the street mid-fight, unbothered.
+
+### Identity
+- **Name:** The Cauliflower Whisperer (no other name given — Old Spigot just calls him "that vegetable man")
+- **Appearance:** Elderly, trench coat covered in cauliflower pin badges, always holding a single raw cauliflower head like a talisman. Speaks in reverent hushed tones about what the cauliflower told him.
+- **Interaction:** Walk up, press `E`. He doesn't sell anything — he **grants one free buff per encounter**, chosen from a small pool. You can't pick; the cauliflower decides.
+
+### Buff Pool (randomised per visit)
+
+| Buff | Effect | Duration |
+|---|---|---|
+| **The Floret's Blessing** | +15% spray damage | Current wave |
+| **Dense Core** | +25 max HP, healed immediately | Permanent (this run) |
+| **Pressurised Prophecy** | Tank regen doubled | 2 waves |
+| **The Curd Speaks** | Next hit you take deals 0 damage (one absorb) | Until triggered |
+| **Brassica Sprint** | +22 move speed | 3 waves |
+| **Pale Wisdom** | Dash cooldown reduced by 0.3s | Permanent (this run) |
+| **The Whisperer's Curse** *(rare)* | -10 max HP, but all damage dealt +30% | Permanent (this run) — he looks apologetic |
+
+### Dialogue Flavour (a few lines)
+
+> *"She told me… you will face water that fears itself. I don't know what it means. She rarely explains."*
+
+> *"The inner florets spoke of pressure. I have passed their message to your hose."*
+
+> *"Do not thank me. Thank the cauliflower. I am merely the vessel."*
+
+> *"She was quiet today. But she looked at you. That's enough."*
+
+### Design Notes
+- He never repeats the same buff twice per run — cross off each one as it's given.
+- He disappears immediately after granting the buff (walks off-screen, no fanfare).
+- If the player tries to find him again mid-fight, he's gone. He appears when the cauliflower wills it.
+- **No Suds exchange** — he's purely a luck/encounter reward, not a shop. Keeps him feeling special and distinct from Old Spigot.
+- Could tie into a hidden achievement: receive all 7 buffs across multiple runs = "Understood the Cauliflower."
+
+---
+
 ## Open Questions
 
 1. Should TP carry over between levels (persistent run progression) or reset per level (roguelite feel per run)?
