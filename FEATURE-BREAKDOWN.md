@@ -1,4 +1,4 @@
-# Feature Breakdown: Foraging + The Slayer
+# Feature Breakdown: Foraging + The Slayer + Heat Wave Minigame
 
 > Research-only document. No implementation. All file references are to the current codebase.
 
@@ -8,6 +8,7 @@
 
 1. [Plant Foraging / Revitalization](#1-plant-foraging--revitalization)
 2. [The Slayer (New Character)](#2-the-slayer-new-character)
+3. [Heat Wave Minigame](#3-heat-wave-minigame)
 
 ---
 
@@ -507,9 +508,309 @@ The Slayer is roughly 2–3× the scope of Plant Foraging. The boss AI (`SlayerB
 
 ---
 
+---
+
+---
+
+## 3. Heat Wave Minigame
+
+### Concept Summary
+
+A scripted wave event where combat stops and the stakes flip: instead of fighting enemies, Jon Hose must cool down overheating civilians scattered across the arena before they pass out. Pure water-management puzzle — the hose tank becomes the core constraint.
+
+---
+
+### Systems / Scopes Touched
+
+| System | File | Notes |
+|--------|------|-------|
+| Wave config | `js/config.js` | New `JH.HEATWAVE` tunables block; new `{ heatwave: true }` wave entry in `JH.LEVEL1.waves` |
+| Wave dispatch | `js/game.js:startWave()` | Add `heatwave` branch (line 239+), parallel to existing `garden` branch |
+| Entity: `OverheatNPC` | `js/entities.js` | New class; inverse of `GardenBox` — heat resource depletes over time instead of building up |
+| Hose interaction | `js/game.js:update()` | Same proximity + spray check as garden boxes; spraying an NPC replenishes their cool meter |
+| Pickup system | `js/entities.js:995` | Rescued NPCs drop coins/health; no new pickup types needed |
+| Asset painter | `js/assets.js` | `"overheating_npc"` painter with heat-state visual variants; registers via `Assets.register()` |
+| HUD / UX | `js/game.js` | Survivor count banner; per-NPC overhead heat bar (mirrors `GardenBox` growth bar) |
+| SFX | `js/config.js:JH.SFX` | Reuse `win` on rescue; add `sizzle` (noise burst) and `faint` entries |
+
+---
+
+### Implementation Tasks (Ordered)
+
+#### Step 1 — Config Tunables
+Add `JH.HEATWAVE` block to `js/config.js` after `JH.GARDEN` (line 173):
+
+```js
+JH.HEATWAVE = {
+  npcCount: 5,            // civilians on screen at once
+  heatMax: 100,           // full heat = pass out
+  heatRate: 8,            // heat units per second (passive)
+  coolRate: 55,           // heat removed per second while being sprayed
+  rescueWindow: 0.5,      // seconds at heatMax before NPC faints (grace period)
+  faintPenalty: 15,       // HP cost to Jon when an NPC faints
+  passThreshold: 3,       // NPCs saved to clear the wave
+  bonusThreshold: 5,      // save all 5 for bonus reward
+  spawnStagger: 0.6,      // seconds between each NPC entering the arena
+};
+```
+
+**Complexity:** XS
+
+---
+
+#### Step 2 — Wave Entry
+Insert into `JH.LEVEL1.waves` in `js/config.js` — best placed between WAVE 6 and THE GARDEN (Acts 4), giving the player a breather between combat waves and the existing garden event:
+
+```js
+{ name: "HEAT WAVE", heatwave: true },
+```
+
+Shift `WAVE_TRIGGERS` in `js/game.js:12` by one entry to account for the new wave position.
+
+**Complexity:** XS — same index-bookkeeping as any new wave insertion.
+
+---
+
+#### Step 3 — Wave Dispatch in `startWave()`
+In `js/game.js:startWave()` (line 239), add a `heatwave` branch alongside the existing `garden` branch:
+
+```js
+if (wave.heatwave) {
+  this.heatNpcs = [];
+  for (let i = 0; i < JH.HEATWAVE.npcCount; i++) {
+    setTimeout(() => {
+      const x = left + 40 + Math.random() * (right - left - 80);
+      const y = JH.DEPTH_MIN + 10 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 20);
+      this.heatNpcs.push(new JH.OverheatNPC(x, y, i));
+    }, i * JH.HEATWAVE.spawnStagger * 1000);
+  }
+  this.heatSaved = 0;
+  this.heatFailed = 0;
+  this.banner("COOL THEM DOWN!", 2.2);
+}
+```
+
+Wave clears when `heatSaved >= JH.HEATWAVE.passThreshold` (checked in `update()`). If all 5 fail, wave still clears but Jon takes accumulated faint penalties and no bonus.
+
+**Complexity:** S
+
+---
+
+#### Step 4 — `OverheatNPC` Entity Class
+New class in `js/entities.js` after `GardenBox` (line 1799). Key inversion from `GardenBox`: heat builds passively and spray reduces it, rather than the reverse.
+
+```js
+class OverheatNPC {
+  constructor(x, y, idx) {
+    this.x = x; this.y = y; this.z = 0;
+    this.idx = idx;
+    this.heat = 0;                          // starts cool
+    this.heatMax = JH.HEATWAVE.heatMax;
+    this.fainted = false; this.rescued = false;
+    this.faintGrace = 0;                    // countdown after hitting heatMax
+    this.bodyW = 14; this.t = 0;
+    this.sprayFx = 0;                       // visual flash when being cooled
+  }
+
+  update(dt, game) {
+    if (this.fainted || this.rescued) return;
+    this.t += dt;
+    this.heat = Math.min(this.heatMax, this.heat + JH.HEATWAVE.heatRate * dt);
+    if (this.sprayFx > 0) this.sprayFx -= dt;
+
+    if (this.heat >= this.heatMax) {
+      this.faintGrace -= dt;
+      if (this.faintGrace <= 0) this.faint(game);
+    } else {
+      this.faintGrace = JH.HEATWAVE.rescueWindow;  // reset grace while heat < max
+    }
+  }
+
+  cool(amt, game) {
+    if (this.fainted || this.rescued) return;
+    this.heat = Math.max(0, this.heat - amt);
+    this.sprayFx = 0.1;
+    if (this.heat <= 0) this.rescue(game);
+  }
+
+  rescue(game) {
+    this.rescued = true;
+    game.heatSaved++;
+    game.audio.play("win"); game.shake(3);
+    burst(game, this.x, this.y, 16, "#6cd3ff", 14, { speed: 70, life: 0.6, up: 50 });
+    game.spawnPickup("coin", this.x, this.y, 10);
+    if (game.heatSaved >= JH.HEATWAVE.passThreshold) game.checkHeatwaveCleared();
+  }
+
+  faint(game) {
+    this.fainted = true;
+    game.heatFailed++;
+    game.player.takeDmg(JH.HEATWAVE.faintPenalty, game);
+    game.audio.play("hurt");
+    // Fainted NPC slumps — visual handled in draw() via fainted flag
+    game.checkHeatwaveCleared();
+  }
+}
+JH.OverheatNPC = OverheatNPC;
+```
+
+**Complexity:** M
+
+---
+
+#### Step 5 — Hose Interaction Hookup
+In `game.js:update()`, alongside the gardens loop, add heat NPC cooling:
+
+```js
+if (this.player.spraying && this.heatNpcs) {
+  for (const npc of this.heatNpcs) {
+    if (!npc.rescued && !npc.fainted) {
+      const dx = Math.abs(npc.x - hoseEndX);
+      const dy = Math.abs(npc.y - this.player.y);
+      if (dx < 28 && dy < 20) {
+        npc.cool(JH.HEATWAVE.coolRate * dt, this);
+      }
+    }
+  }
+}
+```
+
+Uses existing hose-end x/y from the spray loop. No new infrastructure.
+
+**Complexity:** S
+
+---
+
+#### Step 6 — Wave Clear Logic
+Add `checkHeatwaveCleared()` to the game object:
+
+```js
+checkHeatwaveCleared() {
+  const allDone = this.heatNpcs.every(n => n.rescued || n.fainted);
+  if (!allDone) return;
+  if (this.heatSaved >= JH.HEATWAVE.bonusThreshold) {
+    this.banner("PERFECT RESCUE! +40 SUDS BONUS", 2.5);
+    this.spawnPickup("coin", this.player.x, this.player.y - 20, 40);
+  } else if (this.heatSaved >= JH.HEATWAVE.passThreshold) {
+    this.banner(`${this.heatSaved}/5 COOLED — WAVE CLEAR!`, 2.0);
+  } else {
+    this.banner("WAVE CLEAR — NEXT TIME SAVE MORE.", 2.0);
+  }
+  this.waveCleared_();
+}
+```
+
+**Complexity:** XS
+
+---
+
+#### Step 7 — Asset Painter (`overheating_npc`)
+Register in `js/assets.js` using `Assets.register()` pattern (line 708). Three visual states driven by `opt.heatFrac` (0.0 = cool, 1.0 = about to faint):
+
+- **Cool (0–0.4):** Standing civilian, relaxed pose. Neutral skin tones, light clothing.
+- **Hot (0.4–0.8):** Flushed face (`#e06050`), slouched, sweat drops (animated, `#6cd3ff`).
+- **Critical (0.8–1.0):** Deep red face (`#cc2020`), knees buckling (1px lower), heat shimmer particles above head.
+- **Fainted:** Slumped on ground (rotated/flattened rect), grey tone.
+- **Rescued:** Brief star-burst replaced by cool blue glow, then removed from scene.
+
+Sweat drops: 2–3 small blue pixels at randomized offsets from face, animated via `Math.sin(t * 8)` bob.
+
+**Complexity:** S
+
+---
+
+#### Step 8 — Per-NPC Overhead Heat Bar
+In `OverheatNPC.draw()`, mirror the `GardenBox` growth bar (entities.js:1773) but color shifts from blue → yellow → red as heat rises:
+
+```js
+const hf = this.heat / this.heatMax;
+const barColor = hf < 0.5 ? "#44aaff"
+               : hf < 0.8 ? "#ffcc00"
+               : "#ff3300";
+// Draw 28px wide bar above NPC head, fill left-to-right with hf
+```
+
+Add a pulsing glow on the bar when `hf > 0.8` (use `Math.sin(t * 10)` alpha oscillation).
+
+**Complexity:** XS
+
+---
+
+#### Step 9 — SFX
+Add to `js/config.js:JH.SFX`:
+
+```js
+sizzle: { type: "noise", dur: 0.12, gain: 0.09 },   // NPC hitting heatMax
+faint:  { type: "saw",   freq: 80,  dur: 0.3,  gain: 0.13 },  // NPC passes out
+```
+
+Rescue reuses `win`. Spray-on-NPC reuses `spray` (already plays during hose use).
+
+**Complexity:** XS
+
+---
+
+### Artwork Required
+
+| Asset | Type | Notes |
+|-------|------|-------|
+| `overheating_npc` (cool state) | Procedural painter | Neutral civilian silhouette |
+| `overheating_npc` (hot state) | Procedural painter | Flushed face, sweat drops, slouch |
+| `overheating_npc` (critical state) | Procedural painter | Deep red, knees buckling, shimmer |
+| `overheating_npc` (fainted state) | Procedural painter | Slumped flat on ground |
+| Rescue burst | Reuse `burst()` | Blue water-color particles |
+| Heat shimmer | Procedural particles | Wavy heat-distortion dots above head |
+| Survivor count HUD | Text only | "COOLED: 3/5" via existing banner system |
+| "COOL THEM DOWN!" banner | Text only | Existing `game.banner()` |
+
+All procedural — no external PNGs required.
+
+---
+
+### Design Notes
+
+**Why this works mechanically:** The hose tank (36 units/sec drain) becomes a triage puzzle. With 5 overheating NPCs and limited water, the player must prioritize who to cool first based on heat bars. Kinetic Tap and Closed Loop upgrades (existing upgrade tree) become directly relevant — moving between NPCs triggers Kinetic Tap's regen bonus, and cooling an NPC triggers Closed Loop's drain reduction.
+
+**Tonal fit:** Pure service-to-community moment — contrasts with combat waves, rewards the water-hose-as-tool fantasy rather than weapon fantasy. Fits the game's tone well.
+
+**Scalable difficulty hooks (future):** NPCs could move around (wandering civilians), some could block the hose line of sight (crowds), or a Pyro enemy could appear mid-event re-heating cooled NPCs.
+
+---
+
+### Dependencies
+
+- All hooks exist; no new systems required.
+- `GardenBox` interaction pattern (water-proximity check in `game.js:update()`) must remain stable.
+- `spawnPickup()` and `burst()` unchanged.
+- Wave index bookkeeping must account for this new wave alongside any Slayer insertion.
+
+---
+
+### Estimated Complexity
+
+| Task | Size |
+|------|------|
+| Config tunables | XS |
+| Wave entry + trigger shift | XS |
+| Wave dispatch (`startWave()` branch) | S |
+| `OverheatNPC` entity class | M |
+| Hose interaction hookup | S |
+| Wave clear logic | XS |
+| Asset painter (4 states) | S |
+| Per-NPC heat bar | XS |
+| SFX | XS |
+| **Total** | **M** |
+
+Smallest of the three banked features. The `GardenBox` → `OverheatNPC` inversion covers most of the logic; the main new work is the multi-NPC triage mechanic and the heat-state visual progression.
+
+---
+
+---
+
 ## Cross-Feature Notes
 
-- Both features are **independently shippable** — no shared dependencies between them.
-- Plant Foraging can ship without touching the wave sequence; The Slayer requires careful wave-index surgery.
+- All three features are **independently shippable** — no shared dependencies between them.
+- Plant Foraging and Heat Wave can ship without touching the wave sequence at all if placed in free-walk zones; The Slayer requires careful wave-index surgery.
 - If The Slayer ships first, confirm Quake Walker's cutscene trigger index (`game.js:286`) is updated to match the shifted wave positions before merging.
-- The procedural-art-first approach (no PNG required at MVP) applies to both features and matches the existing fallback pattern throughout `assets.js`.
+- Heat Wave and Plant Foraging both use the same hose-proximity interaction pattern — if that loop is ever refactored, update both.
+- The procedural-art-first approach (no PNG required at MVP) applies to all three features and matches the existing fallback pattern throughout `assets.js`.
