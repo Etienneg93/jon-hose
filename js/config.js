@@ -65,8 +65,8 @@
     dummy: "#cc5c18",
     suds: "#ffd23f", hpPk: "#ff5a5a",
     shadow: "rgba(0,0,0,0.35)",
-    gigaBody: "#1e2535", gigaDk: "#0c0f18", gigaFace: "#8a7a6a", gigaStubble: "#5a5050",
-    gigaLed: "#ff3a3a",
+    gkBody: "#1e2535", gkDk: "#0c0f18", gkFace: "#8a7a6a", gkStubble: "#5a5050",
+    gkLed: "#ff3a3a",
     wallbossBody: "#3a3f4a", wallbossDk: "#23262e", wallbossHi: "#5a6373",
     wallbossHaz: "#d8a82a", wallbossShut: "#15171d",
     wallbossCore: "#ff5a2a", wallbossCoreHi: "#ffd06a",
@@ -178,12 +178,12 @@
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
 
-  // Giga Karnage ("GK") — a powered-up standing switch with an embedded
+  // Gateway Krusher 9000 ("GK") — a powered-up standing switch with an embedded
   // middle-aged face. Adds a floor-row depth slam on top of the Switch's
   // arsenal. The escalated return of the Switch-of-Doom boss lineage.
-  JH.GIGAKARNAGE = {
-    name: "Giga Karnage", hp: 1800, speed: 28, bodyW: 44, bodyH: 60,
-    touchDmg: 18, contactCd: 0.9, suds: 480, color: "gigaBody",
+  JH.GATEWAYKRUSHER = {
+    name: "Gateway Krusher 9000", hp: 1800, speed: 28, bodyW: 44, bodyH: 60,
+    touchDmg: 18, contactCd: 0.9, suds: 480, color: "gkBody",
     lineDmg: 26, lineBand: 13, lineWind: 0.82, enrageAt: 0.38,
     whipDmg: 24, whipBand: 16, whipWind: 0.78,
     rowDmg: 22, rowBand: 18, rowWind: 0.92,
@@ -253,7 +253,7 @@
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
-      { name: "GIGA KARNAGE", boss: true, bossType: "gigakarnage" },  // true finale
+      { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },  // true finale
     ],
   };
 

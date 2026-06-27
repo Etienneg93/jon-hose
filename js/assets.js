@@ -546,12 +546,12 @@
     p(-9, 22 + bob, 2, 3, "#dddddd");     // bushy beard
   });
 
-  // ====================== GIGA KARNAGE (final boss) ===================
+  // ====================== GATEWAY KRUSHER 9000 (final boss) ===================
   // A big STANDING switch chassis with an angry middle-aged face embedded.
-  Assets.register("gigakarnage", (p, opt) => {
+  Assets.register("gatewaykrusher", (p, opt) => {
     const t = opt.t || 0;
     if (opt.hurt && (Math.floor(t * 8) & 1)) return;
-    const C = PAL.gigaBody, D = PAL.gigaDk;
+    const C = PAL.gkBody, D = PAL.gkDk;
     // Outer chassis
     p(-22, 0, 44, 60, D);
     p(-20, 2, 40, 56, C);
@@ -565,16 +565,16 @@
         const px = -18 + i * 4.5;
         const py = 42 + row * 5;
         const on = (Math.floor(t * 5 + i + row * 3) % 4 !== 0);
-        p(px, py, 3, 3, on ? PAL.gigaLed : "#1a0808");
+        p(px, py, 3, 3, on ? PAL.gkLed : "#1a0808");
       }
     }
     // Face embedded in middle section (ly 20-42)
-    p(-11, 22, 22, 20, PAL.gigaFace);          // skin base
-    p(-10, 22, 20, 5, PAL.gigaStubble);         // chin stubble band
+    p(-11, 22, 22, 20, PAL.gkFace);          // skin base
+    p(-10, 22, 20, 5, PAL.gkStubble);         // chin stubble band
     // Stubble texture patches (lighter flecks)
-    p(-9, 22, 2, 4, PAL.gigaFace); p(-5, 23, 2, 3, PAL.gigaFace);
-    p(-1, 22, 2, 4, PAL.gigaFace); p( 3, 23, 2, 3, PAL.gigaFace);
-    p( 6, 22, 2, 4, PAL.gigaFace);
+    p(-9, 22, 2, 4, PAL.gkFace); p(-5, 23, 2, 3, PAL.gkFace);
+    p(-1, 22, 2, 4, PAL.gkFace); p( 3, 23, 2, 3, PAL.gkFace);
+    p( 6, 22, 2, 4, PAL.gkFace);
     // Mouth grimace
     p(-7, 27, 14, 2, "#1a1010");
     p(-6, 28, 3, 2, "#0a0808"); p(3, 28, 3, 2, "#0a0808"); // teeth gaps
@@ -591,8 +591,8 @@
     p(-18, 10, 5, 2, "#0a0c10"); p(-18, 13, 5, 1, "#0a0c10");
     p( 13, 10, 5, 2, "#0a0c10"); p( 13, 13, 5, 1, "#0a0c10");
     // Status LEDs — all red/angry
-    p(-19, 5, 3, 3, PAL.gigaLed); p(16, 5, 3, 3, "#ff3a3a");
-    p(-19, 18, 3, 3, PAL.gigaLed); p(16, 18, 3, 3, "#ff3a3a");
+    p(-19, 5, 3, 3, PAL.gkLed); p(16, 5, 3, 3, "#ff3a3a");
+    p(-19, 18, 3, 3, PAL.gkLed); p(16, 18, 3, 3, "#ff3a3a");
   });
 
   // ===================== THE PRESSURE WALL (wall boss) ================

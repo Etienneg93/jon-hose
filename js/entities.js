@@ -1946,16 +1946,16 @@
   }
   JH.NeighborNPC = NeighborNPC;
 
-  // ========================================== Giga Karnage (true final boss)
+  // ========================================== Gateway Krusher 9000 (true final boss)
   // A standing switch chassis — tall and meaner — with an embedded angry face.
   // Adds a depth-row surge on top of the Switch's cable attacks.
-  class GigaKarnageBoss extends SwitchBoss {
+  class GatewayKrusherBoss extends SwitchBoss {
     constructor(x, y) {
       super(x, y);
-      this.def = JH.GIGAKARNAGE;
-      this.type = "gigakarnage";
-      this.hp = this.maxHp = JH.GIGAKARNAGE.hp;
-      this.bodyW = JH.GIGAKARNAGE.bodyW; this.bodyH = JH.GIGAKARNAGE.bodyH;
+      this.def = JH.GATEWAYKRUSHER;
+      this.type = "gatewaykrusher";
+      this.hp = this.maxHp = JH.GATEWAYKRUSHER.hp;
+      this.bodyW = JH.GATEWAYKRUSHER.bodyW; this.bodyH = JH.GATEWAYKRUSHER.bodyH;
       this._doRow = false; this._rowY = 0;
       this.cdTimer = 1.6;
     }
@@ -2088,7 +2088,7 @@
       game.onEnemyKilled(this);
     }
   }
-  JH.GigaKarnageBoss = GigaKarnageBoss;
+  JH.GatewayKrusherBoss = GatewayKrusherBoss;
 
   // ================================================ THE PRESSURE WALL (wall boss)
   // A colossal bulkhead pinned to the right edge of the arena — so big it fills
@@ -2449,7 +2449,7 @@
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
-    if (type === "gigakarnage") return new GigaKarnageBoss(x, y);
+    if (type === "gatewaykrusher") return new GatewayKrusherBoss(x, y);
     if (type === "wallboss") return new WallBoss(x, y);
     if (type === "neighbor") return new NeighborNPC(x, y);
     return new Enemy(type, x, y);
