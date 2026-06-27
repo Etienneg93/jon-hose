@@ -1167,6 +1167,9 @@
       if (this._doLine && (this.state === "tele" || this.fireFx > 0)) this.drawLines(ctx, cam);
       if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
+      // Shared lineage core — the red eye that survives into the next form.
+      const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.5;
+      Assets.bossCore(ctx, cx, cy, 4, this.t, { flash: this.fireFx > 0 });
     }
     // Doc-Ock cables waving out of the chassis.
     drawCables(ctx, cam) {
@@ -1305,6 +1308,7 @@
       for (let i = 0; i < 6; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }), i * 90);
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
+      ejectBossCore(game, this);   // it rebuilds — the core gets away
       game.onEnemyKilled(this);
     }
   }
@@ -1415,6 +1419,66 @@
     }
   }
   JH.Shockwave = Shockwave;
+
+  // ============================================== ESCAPING BOSS CORE
+  // The surviving-core death beat. When a NON-final form of the recurring boss
+  // is destroyed, its red reactor-core (the shared lineage glyph) ejects from
+  // the wreck, bounces off the floor and skitters away across the arena before
+  // winking out — "you didn't really kill it." Purely cosmetic: it rides the
+  // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)) so it never
+  // affects wave-clear or collision.
+  class BossCore {
+    constructor(x, y, z) {
+      this.x = x; this.y = y; this.z = z != null ? z : 26;
+      this.vx = -70 - Math.random() * 40;        // flee left, past the player
+      this.vz = 150 + Math.random() * 40;
+      this.t = 0; this.life = 3.0; this.dead = false; this.bounces = 0;
+      this.wob = Math.random() * Math.PI * 2;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.vz -= 380 * dt; this.z += this.vz * dt;
+      this.x += this.vx * dt;
+      this.y += Math.sin(this.t * 12 + this.wob) * 14 * dt;   // scuttle wobble
+      this.y = Geo.clampDepth(this.y);
+      if (this.z <= 0) {                          // bounce, scrambling faster each time
+        this.z = 0; this.vz = Math.abs(this.vz) * 0.5;
+        this.bounces++; this.vx *= 1.08;
+        if (this.bounces === 1) game.audio.play("hit");
+      }
+      if (Math.random() < 0.7)
+        burst(game, this.x, this.y, this.z + 4, Math.random() < 0.5 ? JH.PAL.wallbossCore : "#ff8a3c", 1,
+          { speed: 36, life: 0.3, up: 16, grav: 120 });
+      if (this.t > this.life || this.x < (game.bounds ? game.bounds.minX - 40 : -40)) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      // fade out in the final 0.5s
+      const fade = this.t > this.life - 0.5 ? Math.max(0, (this.life - this.t) / 0.5) : 1;
+      if (fade < 1 && (Math.floor(this.t * 16) & 1)) return;   // flicker as it vanishes
+      Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 4);
+      // little skittering legs
+      ctx.save();
+      ctx.strokeStyle = "#0d0f15"; ctx.lineWidth = 1;
+      const lh = 4 + Math.sin(this.t * 20) * 1.5;
+      for (const dx of [-3, 3]) {
+        ctx.beginPath(); ctx.moveTo(sx + dx, sy - 3); ctx.lineTo(sx + dx * 1.6, sy + lh - 3); ctx.stroke();
+      }
+      ctx.restore();
+      Assets.bossCore(ctx, sx, sy - 5, 4, this.t);
+    }
+  }
+  JH.BossCore = BossCore;
+
+  // Spawn the surviving core from a defeated non-final lineage boss.
+  function ejectBossCore(game, boss) {
+    const z = (boss.bodyH || 30) * 0.5;
+    game.embers.push(new BossCore(boss.x, boss.y, z));
+    game.audio.play("hurt");
+    game.banner("…THE CORE SURVIVES", 1.6);
+  }
+  JH.ejectBossCore = ejectBossCore;
 
   // ================================================ QUAKE WALKER (boss 3)
   class QuakeBoss extends Enemy {
@@ -2049,6 +2113,9 @@
       if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       if (this._doRow && (this.state === "tele" || this.fireFx > 0)) this.drawDepthRow(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
+      // The lineage core — bigger on the final form. This is the one you finally kill.
+      const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.55;
+      Assets.bossCore(ctx, cx, cy, 5, this.t, { flash: this.fireFx > 0 });
     }
     drawDepthRow(ctx, cam) {
       const d = this.def;
@@ -2084,6 +2151,12 @@
       for (let i = 0; i < 9; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
           Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }), i * 80);
+      // FINAL form — the core does NOT escape this time. It shatters.
+      const cy = this.bodyH * 0.55;
+      for (let i = 0; i < 22; i++)
+        burst(game, this.x + (Math.random() - 0.5) * 18, this.y, cy + (Math.random() - 0.5) * 20,
+          Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossCoreHi, 1, { speed: 200, life: 0.7, up: 40 });
+      game.banner("CORE DESTROYED!", 2.0);
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
@@ -2413,6 +2486,7 @@
           Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossHaz, 16,
           { speed: 180, life: 0.8, up: 150 }), i * 80);
       spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
+      ejectBossCore(game, this);   // a rebuild — the core escapes to return bigger
       game.onEnemyKilled(this);
     }
   }

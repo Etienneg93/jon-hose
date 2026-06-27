@@ -219,6 +219,40 @@
   }
   Assets.shadow = shadow;
 
+  // Shared "reactor core" glyph — the red eye that ties the boss LINEAGE
+  // together (The Switch of Doom → The Pressure Wall → Gateway Krusher 9000:
+  // one entity that keeps rebuilding). It rides on each form's chassis and is
+  // the thing that ejects + escapes when a non-final form is destroyed, so the
+  // same element reads across every fight. Drawn directly in ctx space (call
+  // it from a boss draw() with the on-screen core centre).
+  function bossCore(ctx, cx, cy, r, t, opt) {
+    opt = opt || {};
+    cx = Math.round(cx); cy = Math.round(cy);
+    const pulse = 0.7 + 0.3 * Math.abs(Math.sin(t * 6));
+    ctx.save();
+    // dark socket + metal ring
+    ctx.fillStyle = "#0d0f15";
+    ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = PAL.switchBody; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.stroke();
+    // outer glow
+    ctx.globalAlpha = 0.5 * pulse;
+    ctx.fillStyle = PAL.wallbossCore;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r * 1.5, r * 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // lens
+    ctx.fillStyle = PAL.wallbossCore;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2); ctx.fill();
+    // hot slit-pupil centre
+    ctx.fillStyle = opt.flash ? "#ffffff" : PAL.wallbossCoreHi;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r * 0.42, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    // angry brow slit for the "eye" read
+    ctx.fillStyle = "#0d0f15";
+    ctx.fillRect(cx - r, Math.round(cy - r - 1), r * 2, 1);
+    ctx.restore();
+  }
+  Assets.bossCore = bossCore;
+
   // Walk-cycle leg offset from a frame counter (0..3).
   const legStep = (frame) => [2, 1, -2, -1][frame & 3];
 
