@@ -281,7 +281,7 @@
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
-        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : bt === "gk9000" ? JH.GK9000 : bt === "wallboss" ? JH.WALLBOSS : JH.BOSS;
+        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : bt === "gigakarnage" ? JH.GIGAKARNAGE : bt === "wallboss" ? JH.WALLBOSS : JH.BOSS;
         this.dropBudget = { suds: 10, items: 5 };             // caps summon farming
         this.banner(bdef.name.toUpperCase(), 1.8);
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
