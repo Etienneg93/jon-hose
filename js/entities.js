@@ -1167,7 +1167,7 @@
       if (this._doLine && (this.state === "tele" || this.fireFx > 0)) this.drawLines(ctx, cam);
       if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
-      // Shared lineage core — the red eye that survives into the next form.
+      // shared boss core glyph
       const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.5;
       Assets.bossCore(ctx, cx, cy, 4, this.t, { flash: this.fireFx > 0 });
     }
@@ -1308,7 +1308,7 @@
       for (let i = 0; i < 6; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }), i * 90);
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
-      ejectBossCore(game, this);   // it rebuilds — the core gets away
+      ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.onEnemyKilled(this);
     }
   }
@@ -1421,12 +1421,10 @@
   JH.Shockwave = Shockwave;
 
   // ============================================== ESCAPING BOSS CORE
-  // The surviving-core death beat. When a NON-final form of the recurring boss
-  // is destroyed, its red reactor-core (the shared lineage glyph) ejects from
-  // the wreck, bounces off the floor and skitters away across the arena before
-  // winking out — "you didn't really kill it." Purely cosmetic: it rides the
-  // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)) so it never
-  // affects wave-clear or collision.
+  // A red core that ejects from a defeated boss, bounces off the floor and
+  // skitters left across the arena before fading. Cosmetic only: rides the
+  // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)), so it never
+  // affects wave-clear or collision. Spawned via ejectBossCore().
   class BossCore {
     constructor(x, y, z) {
       this.x = x; this.y = y; this.z = z != null ? z : 26;
@@ -1471,7 +1469,7 @@
   }
   JH.BossCore = BossCore;
 
-  // Spawn the surviving core from a defeated non-final lineage boss.
+  // Spawn an escaping BossCore from a defeated boss (cosmetic).
   function ejectBossCore(game, boss) {
     const z = (boss.bodyH || 30) * 0.5;
     game.embers.push(new BossCore(boss.x, boss.y, z));
@@ -2113,7 +2111,7 @@
       if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       if (this._doRow && (this.state === "tele" || this.fireFx > 0)) this.drawDepthRow(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
-      // The lineage core — bigger on the final form. This is the one you finally kill.
+      // shared boss core glyph (larger)
       const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.55;
       Assets.bossCore(ctx, cx, cy, 5, this.t, { flash: this.fireFx > 0 });
     }
@@ -2151,7 +2149,7 @@
       for (let i = 0; i < 9; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
           Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }), i * 80);
-      // FINAL form — the core does NOT escape this time. It shatters.
+      // No core ejection here — it shatters instead.
       const cy = this.bodyH * 0.55;
       for (let i = 0; i < 22; i++)
         burst(game, this.x + (Math.random() - 0.5) * 18, this.y, cy + (Math.random() - 0.5) * 20,
@@ -2164,18 +2162,12 @@
   JH.GatewayKrusherBoss = GatewayKrusherBoss;
 
   // ================================================ THE PRESSURE WALL (wall boss)
-  // A colossal bulkhead pinned to the right edge of the arena — so big it fills
-  // the rightmost slice of the screen and never moves. Its armoured face shrugs
-  // off the hose (sparks, no damage); the ONLY way to hurt it is its WEAK SPOT,
-  // a reactor core that (a) ROAMS up/down the wall — you must match its depth
-  // lane to land the stream — and (b) only OPENS periodically. Approaching to
-  // hit it is dangerous: the CRUSHER slams the zone in front of the face (back
-  // off) and the PISTON STOMP rolls a shockwave along the floor (jump it). So
-  // dart in while the core is open, then retreat.
-  //
-  // Standalone for now — NOT in JH.LEVEL1.waves. To drop it into the level, add
-  // a wave like  { name: "THE WALL", boss: true, bossType: "wallboss" }  (game.js
-  // already maps "wallboss" → JH.WALLBOSS and the factory below builds it).
+  // Bulkhead pinned to the right edge of the arena; doesn't move. Body is
+  // armoured (takeDamage ignores hits); only the WEAK SPOT (core) takes damage,
+  // and only while OPEN. The core ROAMS in depth (this.y) — the player must
+  // stand in its lane for the stream to register. Attacks: CRUSHER slab in
+  // front of the face (back off) and PISTON STOMP shockwave (jump).
+  // Not in JH.LEVEL1.waves; see JH.WALLBOSS in config.js for how to wire it in.
   class WallBoss extends Enemy {
     constructor(x, y) {
       super("mook", x, y);
@@ -2486,7 +2478,7 @@
           Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossHaz, 16,
           { speed: 180, life: 0.8, up: 150 }), i * 80);
       spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
-      ejectBossCore(game, this);   // a rebuild — the core escapes to return bigger
+      ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.onEnemyKilled(this);
     }
   }

@@ -158,9 +158,9 @@
     summonCd: 6.5, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks
   };
 
-  // Final boss — "The Switch of Doom" (Jon Hose cinematic universe): an 8-port
-  // network switch with Doc-Ock cable tentacles. Fires TELEGRAPHED full-width
-  // LINE attacks along a depth row; dodge by moving up/down a lane (or jumping).
+  // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable
+  // tentacles. Fires telegraphed full-width LINE attacks along a depth row;
+  // dodge by moving up/down a lane (or jumping).
   JH.SWITCH = {
     name: "The Switch of Doom", hp: 1000, speed: 30, bodyW: 48, bodyH: 30,
     touchDmg: 14, contactCd: 0.9, suds: 240, color: "switchBody",
@@ -178,9 +178,8 @@
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
 
-  // Gateway Krusher 9000 ("GK") — a powered-up standing switch with an embedded
-  // middle-aged face. Adds a floor-row depth slam on top of the Switch's
-  // arsenal. The escalated return of the Switch-of-Doom boss lineage.
+  // Gateway Krusher 9000 — a powered-up standing switch with an embedded face.
+  // Reuses the Switch's line/whip attacks and adds a floor-row depth slam.
   JH.GATEWAYKRUSHER = {
     name: "Gateway Krusher 9000", hp: 1800, speed: 28, bodyW: 44, bodyH: 60,
     touchDmg: 18, contactCd: 0.9, suds: 480, color: "gkBody",
@@ -189,17 +188,13 @@
     rowDmg: 22, rowBand: 18, rowWind: 0.92,
   };
 
-  // WALL BOSS (concept) — "The Pressure Wall". A colossal bulkhead pinned to
-  // the RIGHT edge of the arena: so big it fills the rightmost slice of the
-  // screen and never moves. Its armoured face shrugs the hose off (sparks, no
-  // damage) — the ONLY way to hurt it is its WEAK SPOT, a reactor core that
-  //   (a) ROAMS up/down the wall  → you must stand in its depth lane to land
-  //       the stream (the core's screen height tracks its depth lane), and
-  //   (b) only OPENS periodically → armoured shut the rest of the time.
-  // Camping the face is punished: the CRUSHER piston slams the zone in front
-  // of the wall (back off), and a PISTON STOMP rolls a shockwave along the
-  // floor (jump it). Dart in while the core is open, then retreat.
-  //   Standalone for now — NOT wired into JH.LEVEL1.waves. To use it, add e.g.
+  // "The Pressure Wall" — a large bulkhead pinned to the RIGHT edge of the
+  // arena; it doesn't move. Body is armoured (spray does no damage); only the
+  // WEAK SPOT (a core) takes damage, and only while OPEN. The core also ROAMS
+  // in depth — its lane (this.y) is what the stream is tested against, so the
+  // player must stand in its lane. Attacks: CRUSHER slab in front of the face
+  // (back off) and PISTON STOMP shockwave along the floor (jump).
+  // Not in JH.LEVEL1.waves; wire in with
   //   { name: "THE WALL", boss: true, bossType: "wallboss" }  (game.js maps it).
   JH.WALLBOSS = {
     name: "The Pressure Wall", hp: 1500, suds: 540, color: "wallbossBody",

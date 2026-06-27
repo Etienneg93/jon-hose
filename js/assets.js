@@ -219,12 +219,9 @@
   }
   Assets.shadow = shadow;
 
-  // Shared "reactor core" glyph — the red eye that ties the boss LINEAGE
-  // together (The Switch of Doom → The Pressure Wall → Gateway Krusher 9000:
-  // one entity that keeps rebuilding). It rides on each form's chassis and is
-  // the thing that ejects + escapes when a non-final form is destroyed, so the
-  // same element reads across every fight. Drawn directly in ctx space (call
-  // it from a boss draw() with the on-screen core centre).
+  // Shared red "reactor core" glyph used by the bosses. Drawn directly in ctx
+  // space — call from a boss draw() with the on-screen core centre. opt.flash
+  // whitens the centre (e.g. on an attack/hit frame).
   function bossCore(ctx, cx, cy, r, t, opt) {
     opt = opt || {};
     cx = Math.round(cx); cy = Math.round(cy);
