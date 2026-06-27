@@ -67,6 +67,9 @@
     shadow: "rgba(0,0,0,0.35)",
     gk9000Body: "#1e2535", gk9000Dk: "#0c0f18", gk9000Face: "#8a7a6a", gk9000Stubble: "#5a5050",
     gk9000Led: "#ff3a3a",
+    wallbossBody: "#3a3f4a", wallbossDk: "#23262e", wallbossHi: "#5a6373",
+    wallbossHaz: "#d8a82a", wallbossShut: "#15171d",
+    wallbossCore: "#ff5a2a", wallbossCoreHi: "#ffd06a",
     neighbor: "#3a5888", neighborDk: "#243a66",
     soundwave: "#40e0ff",
     rock: "#7a6a58", rockDk: "#4e4030",
@@ -183,6 +186,35 @@
     lineDmg: 26, lineBand: 13, lineWind: 0.82, enrageAt: 0.38,
     whipDmg: 24, whipBand: 16, whipWind: 0.78,
     rowDmg: 22, rowBand: 18, rowWind: 0.92,
+  };
+
+  // WALL BOSS (concept) — "The Pressure Wall". A colossal bulkhead pinned to
+  // the RIGHT edge of the arena: so big it fills the rightmost slice of the
+  // screen and never moves. Its armoured face shrugs the hose off (sparks, no
+  // damage) — the ONLY way to hurt it is its WEAK SPOT, a reactor core that
+  //   (a) ROAMS up/down the wall  → you must stand in its depth lane to land
+  //       the stream (the core's screen height tracks its depth lane), and
+  //   (b) only OPENS periodically → armoured shut the rest of the time.
+  // Camping the face is punished: the CRUSHER piston slams the zone in front
+  // of the wall (back off), and a PISTON STOMP rolls a shockwave along the
+  // floor (jump it). Dart in while the core is open, then retreat.
+  //   Standalone for now — NOT wired into JH.LEVEL1.waves. To use it, add e.g.
+  //   { name: "THE WALL", boss: true, bossType: "wallboss" }  (game.js maps it).
+  JH.WALLBOSS = {
+    name: "The Pressure Wall", hp: 1500, suds: 540, color: "wallbossBody",
+    bodyW: 84, bodyH: 178, touchDmg: 20, contactCd: 0.8, enrageAt: 0.4,
+    // Weak-spot cycle (seconds): armored → opening telegraph → open(vulnerable).
+    wsClosed: 3.0, wsOpen: 2.6, wsWind: 0.7,
+    wsClosedEnraged: 2.0, wsOpenEnraged: 3.2,
+    wsRoam: 30, wsRetargetMin: 1.1, wsRetargetMax: 2.2,   // depth drift px/s + retarget cadence
+    wsLift: 46, wsBob: 9,                                  // core sits this high on the wall, bobs ±wsBob
+    dmgMult: 1.4,                                          // hose hurts more on an exposed core
+    // PISTON STOMP → shockwave rolls left along the floor (jump over it).
+    slamWind: 0.8, slamCd: 2.6, waveDmg: 20, waveRange: 480, waveSpeed: 170,
+    // CRUSHER → slab punches the zone in front of the face (back away to dodge).
+    crushWind: 0.85, crushCd: 2.8, crushDmg: 32, crushReach: 78,
+    // Reinforcements ("maintenance drones").
+    summonCd: 7.5, summonType: "mook",
   };
 
   // True final boss — "Quake Walker", one of Jon's nemeses. A hulking bruiser

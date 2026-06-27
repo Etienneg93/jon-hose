@@ -2090,6 +2090,334 @@
   }
   JH.GK9000Boss = GK9000Boss;
 
+  // ================================================ THE PRESSURE WALL (wall boss)
+  // A colossal bulkhead pinned to the right edge of the arena — so big it fills
+  // the rightmost slice of the screen and never moves. Its armoured face shrugs
+  // off the hose (sparks, no damage); the ONLY way to hurt it is its WEAK SPOT,
+  // a reactor core that (a) ROAMS up/down the wall — you must match its depth
+  // lane to land the stream — and (b) only OPENS periodically. Approaching to
+  // hit it is dangerous: the CRUSHER slams the zone in front of the face (back
+  // off) and the PISTON STOMP rolls a shockwave along the floor (jump it). So
+  // dart in while the core is open, then retreat.
+  //
+  // Standalone for now — NOT in JH.LEVEL1.waves. To drop it into the level, add
+  // a wave like  { name: "THE WALL", boss: true, bossType: "wallboss" }  (game.js
+  // already maps "wallboss" → JH.WALLBOSS and the factory below builds it).
+  class WallBoss extends Enemy {
+    constructor(x, y) {
+      super("mook", x, y);
+      this.def = JH.WALLBOSS;
+      this.type = "wallboss";
+      this.hp = this.maxHp = JH.WALLBOSS.hp;
+      this.bodyW = JH.WALLBOSS.bodyW; this.bodyH = JH.WALLBOSS.bodyH;
+      this.isBoss = true;
+      this.facing = -1;
+      this.spawnGrace = 0.6;
+      // Weak-spot ("core") cycle.
+      this.wsState = "armored";              // armored | opening | open
+      this.wsTimer = JH.WALLBOSS.wsClosed;
+      this.wsOpenAmt = 0;                    // 0 shut .. 1 fully open (drives the iris)
+      this.wsRetarget = 0;
+      this.wsTargetY = y;                    // depth the core is drifting toward
+      this.wsBobPhase = Math.random() * Math.PI * 2;
+      // Attacks.
+      this.atkState = "idle";                // idle | slamWind | crushWind | strike
+      this.atkTimer = 0; this.atkDur = 0;
+      this.slamCd = JH.WALLBOSS.slamCd;
+      this.crushCd = JH.WALLBOSS.crushCd * 0.6;
+      this.strikeFx = 0; this._clangFx = 0; this._hitFx = 0;
+      this.summonTimer = JH.WALLBOSS.summonCd;
+      this._hinted = false;
+    }
+
+    applyKnockback() { /* immovable — the hose can't shove a wall */ }
+
+    // Armoured everywhere except the OPEN core. Spray/melee route through here.
+    takeDamage(dmg, game) {
+      if (this.dead) return;
+      if (this.wsState !== "open") {
+        this._clangFx = 0.07;                // ping off the armour, no damage
+        if (Math.random() < 0.18)
+          burst(game, this.x - this.bodyW * 0.5, this.y, 18 + Math.random() * 70, "#ffe6a0", 1,
+            { speed: 90, life: 0.2, up: 20, grav: 320 });
+        return;
+      }
+      this.hp -= dmg * (this.def.dmgMult || 1);
+      this.hurt(); this._hitFx = 0.1;
+      if (Math.random() < 0.4)
+        burst(game, this.x - this.bodyW * 0.5, this.y, 40 + Math.random() * 40,
+          Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossCoreHi, 1,
+          { speed: 80, life: 0.3, up: 30 });
+      if (this.hp <= 0) this.die(game);
+    }
+
+    update(dt, game) {
+      this.t += dt;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+      if (this._clangFx > 0) this._clangFx -= dt;
+      if (this._hitFx > 0) this._hitFx -= dt;
+      if (this.flashTimer > 0) this.flashTimer -= dt;
+      if (this.spawnGrace > 0) this.spawnGrace -= dt;
+
+      const d = this.def;
+      const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Pin to the right edge of the arena; never moves.
+      this.x = game.bounds.maxX - 6;
+      this.facing = -1;
+
+      this.updateWeakSpot(dt, d, enraged);
+      this.updateContact(dt, game, d);
+      this.updateSummon(dt, game, d, enraged);
+      this.updateAttacks(dt, game, d, enraged);
+    }
+
+    // Drift the core to a roaming depth target + run the open/shut cycle. The
+    // core's depth (this.y) is what the player's stream is tested against, so
+    // roaming it forces the player to track its lane.
+    updateWeakSpot(dt, d, enraged) {
+      this.wsRetarget -= dt;
+      if (this.wsRetarget <= 0) {
+        this.wsRetarget = d.wsRetargetMin + Math.random() * (d.wsRetargetMax - d.wsRetargetMin);
+        this.wsTargetY = JH.DEPTH_MIN + 4 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 8);
+      }
+      const roam = d.wsRoam * (enraged ? 1.5 : 1) * dt;
+      this.y += clamp(this.wsTargetY - this.y, -roam, roam);
+      this.y = Geo.clampDepth(this.y);
+
+      this.wsTimer -= dt;
+      if (this.wsState === "armored") {
+        this.wsOpenAmt = Math.max(0, this.wsOpenAmt - dt * 3);
+        if (this.wsTimer <= 0) { this.wsState = "opening"; this.wsTimer = d.wsWind; }
+      } else if (this.wsState === "opening") {
+        this.wsOpenAmt = Math.min(1, this.wsOpenAmt + dt / d.wsWind);
+        if (this.wsTimer <= 0) { this.wsState = "open"; this.wsTimer = enraged ? d.wsOpenEnraged : d.wsOpen; }
+      } else { // open
+        this.wsOpenAmt = 1;
+        if (this.wsTimer <= 0) { this.wsState = "armored"; this.wsTimer = enraged ? d.wsClosedEnraged : d.wsClosed; }
+      }
+    }
+
+    // Pressing against the bulkhead face hurts (it spans the whole street).
+    updateContact(dt, game, d) {
+      if (this.contactTimer > 0) this.contactTimer -= dt;
+      const pl = game.player;
+      if (!pl.alive || this.contactTimer > 0) return;
+      const face = this.x - this.bodyW * 0.5;
+      if (pl.x + pl.bodyW * 0.5 >= face - 2 && (pl.z || 0) < 30) {
+        pl.takeHit(d.touchDmg, game, this.x);
+        this.contactTimer = d.contactCd;
+      }
+    }
+
+    updateSummon(dt, game, d, enraged) {
+      this.summonTimer -= dt;
+      if (this.summonTimer <= 0 && game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
+        this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
+        const ey = JH.DEPTH_MIN + 10 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 20);
+        game.spawnEnemy(d.summonType, this.x - this.bodyW * 0.5 - 10, ey, { infinite: true });
+        game.banner("MAINTENANCE DRONES!");
+      }
+    }
+
+    updateAttacks(dt, game, d, enraged) {
+      if (this.spawnGrace > 0) return;
+      const pl = game.player;
+      if (this.slamCd > 0) this.slamCd -= dt;
+      if (this.crushCd > 0) this.crushCd -= dt;
+
+      if (this.atkState === "slamWind") {
+        this.atkTimer -= dt;
+        if (this.atkTimer <= 0) this.fireSlam(game, d, enraged);
+        return;
+      }
+      if (this.atkState === "crushWind") {
+        this.atkTimer -= dt;
+        if (this.atkTimer <= 0) this.fireCrush(game, d);
+        return;
+      }
+      if (this.atkState === "strike") { if (this.strikeFx <= 0) this.atkState = "idle"; return; }
+
+      // Crusher is prioritised when the player is hugging the face; else stomp.
+      const face = this.x - this.bodyW * 0.5;
+      const atFace = pl.alive && pl.x > face - d.crushReach;
+      if (this.crushCd <= 0 && atFace) {
+        this.atkState = "crushWind";
+        this.atkDur = this.atkTimer = enraged ? d.crushWind * 0.7 : d.crushWind;
+        this.crushCd = (enraged ? d.crushCd * 0.7 : d.crushCd) + this.atkDur;
+        game.audio.play("jump");
+        if (!this._hinted) { game.banner("DON'T HUG THE WALL!", 2); this._hinted = true; }
+      } else if (this.slamCd <= 0) {
+        this.atkState = "slamWind";
+        this.atkDur = this.atkTimer = enraged ? d.slamWind * 0.7 : d.slamWind;
+        this.slamCd = (enraged ? d.slamCd * 0.7 : d.slamCd) + this.atkDur;
+        game.audio.play("jump");
+      }
+    }
+
+    fireSlam(game, d, enraged) {
+      game.shake(9); game.audio.play("whack");
+      const sx = this.x - this.bodyW * 0.5;
+      const ws = enraged ? d.waveSpeed * 1.25 : d.waveSpeed;
+      game.embers.push(new Shockwave(sx, -1, ws, d));            // rolls left at the player
+      if (enraged) game.embers.push(new Shockwave(sx, -1, ws * 0.6, d));
+      for (let i = 0; i < 14; i++)
+        burst(game, sx, JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), Math.random() * 20,
+          Math.random() < 0.5 ? JH.PAL.rubble : "#caa470", 1, { speed: 130, life: 0.45, up: 60 });
+      this.strikeFx = 0.22; this.atkState = "strike";
+    }
+
+    fireCrush(game, d) {
+      game.shake(11); game.audio.play("whack");
+      const pl = game.player;
+      const face = this.x - this.bodyW * 0.5;
+      // The slab covers the whole depth band out to crushReach — back off to dodge.
+      if (pl.alive && pl.x > face - d.crushReach) pl.takeHit(d.crushDmg, game, this.x);
+      for (let i = 0; i < 18; i++)
+        burst(game, face - Math.random() * d.crushReach,
+          JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), Math.random() * 30,
+          "#ffd06a", 1, { speed: 150, life: 0.4, up: 70 });
+      this.strikeFx = 0.24; this.atkState = "strike";
+    }
+
+    // Screen position of the core: its depth lane sets the vertical slide.
+    coreScreen(cam) {
+      const sx = this.x - cam;
+      return {
+        coreX: sx - 22,
+        coreY: Geo.feetScreenY(this.y, 0) - this.def.wsLift
+             + Math.sin(this.t * 2 + this.wsBobPhase) * this.def.wsBob,
+      };
+    }
+
+    draw(ctx, cam) {
+      if (this.atkState === "crushWind") this.drawCrushTelegraph(ctx, cam);
+      if (this.atkState === "slamWind")  this.drawSlamTelegraph(ctx, cam);
+
+      const sx = this.x - cam;
+      const floorBottom = Geo.feetScreenY(JH.DEPTH_MAX, 0);
+      Assets.draw(ctx, "wallboss", sx, floorBottom, 1, { t: this.t });
+      if (this._clangFx > 0) {                 // armour ping flash on the face edge
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillRect(Math.round(sx - this.bodyW * 0.5 - 2), floorBottom - 178, 5, 178);
+      }
+
+      this.drawLaneGuide(ctx, cam);
+      this.drawCore(ctx, cam);
+    }
+
+    // Floor lane marker (where to stand) + vulnerable column when open.
+    drawLaneGuide(ctx, cam) {
+      const sx = this.x - cam;
+      const laneY = Geo.feetScreenY(this.y, 0);
+      const mx = sx - 30, isOpen = this.wsState === "open";
+      ctx.save();
+      ctx.globalAlpha = isOpen ? 0.5 : 0.2;
+      ctx.fillStyle = isOpen ? "#9bff9b" : "#ffd23f";
+      ctx.beginPath(); ctx.ellipse(mx, laneY, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
+      if (isOpen) {
+        const { coreY } = this.coreScreen(cam);
+        ctx.globalAlpha = 0.16 + 0.1 * Math.abs(Math.sin(this.t * 6));
+        ctx.fillStyle = "#9bff9b";
+        ctx.fillRect(mx - 5, coreY, 10, laneY - coreY);
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // The roaming weak-spot core: iris shutters that open to expose the glow.
+    drawCore(ctx, cam) {
+      const { coreX, coreY } = this.coreScreen(cam);
+      const open = this.wsOpenAmt, isOpen = this.wsState === "open";
+      ctx.save();
+      // housing
+      ctx.fillStyle = "#0d0f15"; ctx.fillRect(coreX - 9, coreY - 11, 18, 22);
+      ctx.fillStyle = JH.PAL.wallbossHi;
+      ctx.fillRect(coreX - 9, coreY - 11, 18, 1); ctx.fillRect(coreX - 9, coreY + 10, 18, 1);
+      // glowing core behind the shutters
+      if (open > 0.02) {
+        const pulse = 0.6 + 0.4 * Math.abs(Math.sin(this.t * 6));
+        ctx.globalAlpha = open * pulse;
+        ctx.fillStyle = JH.PAL.wallbossCore;
+        ctx.beginPath(); ctx.ellipse(coreX, coreY, 7, 9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = (this._hitFx > 0 || this.flashTimer > 0) ? "#ffffff" : JH.PAL.wallbossCoreHi;
+        ctx.beginPath(); ctx.ellipse(coreX, coreY, 3.5 * open, 5 * open, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // iris shutters slide apart as `open` grows
+      const shut = Math.round(10 * (1 - open));
+      ctx.fillStyle = JH.PAL.wallbossShut;
+      ctx.fillRect(coreX - 8, coreY - 10, 16, shut);
+      ctx.fillRect(coreX - 8, coreY + 10 - shut, 16, shut);
+      if (shut > 0) {
+        ctx.fillStyle = JH.PAL.wallbossHaz;
+        ctx.fillRect(coreX - 8, coreY - 11 + shut, 16, 1);
+        ctx.fillRect(coreX - 8, coreY + 10 - shut, 16, 1);
+      }
+      // telegraph ring (opening) / hot ring (open)
+      if (this.wsState === "opening" || isOpen) {
+        ctx.strokeStyle = isOpen ? "#ffe6a0" : ((Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f");
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(coreX - 10, coreY - 12, 20, 24);
+      }
+      // crosshair reticle when fully exposed — "spray here"
+      if (isOpen) {
+        const r = 13 + Math.sin(this.t * 8) * 1.5;
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.moveTo(coreX - r, coreY); ctx.lineTo(coreX - r + 4, coreY);
+        ctx.moveTo(coreX + r, coreY); ctx.lineTo(coreX + r - 4, coreY);
+        ctx.moveTo(coreX, coreY - r); ctx.lineTo(coreX, coreY - r + 4);
+        ctx.moveTo(coreX, coreY + r); ctx.lineTo(coreX, coreY + r - 4);
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    drawCrushTelegraph(ctx, cam) {
+      const d = this.def, sx = this.x - cam;
+      const face = sx - this.bodyW * 0.5;
+      const prog = this.atkDur ? 1 - this.atkTimer / this.atkDur : 1;
+      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 40;
+      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 6;
+      ctx.save();
+      ctx.fillStyle = "rgba(255,60,40," + (0.12 + 0.30 * prog) + ")";
+      ctx.fillRect(face - d.crushReach, yT, d.crushReach, yB - yT);
+      ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(face - d.crushReach, yT, d.crushReach, yB - yT);
+      ctx.restore();
+    }
+
+    drawSlamTelegraph(ctx, cam) {
+      const sx = this.x - cam;
+      const face = sx - this.bodyW * 0.5;
+      const prog = this.atkDur ? 1 - this.atkTimer / this.atkDur : 1;
+      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 4;
+      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 4;
+      ctx.save();
+      ctx.globalAlpha = 0.3 + 0.4 * prog;
+      ctx.fillStyle = (Math.floor(this.t * 16) & 1) ? "#ffd06a" : "#ff7a2a";
+      ctx.fillRect(face - 6, yT, 8, yB - yT);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    die(game) {
+      if (this.dead) return;
+      this.dead = true;
+      game.audio.play("win"); game.shake(16);
+      for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
+      for (let i = 0; i < 12; i++)
+        setTimeout(() => burst(game, this.x - 20 - Math.random() * 40,
+          JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), 10 + Math.random() * 120,
+          Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossHaz, 16,
+          { speed: 180, life: 0.8, up: 150 }), i * 80);
+      spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
+      game.onEnemyKilled(this);
+    }
+  }
+  JH.WallBoss = WallBoss;
+
   // Factory used by the spawner.
   // ---- Target Dummy: stationary, unkillable, regens HP after taking damage ----
   class TargetDummy extends Enemy {
@@ -2122,6 +2450,7 @@
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
     if (type === "gk9000") return new GK9000Boss(x, y);
+    if (type === "wallboss") return new WallBoss(x, y);
     if (type === "neighbor") return new NeighborNPC(x, y);
     return new Enemy(type, x, y);
   };
