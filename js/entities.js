@@ -896,7 +896,6 @@
       if (this.summonTimer <= 0 && game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
         this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
         game.spawnEnemy(this.summonType, this.x - this.facing * 40, this.y + 10, { infinite: true });
-        game.banner("BACKUP INCOMING!");
       }
 
       // --- WIND-UP: hold the raised-arm pose + show the danger zone, then hit.
@@ -1589,9 +1588,7 @@
         this.leapTarget = { x: tx, y: pl.y };
         this.atkDur = this.windTimer = enraged ? d.leapWind * 0.75 : d.leapWind;
         this.state = "leapWind";
-        if (!this._leapHinted) { game.banner("GET OUT OF THE WAY!", 2); this._leapHinted = true; }
       } else {
-        if (!this._hinted) { game.banner("DASH THROUGH THE QUAKE!", 2); this._hinted = true; }
         this.atkDur = this.windTimer = enraged ? d.stompWind * 0.7 : d.stompWind;
         this.state = "tele";
         game.audio.play("jump");
@@ -2192,7 +2189,6 @@
       this.crushCd = JH.WALLBOSS.crushCd * 0.6;
       this.strikeFx = 0; this._clangFx = 0; this._hitFx = 0;
       this.summonTimer = JH.WALLBOSS.summonCd;
-      this._hinted = false;
     }
 
     applyKnockback() { /* immovable — the hose can't shove a wall */ }
@@ -2280,7 +2276,6 @@
         this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
         const ey = JH.DEPTH_MIN + 10 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 20);
         game.spawnEnemy(d.summonType, this.x - this.bodyW * 0.5 - 10, ey, { infinite: true });
-        game.banner("SECURITY DAEMONS!");
       }
     }
 
@@ -2310,7 +2305,6 @@
         this.atkDur = this.atkTimer = enraged ? d.crushWind * 0.7 : d.crushWind;
         this.crushCd = (enraged ? d.crushCd * 0.7 : d.crushCd) + this.atkDur;
         game.audio.play("jump");
-        if (!this._hinted) { game.banner("DON'T HUG THE FIREWALL!", 2); this._hinted = true; }
       } else if (this.slamCd <= 0) {
         this.atkState = "slamWind";
         this.atkDur = this.atkTimer = enraged ? d.slamWind * 0.7 : d.slamWind;
@@ -2370,22 +2364,33 @@
       this.drawCore(ctx, cam);
     }
 
-    // Floor lane marker (where to stand) + vulnerable column when open.
+    // Telegraph the vulnerable lane only while the core is opening/open: a
+    // column from the floor up to the exposed core + flashing floor brackets
+    // marking the depth to stand in. (Silent while armoured — nothing to hit.)
     drawLaneGuide(ctx, cam) {
+      if (this.wsState === "armored") return;
       const sx = this.x - cam;
       const laneY = Geo.feetScreenY(this.y, 0);
-      const mx = sx - 30, isOpen = this.wsState === "open";
+      const { coreY } = this.coreScreen(cam);
+      const colX = sx - 22;                          // aligned with the core's X
+      const isOpen = this.wsState === "open";
+      const blink = (Math.floor(this.t * 12) & 1);
       ctx.save();
-      ctx.globalAlpha = isOpen ? 0.5 : 0.2;
+      // vulnerable column (floor lane → core)
+      ctx.globalAlpha = isOpen ? 0.18 + 0.12 * Math.abs(Math.sin(this.t * 6)) : 0.12;
       ctx.fillStyle = isOpen ? "#9bff9b" : "#ffd23f";
-      ctx.beginPath(); ctx.ellipse(mx, laneY, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
-      if (isOpen) {
-        const { coreY } = this.coreScreen(cam);
-        ctx.globalAlpha = 0.16 + 0.1 * Math.abs(Math.sin(this.t * 6));
-        ctx.fillStyle = "#9bff9b";
-        ctx.fillRect(mx - 5, coreY, 10, laneY - coreY);
-      }
+      ctx.fillRect(colX - 5, coreY, 10, laneY - coreY);
+      // flashing floor brackets pointing to the lane
       ctx.globalAlpha = 1;
+      ctx.strokeStyle = isOpen ? (blink ? "#bfffbf" : "#5fdf5f") : (blink ? "#ffd23f" : "#a8861f");
+      ctx.lineWidth = 1.5;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(colX + s * 16, laneY - 4);
+        ctx.lineTo(colX + s * 11, laneY);
+        ctx.lineTo(colX + s * 16, laneY + 4);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
