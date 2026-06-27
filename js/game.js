@@ -833,7 +833,7 @@
       if (wbSel) { ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(PX + 3, wbRy, W - 6, ROW - 1); }
       ctx.fillStyle = wbSel ? "#ff8a4a" : "#667788";
       ctx.font = (wbSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("▮  WALL BOSS", PX + 8, wbRy + ROW - 3);
+      ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
       ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
       ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
 

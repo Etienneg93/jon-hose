@@ -2161,12 +2161,12 @@
   }
   JH.GatewayKrusherBoss = GatewayKrusherBoss;
 
-  // ================================================ THE PRESSURE WALL (wall boss)
-  // Bulkhead pinned to the right edge of the arena; doesn't move. Body is
-  // armoured (takeDamage ignores hits); only the WEAK SPOT (core) takes damage,
-  // and only while OPEN. The core ROAMS in depth (this.y) — the player must
-  // stand in its lane for the stream to register. Attacks: CRUSHER slab in
-  // front of the face (back off) and PISTON STOMP shockwave (jump).
+  // ==================================================== THE FIREWALL (wall boss)
+  // Switch-chassis wall pinned to the right edge of the arena; doesn't move.
+  // Body is armoured (takeDamage ignores hits); only the WEAK SPOT (core) takes
+  // damage, and only while OPEN. The core ROAMS in depth (this.y) — the player
+  // must stand in its lane for the stream to register. Attacks: PORT SLAM slab
+  // in front of the face (back off) and a SURGE shockwave (jump).
   // Not in JH.LEVEL1.waves; see JH.WALLBOSS in config.js for how to wire it in.
   class WallBoss extends Enemy {
     constructor(x, y) {
@@ -2262,7 +2262,7 @@
       }
     }
 
-    // Pressing against the bulkhead face hurts (it spans the whole street).
+    // Pressing against the wall face hurts (it spans the whole street).
     updateContact(dt, game, d) {
       if (this.contactTimer > 0) this.contactTimer -= dt;
       const pl = game.player;
@@ -2280,7 +2280,7 @@
         this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
         const ey = JH.DEPTH_MIN + 10 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 20);
         game.spawnEnemy(d.summonType, this.x - this.bodyW * 0.5 - 10, ey, { infinite: true });
-        game.banner("MAINTENANCE DRONES!");
+        game.banner("SECURITY DAEMONS!");
       }
     }
 
@@ -2302,7 +2302,7 @@
       }
       if (this.atkState === "strike") { if (this.strikeFx <= 0) this.atkState = "idle"; return; }
 
-      // Crusher is prioritised when the player is hugging the face; else stomp.
+      // Port slam (front slab) is prioritised when the player hugs the face; else the surge.
       const face = this.x - this.bodyW * 0.5;
       const atFace = pl.alive && pl.x > face - d.crushReach;
       if (this.crushCd <= 0 && atFace) {
@@ -2310,7 +2310,7 @@
         this.atkDur = this.atkTimer = enraged ? d.crushWind * 0.7 : d.crushWind;
         this.crushCd = (enraged ? d.crushCd * 0.7 : d.crushCd) + this.atkDur;
         game.audio.play("jump");
-        if (!this._hinted) { game.banner("DON'T HUG THE WALL!", 2); this._hinted = true; }
+        if (!this._hinted) { game.banner("DON'T HUG THE FIREWALL!", 2); this._hinted = true; }
       } else if (this.slamCd <= 0) {
         this.atkState = "slamWind";
         this.atkDur = this.atkTimer = enraged ? d.slamWind * 0.7 : d.slamWind;

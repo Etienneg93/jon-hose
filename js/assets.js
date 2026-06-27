@@ -626,57 +626,67 @@
     p(-19, 18, 3, 3, PAL.gkLed); p(16, 18, 3, 3, "#ff3a3a");
   });
 
-  // ===================== THE PRESSURE WALL (wall boss) ================
+  // ========================= THE FIREWALL (wall boss) =================
   // PLACEHOLDER ART — procedural pixels standing in until a real sprite sheet
   // lands; swap this painter for an image-blit one (see "neighbor" below) with
-  // no entity-code changes. A colossal industrial bulkhead. Drawn pinned to
-  // the right edge with its
-  // base on the front floor line (feet anchor = floor bottom). The roaming
-  // weak-spot core is drawn separately by the entity (it slides along the
-  // dark rail channel carved into the left face). facing is always +1.
+  // no entity-code changes. A wall-sized network-switch chassis (matches the
+  // Switch of Doom palette). Drawn pinned to the right edge with its base on
+  // the front floor line (feet anchor = floor bottom). The roaming weak-spot
+  // core is drawn separately by the entity (it slides along the dark rail
+  // channel carved into the left face). facing is always +1.
   Assets.register("wallboss", (p, opt) => {
     const t = opt.t || 0;
-    const C = PAL.wallbossBody, D = PAL.wallbossDk, HI = PAL.wallbossHi, HAZ = PAL.wallbossHaz;
+    const C = PAL.wallbossBody, D = PAL.wallbossDk, HI = PAL.wallbossHi;
+    const LED = PAL.switchLed, CB = PAL.cable;
     const L = -42, W = 138, H = 178;          // left-face local-x, width, height (ly up from feet)
 
-    // ---- main slab ----
+    // ---- main chassis ----
     p(L - 2, 0, W + 4, H, D);                  // dark outline
     p(L, 2, W, H - 4, C);                       // body fill
-    // recessed vertical panel seams
-    for (let gx = L + 16; gx < L + W - 8; gx += 24) p(gx, 8, 2, H - 16, D);
-    // horizontal rib bands
-    p(L, 44, W, 3, D); p(L, 100, W, 3, D); p(L, 150, W, 3, D);
+    // recessed vertical rack seams
+    for (let gx = L + 16; gx < L + W - 8; gx += 26) p(gx, 8, 2, H - 16, D);
+    // horizontal rack-unit divider bands
+    p(L, 46, W, 2, D); p(L, 92, W, 2, D); p(L, 138, W, 2, D);
 
     // ---- bright left face plate (the side facing the player) ----
     p(L, 0, 5, H, HI);
-    p(L, 0, 2, H, "#aeb6c4");
-
-    // ---- rivets running down the face ----
-    for (let gy = 12; gy < H - 10; gy += 18) { p(L + 8, gy, 2, 2, HI); p(L + 8, gy + 9, 2, 2, D); }
-
-    // ---- hazard stripe bands (top + bottom) ----
-    for (let i = 0; i < W / 8; i++) {
-      const hx = L + i * 8;
-      p(hx, H - 15, 4, 11, HAZ); p(hx + 4, H - 15, 4, 11, D);
-      p(hx, 5, 4, 9, HAZ);       p(hx + 4, 5, 4, 9, D);
-    }
-
-    // ---- vent grille (upper section, away from the rail) ----
-    for (let vy = 112; vy < 142; vy += 5) p(L + 64, vy, 56, 2, D);
-    // exhaust scorch
-    p(L + 64, 108, 56, 2, "#1a1a20");
+    p(L, 0, 2, H, "#9aa6c0");
 
     // ---- weak-spot rail channel on the left face (core travels here) ----
-    p(L + 14, 16, 14, H - 34, "#0d0f15");      // dark recessed track
+    p(L + 14, 16, 14, H - 34, "#0b0d14");      // dark recessed track
     p(L + 13, 16, 1, H - 34, HI);              // rail edges
     p(L + 28, 16, 1, H - 34, HI);
     for (let ry = 22; ry < H - 22; ry += 10) p(L + 15, ry, 12, 1, "#05060a"); // rail ties
 
-    // ---- status LEDs (angry red, blinking) ----
+    // ---- port banks across the face (the "network switch" read) ----
+    for (let row = 0; row < 15; row++) {
+      const py = 16 + row * 11;
+      if (py > H - 18) break;
+      for (let col = 0; col < 8; col++) {
+        const px = L + 38 + col * 11;
+        p(px, py, 7, 5, "#0a0d14");             // dark port socket
+        p(px + 1, py + 1, 5, 3, D);             // inner
+        // per-port status LED — mostly green, occasional red, some dark
+        const k = Math.floor(t * 4 + col * 2 + row * 3) % 7;
+        const lit = k !== 0 && k !== 4;
+        const red = (col + row) % 5 === 0;
+        p(px + 2, py + 1, 2, 2, lit ? (red ? "#ff5a5a" : LED) : "#10331f");
+      }
+    }
+
+    // ---- cable connectors along the top edge (switch lineage nod) ----
+    for (let i = 0; i < 5; i++) {
+      const cx = L + 34 + i * 18;
+      p(cx, H - 9, 4, 9, CB);
+      p(cx + 1, H - 3, 2, 4, "#2a3346");
+    }
+
+    // ---- trim + master status LEDs ----
+    p(L, H - 4, W, 4, D);                        // top trim
+    p(L, 0, W, 3, "#05070c");                    // base strip
     const on = (Math.floor(t * 4) % 2) === 0;
-    p(L + 40, H - 26, 3, 3, on ? "#ff5a5a" : "#3a0c0c");
-    p(L + 50, H - 26, 3, 3, on ? "#3a0c0c" : "#ff5a5a");
-    p(L + 40, 22, 3, 3, on ? "#3a0c0c" : "#ff5a5a");
+    p(L + 33, 8, 3, 3, on ? LED : "#10331f");
+    p(L + W - 9, 8, 3, 3, on ? "#ffb020" : "#3a2a08");
   });
 
   // ====================== THE NEIGHBOR (garden enemy) =================

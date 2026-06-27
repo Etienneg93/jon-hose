@@ -67,8 +67,8 @@
     shadow: "rgba(0,0,0,0.35)",
     gkBody: "#1e2535", gkDk: "#0c0f18", gkFace: "#8a7a6a", gkStubble: "#5a5050",
     gkLed: "#ff3a3a",
-    wallbossBody: "#3a3f4a", wallbossDk: "#23262e", wallbossHi: "#5a6373",
-    wallbossHaz: "#d8a82a", wallbossShut: "#15171d",
+    wallbossBody: "#27314a", wallbossDk: "#10141d", wallbossHi: "#46557a",
+    wallbossHaz: "#d8a82a", wallbossShut: "#0c1018",
     wallbossCore: "#ff5a2a", wallbossCoreHi: "#ffd06a",
     neighbor: "#3a5888", neighborDk: "#243a66",
     soundwave: "#40e0ff",
@@ -188,28 +188,28 @@
     rowDmg: 22, rowBand: 18, rowWind: 0.92,
   };
 
-  // "The Pressure Wall" — a large bulkhead pinned to the RIGHT edge of the
-  // arena; it doesn't move. Body is armoured (spray does no damage); only the
-  // WEAK SPOT (a core) takes damage, and only while OPEN. The core also ROAMS
-  // in depth — its lane (this.y) is what the stream is tested against, so the
-  // player must stand in its lane. Attacks: CRUSHER slab in front of the face
-  // (back off) and PISTON STOMP shockwave along the floor (jump).
-  // Not in JH.LEVEL1.waves; wire in with
-  //   { name: "THE WALL", boss: true, bossType: "wallboss" }  (game.js maps it).
+  // "The Firewall" — a large switch-chassis wall pinned to the RIGHT edge of
+  // the arena; it doesn't move. Body is armoured (spray does no damage); only
+  // the WEAK SPOT (an exposed port/core) takes damage, and only while OPEN. The
+  // weak spot also ROAMS in depth — its lane (this.y) is what the stream is
+  // tested against, so the player must stand in its lane. Attacks: PORT SLAM
+  // slab in front of the face (back off) and a SURGE shockwave along the floor
+  // (jump). Not in JH.LEVEL1.waves; wire in with
+  //   { name: "THE FIREWALL", boss: true, bossType: "wallboss" }  (game.js maps it).
   JH.WALLBOSS = {
-    name: "The Pressure Wall", hp: 1500, suds: 540, color: "wallbossBody",
+    name: "The Firewall", hp: 1500, suds: 540, color: "wallbossBody",
     bodyW: 84, bodyH: 178, touchDmg: 20, contactCd: 0.8, enrageAt: 0.4,
     // Weak-spot cycle (seconds): armored → opening telegraph → open(vulnerable).
     wsClosed: 3.0, wsOpen: 2.6, wsWind: 0.7,
     wsClosedEnraged: 2.0, wsOpenEnraged: 3.2,
     wsRoam: 30, wsRetargetMin: 1.1, wsRetargetMax: 2.2,   // depth drift px/s + retarget cadence
     wsLift: 46, wsBob: 9,                                  // core sits this high on the wall, bobs ±wsBob
-    dmgMult: 1.4,                                          // hose hurts more on an exposed core
-    // PISTON STOMP → shockwave rolls left along the floor (jump over it).
+    dmgMult: 1.4,                                          // hose hurts more on an exposed port
+    // SURGE → shockwave rolls left along the floor (jump over it).
     slamWind: 0.8, slamCd: 2.6, waveDmg: 20, waveRange: 480, waveSpeed: 170,
-    // CRUSHER → slab punches the zone in front of the face (back away to dodge).
+    // PORT SLAM → slab punches the zone in front of the face (back away to dodge).
     crushWind: 0.85, crushCd: 2.8, crushDmg: 32, crushReach: 78,
-    // Reinforcements ("maintenance drones").
+    // Reinforcements (spawned "security daemons").
     summonCd: 7.5, summonType: "mook",
   };
 
