@@ -2360,38 +2360,7 @@
         ctx.fillRect(Math.round(sx - this.bodyW * 0.5 - 2), floorBottom - 178, 5, 178);
       }
 
-      this.drawLaneGuide(ctx, cam);
       this.drawCore(ctx, cam);
-    }
-
-    // Telegraph the vulnerable lane only while the core is opening/open: a
-    // column from the floor up to the exposed core + flashing floor brackets
-    // marking the depth to stand in. (Silent while armoured — nothing to hit.)
-    drawLaneGuide(ctx, cam) {
-      if (this.wsState === "armored") return;
-      const sx = this.x - cam;
-      const laneY = Geo.feetScreenY(this.y, 0);
-      const { coreY } = this.coreScreen(cam);
-      const colX = sx - 22;                          // aligned with the core's X
-      const isOpen = this.wsState === "open";
-      const blink = (Math.floor(this.t * 12) & 1);
-      ctx.save();
-      // vulnerable column (floor lane → core)
-      ctx.globalAlpha = isOpen ? 0.18 + 0.12 * Math.abs(Math.sin(this.t * 6)) : 0.12;
-      ctx.fillStyle = isOpen ? "#9bff9b" : "#ffd23f";
-      ctx.fillRect(colX - 5, coreY, 10, laneY - coreY);
-      // flashing floor brackets pointing to the lane
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = isOpen ? (blink ? "#bfffbf" : "#5fdf5f") : (blink ? "#ffd23f" : "#a8861f");
-      ctx.lineWidth = 1.5;
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(colX + s * 16, laneY - 4);
-        ctx.lineTo(colX + s * 11, laneY);
-        ctx.lineTo(colX + s * 16, laneY + 4);
-        ctx.stroke();
-      }
-      ctx.restore();
     }
 
     // The roaming weak-spot core: iris shutters that open to expose the glow.
