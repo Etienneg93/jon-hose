@@ -14,6 +14,16 @@
       if (waveIndex < 10) return 1;
       return 2;
     },
+
+    // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
+    // dropMult. Base rates (mult 1): 18% health, 27% water can.
+    dropThresholds(dropMult) {
+      const m = dropMult || 1;
+      const health = Math.min(0.45, 0.18 * m);
+      const waterChance = 0.27 * m;
+      const water = Math.min(0.9, health + waterChance);
+      return { health, water };
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

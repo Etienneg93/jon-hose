@@ -13,3 +13,22 @@ test("actLevelForWave maps wave index to elite act tier", () => {
   assert.strictEqual(Balance.actLevelForWave(10), 2);  // Act 4
   assert.strictEqual(Balance.actLevelForWave(13), 2);
 });
+
+test("dropThresholds reproduces base rates at mult 1", () => {
+  const t = Balance.dropThresholds(1);
+  assert.strictEqual(t.health, 0.18);
+  assert.ok(Math.abs(t.water - 0.45) < 1e-9);   // 0.18 + 0.27
+});
+
+test("dropThresholds scales item chances by mult and stays cumulative", () => {
+  const t = Balance.dropThresholds(1.8);
+  assert.ok(Math.abs(t.health - 0.324) < 1e-9); // 0.18 * 1.8
+  assert.ok(Math.abs(t.water - 0.81) < 1e-9);   // 0.324 + 0.27*1.8 (0.486)
+  assert.ok(t.water > t.health);
+});
+
+test("dropThresholds caps so drops are never guaranteed", () => {
+  const t = Balance.dropThresholds(10);
+  assert.ok(t.health <= 0.45);
+  assert.ok(t.water <= 0.9);
+});
