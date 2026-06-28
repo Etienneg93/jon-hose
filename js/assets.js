@@ -219,6 +219,37 @@
   }
   Assets.shadow = shadow;
 
+  // Shared red "reactor core" glyph used by the bosses. Drawn directly in ctx
+  // space — call from a boss draw() with the on-screen core centre. opt.flash
+  // whitens the centre (e.g. on an attack/hit frame).
+  function bossCore(ctx, cx, cy, r, t, opt) {
+    opt = opt || {};
+    cx = Math.round(cx); cy = Math.round(cy);
+    const pulse = 0.7 + 0.3 * Math.abs(Math.sin(t * 6));
+    ctx.save();
+    // dark socket + metal ring
+    ctx.fillStyle = "#0d0f15";
+    ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = PAL.switchBody; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.stroke();
+    // outer glow
+    ctx.globalAlpha = 0.5 * pulse;
+    ctx.fillStyle = PAL.wallbossCore;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r * 1.5, r * 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // lens
+    ctx.fillStyle = PAL.wallbossCore;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2); ctx.fill();
+    // hot slit-pupil centre
+    ctx.fillStyle = opt.flash ? "#ffffff" : PAL.wallbossCoreHi;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r * 0.42, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    // angry brow slit for the "eye" read
+    ctx.fillStyle = "#0d0f15";
+    ctx.fillRect(cx - r, Math.round(cy - r - 1), r * 2, 1);
+    ctx.restore();
+  }
+  Assets.bossCore = bossCore;
+
   // Walk-cycle leg offset from a frame counter (0..3).
   const legStep = (frame) => [2, 1, -2, -1][frame & 3];
 
@@ -546,12 +577,12 @@
     p(-9, 22 + bob, 2, 3, "#dddddd");     // bushy beard
   });
 
-  // ========================= GK9000 (final boss) ======================
+  // ====================== GATEWAY KRUSHER 9000 (final boss) ===================
   // A big STANDING switch chassis with an angry middle-aged face embedded.
-  Assets.register("gk9000", (p, opt) => {
+  Assets.register("gatewaykrusher", (p, opt) => {
     const t = opt.t || 0;
     if (opt.hurt && (Math.floor(t * 8) & 1)) return;
-    const C = PAL.gk9000Body, D = PAL.gk9000Dk;
+    const C = PAL.gkBody, D = PAL.gkDk;
     // Outer chassis
     p(-22, 0, 44, 60, D);
     p(-20, 2, 40, 56, C);
@@ -565,16 +596,16 @@
         const px = -18 + i * 4.5;
         const py = 42 + row * 5;
         const on = (Math.floor(t * 5 + i + row * 3) % 4 !== 0);
-        p(px, py, 3, 3, on ? PAL.gk9000Led : "#1a0808");
+        p(px, py, 3, 3, on ? PAL.gkLed : "#1a0808");
       }
     }
     // Face embedded in middle section (ly 20-42)
-    p(-11, 22, 22, 20, PAL.gk9000Face);          // skin base
-    p(-10, 22, 20, 5, PAL.gk9000Stubble);         // chin stubble band
+    p(-11, 22, 22, 20, PAL.gkFace);          // skin base
+    p(-10, 22, 20, 5, PAL.gkStubble);         // chin stubble band
     // Stubble texture patches (lighter flecks)
-    p(-9, 22, 2, 4, PAL.gk9000Face); p(-5, 23, 2, 3, PAL.gk9000Face);
-    p(-1, 22, 2, 4, PAL.gk9000Face); p( 3, 23, 2, 3, PAL.gk9000Face);
-    p( 6, 22, 2, 4, PAL.gk9000Face);
+    p(-9, 22, 2, 4, PAL.gkFace); p(-5, 23, 2, 3, PAL.gkFace);
+    p(-1, 22, 2, 4, PAL.gkFace); p( 3, 23, 2, 3, PAL.gkFace);
+    p( 6, 22, 2, 4, PAL.gkFace);
     // Mouth grimace
     p(-7, 27, 14, 2, "#1a1010");
     p(-6, 28, 3, 2, "#0a0808"); p(3, 28, 3, 2, "#0a0808"); // teeth gaps
@@ -591,8 +622,71 @@
     p(-18, 10, 5, 2, "#0a0c10"); p(-18, 13, 5, 1, "#0a0c10");
     p( 13, 10, 5, 2, "#0a0c10"); p( 13, 13, 5, 1, "#0a0c10");
     // Status LEDs — all red/angry
-    p(-19, 5, 3, 3, PAL.gk9000Led); p(16, 5, 3, 3, "#ff3a3a");
-    p(-19, 18, 3, 3, PAL.gk9000Led); p(16, 18, 3, 3, "#ff3a3a");
+    p(-19, 5, 3, 3, PAL.gkLed); p(16, 5, 3, 3, "#ff3a3a");
+    p(-19, 18, 3, 3, PAL.gkLed); p(16, 18, 3, 3, "#ff3a3a");
+  });
+
+  // ========================= THE FIREWALL (wall boss) =================
+  // PLACEHOLDER ART — procedural pixels standing in until a real sprite sheet
+  // lands; swap this painter for an image-blit one (see "neighbor" below) with
+  // no entity-code changes. A wall-sized network-switch chassis (matches the
+  // Switch of Doom palette). Drawn pinned to the right edge with its base on
+  // the front floor line (feet anchor = floor bottom). The roaming weak-spot
+  // core is drawn separately by the entity (it slides along the dark rail
+  // channel carved into the left face). facing is always +1.
+  Assets.register("wallboss", (p, opt) => {
+    const t = opt.t || 0;
+    const C = PAL.wallbossBody, D = PAL.wallbossDk, HI = PAL.wallbossHi;
+    const LED = PAL.switchLed, CB = PAL.cable;
+    const L = -42, W = 138, H = 178;          // left-face local-x, width, height (ly up from feet)
+
+    // ---- main chassis ----
+    p(L - 2, 0, W + 4, H, D);                  // dark outline
+    p(L, 2, W, H - 4, C);                       // body fill
+    // recessed vertical rack seams
+    for (let gx = L + 16; gx < L + W - 8; gx += 26) p(gx, 8, 2, H - 16, D);
+    // horizontal rack-unit divider bands
+    p(L, 46, W, 2, D); p(L, 92, W, 2, D); p(L, 138, W, 2, D);
+
+    // ---- bright left face plate (the side facing the player) ----
+    p(L, 0, 5, H, HI);
+    p(L, 0, 2, H, "#9aa6c0");
+
+    // ---- weak-spot rail channel on the left face (core travels here) ----
+    p(L + 14, 16, 14, H - 34, "#0b0d14");      // dark recessed track
+    p(L + 13, 16, 1, H - 34, HI);              // rail edges
+    p(L + 28, 16, 1, H - 34, HI);
+    for (let ry = 22; ry < H - 22; ry += 10) p(L + 15, ry, 12, 1, "#05060a"); // rail ties
+
+    // ---- port banks across the face (the "network switch" read) ----
+    for (let row = 0; row < 15; row++) {
+      const py = 16 + row * 11;
+      if (py > H - 18) break;
+      for (let col = 0; col < 8; col++) {
+        const px = L + 38 + col * 11;
+        p(px, py, 7, 5, "#0a0d14");             // dark port socket
+        p(px + 1, py + 1, 5, 3, D);             // inner
+        // per-port status LED — mostly green, occasional red, some dark
+        const k = Math.floor(t * 4 + col * 2 + row * 3) % 7;
+        const lit = k !== 0 && k !== 4;
+        const red = (col + row) % 5 === 0;
+        p(px + 2, py + 1, 2, 2, lit ? (red ? "#ff5a5a" : LED) : "#10331f");
+      }
+    }
+
+    // ---- cable connectors along the top edge (switch lineage nod) ----
+    for (let i = 0; i < 5; i++) {
+      const cx = L + 34 + i * 18;
+      p(cx, H - 9, 4, 9, CB);
+      p(cx + 1, H - 3, 2, 4, "#2a3346");
+    }
+
+    // ---- trim + master status LEDs ----
+    p(L, H - 4, W, 4, D);                        // top trim
+    p(L, 0, W, 3, "#05070c");                    // base strip
+    const on = (Math.floor(t * 4) % 2) === 0;
+    p(L + 33, 8, 3, 3, on ? LED : "#10331f");
+    p(L + W - 9, 8, 3, 3, on ? "#ffb020" : "#3a2a08");
   });
 
   // ====================== THE NEIGHBOR (garden enemy) =================

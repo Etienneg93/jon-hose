@@ -65,8 +65,11 @@
     dummy: "#cc5c18",
     suds: "#ffd23f", hpPk: "#ff5a5a",
     shadow: "rgba(0,0,0,0.35)",
-    gk9000Body: "#1e2535", gk9000Dk: "#0c0f18", gk9000Face: "#8a7a6a", gk9000Stubble: "#5a5050",
-    gk9000Led: "#ff3a3a",
+    gkBody: "#1e2535", gkDk: "#0c0f18", gkFace: "#8a7a6a", gkStubble: "#5a5050",
+    gkLed: "#ff3a3a",
+    wallbossBody: "#27314a", wallbossDk: "#10141d", wallbossHi: "#46557a",
+    wallbossHaz: "#d8a82a", wallbossShut: "#0c1018",
+    wallbossCore: "#ff5a2a", wallbossCoreHi: "#ffd06a",
     neighbor: "#3a5888", neighborDk: "#243a66",
     soundwave: "#40e0ff",
     rock: "#7a6a58", rockDk: "#4e4030",
@@ -155,9 +158,9 @@
     summonCd: 6.5, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks
   };
 
-  // Final boss — "The Switch of Doom" (Jon Hose cinematic universe): an 8-port
-  // network switch with Doc-Ock cable tentacles. Fires TELEGRAPHED full-width
-  // LINE attacks along a depth row; dodge by moving up/down a lane (or jumping).
+  // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable
+  // tentacles. Fires telegraphed full-width LINE attacks along a depth row;
+  // dodge by moving up/down a lane (or jumping).
   JH.SWITCH = {
     name: "The Switch of Doom", hp: 1000, speed: 30, bodyW: 48, bodyH: 30,
     touchDmg: 14, contactCd: 0.9, suds: 240, color: "switchBody",
@@ -175,14 +178,39 @@
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
 
-  // GK9000 — a powered-up standing switch with an embedded middle-aged face.
-  // Adds a floor-row depth slam on top of the Switch's arsenal.
-  JH.GK9000 = {
-    name: "GK9000", hp: 1800, speed: 28, bodyW: 44, bodyH: 60,
-    touchDmg: 18, contactCd: 0.9, suds: 480, color: "gk9000Body",
+  // Gateway Krusher 9000 — a powered-up standing switch with an embedded face.
+  // Reuses the Switch's line/whip attacks and adds a floor-row depth slam.
+  JH.GATEWAYKRUSHER = {
+    name: "Gateway Krusher 9000", hp: 1800, speed: 28, bodyW: 44, bodyH: 60,
+    touchDmg: 18, contactCd: 0.9, suds: 480, color: "gkBody",
     lineDmg: 26, lineBand: 13, lineWind: 0.82, enrageAt: 0.38,
     whipDmg: 24, whipBand: 16, whipWind: 0.78,
     rowDmg: 22, rowBand: 18, rowWind: 0.92,
+  };
+
+  // "The Firewall" — a large switch-chassis wall pinned to the RIGHT edge of
+  // the arena; it doesn't move. Body is armoured (spray does no damage); only
+  // the WEAK SPOT (an exposed port/core) takes damage, and only while OPEN. The
+  // weak spot also ROAMS in depth — its lane (this.y) is what the stream is
+  // tested against, so the player must stand in its lane. Attacks: PORT SLAM
+  // slab in front of the face (back off) and a SURGE shockwave along the floor
+  // (jump). Not in JH.LEVEL1.waves; wire in with
+  //   { name: "THE FIREWALL", boss: true, bossType: "wallboss" }  (game.js maps it).
+  JH.WALLBOSS = {
+    name: "The Firewall", hp: 1500, suds: 540, color: "wallbossBody",
+    bodyW: 84, bodyH: 178, touchDmg: 20, contactCd: 0.8, enrageAt: 0.4,
+    // Weak-spot cycle (seconds): armored → opening telegraph → open(vulnerable).
+    wsClosed: 3.0, wsOpen: 2.6, wsWind: 0.7,
+    wsClosedEnraged: 2.0, wsOpenEnraged: 3.2,
+    wsRoam: 30, wsRetargetMin: 1.1, wsRetargetMax: 2.2,   // depth drift px/s + retarget cadence
+    wsLift: 46, wsBob: 9,                                  // core sits this high on the wall, bobs ±wsBob
+    dmgMult: 1.4,                                          // hose hurts more on an exposed port
+    // SURGE → shockwave rolls left along the floor (jump over it).
+    slamWind: 0.8, slamCd: 2.6, waveDmg: 20, waveRange: 480, waveSpeed: 170,
+    // PORT SLAM → slab punches the zone in front of the face (back away to dodge).
+    crushWind: 0.85, crushCd: 2.8, crushDmg: 32, crushReach: 78,
+    // Reinforcements (spawned "security daemons").
+    summonCd: 7.5, summonType: "mook",
   };
 
   // True final boss — "Quake Walker", one of Jon's nemeses. A hulking bruiser
@@ -220,7 +248,7 @@
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
-      { name: "GK9000", boss: true, bossType: "gk9000" },    // true finale
+      { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },  // true finale
     ],
   };
 

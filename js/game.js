@@ -96,13 +96,14 @@
           return;
         }
         if (!this.devMenu) return;
-        const count = JH.LEVEL1.waves.length + 2;  // +1 cutscene, +1 target range
+        const count = JH.LEVEL1.waves.length + 3;  // +1 cutscene, +1 target range, +1 wall boss
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
         if (e.code === "Enter" || e.code === "NumpadEnter") {
           e.preventDefault();
           if (this.devCursor === JH.LEVEL1.waves.length) this.devTriggerCutscene();
           else if (this.devCursor === JH.LEVEL1.waves.length + 1) this.devGotoRange();
+          else if (this.devCursor === JH.LEVEL1.waves.length + 2) this.devGotoWallBoss();
           else this.devGotoWave(this.devCursor);
         }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
@@ -159,6 +160,27 @@
       // Shop NPC visible from spawn
       this.shopNpc = new JH.ShopNPC(220, JH.DEPTH_MIN + 6);
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
+      this.devMenu = false;
+    },
+
+    // Standalone test arena for the wall boss (not in the wave list yet).
+    devGotoWallBoss() {
+      this.startGame();
+      const px = 200;
+      this.player.x = px;
+      this.player.y = JH.DEPTH_MAX * 0.5;
+      this.player.suds = 999;
+      JH.Camera.x = Math.max(0, px - Math.floor(JH.VIEW_W * 0.38));
+      this.waveActive = true;
+      this.waveCleared = false;
+      this.waveIndex = JH.LEVEL1.waves.length - 1;  // killing it routes to win(); checkWaveTrigger stays quiet
+      JH.Camera.lock();
+      const left = JH.Camera.x + 20, right = JH.Camera.x + JH.VIEW_W - 20;
+      this.bounds = { minX: left, maxX: right };
+      this.dropBudget = { suds: 10, items: 5 };
+      JH.Music.setTrack("boss");
+      this.banner(JH.WALLBOSS.name.toUpperCase(), 1.8);
+      this.spawnEnemy("wallboss", right - 20, JH.DEPTH_MAX - 30);
       this.devMenu = false;
     },
 
@@ -259,7 +281,7 @@
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
-        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : bt === "gk9000" ? JH.GK9000 : JH.BOSS;
+        const bdef = bt === "switch" ? JH.SWITCH : bt === "quake" ? JH.QUAKE : bt === "gatewaykrusher" ? JH.GATEWAYKRUSHER : bt === "wallboss" ? JH.WALLBOSS : JH.BOSS;
         this.dropBudget = { suds: 10, items: 5 };             // caps summon farming
         this.banner(bdef.name.toUpperCase(), 1.8);
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
@@ -748,7 +770,7 @@
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
       const W = 224, ROW = 11, PAD = 14;
-      const H = PAD + (waves.length + 2) * ROW + PAD;
+      const H = PAD + (waves.length + 3) * ROW + PAD;
       const PX = Math.round((JH.VIEW_W - W) / 2);
       const PY = Math.round((JH.VIEW_H - H) / 2);
       const MID = PX + W / 2;
@@ -804,6 +826,16 @@
       ctx.fillText("⊕  TARGET RANGE", PX + 8, rangeRy + ROW - 3);
       ctx.fillStyle = rangeSel ? "#80ff80" : "#445566"; ctx.textAlign = "right";
       ctx.fillText("DEV", PX + W - 6, rangeRy + ROW - 3);
+
+      // Wall boss entry (standalone concept — not in the wave list)
+      const wbRy = PY + PAD + (waves.length + 2) * ROW;
+      const wbSel = this.devCursor === waves.length + 2;
+      if (wbSel) { ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(PX + 3, wbRy, W - 6, ROW - 1); }
+      ctx.fillStyle = wbSel ? "#ff8a4a" : "#667788";
+      ctx.font = (wbSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+      ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
+      ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
+      ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
 
       // Footer hint
       ctx.fillStyle = "#445566";
