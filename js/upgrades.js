@@ -21,7 +21,7 @@
   // tier = vertical position in its branch column (1 = root).
   const NODES = [
     // ---- PRESSURE -----------------------------------------------------
-    { id: "pw1", branch: "PRESSURE", tier: 1, req: [], cost: 40,
+    { id: "pw1", branch: "PRESSURE", tier: 1, req: [], cost: 32,
       name: "Thumb on the Nozzle", desc: "+8 dmg. Stream tightens into a jet.",
       apply: (s) => { s.sprayDamage += 8; s.beam = Math.max(s.beam, 1); } },
     { id: "pw2", branch: "PRESSURE", tier: 2, req: ["pw1"], cost: 80,
@@ -32,7 +32,7 @@
       apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
 
     // ---- REACH --------------------------------------------------------
-    { id: "rc1", branch: "REACH", tier: 1, req: [], cost: 45,
+    { id: "rc1", branch: "REACH", tier: 1, req: [], cost: 36,
       name: "Extension Hose", desc: "+26 stream range.",
       apply: (s) => { s.sprayRange += 26; } },
     { id: "rc2", branch: "REACH", tier: 2, req: ["rc1"], cost: 85,
@@ -43,7 +43,7 @@
       apply: (s) => { s.splitStream = true; } },
 
     // ---- TANK ---------------------------------------------------------
-    { id: "tk1", branch: "TANK", tier: 1, req: [], cost: 25,
+    { id: "tk1", branch: "TANK", tier: 1, req: [], cost: 20,
       name: "Bladder Pack", desc: "+40 max water.",
       apply: (s) => { s.maxWater += 40; } },
     { id: "tk2", branch: "TANK", tier: 2, req: ["tk1"], cost: 55,
@@ -54,7 +54,7 @@
       apply: (s) => { s.waterReturn += 10; } },
 
     // ---- MOBILITY -----------------------------------------------------
-    { id: "mb1", branch: "MOBILITY", tier: 1, req: [], cost: 40,
+    { id: "mb1", branch: "MOBILITY", tier: 1, req: [], cost: 32,
       name: "Gripper Soles", desc: "+18 move speed.",
       apply: (s) => { s.moveSpeed += 18; } },
     { id: "mb2", branch: "MOBILITY", tier: 2, req: ["mb1"], cost: 85,
@@ -65,7 +65,7 @@
       apply: (s) => { s.moveRegen += 10; } },
 
     // ---- VITALITY -----------------------------------------------------
-    { id: "vt1", branch: "VITALITY", tier: 1, req: [], cost: 25,
+    { id: "vt1", branch: "VITALITY", tier: 1, req: [], cost: 20,
       name: "Wetsuit", desc: "+30 max HP.",
       apply: (s) => { s.maxHp += 30; } },
     { id: "vt2", branch: "VITALITY", tier: 2, req: ["vt1"], cost: 60,
