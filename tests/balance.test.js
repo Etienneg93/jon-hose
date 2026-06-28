@@ -32,3 +32,9 @@ test("dropThresholds caps so drops are never guaranteed", () => {
   assert.ok(t.health <= 0.45);
   assert.ok(t.water <= 0.9);
 });
+
+test("dropThresholds applies cumulative water cap at mult 2", () => {
+  const t = Balance.dropThresholds(2);
+  assert.ok(Math.abs(t.health - 0.36) < 1e-9);  // 0.18 * 2
+  assert.ok(Math.abs(t.water - 0.9) < 1e-9);    // min(0.9, 0.36 + 0.54)
+});

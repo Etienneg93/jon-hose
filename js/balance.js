@@ -17,6 +17,7 @@
 
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
+    // The 0.9 cap applies to the cumulative water threshold, not per-item.
     dropThresholds(dropMult) {
       const m = dropMult || 1;
       const health = Math.min(0.45, 0.18 * m);
