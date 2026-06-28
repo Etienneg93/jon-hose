@@ -578,6 +578,47 @@
       });
       list.appendChild(repCol);
 
+      const conCol = document.createElement("div");
+      conCol.className = "tree-col";
+      conCol.innerHTML = '<div class="tree-head">SUPPLIES</div>';
+      const cons = [
+        { key: "medkit", buy: () => {
+            const c = JH.CONSUMABLES.medkit;
+            if (this.player.suds < c.cost) return false;
+            this.player.suds -= c.cost;
+            this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
+            return true;
+          }, label: () => JH.CONSUMABLES.medkit.name,
+          desc: () => "Heal " + JH.CONSUMABLES.medkit.heal + " HP now.",
+          cost: () => JH.CONSUMABLES.medkit.cost },
+        { key: "pressure", buy: () => {
+            const c = JH.CONSUMABLES.pressure;
+            if (this.player.suds < c.cost) return false;
+            this.player.suds -= c.cost;
+            this.player.pressureBuffT = c.dur;
+            return true;
+          }, label: () => JH.CONSUMABLES.pressure.name,
+          desc: () => "+" + Math.round((JH.CONSUMABLES.pressure.mult - 1) * 100) +
+                      "% spray dmg for " + JH.CONSUMABLES.pressure.dur + "s of the next fight.",
+          cost: () => JH.CONSUMABLES.pressure.cost },
+      ];
+      cons.forEach((item) => {
+        const cost = item.cost();
+        const afford = this.player.suds >= cost;
+        const node = document.createElement("div");
+        node.className = "tree-node " + (afford ? "buyable" : "cant");
+        node.innerHTML =
+          '<div class="tn-top"><span class="tn-name">' + item.label() + "</span>" +
+          '<span class="tn-cost">💧' + cost + "</span></div>" +
+          '<div class="tn-desc">' + item.desc() + "</div>";
+        node.addEventListener("click", () => {
+          if (item.buy()) { this.audio.play("buy"); this.renderShop(); }
+          else this.audio.play("hurt");
+        });
+        conCol.appendChild(node);
+      });
+      list.appendChild(conCol);
+
       function connector() { const c = document.createElement("div"); c.className = "tree-link"; return c; }
     },
     closeShop() {

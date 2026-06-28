@@ -169,6 +169,7 @@
       this.sprayEmitAcc = 0;       // fractional particle emitter for the stream
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
+      this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
       this.bodyW = this.stats.bodyW;
@@ -184,6 +185,7 @@
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
+      if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
@@ -375,7 +377,8 @@
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
         const mult = e.def ? (e.def.waterMult || 1) : 1;
-        const dmg = S.sprayDamage * dmgScale * mult * dt;
+        const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
+        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)

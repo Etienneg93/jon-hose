@@ -181,6 +181,13 @@
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
 
+  // Between-wave consumables (Suds sink). Med Kit heals instantly on purchase;
+  // Pressure Charge is "armed" in the shop and ticks down only during play.
+  JH.CONSUMABLES = {
+    medkit:   { name: "Med Kit",        cost: 45, heal: 60 },
+    pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
+  };
+
   // Gateway Krusher 9000 — a powered-up standing switch with an embedded face.
   // Reuses the Switch's line/whip attacks and adds a floor-row depth slam.
   JH.GATEWAYKRUSHER = {
