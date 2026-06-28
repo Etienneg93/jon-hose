@@ -68,16 +68,16 @@
   }
   JH.spawnSudsCoins = spawnSudsCoins;
 
-  // Boss kill: coins arc upward and land
+  // Boss kill: coins stream up and land close by
   function spawnCoinFountain(game, x, y, total) {
     denominateCoins(total).forEach((val, i) => {
       setTimeout(() => {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 70 + Math.random() * 110;
+        const speed = 15 + Math.random() * 30;
         const p = new JH.Pickup("suds", x, y, val);
-        p.z = 10; p.vz = 220 + Math.random() * 140;
+        p.z = 10; p.vz = 100 + Math.random() * 80;
         p.vx = Math.cos(angle) * speed;
-        p.vy = Math.sin(angle) * speed * 0.35;
+        p.vy = Math.sin(angle) * speed * 0.2;
         game.pickups.push(p);
       }, i * 30);
     });
@@ -973,10 +973,9 @@
       ctx.restore();
     }
     die(game) {
-      if (this.dead) return;
-      this.dead = true;
+      if (this.dead || this.dying) return;
+      this.dying = true;
       game.audio.play("win");
-      // His summoned goons collapse with him.
       for (const e of game.enemies) {
         if (e !== this && !e.dead && !e.isBoss) {
           e.dead = true;
@@ -986,7 +985,7 @@
       for (let i = 0; i < 5; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }), i * 90);
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
-      game.onEnemyKilled(this);
+      game.startBossDeathSeq(this);
     }
   }
   JH.Boss = Boss;
@@ -1028,7 +1027,6 @@
         pl.kibbleTimer = 6.0;
         pl.kibbleRegen = this.value / 6.0;
         game.audio.play("buy");
-        game.banner("KIBBLE REGEN!", 1.6);
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
       }
       else if (this.kind === "water_can") { pl.water = Math.min(pl.stats.maxWater, pl.water + this.value); game.audio.play("buy"); }
@@ -1300,15 +1298,15 @@
       ctx.restore();
     }
     die(game) {
-      if (this.dead) return;
-      this.dead = true;
+      if (this.dead || this.dying) return;
+      this.dying = true;
       game.audio.play("win");
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 6; i++)
         setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }), i * 90);
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
-      game.onEnemyKilled(this);
+      game.startBossDeathSeq(this);
     }
   }
   JH.SwitchBoss = SwitchBoss;
@@ -2139,8 +2137,8 @@
       ctx.restore();
     }
     die(game) {
-      if (this.dead) return;
-      this.dead = true;
+      if (this.dead || this.dying) return;
+      this.dying = true;
       game.audio.play("win");
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 9; i++)
@@ -2153,7 +2151,7 @@
           Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossCoreHi, 1, { speed: 200, life: 0.7, up: 40 });
       game.banner("CORE DESTROYED!", 2.0);
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
-      game.onEnemyKilled(this);
+      game.startBossDeathSeq(this);
     }
   }
   JH.GatewayKrusherBoss = GatewayKrusherBoss;
@@ -2442,8 +2440,8 @@
     }
 
     die(game) {
-      if (this.dead) return;
-      this.dead = true;
+      if (this.dead || this.dying) return;
+      this.dying = true;
       game.audio.play("win"); game.shake(16);
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 12; i++)
@@ -2453,7 +2451,7 @@
           { speed: 180, life: 0.8, up: 150 }), i * 80);
       spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
-      game.onEnemyKilled(this);
+      game.startBossDeathSeq(this);
     }
   }
   JH.WallBoss = WallBoss;

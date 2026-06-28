@@ -1,11 +1,17 @@
 {
   "name": "jon-hose",
   "private": true,
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "Jon Hose - The Game",
   "scripts": {
     "dev": "npx --yes serve@14 -l 5173 .",
     "build": "node tools/build.mjs",
-    "preview": "npm run build && npx --yes serve@14 -l 5174 dist"
+    "preview": "npm run build && npx --yes serve@14 -l 5174 dist",
+    "sprite:gen": "node tools/imagen-gen.mjs",
+    "sprite:animate": "node tools/pixellab-animate.mjs",
+    "sprite:quantize": "node tools/quantize.mjs"
+  },
+  "dependencies": {
+    "pngjs": "^7.0.0"
   }
 }

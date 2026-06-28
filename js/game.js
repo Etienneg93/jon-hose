@@ -35,6 +35,7 @@
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
+    dyingBoss: null, deathSeqT: 0,
 
     // ------------------------------------------------------------- setup
     init() {
@@ -93,6 +94,12 @@
             this.startGame();
           this.devMenu = !this.devMenu;
           if (this.devMenu) this.devCursor = 0;
+          return;
+        }
+        // K — instantly kill the active boss to test the death sequence
+        if (e.code === "KeyK" && this.state === "play") {
+          const b = this.enemies.find((en) => en.isBoss && !en.dead && !en.dying);
+          if (b) { e.preventDefault(); b.hp = 0; b.die(this); }
           return;
         }
         if (!this.devMenu) return;
@@ -199,6 +206,27 @@
       // restart pop animation
       el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
       this.bannerTimer = dur || 1.4;
+    },
+
+    startBossDeathSeq(boss) {
+      this.state = "bossDeathSeq";
+      this.dyingBoss = boss;
+      this.deathSeqT = 0;
+      this.shake(6);
+    },
+
+    updateBossDeathSeq(dt) {
+      const t = (this.deathSeqT += dt);
+      if (t >= 1.2 && t - dt < 1.2) this.shake(10);
+      if (t >= 1.5) {
+        const boss = this.dyingBoss;
+        boss.dead = true;
+        boss.dying = false;
+        this.dyingBoss = null;
+        this.deathSeqT = 0;
+        this.state = "play";
+        this.onEnemyKilled(boss);
+      }
     },
 
     // Celebratory feedback when an upgrade node is purchased: rising chime,
@@ -581,6 +609,13 @@
       }
       if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
 
+      if (this.state === "bossDeathSeq") {
+        this.particles = this.particles.filter((p) => p.update(dt));
+        this.embers   = this.embers.filter((p) => p.update(dt, this));
+        this.updateBossDeathSeq(dt);
+        return;
+      }
+
       if (this.devMenu) return;
 
       // Cutscene: only E (confirm) advances the dialogue.
@@ -740,7 +775,29 @@
         actors.push(this.player);
         if (this.shopNpc) actors.push(this.shopNpc);
         actors.sort((m, n) => m.y - n.y);
-        for (const e of actors) if (e.draw) e.draw(ctx, cam);
+        for (const e of actors) {
+          if (!e.draw) continue;
+          if (e.dying) {
+            const t = this.deathSeqT;
+            ctx.save();
+            if (t < 0.6) {
+              // Rapid white strobe: boss turns pure white on the flash beats
+              if (Math.sin(t * Math.PI * 12) > 0)
+                ctx.filter = "brightness(20) saturate(0)";
+            } else if (t < 1.0) {
+              // Brightness ramps back to normal as the boss fades
+              const b = 1 + (1 - (t - 0.6) / 0.4) * 19;
+              ctx.filter = `brightness(${b.toFixed(1)})`;
+            } else {
+              // Final fade-out
+              ctx.globalAlpha = Math.max(0, 1 - (t - 1.0) / 0.5);
+            }
+            e.draw(ctx, cam);
+            ctx.restore();
+          } else {
+            e.draw(ctx, cam);
+          }
+        }
 
         // projectiles + particles on top
         for (const p of this.embers) p.draw(ctx, cam);
@@ -753,8 +810,8 @@
         if (this.state === "play" && !this.waveActive && this.waveIndex + 1 < JH.LEVEL1.waves.length && !this.nearShop) {
           this.drawGoArrow(ctx);
         }
-        // boss health bar
-        const boss = this.enemies.find((e) => e.isBoss);
+        // boss health bar (hidden while death sequence plays)
+        const boss = this.enemies.find((e) => e.isBoss && !e.dying);
         if (boss) this.drawBossBar(ctx, boss);
       }
       ctx.restore();

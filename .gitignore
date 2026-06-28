@@ -11,3 +11,7 @@ Thumbs.db
 desktop.ini
 *.swp
 .vscode/
+
+# API keys / secrets
+.env
+.env.*
