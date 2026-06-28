@@ -172,6 +172,9 @@
   // then walk through to the next zone.
   JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
 
+  // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
+  JH.WAVECAP = { charger: 2 };
+
   // Garden event: spray water on the planter to grow crops. Neighbor throws rocks.
   JH.GARDEN = { growMax: 280 };
 

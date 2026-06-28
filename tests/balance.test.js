@@ -57,3 +57,26 @@ test("eliteScale ramps with player power and caps at 15 owned", () => {
   assert.strictEqual(capped.hp, over.hp);   // capped at 15
   assert.strictEqual(over.hp, 2.61);        // 1.8 * (1 + 0.03*15) = 1.8*1.45
 });
+
+test("capEnemyType clamps a type and reassigns excess to fallback", () => {
+  const spawns = [{ type: "charger", count: 4 }, { type: "pyro", count: 1 }];
+  const out = Balance.capEnemyType(spawns, "charger", 2, "mook");
+  const charger = out.find((g) => g.type === "charger");
+  const mook = out.find((g) => g.type === "mook");
+  assert.strictEqual(charger.count, 2);
+  assert.strictEqual(mook.count, 2);                  // 2 excess → mooks
+  assert.strictEqual(out.find((g) => g.type === "pyro").count, 1);
+});
+
+test("capEnemyType merges fallback into an existing group and is non-mutating", () => {
+  const spawns = [{ type: "charger", count: 3 }, { type: "mook", count: 1 }];
+  const out = Balance.capEnemyType(spawns, "charger", 2, "mook");
+  assert.strictEqual(out.find((g) => g.type === "mook").count, 2); // 1 + 1 excess
+  assert.strictEqual(spawns[0].count, 3);             // original untouched
+});
+
+test("capEnemyType leaves under-cap lists unchanged", () => {
+  const spawns = [{ type: "charger", count: 1 }];
+  const out = Balance.capEnemyType(spawns, "charger", 2, "mook");
+  assert.deepStrictEqual(out, [{ type: "charger", count: 1 }]);
+});

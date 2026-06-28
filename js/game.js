@@ -320,7 +320,9 @@
         const eliteScale = wave.tough
           ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
         let slot = 0;
-        wave.spawns.forEach((grp) => {
+        const spawnList = JH.Balance.capEnemyType(
+          wave.spawns, "charger", JH.WAVECAP.charger, "mook");
+        spawnList.forEach((grp) => {
           for (let k = 0; k < grp.count; k++) {
             const ex = right - 6 - (slot % 3) * 16 + Math.random() * 10;
             const ey = JH.DEPTH_MIN + 8 + ((slot * 27) % (JH.DEPTH_MAX - JH.DEPTH_MIN - 16));

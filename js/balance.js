@@ -28,6 +28,30 @@
       };
     },
 
+    // Clamp total count of `type` to `cap`; excess becomes `fallback` enemies
+    // (merged into an existing fallback group if present). Pure: returns a new
+    // list, never mutates the input.
+    capEnemyType(spawns, type, cap, fallback) {
+      let total = 0;
+      spawns.forEach((g) => { if (g.type === type) total += g.count; });
+      if (total <= cap) return spawns.map((g) => ({ type: g.type, count: g.count }));
+      let excess = total - cap;
+      const out = [];
+      let capped = false;
+      spawns.forEach((g) => {
+        if (g.type === type) {
+          if (!capped) { out.push({ type, count: cap }); capped = true; }
+          // drop additional `type` groups (their counts folded into excess)
+        } else {
+          out.push({ type: g.type, count: g.count });
+        }
+      });
+      const fb = out.find((g) => g.type === fallback);
+      if (fb) fb.count += excess;
+      else out.push({ type: fallback, count: excess });
+      return out;
+    },
+
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
     // The 0.9 cap applies to the cumulative water threshold, not per-item.
