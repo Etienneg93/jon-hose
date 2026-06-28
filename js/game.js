@@ -556,6 +556,28 @@
         });
         list.appendChild(col);
       });
+
+      const repCol = document.createElement("div");
+      repCol.className = "tree-col";
+      repCol.innerHTML = '<div class="tree-head">OVERCHARGE</div>';
+      U.repeatables.forEach((n) => {
+        const cost = U.repCost(n.id);
+        const afford = this.player.suds >= cost;
+        const node = document.createElement("div");
+        node.className = "tree-node " + (afford ? "buyable" : "cant");
+        node.innerHTML =
+          '<div class="tn-top"><span class="tn-name">' + n.name +
+          (U.repCount[n.id] ? " ×" + U.repCount[n.id] : "") + "</span>" +
+          '<span class="tn-cost">💧' + cost + "</span></div>" +
+          '<div class="tn-desc">' + n.desc + "</div>";
+        node.addEventListener("click", () => {
+          if (U.buyRep(n.id, this.player)) { this.audio.play("upgrade"); this.renderShop(); }
+          else this.audio.play("hurt");
+        });
+        repCol.appendChild(node);
+      });
+      list.appendChild(repCol);
+
       function connector() { const c = document.createElement("div"); c.className = "tree-link"; return c; }
     },
     closeShop() {

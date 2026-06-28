@@ -76,14 +76,28 @@
       apply: (s) => { s.vampiricRate += 0.10; } },
   ];
 
+  // Repeatable "Overcharge" nodes: bought any number of times, cost rises each
+  // buy (JH.Balance.repeatableCost). The late-game Suds sink that keeps power
+  // creeping to match the elite ramp.
+  const REPEATABLES = [
+    { id: "ov_dmg",   name: "Overcharge",  baseCost: 60, desc: "+4 spray dmg (repeatable).",
+      apply: (s) => { s.sprayDamage += 4; } },
+    { id: "ov_water", name: "Reserves",    baseCost: 50, desc: "+12 max water (repeatable).",
+      apply: (s) => { s.maxWater += 12; } },
+    { id: "ov_hp",    name: "Conditioning",baseCost: 55, desc: "+12 max HP (repeatable).",
+      apply: (s) => { s.maxHp += 12; } },
+  ];
+
   const BRANCHES = ["PRESSURE", "REACH", "TANK", "MOBILITY", "VITALITY"];
 
   const Upgrades = {
     nodes: NODES,
     branches: BRANCHES,
+    repeatables: REPEATABLES,
     owned: {},
+    repCount: {},
 
-    reset() { this.owned = {}; },
+    reset() { this.owned = {}; this.repCount = {}; },
     byId(id) { return NODES.find((n) => n.id === id); },
     isOwned(id) { return !!this.owned[id]; },
     cost(id) { return this.byId(id).cost; },
@@ -104,10 +118,15 @@
       return NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier);
     },
 
-    // Fresh effective-stats from the base block + every owned node.
+    // Fresh effective-stats from the base block + every owned node + repeatables.
     computeStats(owned) {
       const s = JSON.parse(JSON.stringify(JH.PLAYER));
       NODES.forEach((n) => { if (owned && owned[n.id]) n.apply(s); });
+      const rc = this.repCount || {};
+      REPEATABLES.forEach((n) => {
+        const c = rc[n.id] || 0;
+        for (let i = 0; i < c; i++) n.apply(s);
+      });
       return s;
     },
 
@@ -117,6 +136,22 @@
       if (!this.canBuy(id, player.suds)) return false;
       player.suds -= this.cost(id);
       this.owned[id] = true;
+      const fresh = this.computeStats(this.owned);
+      const hpGain = fresh.maxHp - player.stats.maxHp;
+      const waterGain = fresh.maxWater - player.stats.maxWater;
+      player.applyStats(fresh);
+      if (hpGain > 0) player.hp = Math.min(fresh.maxHp, player.hp + hpGain);
+      if (waterGain > 0) player.water = Math.min(fresh.maxWater, player.water + waterGain);
+      return true;
+    },
+
+    repById(id) { return REPEATABLES.find((n) => n.id === id); },
+    repCost(id) { return JH.Balance.repeatableCost(this.repById(id).baseCost, this.repCount[id] || 0); },
+    canBuyRep(id, suds) { return !!this.repById(id) && suds >= this.repCost(id); },
+    buyRep(id, player) {
+      if (!this.canBuyRep(id, player.suds)) return false;
+      player.suds -= this.repCost(id);
+      this.repCount[id] = (this.repCount[id] || 0) + 1;
       const fresh = this.computeStats(this.owned);
       const hpGain = fresh.maxHp - player.stats.maxHp;
       const waterGain = fresh.maxWater - player.stats.maxWater;

@@ -52,6 +52,11 @@
       return out;
     },
 
+    // Cost of the next purchase of a repeatable node (1.5x per prior buy).
+    repeatableCost(base, timesBought) {
+      return Math.round(base * Math.pow(1.5, timesBought || 0));
+    },
+
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
     // The 0.9 cap applies to the cumulative water threshold, not per-item.

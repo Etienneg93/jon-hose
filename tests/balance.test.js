@@ -80,3 +80,10 @@ test("capEnemyType leaves under-cap lists unchanged", () => {
   const out = Balance.capEnemyType(spawns, "charger", 2, "mook");
   assert.deepStrictEqual(out, [{ type: "charger", count: 1 }]);
 });
+
+test("repeatableCost rises 1.5x per purchase", () => {
+  assert.strictEqual(Balance.repeatableCost(60, 0), 60);
+  assert.strictEqual(Balance.repeatableCost(60, 1), 90);
+  assert.strictEqual(Balance.repeatableCost(60, 2), 135);
+  assert.strictEqual(Balance.repeatableCost(60, 3), 203); // round(202.5)
+});
