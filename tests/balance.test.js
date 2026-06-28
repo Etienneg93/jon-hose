@@ -38,3 +38,22 @@ test("dropThresholds applies cumulative water cap at mult 2", () => {
   assert.ok(Math.abs(t.health - 0.36) < 1e-9);  // 0.18 * 2
   assert.ok(Math.abs(t.water - 0.9) < 1e-9);    // min(0.9, 0.36 + 0.54)
 });
+
+test("eliteScale ramps by act level", () => {
+  const a2 = Balance.eliteScale(0, 0);
+  const a4 = Balance.eliteScale(2, 0);
+  assert.strictEqual(a2.hp, 1.3);
+  assert.strictEqual(a4.hp, 1.8);
+  assert.ok(a4.dmg > a2.dmg);
+  assert.ok(a4.speed > a2.speed);
+});
+
+test("eliteScale ramps with player power and caps at 15 owned", () => {
+  const fresh = Balance.eliteScale(2, 0);
+  const mid = Balance.eliteScale(2, 10);
+  const capped = Balance.eliteScale(2, 15);
+  const over = Balance.eliteScale(2, 99);
+  assert.ok(mid.hp > fresh.hp);
+  assert.strictEqual(capped.hp, over.hp);   // capped at 15
+  assert.strictEqual(over.hp, 2.61);        // 1.8 * (1 + 0.03*15) = 1.8*1.45
+});

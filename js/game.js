@@ -315,12 +315,16 @@
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
       } else {
         this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
+        const actLevel = JH.Balance.actLevelForWave(this.waveIndex);
+        const ownedCount = Object.keys(JH.Upgrades.owned).length;
+        const eliteScale = wave.tough
+          ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
         let slot = 0;
         wave.spawns.forEach((grp) => {
           for (let k = 0; k < grp.count; k++) {
             const ex = right - 6 - (slot % 3) * 16 + Math.random() * 10;
             const ey = JH.DEPTH_MIN + 8 + ((slot * 27) % (JH.DEPTH_MAX - JH.DEPTH_MIN - 16));
-            const e = this.spawnEnemy(grp.type, clamp(ex, left, right), ey, { elite: wave.tough });
+            const e = this.spawnEnemy(grp.type, clamp(ex, left, right), ey, { elite: eliteScale });
             e.spawnGrace = 0.3 + slot * 0.25; // stagger entrances
             slot++;
           }
@@ -477,7 +481,7 @@
       const e = JH.makeEnemy(type, x, y);
       if (opts) {
         if (opts.infinite) e.infinite = true;
-        if (opts.elite && e.makeElite) e.makeElite();
+        if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
       }
       this.enemies.push(e);
       return e;
@@ -694,7 +698,10 @@
               this.wallSpawnTimer = JH.WALL.spawnEvery;
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
-              const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: wave.tough });
+              const sc = wave.tough
+                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex), Object.keys(JH.Upgrades.owned).length)
+                : null;
+              const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
               e.spawnGrace = 0.2;
             }
           }

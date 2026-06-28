@@ -651,16 +651,18 @@
     }
     colorOf() { return JH.PAL[this.def.color] || "#fff"; }
 
-    // Act-2 "elite" — a tougher clone of the def (never mutate the shared one).
-    makeElite() {
+    // Tougher clone of the def (never mutate the shared one). `scale` is a
+    // {hp,dmg,speed} multiplier set; omitted = legacy flat values.
+    makeElite(scale) {
       this.elite = true;
+      const s = scale || { hp: 1.7, dmg: 1.3, speed: 1.12 };
       const d = Object.assign({}, this.def);
-      d.hp = Math.round(d.hp * 1.7);
-      d.touchDmg = Math.round(d.touchDmg * 1.3);
-      if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * 1.3);
-      if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * 1.3);
-      if (d.emberDmg)  d.emberDmg  = Math.round(d.emberDmg * 1.3);
-      if (d.speed)     d.speed    *= 1.12;
+      d.hp = Math.round(d.hp * s.hp);
+      d.touchDmg = Math.round(d.touchDmg * s.dmg);
+      if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * s.dmg);
+      if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * s.dmg);
+      if (d.emberDmg)  d.emberDmg  = Math.round(d.emberDmg * s.dmg);
+      if (d.speed)     d.speed    *= s.speed;
       if (d.bodyW)     d.bodyW = Math.round(d.bodyW * 1.22);
       if (d.bodyH)     d.bodyH = Math.round(d.bodyH * 1.16);
       d.suds = Math.round(d.suds * 1.4);

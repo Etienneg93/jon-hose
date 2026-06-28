@@ -15,6 +15,19 @@
       return 2;
     },
 
+    // Elite stat multipliers: ramp by act tier and by player power
+    // (owned-upgrade count, capped at 15) so late fights stay tense.
+    eliteScale(actLevel, ownedCount) {
+      const lvl = Math.max(0, actLevel);
+      const power = 1 + 0.03 * Math.min(ownedCount || 0, 15);
+      const round3 = (n) => Math.round(n * 1000) / 1000;
+      return {
+        hp: round3((1.3 + 0.25 * lvl) * power),
+        dmg: round3(1.2 + 0.12 * lvl),
+        speed: round3(1.08 + 0.03 * lvl),
+      };
+    },
+
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
     // The 0.9 cap applies to the cumulative water threshold, not per-item.
