@@ -124,17 +124,17 @@
     mook: {
       name: "Mook", hp: 40, speed: 46, touchDmg: 8, contactCd: 0.8,
       meleeDmg: 10, meleeRange: 20, meleeWind: 0.45, suds: 8,
-      waterMult: 1, bodyW: 16, bodyH: 28, color: "mook",
+      waterMult: 1, dropMult: 1, bodyW: 16, bodyH: 28, color: "mook",
     },
     charger: {
       name: "Charger", hp: 55, speed: 40, touchDmg: 6, contactCd: 0.8,
       chargeSpeed: 200, chargeWind: 0.6, chargeDur: 0.55, chargeCd: 1.8,
-      chargeDmg: 16, suds: 13, waterMult: 1, bodyW: 18, bodyH: 30, color: "charger",
+      chargeDmg: 16, suds: 13, waterMult: 1, dropMult: 1.8, bodyW: 18, bodyH: 30, color: "charger",
     },
     pyro: {
       name: "Pyro", hp: 36, speed: 38, touchDmg: 10, contactCd: 0.7,
       shootRange: 150, shootCd: 1.6, emberSpeed: 130, emberDmg: 9,
-      suds: 16, waterMult: 1.5, bodyW: 16, bodyH: 28, color: "pyro",
+      suds: 16, waterMult: 1.5, dropMult: 1.8, bodyW: 16, bodyH: 28, color: "pyro",
     },
     dummy: {
       name: "Target Dummy", hp: 9999, speed: 0, touchDmg: 0, contactCd: 99,

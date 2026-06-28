@@ -504,9 +504,10 @@
         }
       } else {
         JH.spawnSudsCoins(this, e.x, e.y, e.def.suds);
+        const t = JH.Balance.dropThresholds(e.def.dropMult);
         const r = Math.random();
-        if (r < 0.18) this.spawnPickup("health", e.x + 6, e.y, 25);
-        else if (r < 0.45) this.spawnPickup("water_can", e.x - 6, e.y, 40);
+        if (r < t.health) this.spawnPickup("health", e.x + 6, e.y, 25);
+        else if (r < t.water) this.spawnPickup("water_can", e.x - 6, e.y, 40);
       }
     },
     shake(n) { this.shakeAmt = Math.min(12, this.shakeAmt + n); },
