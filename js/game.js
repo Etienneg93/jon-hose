@@ -658,6 +658,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
+      this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false;
       this.dropBudget = { suds: 0, items: 0 };
@@ -905,6 +906,15 @@
 
     // ============================================================ RENDER
     render() {
+      if (this.state === "church") {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
+        JH.Church.renderScene(ctx, this);
+        ctx.restore();
+        if (this.devMenu) this.drawDevMenu(ctx);
+        return;
+      }
       const ctx = this.ctx;
       ctx.save();
       // screen shake
