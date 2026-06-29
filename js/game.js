@@ -43,6 +43,7 @@
       this.canvas = document.getElementById("game");
       this.ctx = this.canvas.getContext("2d");
       this.ctx.imageSmoothingEnabled = false;
+      if (JH.Church) JH.Church.load();
       this.input = JH.Input; this.input.init();
       this.audio = JH.AudioFX;
       JH.Music.init();
@@ -686,6 +687,8 @@
         "\nTime: " + this.elapsed.toFixed(1) + "s";
       this.showScreen("screen-win");
     },
+    // Retired from the death path (death now routes to the Church via
+    // startPlayerDeathSeq); kept for a future manual quit/give-up affordance.
     gameOver() {
       this.state = "over";
       document.getElementById("over-stats").textContent =

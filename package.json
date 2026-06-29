@@ -1,7 +1,7 @@
 {
   "name": "jon-hose",
   "private": true,
-  "version": "0.11.20",
+  "version": "0.11.21",
   "description": "Jon Hose - The Game",
   "scripts": {
     "test": "node --test",

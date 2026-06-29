@@ -53,3 +53,19 @@ test("serialize() round-trips through sanitize()", () => {
   assert.strictEqual(round.essence, 4);
   assert.strictEqual(round.blessings.bless_hp, 1);
 });
+
+test("save() then load() round-trips state through a stubbed localStorage", () => {
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+  };
+  Church.state = Church.sanitize({ essence: 7, blessings: { bless_dps: 3 }, elements: { earth: true } });
+  Church.save();
+  Church.state = Church.defaults();           // wipe in-memory
+  Church.load();                               // must restore from the stub
+  assert.strictEqual(Church.state.essence, 7);
+  assert.strictEqual(Church.state.blessings.bless_dps, 3);
+  assert.strictEqual(Church.state.elements.earth, true);
+  delete globalThis.localStorage;
+});
