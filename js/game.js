@@ -693,6 +693,26 @@
       this.audio.play("die");
       this.showScreen("screen-over");
     },
+    startPlayerDeathSeq() {
+      this.state = "playerDeathSeq";
+      this.deathSeqT = 0;
+      this.audio.play("die");
+      this.shake(8);
+    },
+
+    updatePlayerDeathSeq(dt) {
+      if ((this.deathSeqT += dt) >= JH.CHURCH.deathSeq.total) {
+        this.deathSeqT = 0;
+        this.enterChurch();
+      }
+    },
+
+    enterChurch() {
+      this.state = "church";
+      document.getElementById("hud").classList.add("hidden");
+      document.getElementById("banner").classList.add("hidden");
+      if (JH.Church.enterScene) JH.Church.enterScene(this);
+    },
     togglePause() {
       if (this.state === "play") { this.state = "pause"; this.showScreen("screen-pause"); }
       else if (this.state === "pause") { this.state = "play"; this.showScreen("hud"); }
@@ -733,6 +753,16 @@
         this.particles = this.particles.filter((p) => p.update(dt));
         this.embers   = this.embers.filter((p) => p.update(dt, this));
         this.updateBossDeathSeq(dt);
+        return;
+      }
+      if (this.state === "playerDeathSeq") {
+        this.particles = this.particles.filter((p) => p.update(dt));
+        this.embers   = this.embers.filter((p) => p.update(dt, this));
+        this.updatePlayerDeathSeq(dt);
+        return;
+      }
+      if (this.state === "church") {
+        if (JH.Church.updateScene) JH.Church.updateScene(dt, this);
         return;
       }
 
@@ -843,7 +873,7 @@
       }
 
       // --- death
-      if (!this.player.alive) this.gameOver();
+      if (!this.player.alive && this.state === "play") this.startPlayerDeathSeq();
 
       this.updateHUD();
     },
@@ -945,6 +975,23 @@
         if (boss) this.drawBossBar(ctx, boss);
       }
       ctx.restore();
+
+      // Player death sequence: fade-to-black then a flickering spirit.
+      if (this.state === "playerDeathSeq") {
+        const D = JH.CHURCH.deathSeq, t = this.deathSeqT, ctx2 = this.ctx;
+        let a = 0;
+        if (t > D.animEnd) a = Math.min(1, (t - D.animEnd) / (D.fadeEnd - D.animEnd));
+        if (a > 0) { ctx2.save(); ctx2.globalAlpha = a; ctx2.fillStyle = "#000";
+          ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore(); }
+        if (t > D.fadeEnd) {
+          const flick = (Math.sin(t * 22) > -0.3) ? 0.85 : 0.25;   // placeholder flicker
+          ctx2.save(); ctx2.globalAlpha = flick; ctx2.fillStyle = JH.PAL.waterHi;
+          const cx = JH.VIEW_W / 2, cy = JH.VIEW_H / 2;
+          ctx2.fillRect(cx - 5, cy - 16, 10, 22);                  // body
+          ctx2.fillRect(cx - 4, cy - 24, 8, 8);                    // head
+          ctx2.restore();
+        }
+      }
 
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
