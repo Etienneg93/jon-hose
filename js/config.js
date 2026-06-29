@@ -188,13 +188,13 @@
     pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
   };
 
-  // ---- Church of the Hose (Phase 0 meta-progression) ------------------
+  // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
     // Death-sequence timeline (seconds): collapse -> fade -> spirit -> Church.
     deathSeq: { animEnd: 1.2, fadeEnd: 2.0, spiritEnd: 2.8, total: 2.8 },
     essencePerBoss: 1,
     sermon: {
-      first: "Rise, my child. You have passed from the street into the Church of the Hose. Death is not the end of the spray.",
+      first: "Rise, my child. You have passed from the street into the Church of the Holy Hose. Death is not the end of the spray.",
       repeat: ["The water remembers you.", "Again you fall — again you rise.", "Pressure builds in the faithful.", "The street still thirsts. Return."],
     },
     // Walkable scene layout (logical px). spawnFar = long first-visit walk;
