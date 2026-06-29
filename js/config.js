@@ -188,6 +188,29 @@
     pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
   };
 
+  // ---- Church of the Hose (Phase 0 meta-progression) ------------------
+  JH.CHURCH = {
+    // Death-sequence timeline (seconds): collapse -> fade -> spirit -> Church.
+    deathSeq: { animEnd: 1.2, fadeEnd: 2.0, spiritEnd: 2.8, total: 2.8 },
+    essencePerBoss: 1,
+    // Walkable scene layout (logical px). spawnFar = long first-visit walk;
+    // spawnNear = short repeat walk. Altar/portal are world-x trigger points.
+    layout: { length: 640, spawnFar: 40, spawnNear: 360, altarX: 470, portalX: 540 },
+    // Shrine -> element -> redeeming boss (s.type). null boss = capstone (Water/Jon).
+    shrines: [
+      { element: "earth", boss: "quake",  label: "EARTH" },
+      { element: "fire",  boss: "slayer", label: "FIRE"  },
+      { element: "air",   boss: "assman", label: "AIR"   },
+      { element: "water", boss: null,     label: "WATER" },
+    ],
+    // Permanent blessings (repeatable, +1-per-level cost via Balance.blessingCost).
+    blessings: [
+      { id: "bless_dps",  name: "Anointed Pressure", desc: "+4 spray dmg",   apply: (s) => { s.sprayDamage += 4; } },
+      { id: "bless_tank", name: "Deep Reservoir",    desc: "+15 max water",  apply: (s) => { s.maxWater += 15; } },
+      { id: "bless_hp",   name: "Blessed Vigor",     desc: "+20 max HP",     apply: (s) => { s.maxHp += 20; } },
+    ],
+  };
+
   // Gateway Krusher 9000 — a powered-up standing switch with an embedded face.
   // Reuses the Switch's line/whip attacks and adds a floor-row depth slam.
   JH.GATEWAYKRUSHER = {

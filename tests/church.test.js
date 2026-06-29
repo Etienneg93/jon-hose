@@ -26,3 +26,30 @@ test("blessingCost rises by 1 per purchase: 1, 2, 3, ...", () => {
   assert.strictEqual(Balance.blessingCost(2), 3);
   assert.strictEqual(Balance.blessingCost(9), 10);
 });
+
+const Church = require("../js/church.js");
+
+test("defaults() is a fresh zeroed meta-state", () => {
+  const d = Church.defaults();
+  assert.strictEqual(d.essence, 0);
+  assert.deepStrictEqual(d.blessings, {});
+  assert.strictEqual(d.churchVisited, false);
+  assert.deepStrictEqual(d.elements, { earth: false, fire: false, air: false, water: false });
+});
+
+test("sanitize() merges partial/corrupt data over defaults", () => {
+  assert.strictEqual(Church.sanitize(null).essence, 0);
+  assert.strictEqual(Church.sanitize({ essence: 3 }).essence, 3);
+  // unknown/garbage fields ignored; missing nested objects restored
+  const s = Church.sanitize({ essence: "x", blessings: { bless_dps: 2 } });
+  assert.strictEqual(s.essence, 0);                 // non-number -> 0
+  assert.strictEqual(s.blessings.bless_dps, 2);
+  assert.strictEqual(s.elements.earth, false);
+});
+
+test("serialize() round-trips through sanitize()", () => {
+  Church.state = Church.sanitize({ essence: 4, blessings: { bless_hp: 1 } });
+  const round = Church.sanitize(JSON.parse(Church.serialize()));
+  assert.strictEqual(round.essence, 4);
+  assert.strictEqual(round.blessings.bless_hp, 1);
+});
