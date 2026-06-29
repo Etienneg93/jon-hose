@@ -36,6 +36,7 @@
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
     dyingBoss: null, deathSeqT: 0,
+    checkpointWave: 0,
 
     // ------------------------------------------------------------- setup
     init() {
@@ -257,6 +258,7 @@
       this.cutscene = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
+      this.checkpointWave = 0;
       this.elapsed = 0; this.kills = 0; this.shakeAmt = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
@@ -277,6 +279,7 @@
 
     startWave(i) {
       this.waveIndex = i;
+      this.checkpointWave = JH.Balance.actStartForWave(i, JH.ACT_STARTS);
       this.waveActive = true;
       this.waveCleared = false;
       this.shopNpc = null;          // vendor gets left behind once the fight starts
@@ -640,6 +643,33 @@
 
       function connector() { const c = document.createElement("div"); c.className = "tree-link"; return c; }
     },
+    // Return from the Church: rebuild the world at the act-start checkpoint.
+    // Keeps the player's build (no Upgrades.reset) and Suds.
+    respawnAtCheckpoint() {
+      const cp = this.checkpointWave || 0;
+      JH.Camera.reset();
+      const p = this.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      p.x = WAVE_TRIGGERS[cp] - 40;
+      p.y = JH.DEPTH_MAX - 24;
+      p.hp = p.stats.maxHp;
+      p.water = p.stats.maxWater;
+      p.alive = true;
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
+      this.deferredQueue = [];
+      this.hitStopTimer = 0;
+      this.wall = null; this.gardens = [];
+      this.shopNpc = null; this.nearShop = false;
+      this.dropBudget = { suds: 0, items: 0 };
+      this.waveIndex = cp - 1;
+      this.waveActive = false; this.waveCleared = false;
+      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[cp] + 30 };
+      this.state = "play";
+      this.showScreen("hud");
+      JH.Music.reset(); JH.Music.start();
+      this.banner("BACK TO THE STREET!", 1.4);
+    },
+
     closeShop() {
       this.state = "play";
       this.showScreen("hud");
