@@ -37,6 +37,7 @@
     devMenu: false, devCursor: 0,
     dyingBoss: null, deathSeqT: 0,
     checkpointWave: 0,
+    diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0,
 
     // ------------------------------------------------------------- setup
     init() {
@@ -646,12 +647,17 @@
     },
     // Return from the Church: rebuild the world at the act-start checkpoint.
     // Keeps the player's build (no Upgrades.reset) and Suds.
-    respawnAtCheckpoint() {
-      const cp = this.checkpointWave || 0;
+    // Return from the Church: warp Jon back in at the last fire hydrant he
+    // visited (or the level start), re-arm the wave he died in so it spawns
+    // fresh as he walks back ("try again"), and fade the world in. Build +
+    // Suds are kept (no Upgrades.reset).
+    respawnFromChurch() {
+      const next = Math.max(0, this.diedWave);     // the wave to re-fight
       JH.Camera.reset();
       const p = this.player;
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
-      p.x = WAVE_TRIGGERS[cp] - 40;
+      const maxX = WAVE_TRIGGERS[next] + 30;
+      p.x = clamp(this.lastHydrantX || 60, 12, maxX - 12);
       p.y = JH.DEPTH_MAX - 24;
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
@@ -663,13 +669,15 @@
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false;
       this.dropBudget = { suds: 0, items: 0 };
-      this.waveIndex = cp - 1;
+      this.waveIndex = next - 1;
       this.waveActive = false; this.waveCleared = false;
-      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[cp] + 30 };
+      this.bounds = { minX: 8, maxX: maxX };
+      this.worldFadeT = 0.6;     // black -> clear (continues the Church fade)
+      this.warpInT = 0.5;        // Mega Man-style materialize beam
       this.state = "play";
       this.showScreen("hud");
       JH.Music.reset(); JH.Music.start();
-      this.banner("BACK TO THE STREET!", 1.4);
+      this.banner("TRY AGAIN!", 1.4);
     },
 
     closeShop() {
@@ -698,6 +706,7 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
+      this.diedWave = this.waveIndex;        // the wave to re-arm on return
       this.state = "playerDeathSeq";
       this.deathSeqT = 0;
       this.audio.play("die");
@@ -751,6 +760,8 @@
         if (this.bannerTimer <= 0) document.getElementById("banner").classList.add("hidden");
       }
       if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
+      if (this.worldFadeT > 0) this.worldFadeT = Math.max(0, this.worldFadeT - dt);
+      if (this.warpInT > 0) this.warpInT = Math.max(0, this.warpInT - dt);
       if (this.state === "play" || this.state === "bossDeathSeq") this.tickDeferred(dt);
 
       if (this.state === "bossDeathSeq") {
@@ -807,6 +818,8 @@
 
       // --- hydrant timers + walk-up shop vendor
       for (const h of this.hydrants) h.t += dt;
+      // Remember the last hydrant visited — death returns Jon here.
+      if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
       if (this.shopNpc) {
         this.shopNpc.update(dt);
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
@@ -1003,6 +1016,24 @@
           ctx2.fillRect(cx - 5, cy - 16, 10, 22);                  // body
           ctx2.fillRect(cx - 4, cy - 24, 8, 8);                    // head
           ctx2.restore();
+        }
+      }
+
+      // Returning from the Church: Mega Man-style warp beam at Jon, then the
+      // world fades in from black (continuing the Church's fade-out).
+      if (this.state === "play" && (this.warpInT > 0 || this.worldFadeT > 0)) {
+        const ctx2 = this.ctx;
+        if (this.warpInT > 0 && this.player) {
+          const sx = Math.round(this.player.x - JH.Camera.x);
+          const k = this.warpInT / 0.5;                 // 1 -> 0
+          ctx2.save(); ctx2.globalAlpha = 0.35 + 0.45 * k; ctx2.fillStyle = JH.PAL.waterHi;
+          const w = Math.max(2, Math.round(10 * k));
+          ctx2.fillRect(sx - w / 2, 0, w, JH.VIEW_H);   // descending light column
+          ctx2.restore();
+        }
+        if (this.worldFadeT > 0) {
+          ctx2.save(); ctx2.globalAlpha = Math.min(1, this.worldFadeT / 0.6);
+          ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
         }
       }
 

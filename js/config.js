@@ -193,13 +193,29 @@
     // Death-sequence timeline (seconds): collapse -> fade -> spirit -> Church.
     deathSeq: { animEnd: 1.2, fadeEnd: 2.0, spiritEnd: 2.8, total: 2.8 },
     essencePerBoss: 1,
+    // Father Jon dialogue. `first` = in-character Holy-Essence tutorial (one
+    // box per line); `repeat` = a single short line picked at random per visit.
     sermon: {
-      first: "Rise, my child. You have passed from the street into the Church of the Holy Hose. Death is not the end of the spray.",
-      repeat: ["The water remembers you.", "Again you fall — again you rise.", "Pressure builds in the faithful.", "The street still thirsts. Return."],
+      first: [
+        "Rise, child. You stand in the Church of the Holy Hose — where the fallen are made faithful.",
+        "Each nemesis you redeem leaves behind Holy Essence. I keep it here, gathered from your trials.",
+        "Spend it at the shrines along the nave — Pressure, Vigor, Reservoir — and the blessing follows you into every life to come.",
+        "Death is not the end of the spray. Walk into the light when you are ready, and try again.",
+      ],
+      repeat: ["The water remembers you, child.", "Again you fall — again you rise.", "Spend what you have earned; the street still thirsts.", "Pressure builds in the faithful. Return to the light."],
     },
-    // Walkable scene layout (logical px). spawnFar = long first-visit walk;
-    // spawnNear = short repeat walk. Altar/portal are world-x trigger points.
-    layout: { length: 640, spawnFar: 40, spawnNear: 360, altarX: 470, portalX: 540 },
+    // Walkable scene layout (logical px). Jon spawns at spawnX and walks right:
+    // Father Jon materializes at fatherX; blessing stations sit along the nave;
+    // walking into portalX (within portalReach) returns you to the street.
+    layout: {
+      length: 720, spawnX: 28, fatherX: 168, altarX: 300, portalX: 660,
+      portalReach: 18, stationRange: 24,
+      stations: [
+        { id: "bless_dps",  x: 396 },
+        { id: "bless_tank", x: 470 },
+        { id: "bless_hp",   x: 544 },
+      ],
+    },
     // Shrine -> element -> redeeming boss (s.type). null boss = capstone (Water/Jon).
     shrines: [
       { element: "earth", boss: "quake",  label: "EARTH" },

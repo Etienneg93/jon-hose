@@ -917,13 +917,18 @@
       img.src = src; return img;
     }
     JH.ChurchArt = {
-      backdrop:  makeImg("sprites/church/backdrop.png"),
-      spirit:    makeImg("sprites/church/spirit.png"),
-      altar:     makeImg("sprites/church/altar.png"),
-      shrineDim: makeImg("sprites/church/shrine_dim.png"),
-      shrineLit: makeImg("sprites/church/shrine_lit.png"),
-      portal:    makeImg("sprites/church/portal.png"),
-      fatherJon: makeImg("sprites/church/father_jon.png"),
+      backdrop:          makeImg("sprites/church/backdrop.png"),
+      altar:             makeImg("sprites/church/altar.png"),
+      shrineDim:         makeImg("sprites/church/shrine_dim.png"),
+      shrineLit:         makeImg("sprites/church/shrine_lit.png"),
+      portal:            makeImg("sprites/church/portal.png"),
+      // Father Jon: in-world NPC + codec dialogue portrait.
+      fatherJonNpc:      makeImg("sprites/church/father_jon.png"),
+      fatherJonPortrait: makeImg("sprites/church/father_jon_portrait.png"),
+      // Walk-up blessing stations (keyed by blessing id).
+      station_bless_dps:  makeImg("sprites/church/station_dmg.png"),
+      station_bless_tank: makeImg("sprites/church/station_water.png"),
+      station_bless_hp:   makeImg("sprites/church/station_hp.png"),
     };
   }
 })();
