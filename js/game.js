@@ -493,7 +493,10 @@
     spawnPickup(kind, x, y, value) {
       this.pickups.push(new JH.Pickup(kind, x, y, value));
     },
-    onEnemyKilled(e) { this.kills++; },
+    onEnemyKilled(e) {
+      this.kills++;
+      if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
+    },
 
     // Loot with anti-farm: scripted-wave enemies always drop; "infinite"
     // spawns (boss summons + wall-zone reinforcements) share a per-encounter
