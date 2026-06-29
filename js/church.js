@@ -114,7 +114,21 @@
         if (In.held("right")) sc.spiritX += sp;
         if (In.held("left"))  sc.spiritX -= sp;
         if (sc.spiritX < 8) sc.spiritX = 8;
-        if (sc.spiritX >= L.altarX) { sc.spiritX = L.altarX; sc.phase = "portal"; sc.t = 0; }
+        if (sc.spiritX >= L.altarX) { sc.spiritX = L.altarX; sc.phase = "altar"; sc.cursor = 0; sc.t = 0; }
+        return;
+      }
+      if (sc.phase === "altar") {
+        const defs = root.JH.CHURCH.blessings, rows = defs.length + 1; // + "Leave"
+        if (In.pressed("up"))   sc.cursor = (sc.cursor - 1 + rows) % rows;
+        if (In.pressed("down")) sc.cursor = (sc.cursor + 1) % rows;
+        if (In.pressed("confirm") && sc.t > 0.2) {
+          if (sc.cursor >= defs.length) { sc.phase = "portal"; sc.t = 0; }
+          else {
+            const id = defs[sc.cursor].id;
+            if (this.buyBlessing(id, game.player)) game.audio.play("upgrade");
+            else game.audio.play("hurt");
+          }
+        }
         return;
       }
       if (sc.phase === "portal") {
@@ -168,7 +182,23 @@
       // Phase prompts.
       ctx.fillStyle = "#9fb0c8";
       if (sc.phase === "walk") ctx.fillText("...where am I?  →", VW / 2, 20);
-      else if (sc.phase === "portal") ctx.fillText("A portal hums. Press E to return.", VW / 2, 20);
+      else if (sc.phase === "altar") {
+        ctx.fillText("ALTAR OF ELEMENTS — Holy Essence: " + this.state.essence, root.JH.VIEW_W / 2, 16);
+        const defs = root.JH.CHURCH.blessings;
+        const baseY = 30;
+        defs.forEach((b, i) => {
+          const sel = sc.cursor === i;
+          ctx.fillStyle = sel ? "#ffd23f" : (this.canBuyBlessing(b.id) ? "#cfe" : "#667");
+          ctx.fillText((sel ? "▶ " : "  ") + b.name + "  (" + b.desc + ")  cost " +
+            this.blessingCost(b.id) + "  lvl " + this.blessingCount(b.id),
+            root.JH.VIEW_W / 2, baseY + i * 11);
+        });
+        const sel = sc.cursor === defs.length;
+        ctx.fillStyle = sel ? "#6cff9a" : "#9fb0c8";
+        ctx.fillText((sel ? "▶ " : "  ") + "Leave →", root.JH.VIEW_W / 2, baseY + defs.length * 11);
+      }
+      else if (sc.phase === "portal")
+        ctx.fillText("A portal hums. Press E to return.", root.JH.VIEW_W / 2, 20);
       ctx.textAlign = "left";
     },
   };
