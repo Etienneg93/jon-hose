@@ -248,6 +248,8 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
+      this.deferredQueue = [];
+      this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
       this.wall = null; this.gardens = [];
@@ -518,7 +520,21 @@
     },
     shake(n) { this.shakeAmt = Math.min(12, this.shakeAmt + n); },
 
+    hitStop(secs) { this.hitStopTimer = Math.max(this.hitStopTimer, secs); },
+    defer(delayMs, fn) { this.deferredQueue.push({ rem: delayMs / 1000, fn }); },
+    tickDeferred(dt) {
+      this.deferredQueue = this.deferredQueue.filter((e) => {
+        e.rem -= dt;
+        if (e.rem <= 0) { e.fn(); return false; }
+        return true;
+      });
+    },
+
     // ------------------------------------------------------- shop
+    // DEAD CODE: the HTML overlay shop (#screen-shop / renderShop) is no longer
+    // wired up — nothing calls openShop. The live shop is the canvas-drawn
+    // drawHoverShop() (walk up to the vendor). Kept only for reference; do NOT
+    // add shop features here — edit drawHoverShop + shopSelectables instead.
     openShop() {
       this.state = "shop";
       this.renderShop();
@@ -678,6 +694,7 @@
         if (this.bannerTimer <= 0) document.getElementById("banner").classList.add("hidden");
       }
       if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
+      if (this.state === "play" || this.state === "bossDeathSeq") this.tickDeferred(dt);
 
       if (this.state === "bossDeathSeq") {
         this.particles = this.particles.filter((p) => p.update(dt));
@@ -704,6 +721,14 @@
 
       if (this.state !== "play") { this.updateHUD(); return; }
 
+      // Hitstop: freeze entities briefly on impact; embers + particles keep running.
+      if (this.hitStopTimer > 0) {
+        this.hitStopTimer -= dt;
+        this.embers = this.embers.filter((p) => p.update(dt, this));
+        this.particles = this.particles.filter((p) => p.update(dt));
+        return;
+      }
+
       this.elapsed += dt;
 
       // --- entities
@@ -722,19 +747,18 @@
         this.player.nearShop = this.nearShop;
         if (this.nearShop) {
           const U = JH.Upgrades;
-          const sel = U.nodes.filter((n) => U.isAvailable(n.id));
+          const sel = this.shopSelectables();
           if (sel.length > 0) {
             if (this.input.pressed("up"))   this.shopCursor = (this.shopCursor - 1 + sel.length) % sel.length;
             if (this.input.pressed("down")) this.shopCursor = (this.shopCursor + 1) % sel.length;
             if (this.input.pressed("confirm")) {
-              const node = sel[this.shopCursor];
-              if (node && U.buy(node.id, this.player)) {
-                this.upgradeFx(node);
-                const newSel = U.nodes.filter((n) => U.isAvailable(n.id));
-                this.shopCursor = Math.min(this.shopCursor, Math.max(0, newSel.length - 1));
-              } else {
-                this.audio.play("hurt");
-              }
+              const e = sel[this.shopCursor];
+              let ok = false;
+              if (e.kind === "node") { ok = U.buy(e.id, this.player); if (ok) this.upgradeFx(U.byId(e.id)); }
+              else if (e.kind === "rep") { ok = U.buyRep(e.id, this.player); if (ok) this.audio.play("upgrade"); }
+              else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
+              if (!ok) this.audio.play("hurt");
+              else this.shopCursor = Math.min(this.shopCursor, Math.max(0, this.shopSelectables().length - 1));
             }
           }
         }
@@ -1017,11 +1041,35 @@
       ctx.closePath(); ctx.fill();
     },
 
+    // Unified, ordered list of everything buyable in the walk-up shop, used by
+    // BOTH the purchase input handler and drawHoverShop so the cursor index and
+    // the rendered rows never diverge: available skill nodes, then repeatable
+    // OVERCHARGE nodes, then SUPPLIES consumables.
+    shopSelectables() {
+      const U = JH.Upgrades;
+      const out = [];
+      U.nodes.forEach((n) => { if (U.isAvailable(n.id)) out.push({ kind: "node", id: n.id }); });
+      // OVERCHARGE only unlocks once the whole skill tree is bought.
+      if (U.allNodesOwned()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
+      Object.keys(JH.CONSUMABLES).forEach((k) => out.push({ kind: "consumable", id: k }));
+      return out;
+    },
+    // Buy a between-wave consumable; returns true on success.
+    buyConsumable(key) {
+      const c = JH.CONSUMABLES[key];
+      if (!c || this.player.suds < c.cost) return false;
+      this.player.suds -= c.cost;
+      if (key === "medkit") this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
+      else if (key === "pressure") this.player.pressureBuffT = c.dur;
+      return true;
+    },
+
     drawHoverShop(ctx) {
       const U = JH.Upgrades, pl = this.player;
-      const selectable = U.nodes.filter((n) => U.isAvailable(n.id));
+      const selectable = this.shopSelectables();
       if (selectable.length > 0)
         this.shopCursor = Math.max(0, Math.min(selectable.length - 1, this.shopCursor));
+      const cur = selectable[this.shopCursor];
 
       const PX = 280, PY = 6, PW = 194, PH = 258, MID = PX + PW / 2;
 
@@ -1052,69 +1100,116 @@
       ctx.fillStyle = "#334455";
       ctx.fillRect(PX + 4, PY + 22, PW - 8, 1);
 
-      let ry = PY + 26;
+      // ---- Build the flat row list (headers + buyable items), then scroll it
+      // so the cursor row stays visible (the list now overflows the panel). ----
+      const HROW = 7, IROW = 11;
+      const rows = [];
       U.branches.forEach((branch) => {
-        const nodes = U.nodesByBranch(branch);
-        ctx.fillStyle = "#445566";
-        ctx.font = "5px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("── " + branch + " ──", MID, ry + 5);
-        ctx.textAlign = "left";
-        ry += 7;
-
-        nodes.forEach((n) => {
-          const owned = U.isOwned(n.id);
-          const locked = U.isLocked(n.id);
-          const avail = U.isAvailable(n.id);
-          const afford = avail && pl.suds >= n.cost;
-          const selIdx = selectable.findIndex((s) => s.id === n.id);
-          const isCursor = selIdx >= 0 && selIdx === this.shopCursor;
-
-          if (isCursor) {
-            ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
-            ctx.fillRect(PX + 2, ry, PW - 4, 11);
-          }
-
-          ctx.font = "bold 6px monospace";
-          ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
-          const mark = owned ? "✓" : locked ? "▸" : "•";
-          ctx.fillText(mark + " " + n.name, PX + 5, ry + 8);
-
-          if (!owned) {
-            ctx.textAlign = "right";
-            ctx.fillStyle = locked ? "#3a4a5a" : afford ? "#ffd23f" : "#cc4444";
-            ctx.fillText(locked ? "?" : n.cost, PX + PW - 4, ry + 8);
-            ctx.textAlign = "left";
-          }
-          ry += 11;
-        });
+        rows.push({ t: "head", label: "── " + branch + " ──" });
+        U.nodesByBranch(branch).forEach((n) => rows.push({ t: "node", n }));
       });
+      rows.push({ t: "head", label: "── OVERCHARGE ──" });
+      if (U.allNodesOwned()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
+      else rows.push({ t: "lock", label: "Max the skill tree to unlock" });
+      rows.push({ t: "head", label: "── SUPPLIES ──" });
+      Object.keys(JH.CONSUMABLES).forEach((k) => rows.push({ t: "con", k }));
 
-      // Separator
+      const isCurRow = (r) => cur && (
+        (r.t === "node" && cur.kind === "node" && cur.id === r.n.id) ||
+        (r.t === "rep" && cur.kind === "rep" && cur.id === r.n.id) ||
+        (r.t === "con" && cur.kind === "consumable" && cur.id === r.k));
+
+      let cy = 0, cursorCY = 0;
+      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
+      const contentH = cy;
+
+      const viewTop = PY + 26, viewBot = PY + PH - 34, viewH = viewBot - viewTop;
+      let scroll = 0;
+      if (contentH > viewH) scroll = Math.max(0, Math.min(contentH - viewH, cursorCY - viewH / 2));
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(PX + 1, viewTop - 1, PW - 2, viewH + 2);
+      ctx.clip();
+      rows.forEach((r) => {
+        const ry = viewTop + r.cy - scroll;
+        if (ry + r.h < viewTop - 2 || ry > viewBot + 2) return;   // cull offscreen
+        if (r.t === "head") {
+          ctx.fillStyle = "#445566"; ctx.font = "5px monospace"; ctx.textAlign = "center";
+          ctx.fillText(r.label, MID, ry + 5); ctx.textAlign = "left";
+          return;
+        }
+        if (r.t === "lock") {
+          ctx.fillStyle = "#3a4a5a"; ctx.font = "5px monospace"; ctx.textAlign = "center";
+          ctx.fillText("🔒 " + r.label, MID, ry + 7); ctx.textAlign = "left";
+          return;
+        }
+        let name, cost, owned = false, locked = false, afford = false, suffix = "";
+        if (r.t === "node") {
+          const n = r.n;
+          owned = U.isOwned(n.id); locked = U.isLocked(n.id);
+          afford = U.isAvailable(n.id) && pl.suds >= n.cost;
+          name = n.name; cost = n.cost;
+        } else if (r.t === "rep") {
+          cost = U.repCost(r.n.id); afford = pl.suds >= cost; name = r.n.name;
+          if (U.repCount[r.n.id]) suffix = " x" + U.repCount[r.n.id];
+        } else {
+          const c = JH.CONSUMABLES[r.k]; cost = c.cost; afford = pl.suds >= cost; name = c.name;
+        }
+        if (isCurRow(r)) {
+          ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
+          ctx.fillRect(PX + 2, ry, PW - 4, 11);
+        }
+        ctx.font = "bold 6px monospace";
+        ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
+        const mark = owned ? "✓" : locked ? "▸" : "•";
+        ctx.fillText(mark + " " + name + suffix, PX + 5, ry + 8);
+        if (!owned) {
+          ctx.textAlign = "right";
+          ctx.fillStyle = locked ? "#3a4a5a" : afford ? "#ffd23f" : "#cc4444";
+          ctx.fillText(locked ? "?" : cost, PX + PW - 4, ry + 8);
+          ctx.textAlign = "left";
+        }
+      });
+      ctx.restore();
+
+      // Scroll arrows
+      ctx.fillStyle = "#667788"; ctx.font = "5px monospace"; ctx.textAlign = "center";
+      if (scroll > 0) ctx.fillText("▲", MID, viewTop + 3);
+      if (scroll < contentH - viewH) ctx.fillText("▼", MID, viewBot + 2);
+      ctx.textAlign = "left";
+
+      // Separator + description of the selected entry
+      const dy = PY + PH - 30;
       ctx.fillStyle = "#334455";
-      ctx.fillRect(PX + 4, ry + 1, PW - 8, 1);
-      ry += 4;
-
-      // Description of selected node
-      const curNode = selectable[this.shopCursor];
-      if (curNode) {
+      ctx.fillRect(PX + 4, dy, PW - 8, 1);
+      let desc = "";
+      if (cur) {
+        if (cur.kind === "node") { const n = U.byId(cur.id); desc = n ? n.desc : ""; }
+        else if (cur.kind === "rep") { const n = U.repById(cur.id); desc = n ? n.desc : ""; }
+        else if (cur.kind === "consumable") {
+          const c = JH.CONSUMABLES[cur.id];
+          desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now."
+            : cur.id === "pressure" ? "+" + Math.round((c.mult - 1) * 100) + "% spray dmg for " + c.dur + "s next fight." : "";
+        }
+      }
+      if (desc) {
         ctx.fillStyle = "#778899";
         ctx.font = "5px monospace";
-        const d = curNode.desc;
-        const wrap = d.length > 34 ? d.lastIndexOf(" ", 34) : -1;
+        const wrap = desc.length > 34 ? desc.lastIndexOf(" ", 34) : -1;
         if (wrap > 0) {
-          ctx.fillText(d.slice(0, wrap), PX + 5, ry + 5);
-          ctx.fillText(d.slice(wrap + 1), PX + 5, ry + 11);
+          ctx.fillText(desc.slice(0, wrap), PX + 5, dy + 6);
+          ctx.fillText(desc.slice(wrap + 1), PX + 5, dy + 12);
         } else {
-          ctx.fillText(d, PX + 5, ry + 5);
+          ctx.fillText(desc, PX + 5, dy + 6);
         }
       }
 
       // Footer hint
-      ctx.fillStyle = selectable.length ? "#445566" : "#44aa44";
+      ctx.fillStyle = "#445566";
       ctx.font = "5px monospace";
       ctx.textAlign = "center";
-      ctx.fillText(selectable.length ? "▲▼ SELECT   [E] BUY" : "FULLY KITTED OUT!", MID, PY + PH - 5);
+      ctx.fillText("▲▼ SELECT   [E] BUY", MID, PY + PH - 5);
       ctx.textAlign = "left";
     },
 

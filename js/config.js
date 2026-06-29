@@ -215,7 +215,7 @@
     wsRoam: 30, wsRetargetMin: 1.1, wsRetargetMax: 2.2,   // depth drift px/s + retarget cadence
     wsLift: 46, wsBob: 9,                                  // core sits this high on the wall, bobs ±wsBob
     dmgMult: 1.4,                                          // hose hurts more on an exposed port
-    // SURGE → shockwave rolls left along the floor (jump over it).
+    // SURGE → lightning bolt rolls left along the core's depth lane (step out of the lane to dodge).
     slamWind: 0.8, slamCd: 2.6, waveDmg: 20, waveRange: 480, waveSpeed: 170,
     // PORT SLAM → slab punches the zone in front of the face (back away to dodge).
     crushWind: 0.85, crushCd: 2.8, crushDmg: 32, crushReach: 78,

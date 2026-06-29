@@ -182,6 +182,14 @@
 
   // -------------------------------------------------------------- Sprites
   const painters = {};
+
+  // Reusable offscreen canvas for the hit-flash white-silhouette effect.
+  // Sized to fit the largest entity (WallBoss: ~142 × 178 px). The anchor
+  // point (ox, oy) matches the feet-baseline convention used by every painter.
+  const _hurtOC = document.createElement("canvas");
+  _hurtOC.width = 220; _hurtOC.height = 300;
+  const _hurtOC2d = _hurtOC.getContext("2d");
+
   const Assets = {
     register(key, fn) { painters[key] = fn; },
     has(key) { return !!painters[key]; },
@@ -202,7 +210,35 @@
         ctx.fillStyle = color;
         ctx.fillRect(sx, sy, w, h);
       };
-      fn(p, opt, ctx, x, y, facing);
+      // When hurtAlpha > 0 strip the hurt flag from the main call so painters
+      // don't early-return — the silhouette overlay handles the hit visual.
+      const usesilhouette = opt.hurt && opt.hurtAlpha > 0;
+      fn(p, usesilhouette ? Object.assign({}, opt, { hurt: false }) : opt, ctx, x, y, facing);
+
+      if (usesilhouette) {
+        // Render entity shape onto the offscreen canvas, then flood-fill white.
+        const ox = 110, oy = 280;
+        _hurtOC2d.globalAlpha = 1;
+        _hurtOC2d.globalCompositeOperation = "source-over";
+        _hurtOC2d.clearRect(0, 0, 220, 300);
+        const hp = (lx, ly, w, h, color) => {
+          w = Math.round(w * scale); h = Math.round(h * scale);
+          const osx = facing === 1 ? ox + Math.round(lx * scale) : ox - Math.round(lx * scale) - w;
+          const osy = oy - Math.round(ly * scale) - h;
+          _hurtOC2d.fillStyle = color;
+          _hurtOC2d.fillRect(osx, osy, w, h);
+        };
+        _hurtOC2d.save();
+        fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, ox, oy, facing);
+        _hurtOC2d.restore();
+        _hurtOC2d.globalCompositeOperation = "source-in";
+        _hurtOC2d.fillStyle = "#ffffff";
+        _hurtOC2d.fillRect(0, 0, 220, 300);
+        _hurtOC2d.globalCompositeOperation = "source-over";
+        // Stamp silhouette onto main canvas.
+        ctx.globalAlpha = opt.hurtAlpha;
+        ctx.drawImage(_hurtOC, x - ox, y - oy);
+      }
       ctx.restore();
     },
   };

@@ -63,7 +63,7 @@
     denominateCoins(total).forEach((val, i) => {
       const ox = (Math.random() - 0.5) * 40;
       const oy = (Math.random() - 0.5) * 20;
-      setTimeout(() => game.spawnPickup("suds", x + ox, y + oy, val), i * 45);
+      game.defer(i * 45, () => game.spawnPickup("suds", x + ox, y + oy, val));
     });
   }
   JH.spawnSudsCoins = spawnSudsCoins;
@@ -71,7 +71,7 @@
   // Boss kill: coins stream up and land close by
   function spawnCoinFountain(game, x, y, total) {
     denominateCoins(total).forEach((val, i) => {
-      setTimeout(() => {
+      game.defer(i * 30, () => {
         const angle = Math.random() * Math.PI * 2;
         const speed = 15 + Math.random() * 30;
         const p = new JH.Pickup("suds", x, y, val);
@@ -79,7 +79,7 @@
         p.vx = Math.cos(angle) * speed;
         p.vy = Math.sin(angle) * speed * 0.2;
         game.pickups.push(p);
-      }, i * 30);
+      });
     });
   }
 
@@ -502,6 +502,7 @@
       this.applyKnockback(dir, 90);
       game.audio.play("hurt");
       game.shake(5);
+      game.hitStop(0.06);
       if (this.hp <= 0) { this.hp = 0; this.alive = false; }
     }
 
@@ -648,6 +649,7 @@
       if (this.dead) return;
       this.dead = true;
       game.audio.play("die");
+      game.hitStop(0.04);
       burst(game, this.x, this.y, this.z + 12, this.colorOf(), 10, { speed: 100, life: 0.5, up: 80 });
       game.dropLoot(this);   // anti-farm aware (infinite spawns share a budget)
       game.onEnemyKilled(this);
@@ -728,7 +730,9 @@
       Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
       Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
-        hurt: this.flashTimer > 0, wind: this.state === "wind", elite: this.elite,
+        hurt: this.flashTimer > 0,
+        hurtAlpha: this.flashTimer / 0.18,
+        wind: this.state === "wind", elite: this.elite,
         scale: this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
@@ -988,7 +992,7 @@
         }
       }
       for (let i = 0; i < 5; i++)
-        setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }), i * 90);
+        game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.startBossDeathSeq(this);
     }
@@ -1308,7 +1312,7 @@
       game.audio.play("win");
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 6; i++)
-        setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }), i * 90);
+        game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.startBossDeathSeq(this);
@@ -1421,6 +1425,75 @@
     }
   }
   JH.Shockwave = Shockwave;
+
+  // ================================================ LIGHTNING WAVE (Firewall SURGE)
+  // Depth-lane attack: rolls left at the core's depth row. Distinct from Shockwave —
+  // dodge by stepping out of the core's depth lane (not dashing through it).
+  class LightningWave {
+    constructor(x, y, dir, speed, def) {
+      this.x = x; this.y = y; this.dir = dir; this.speed = speed;
+      this.dmg = def.waveDmg; this.range = def.waveRange;
+      this.traveled = 0; this.t = 0; this.dead = false; this.hit = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      const step = this.speed * dt * this.dir;
+      this.x += step; this.traveled += Math.abs(step);
+      const pl = game.player;
+      // Hit only if player is in this depth lane (move to a different lane to dodge).
+      if (!this.hit && pl.alive &&
+          Math.abs(pl.x - this.x) < 10 && Math.abs(pl.y - this.y) < 22) {
+        pl.takeHit(this.dmg, game, this.x); this.hit = true; game.shake(5);
+      }
+      // Electric sparks along the depth row.
+      if (Math.random() < 0.85)
+        burst(game, this.x, this.y, Math.random() * 18,
+          Math.random() < 0.55 ? "#00f8ff" : "#80ff90", 1,
+          { speed: 60, life: 0.22, up: 50, grav: 200 });
+      if (this.traveled > this.range) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      if (sx < -40 || sx > JH.VIEW_W + 40) return;
+      const sy = Geo.feetScreenY(this.y, 0);
+      const fade = Math.max(0.1, 1 - this.traveled / this.range);
+      const pulse = 0.55 + 0.45 * Math.abs(Math.sin(this.t * 22));
+      ctx.save();
+      // Cyan oval glow at the depth row.
+      ctx.globalAlpha = 0.2 * fade;
+      ctx.fillStyle = "#00d8ff";
+      ctx.beginPath();
+      ctx.ellipse(Math.round(sx), sy - 8, 9, 24, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Jagged bolt: vertical segments with horizontal jag driven by t.
+      const segs = 9, segH = 3;
+      const startY = sy - Math.floor(segs * segH * 0.5);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      const bx = Math.round(sx);
+      // Cyan outer bolt.
+      ctx.globalAlpha = 0.78 * pulse * fade;
+      ctx.strokeStyle = "#00f0ff";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(bx, startY);
+      for (let i = 1; i <= segs; i++)
+        ctx.lineTo(bx + Math.sin(this.t * 24 + i * 2.3) * 5, startY + i * segH);
+      ctx.stroke();
+      // Green fringe.
+      ctx.globalAlpha = 0.4 * pulse * fade;
+      ctx.strokeStyle = "#80ff80";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // White core.
+      ctx.globalAlpha = 0.92 * pulse * fade;
+      ctx.strokeStyle = "#e8ffff";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  JH.LightningWave = LightningWave;
 
   // ============================================== ESCAPING BOSS CORE
   // A red core that ejects from a defeated boss, bounces off the floor and
@@ -1665,7 +1738,7 @@
       this.dead = true;
       game.audio.play("win");
       for (let i = 0; i < 7; i++)
-        setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }), i * 90);
+        game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
@@ -1964,7 +2037,9 @@
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       JH.Assets.shadow(ctx, sx, sy, 11);
       JH.Assets.draw(ctx, "neighbor", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
-        state: this.state, t: this.t, hurt: this.flashTimer > 0,
+        state: this.state, t: this.t,
+        hurt: this.flashTimer > 0,
+        hurtAlpha: this.flashTimer / 0.18,
       });
 
       // Rock wind-up: telegraph ellipse at locked target
@@ -2147,8 +2222,8 @@
       game.audio.play("win");
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 9; i++)
-        setTimeout(() => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
-          Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }), i * 80);
+        game.defer(i * 80, () => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
+          Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }));
       // No core ejection here — it shatters instead.
       const cy = this.bodyH * 0.55;
       for (let i = 0; i < 22; i++)
@@ -2166,7 +2241,8 @@
   // Body is armoured (takeDamage ignores hits); only the WEAK SPOT (core) takes
   // damage, and only while OPEN. The core ROAMS in depth (this.y) — the player
   // must stand in its lane for the stream to register. Attacks: PORT SLAM slab
-  // in front of the face (back off) and a SURGE shockwave (jump).
+  // in front of the face (back off) and a SURGE lightning bolt along the core's
+  // depth lane (step out of the lane to dodge).
   // Not in JH.LEVEL1.waves; see JH.WALLBOSS in config.js for how to wire it in.
   class WallBoss extends Enemy {
     constructor(x, y) {
@@ -2320,11 +2396,14 @@
       game.shake(9); game.audio.play("whack");
       const sx = this.x - this.bodyW * 0.5;
       const ws = enraged ? d.waveSpeed * 1.25 : d.waveSpeed;
-      game.embers.push(new Shockwave(sx, -1, ws, d));            // rolls left at the player
-      if (enraged) game.embers.push(new Shockwave(sx, -1, ws * 0.6, d));
+      // LightningWave locked to the core's current depth lane — player dodges by
+      // stepping out of the lane, not dashing through it.
+      game.embers.push(new LightningWave(sx, this.y, -1, ws, d));
+      if (enraged) game.embers.push(new LightningWave(sx, this.y, -1, ws * 0.6, d));
+      // Electric burst at the emission point.
       for (let i = 0; i < 14; i++)
-        burst(game, sx, JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), Math.random() * 20,
-          Math.random() < 0.5 ? JH.PAL.rubble : "#caa470", 1, { speed: 130, life: 0.45, up: 60 });
+        burst(game, sx, this.y, Math.random() * 24,
+          Math.random() < 0.5 ? "#00f8ff" : "#80ff90", 1, { speed: 140, life: 0.45, up: 70 });
       this.strikeFx = 0.22; this.atkState = "strike";
     }
 
@@ -2450,10 +2529,10 @@
       game.audio.play("win"); game.shake(16);
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 12; i++)
-        setTimeout(() => burst(game, this.x - 20 - Math.random() * 40,
+        game.defer(i * 80, () => burst(game, this.x - 20 - Math.random() * 40,
           JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), 10 + Math.random() * 120,
           Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossHaz, 16,
-          { speed: 180, life: 0.8, up: 150 }), i * 80);
+          { speed: 180, life: 0.8, up: 150 }));
       spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.startBossDeathSeq(this);

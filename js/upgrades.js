@@ -114,6 +114,9 @@
 
     canBuy(id, suds) { return this.isAvailable(id) && suds >= this.cost(id); },
 
+    // Every one-time skill node purchased — gates the repeatable OVERCHARGE nodes.
+    allNodesOwned() { return NODES.every((n) => this.owned[n.id]); },
+
     nodesByBranch(branch) {
       return NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier);
     },
