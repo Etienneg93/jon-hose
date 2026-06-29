@@ -10,6 +10,16 @@
   const KEY = "jonhose.church.v1";
   const ELEMENTS = ["earth", "fire", "air", "water"];
 
+  function wrapText(ctx, text, cx, y, maxW, lh) {
+    const words = text.split(" "); let line = "", yy = y;
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, cx, yy); line = w; yy += lh; }
+      else line = test;
+    }
+    if (line) ctx.fillText(line, cx, yy);
+  }
+
   function defaults() {
     return {
       essence: 0,
@@ -93,14 +103,23 @@
 
     // ---- Death-interlude scene -------------------------------------
     enterScene(game) {
-      const L = root.JH.CHURCH.layout;
+      const JH = root.JH, L = JH.CHURCH.layout;
       const firstVisit = !this.state.churchVisited;
       this.state.churchVisited = true;
+      // Elements unlocked but not yet celebrated -> queue a one-time ceremony.
+      const queue = JH.CHURCH.shrines
+        .filter((s) => this.state.elements[s.element] && !this.state.ceremonyDone[s.element])
+        .map((s) => s.element);
       this.save();
+      const line = firstVisit
+        ? JH.CHURCH.sermon.first
+        : JH.CHURCH.sermon.repeat[(Math.random() * JH.CHURCH.sermon.repeat.length) | 0];
       this.scene = {
         phase: "walk",
         spiritX: firstVisit ? L.spawnFar : L.spawnNear,
         firstVisit: firstVisit,
+        ceremonyQueue: queue,
+        line: line,
         t: 0,
       };
     },
@@ -114,7 +133,23 @@
         if (In.held("right")) sc.spiritX += sp;
         if (In.held("left"))  sc.spiritX -= sp;
         if (sc.spiritX < 8) sc.spiritX = 8;
-        if (sc.spiritX >= L.altarX) { sc.spiritX = L.altarX; sc.phase = "altar"; sc.cursor = 0; sc.t = 0; }
+        if (sc.spiritX >= L.altarX) { sc.spiritX = L.altarX; sc.phase = "sermon"; sc.t = 0; }
+        return;
+      }
+      if (sc.phase === "sermon") {
+        if (In.pressed("confirm") && sc.t > 0.3) {
+          sc.phase = sc.ceremonyQueue.length ? "ceremony" : "altar";
+          sc.cursor = 0; sc.t = 0;
+        }
+        return;
+      }
+      if (sc.phase === "ceremony") {
+        if (In.pressed("confirm") && sc.t > 0.3) {
+          const el = sc.ceremonyQueue.shift();
+          if (el) { this.state.ceremonyDone[el] = true; this.save(); }
+          if (!sc.ceremonyQueue.length) { sc.phase = "altar"; sc.cursor = 0; }
+          sc.t = 0;
+        }
         return;
       }
       if (sc.phase === "altar") {
@@ -182,6 +217,23 @@
       // Phase prompts.
       ctx.fillStyle = "#9fb0c8";
       if (sc.phase === "walk") ctx.fillText("...where am I?  →", VW / 2, 20);
+      else if (sc.phase === "sermon") {
+        ctx.fillStyle = "rgba(0,0,0,0.75)"; ctx.fillRect(0, root.JH.VIEW_H - 56, root.JH.VIEW_W, 56);
+        // Father Jon portrait (transparent PNG; nothing drawn if absent).
+        blit(ctx, (root.JH.ChurchArt || {}).fatherJon, 8, root.JH.VIEW_H - 54, 44, 50, () => {});
+        ctx.fillStyle = "#ffe9a8"; ctx.textAlign = "center";
+        wrapText(ctx, "Father Jon: " + sc.line, root.JH.VIEW_W / 2, root.JH.VIEW_H - 42, 400, 10);
+        ctx.fillStyle = "#9fb0c8"; ctx.fillText("Press E", root.JH.VIEW_W / 2, root.JH.VIEW_H - 8);
+      }
+      else if (sc.phase === "ceremony") {
+        const el = sc.ceremonyQueue[0] || "";
+        const glow = (Math.sin(sc.t * 8) * 0.5 + 0.5);
+        ctx.fillStyle = `rgba(108,211,255,${(0.3 + 0.5 * glow).toFixed(2)})`;
+        ctx.fillRect(0, 0, root.JH.VIEW_W, root.JH.VIEW_H);
+        ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+        ctx.fillText("The " + el.toUpperCase() + " shrine awakens!", root.JH.VIEW_W / 2, root.JH.VIEW_H / 2);
+        ctx.fillStyle = "#9fb0c8"; ctx.fillText("Press E", root.JH.VIEW_W / 2, root.JH.VIEW_H / 2 + 16);
+      }
       else if (sc.phase === "altar") {
         ctx.fillText("ALTAR OF ELEMENTS — Holy Essence: " + this.state.essence, root.JH.VIEW_W / 2, 16);
         const defs = root.JH.CHURCH.blessings;
