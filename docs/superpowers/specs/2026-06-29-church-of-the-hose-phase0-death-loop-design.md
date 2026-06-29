@@ -136,28 +136,36 @@ intended proof of "death isn't a wipe"; stakes/difficulty re-tuning is later wor
 
 ## 4. Holy Essence & the altar
 
-### Earning essence
+### Earning essence — lean, boss-sourced
 
-Banked on each death, scaled by *this life's* progress so deeper deaths pay more,
-never zero. Tracked via `lifeWavesCleared` / `lifeKills`, reset on every (re)spawn.
+Holy Essence is a **rare milestone currency tied to redeeming allies**, not to
+dying. **Each boss defeated/redeemed awards exactly 1 essence** (`JH.Church.addEssence(1)`
+from each boss's defeat/conversion). It accrues and persists; the Church (entered
+on death) is simply *where you spend it*.
 
-```
-JH.CHURCH.essence = { perWave: 6, perKill: 1, min: 8 }   // tunables
-award = max(min, lifeWavesCleared * perWave + lifeKills * perKill)
-```
+With 4 bosses in the campaign, a full clear yields ~4 essence — deliberately slow,
+so each ally redeemed is a meaningful tick of permanent power, accumulated across
+many playthroughs. (Re-killing a boss in a fresh campaign awards again; within one
+campaign you don't re-fight bosses you've passed — checkpoints sit *after* them.)
+
+Note: Quake Walker is *redeemed* (his `die()` is a conversion cutscene, not a
+defeat — see the boss-death spec); his redemption awards essence the same as a kill.
 
 ### The blessings (3, repeatable — seed of the Phase 2 tree)
 
-Repeatable with rising cost, reusing the Overcharge pattern
-(`JH.Balance.repeatableCost(base, n)` in `js/upgrades.js`). Permanent.
+Each blessing is its own repeatable track with a simple **rising integer cost**:
+the *k*-th purchase of a track costs *k* essence (1, then 2, then 3, …). So
+`cost = (timesBought + 1)`. Permanent.
 
-| id | Blessing | Effect | base cost |
+| id | Blessing | Effect per buy | cost curve |
 |---|---|---|---|
-| `bless_dps`   | Anointed Pressure | +4 `sprayDamage` | 30 |
-| `bless_tank`  | Deep Reservoir    | +15 `maxWater`   | 25 |
-| `bless_range` | Long Reach        | +8 `sprayRange`  | 30 |
+| `bless_dps`  | Anointed Pressure | +4 `sprayDamage` | 1, 2, 3, … |
+| `bless_tank` | Deep Reservoir    | +15 `maxWater`   | 1, 2, 3, … |
+| `bless_hp`   | Blessed Vigor     | +20 `maxHp`      | 1, 2, 3, … |
 
-(Magnitudes/costs are `JH.CHURCH` tunables, fine-tuned by playtest.)
+(Effect magnitudes are `JH.CHURCH` tunables; the cost curve is the fixed
+`+1-per-level` integer ramp. No reuse of the Overcharge `×1.4ⁿ` curve — this is
+much leaner by design.)
 
 ### How blessings reach the player's stats
 
@@ -175,7 +183,7 @@ A small persistence layer in `JH.Church` (localStorage, single JSON key,
 e.g. `jonhose.church.v1`):
 
 ```
-{ essence, blessings: { bless_dps, bless_tank, bless_range },
+{ essence, blessings: { bless_dps, bless_tank, bless_hp },
   churchVisited, ceremonyDone: { earth, fire, air, water } }
 ```
 
@@ -191,10 +199,10 @@ e.g. `jonhose.church.v1`):
 
 | File | Change |
 |---|---|
-| `js/config.js` | New `JH.CHURCH` block (scene layout: `length`/`altarX`/`portalX`/`spawnFar`/`spawnNear`; death-seq durations; essence formula; blessing defs; shrine→element map). `JH.ACT_STARTS = [0,5,8,10]`. New `JH.PAL` keys for Church/spirit/Father-Jon placeholders. |
+| `js/config.js` | New `JH.CHURCH` block (scene layout: `length`/`altarX`/`portalX`/`spawnFar`/`spawnNear`; death-seq durations; `essencePerBoss: 1`; blessing defs with `+1-per-level` integer cost; shrine→element map). `JH.ACT_STARTS = [0,5,8,10]`. New `JH.PAL` keys for Church/spirit/Father-Jon placeholders. |
 | `js/church.js` *(new)* | `JH.Church` module: persistent state + `load`/`save`; the scene state machine (`enter`, `update(dt)`, `render`, input handling, sub-phases); essence award; altar buy logic; exposes `blessings` for `computeStats`. Keeps the Church self-contained and testable. |
 | `js/upgrades.js` | `computeStats()` folds `JH.Church.blessings` onto the base stats (permanent layer). |
-| `js/game.js` | New `playerDeathSeq` + `church` states; death routing (`gameOver`/player-death → `playerDeathSeq` → `church`); `deathSeqT` timeline + fade/spirit render overlay; `checkpointWave` tracking (act start); Church-return respawn path (no `Upgrades.reset()`); `lifeWavesCleared`/`lifeKills` tracking; delegate update/render to `JH.Church` while `state === "church"`. |
+| `js/game.js` | New `playerDeathSeq` + `church` states; death routing (`gameOver`/player-death → `playerDeathSeq` → `church`); `deathSeqT` timeline + fade/spirit render overlay; `checkpointWave` tracking (act start); award 1 essence on each boss defeat/redemption (`JH.Church.addEssence(1)`); Church-return respawn path (no `Upgrades.reset()`); delegate update/render to `JH.Church` while `state === "church"`. |
 | `js/assets.js` | Placeholder painters: Jon death pose, spirit flicker, Father Jon portrait, Church backdrop, Altar of Elements, four shrines (dim/lit), portal. |
 | `index.html` | Add `<script src="js/church.js">` (before `game.js`). |
 
@@ -210,12 +218,18 @@ playable immediately; real pixel-art (Church backdrop, Father Jon portrait, spir
 altar, shrines, portal) is a parallel art-pipeline track swapped in at the painter
 seam. Don't over-detail placeholders.
 
+**Deferred — graphics-polish pass (not Phase 0):** the **player death animation**
+(and the spirit-flicker / Church visuals generally) ship as minimal placeholders
+now and are updated later as part of a dedicated graphics-polishing task. Phase 0
+only needs the *timing hooks* (`deathSeqT` windows) in place so polished art drops
+into the existing seam without touching the loop logic.
+
 ## 8. Testing / verification
 
 No automated tests exist; manual per project convention, **except** pure logic
 worth locking with Node `node:test` (the `js/balance.js` pattern):
 
-- Essence award formula (`lifeWavesCleared`, `lifeKills` → essence).
+- Blessing cost curve (`timesBought` → `cost = timesBought + 1`).
 - Checkpoint resolution (`waveIndex` → correct `ACT_STARTS` entry).
 - Blessing folding in `computeStats` (counts → stat deltas) and persistence
   round-trip (`save` → `load` → equal).
@@ -225,9 +239,9 @@ Manual checks (dev wave-select, backtick, 999 Suds):
   build + Suds intact, full HP.
 - First death: full walk + Father Jon + (Earth ceremony if Quake beaten).
   Second death: abbreviated, shrine already glowing, no ceremony.
-- Buy a blessing → essence spent, effect applies this run **and** persists after a
-  page reload.
-- Essence is never zero on death; deeper deaths pay more.
+- Each boss defeat/redemption grants exactly 1 essence (no double-award).
+- Buy a blessing → essence spent (1, then 2, then 3…), effect applies this run
+  **and** persists after a page reload.
 - No console errors; normal wave/boss flow and the boss-death sequence unaffected.
 
 ## 9. Out of scope (later phases / parallel tracks)
