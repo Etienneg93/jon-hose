@@ -235,6 +235,10 @@
     leapWind: 0.65, leapDur: 0.38, leapDmg: 32, leapRadius: 52, leapPeak: 58,
   };
 
+  // Act-start wave indices (bounded by boss clears) — death respawns here.
+  // 0 Act1 · 5 Act2 (after Big Drip) · 8 Act3 (after Switch) · 10 Act4 (after Quake).
+  JH.ACT_STARTS = [0, 5, 8, 10];
+
   // ---- Level 1 waves --------------------------------------------------
   // Each wave: list of {type, count}. Gate progress until cleared, then
   // open the shop (except before the boss, which is its own finale).

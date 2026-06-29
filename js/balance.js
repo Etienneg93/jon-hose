@@ -57,6 +57,21 @@
       return Math.round(base * Math.pow(1.5, timesBought || 0));
     },
 
+    // Act-start checkpoint for a wave: largest actStarts entry <= waveIndex
+    // (clamped to the first act for pre-start indices). Pure.
+    actStartForWave(waveIndex, actStarts) {
+      let start = actStarts[0];
+      for (let i = 0; i < actStarts.length; i++) {
+        if (actStarts[i] <= waveIndex) start = actStarts[i];
+      }
+      return start;
+    },
+
+    // Cost of the next blessing purchase: 1, 2, 3, ... (timesBought + 1). Pure.
+    blessingCost(timesBought) {
+      return (timesBought || 0) + 1;
+    },
+
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
     // The 0.9 cap applies to the cumulative water threshold, not per-item.
