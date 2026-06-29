@@ -906,4 +906,24 @@
     const _open   = makeImg("sprites/quake_walker_portrait_mouthopen.jpg");
     JH.getQuakePortrait = (mouthOpen) => mouthOpen ? _open : _closed;
   }
+
+  // =================== CHURCH OF THE HOSE ART =======================
+  // Transparent PNGs; church.js renderScene falls back to ctx-rects if a
+  // file is missing/unloaded (the documented neighbor blit+fallback seam).
+  {
+    function makeImg(src) {
+      const img = new Image(); img._ready = false;
+      img.onload = () => { img._ready = true; };
+      img.src = src; return img;
+    }
+    JH.ChurchArt = {
+      backdrop:  makeImg("sprites/church/backdrop.png"),
+      spirit:    makeImg("sprites/church/spirit.png"),
+      altar:     makeImg("sprites/church/altar.png"),
+      shrineDim: makeImg("sprites/church/shrine_dim.png"),
+      shrineLit: makeImg("sprites/church/shrine_lit.png"),
+      portal:    makeImg("sprites/church/portal.png"),
+      fatherJon: makeImg("sprites/church/father_jon.png"),
+    };
+  }
 })();
