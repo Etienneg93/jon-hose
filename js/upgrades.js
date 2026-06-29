@@ -130,6 +130,13 @@
         const c = rc[n.id] || 0;
         for (let i = 0; i < c; i++) n.apply(s);
       });
+      // Permanent Church blessings (survive Upgrades.reset()).
+      const ch = (JH.Church && JH.Church.state && JH.Church.state.blessings) || {};
+      const cdefs = (JH.CHURCH && JH.CHURCH.blessings) || [];
+      cdefs.forEach((b) => {
+        const c = ch[b.id] || 0;
+        for (let i = 0; i < c; i++) b.apply(s);
+      });
       return s;
     },
 
