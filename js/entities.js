@@ -2806,12 +2806,66 @@
     }
   }
 
+  // ---- Smelt: slow, arena-control, half-effective spray ----
+  // Approaches slowly; on a cooldown wind-up, smashes the ground to create a
+  // FirePatch. waterMult:0.5 means spray does half damage — stay on it or it
+  // tiles the arena. Extends Enemy, overrides think().
+  class Smelt extends Enemy {
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.smashPatchRadius, d.smashPatchDur));
+          burst(game, this.x, this.y, 2, JH.PAL.smeltGlow, 10, { speed: 90, life: 0.45, up: 40 });
+          this.cdTimer = d.smashCd;
+        }
+        return;
+      }
+      if (this.cdTimer > 0) { this.cdTimer -= dt; }
+
+      if (dist < this.bodyW + 14 && this.cdTimer <= 0 && this.spawnGrace <= 0) {
+        this.windTimer = d.smashWind; this.state = "wind";
+        return;
+      }
+      if (dist > 18 && this.spawnGrace <= 0) {
+        this.x += (dx / (dist || 1)) * d.speed * dt;
+        this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.state = "walk";
+      } else {
+        this.state = "idle";
+      }
+    }
+  }
+  JH.Smelt = Smelt;
+
+  // ---- Fuse: fast rusher, fire-patch death burst ----
+  // Dies in ~1.5s at full Jon DPS — the mechanic is WHERE it dies. Death
+  // creates a FirePatch + applies 1 burn stack if Jon is in deathBurnRange.
+  class Fuse extends Enemy {
+    die(game) {
+      const d = this.def;
+      game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
+      burst(game, this.x, this.y, 6, JH.PAL.fuse, 12, { speed: 110, life: 0.4, up: 60 });
+      if (Math.hypot(game.player.x - this.x, game.player.y - this.y) < d.deathBurnRange)
+        game.player.applyBurn(1);
+      super.die(game);
+    }
+  }
+  JH.Fuse = Fuse;
+
   JH.makeEnemy = function (type, x, y) {
     if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
     if (type === "bulwark") return new Bulwark(type, x, y);
     if (type === "stalker") return new Stalker(type, x, y);
+    if (type === "smelt") return new Smelt(type, x, y);
+    if (type === "fuse") return new Fuse(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);

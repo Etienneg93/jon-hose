@@ -453,6 +453,38 @@
     p(-2, 9, 4, 12, PAL.bulwarkDk);
   });
 
+  // ============================ SMELT ==================================
+  // Procedural placeholder. Heavy, slow fire-worker. `wind` = smash wind-up.
+  Assets.register("smelt", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) * 0.4 : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-8 + ls, 0, 7, 12, PAL.smeltDk);
+    p(1 - ls, 0, 7, 12, PAL.smeltDk);
+    p(-11, 12, 22, 16, PAL.smelt);
+    p(-11, 12, 22, 3, PAL.smeltDk);
+    p(-5, 28, 10, 9, PAL.skin);
+    p(-5, 32, 10, 3, PAL.smeltDk);
+    p(1, 30, 2, 2, "#111");
+    if (opt.state === "wind") {
+      p(-13, 10, 26, 4, PAL.smeltGlow);   // glowing wind-up band
+    }
+  });
+
+  // ============================ FUSE ===================================
+  // Procedural placeholder. Fast, low-HP, dangerous in death.
+  Assets.register("fuse", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-4 + ls, 0, 4, 8, PAL.fuseDk);
+    p(0 - ls, 0, 4, 8, PAL.fuseDk);
+    p(-5, 8, 10, 12, PAL.fuse);
+    p(-5, 8, 10, 2, PAL.fuseDk);
+    p(-3, 18, 6, 7, PAL.skin);
+    p(1, 19, 2, 2, "#111");
+  });
+
   // ========================== STALKER ==================================
   // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
   // post-blink wind-up arm.
