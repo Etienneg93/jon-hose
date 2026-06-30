@@ -193,8 +193,22 @@
 
   // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
-    // Death-sequence timeline (seconds): collapse -> fade -> spirit -> Church.
-    deathSeq: { whitenEnd: 0.6, ghostStart: 0.5, beamStart: 1.3, fadeStart: 1.6, total: 2.4 },
+    // Player death/ghost sequence (seconds) — durations of each phase, consumed by
+    // Church.deathCorpseFrame / deathGhostState / deathScreenFadeAlpha (church.js).
+    deathSeq: {
+      fallEnd: 0.6,          // corpse collapses, frames 0->7
+      lingerDur: 0.4,        // corpse holds on frame 7 before the ghost stirs
+      riseDur: 0.35,         // ghost lifts out of the corpse, still in the collapsed pose
+      materializeDur: 0.15,  // ghost alpha ramp-in, within riseDur
+      standDur: 0.45,        // ghost plays frames 7->0 (reverse), standing up while hovering
+      driftDur: 0.3,         // slow upward drift once standing, before the beam accelerates
+      beamFadeDur: 0.4,      // ghost alpha fades out over this long once the beam starts
+      screenFadeDelay: 0.3,  // gap between beam start and the screen starting to fade
+      screenFadeDur: 0.7,    // screen fade-to-black duration
+      riseHeight: 16,        // px the ghost lifts above the corpse before standing
+      ghostAlphaMax: 0.82,   // ghost's peak opacity
+      total: 3.2,            // whole sequence length; updatePlayerDeathSeq exits the Church at this point
+    },
     essencePerBoss: 1,
     // Father Jon dialogue. `first` = in-character Holy-Essence tutorial (one
     // box per line); `repeat` = a single short line picked at random per visit.
