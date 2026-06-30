@@ -927,6 +927,28 @@
   }
   JH.Bulwark = Bulwark;
 
+  // ---- DeployedShield: a Bulwark's planted shield ----
+  // Stationary, indestructible (no takeDamage path — the player can never
+  // destroy it directly). Hard-blocks Player.doSpray at every beam tier (see
+  // doSpray's blocker-finding). Owned by exactly one Bulwark, which reclaims
+  // (and removes) it when it returns — `dead` is only ever set by the owner
+  // reclaiming it or dying, never by combat.
+  class DeployedShield {
+    constructor(x, y, owner) {
+      this.x = x; this.y = y; this.z = 0;
+      this.bodyW = JH.ENEMIES.bulwark.shieldBodyW;
+      this.owner = owner;
+      this.dead = false; this.t = 0;
+    }
+    update(dt) { this.t += dt; }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.6);
+      Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
+    }
+  }
+  JH.DeployedShield = DeployedShield;
+
   // ---- Stalker: fast "blink harasser" super-elite ----
   // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
   // blinks behind the player's facing, then winds up a strike (state

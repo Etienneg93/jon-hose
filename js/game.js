@@ -269,7 +269,7 @@
       JH.Upgrades.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -688,7 +688,7 @@
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
       p.alive = true;
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
@@ -857,6 +857,7 @@
       // --- entities
       this.player.update(dt, this);
       for (const e of this.enemies) e.update(dt, this);
+      for (const s of this.shields) s.update(dt);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.particles = this.particles.filter((p) => p.update(dt));
@@ -894,6 +895,7 @@
 
       // --- cull dead enemies
       this.enemies = this.enemies.filter((e) => !e.dead);
+      this.shields = this.shields.filter((s) => !s.dead);
 
       // --- camera
       JH.Camera.follow(this.player);
@@ -997,6 +999,9 @@
 
         // garden boxes (if a garden encounter is active)
         if (this.gardens) for (const g of this.gardens) g.draw(ctx, cam);
+
+        // planted Bulwark shields (static world props, drawn like the wall/gardens)
+        for (const s of this.shields) s.draw(ctx, cam);
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
