@@ -150,10 +150,11 @@
       speakerWindup: 0.5, speakerHold: 0.8, speakerChance: 0.33,
       suds: 0, waterMult: 1.3, bodyW: 14, bodyH: 28, color: "neighbor",
     },
-    // Super-elite: slow "moving shield" — counters stand-and-pierce play. The
-    // shield faces `facing`; frontal spray is blocked (frontDmgMult), back is
-    // full damage. Re-faces only every `turnCooldown` — that's the dash-past
-    // window. See docs/superpowers/specs/2026-06-28-super-elites-design.md.
+    // Super-elite: "shield trooper" — counters stand-and-pierce play. The
+    // body is never a blocker; it periodically plants its shield as a
+    // separate, stationary, indestructible obstacle, then fights shieldless
+    // until it sprints back to reclaim it. See docs/superpowers/specs/
+    // 2026-06-30-bulwark-shield-rework-design.md.
     bulwark: {
       name: "Bulwark", hp: 420, speed: 26, touchDmg: 14, contactCd: 1.0,
       // Shield-throw cycle (seconds/px) — see docs/superpowers/specs/
