@@ -91,6 +91,24 @@ Arms raised defensively in front of face. Cape displaced upward. Facing right.`,
     },
   },
 
+  slayer: {
+    refImage: "",
+    refDescription: "",
+    base: `Pixel art game sprite of "The Slayer": a lean menacing brawler in dark leather.
+Dark leather jacket #3a2010 with straps, flame-tipped collar and shoulders (ember accents #ff6010).
+Holds a glowing white cue-ball. About 58px tall, confident cocky stance.`,
+    states: {
+      idle: `Standing idle, weight on back foot, smirking, cue-ball loose in hand. Facing right.`,
+      walk: `4-frame walk cycle as a horizontal sprite sheet, all frames in one image, evenly spaced, no gaps between frames.
+Frame 1 (leftmost): contact — lead foot strikes ground, opposite arm forward.
+Frame 2: down — body at lowest point. Frame 3: passing — feet level, rising.
+Frame 4: up — opposite foot leads, body highest. All same height. Facing right.`,
+      throw_wind: `Wind-up throw pose: flaming cue-ball drawn back behind the shoulder, body coiled, opposite arm forward for balance. Facing right.`,
+      throw_release: `Throw release: throwing arm fully extended forward at chest height, the flaming cue-ball leaving the hand, body leaning into the throw. Facing right.`,
+      hurt: `Hit-recoil pose: body leaning back, head tilted back, arm raised defensively. Facing right.`,
+    },
+  },
+
   jon: {
     refImage: "sprites/john-hose-idle.png",
     refDescription: `The reference shows Jon Hose: a fireman-type hero in a yellow fireman jacket,
