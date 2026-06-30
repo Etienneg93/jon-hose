@@ -157,10 +157,7 @@
     bulwark: {
       name: "Bulwark", hp: 420, speed: 26, touchDmg: 14, contactCd: 1.0,
       // Shield-throw cycle (seconds/px) — see docs/superpowers/specs/
-      // 2026-06-30-bulwark-shield-rework-design.md. turnCooldown/frontDmgMult
-      // are retained here only until the Bulwark/doSpray rewrite lands later
-      // in this plan — they become dead code and are deleted then (Task 6).
-      turnCooldown: 1.1, frontDmgMult: 0,
+      // 2026-06-30-bulwark-shield-rework-design.md.
       throwRange: 80, throwWind: 0.5, shieldlessDur: 3.5,
       retrieveSpeedMult: 1.6, pickupRadius: 16, shieldBodyW: 16,
       suds: 60, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",

@@ -106,20 +106,6 @@ test("bulwarkShouldThrow: exactly at range counts as in range", () => {
   assert.strictEqual(Balance.bulwarkShouldThrow(0, 0, 80, 0, 80), true);
 });
 
-test("bulwarkShielded: attacker in front of the Bulwark's facing is shielded", () => {
-  assert.strictEqual(Balance.bulwarkShielded(100, 1, 150), true);   // facing right, attacker to the right
-  assert.strictEqual(Balance.bulwarkShielded(100, -1, 50), true);   // facing left, attacker to the left
-});
-
-test("bulwarkShielded: attacker behind the Bulwark's facing is NOT shielded", () => {
-  assert.strictEqual(Balance.bulwarkShielded(100, 1, 50), false);   // facing right, attacker to the left
-  assert.strictEqual(Balance.bulwarkShielded(100, -1, 150), false); // facing left, attacker to the right
-});
-
-test("bulwarkShielded: attacker exactly at the Bulwark's x counts as in front", () => {
-  assert.strictEqual(Balance.bulwarkShielded(100, 1, 100), true);
-});
-
 test("stalkerBlinkTarget: lands behind the player relative to their facing", () => {
   const bounds = { minX: 0, maxX: 1000, depthMin: 0, depthMax: 86 };
   const t = Balance.stalkerBlinkTarget(500, 40, 1, 60, bounds);     // facing right -> blink lands LEFT

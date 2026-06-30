@@ -91,13 +91,6 @@
       return dist <= throwRange;
     },
 
-    // Is `attackerX` on the side the Bulwark's shield (facing) currently
-    // covers? true = frontal/shielded, false = the Bulwark's back is exposed.
-    bulwarkShielded(bulwarkX, bulwarkFacing, attackerX) {
-      const side = attackerX >= bulwarkX ? 1 : -1;
-      return side === bulwarkFacing;
-    },
-
     // Where a Stalker reappears after a blink: directly behind the player
     // relative to their current facing, offset by `blinkDist`, clamped into
     // the arena bounds. Pure — bounds/inputs are all passed in.
