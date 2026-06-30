@@ -888,6 +888,37 @@
   }
   JH.Ember = Ember;
 
+  // ---- Bulwark: slow "moving shield" super-elite ----
+  // Chases the player but only RE-FACES every `turnCooldown` seconds — that
+  // slow turn is the counter-play window (dash behind it before it pivots
+  // back). The shield-blocking itself lives in Player.doSpray (it needs to
+  // know the attacker's position, which the Bulwark doesn't track).
+  class Bulwark extends Enemy {
+    constructor(type, x, y) {
+      super(type, x, y);
+      this.turnTimer = 0;
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (this.turnTimer > 0) this.turnTimer -= dt;
+      const wantFacing = dx >= 0 ? 1 : -1;
+      if (wantFacing !== this.facing && this.turnTimer <= 0) {
+        this.facing = wantFacing;
+        this.turnTimer = d.turnCooldown;
+      }
+      if (dist > 18 && this.spawnGrace <= 0) {
+        this.x += (dx / (dist || 1)) * d.speed * dt;
+        this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.state = "walk";
+      } else {
+        this.state = "idle";
+      }
+    }
+  }
+  JH.Bulwark = Bulwark;
+
   // ============================================================== BOSS
   class Boss extends Enemy {
     constructor(x, y, def, type) {
@@ -2580,6 +2611,7 @@
     if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
+    if (type === "bulwark") return new Bulwark(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
