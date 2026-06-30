@@ -1024,6 +1024,50 @@
   }
   JH.DeployedShield = DeployedShield;
 
+  // ---- FirePatch: stationary burning ground zone ----
+  // Left behind by Fuse deaths, Smelt smashes, Slayer fireballs, and the
+  // Slayer's dash trail. Applies burn stacks to the player on overlap;
+  // extinguished by spraying directly (tracked in Player.doSpray, not here).
+  // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
+  class FirePatch {
+    constructor(x, y, radius, extinguishDur) {
+      this.x = x; this.y = y; this.z = 0;
+      this.radius = radius;
+      this.extinguishDur = extinguishDur;
+      this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
+      this.patchBurnT = 0;     // cooldown between burn-stack applications
+      this.dead = false; this.t = 0;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.patchBurnT > 0) this.patchBurnT -= dt;
+      const pl = game.player;
+      if (pl && pl.alive) {
+        const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
+        if (dist < this.radius + pl.bodyW * 0.5 && this.patchBurnT <= 0) {
+          pl.applyBurn(1);
+          this.patchBurnT = JH.FIRE.patchBurnInterval;
+        }
+      }
+      if (this.sprayProgress >= this.extinguishDur) this.dead = true;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      const sy = Geo.feetScreenY(this.y, 0);
+      const prog = this.sprayProgress / this.extinguishDur;
+      const r = Math.max(2, this.radius * (1 - prog));
+      const flick = 0.5 + 0.5 * Math.sin(this.t * 18);
+      ctx.save();
+      ctx.globalAlpha = (0.55 + 0.25 * flick) * (1 - prog * 0.4);
+      ctx.beginPath();
+      ctx.ellipse(Math.round(sx), Math.round(sy), r, r * 0.38, 0, 0, Math.PI * 2);
+      ctx.fillStyle = flick > 0.5 ? JH.PAL.firePatch : JH.PAL.firePatchHi;
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  JH.FirePatch = FirePatch;
+
   // ---- Stalker: fast "blink harasser" super-elite ----
   // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
   // blinks behind the player's facing, then winds up a strike (state

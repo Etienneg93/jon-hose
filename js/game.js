@@ -269,7 +269,7 @@
       JH.Upgrades.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -688,7 +688,7 @@
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
       p.alive = true;
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
@@ -858,6 +858,7 @@
       this.player.update(dt, this);
       for (const e of this.enemies) e.update(dt, this);
       for (const s of this.shields) s.update(dt);
+      for (const fp of this.firePatches) fp.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.particles = this.particles.filter((p) => p.update(dt));
@@ -896,6 +897,7 @@
       // --- cull dead enemies
       this.enemies = this.enemies.filter((e) => !e.dead);
       this.shields = this.shields.filter((s) => !s.dead);
+      this.firePatches = this.firePatches.filter((fp) => !fp.dead);
 
       // --- camera
       JH.Camera.follow(this.player);
@@ -1002,6 +1004,9 @@
 
         // planted Bulwark shields (static world props, drawn like the wall/gardens)
         for (const s of this.shields) s.draw(ctx, cam);
+
+        // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
+        for (const fp of this.firePatches) fp.draw(ctx, cam);
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
