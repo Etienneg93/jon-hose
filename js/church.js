@@ -15,6 +15,19 @@
 
   // Scene presentation timings (seconds) — render/feel, not balance.
   const WALK_SPEED = 78, FATHER_MAT = 0.5, EXIT_FADE = 0.6;
+  // Father Jon's solid-body block: a small circle (px) around his feet —
+  // the church's depth lane is only 40px deep (see layout.depthMin/Max), so
+  // even a modest box tolerance used to swallow most of the walkable band.
+  const FATHER_COLLIDE_R = 9;
+  // Father's manifest feet sit this many screen px above the floor row (a
+  // fixed visual offset, not a depth-lane position) and he's drawn this tall.
+  const FATHER_LIFT = 50, FATHER_H = 69;
+  // Convert that fixed screen offset into a world depth so the collision
+  // circle always sits where he's actually drawn, not just the lane's
+  // midpoint — these two used to drift apart and looked offset from his feet.
+  function fatherFootDepth(JH) {
+    return (JH.VIEW_H - 14) - FATHER_LIFT - JH.FLOOR_TOP;
+  }
 
   // ---- Player death sequence (pure timing -> {frame, riseY, alpha}) ----
   // `ds` is JH.CHURCH.deathSeq (or an equivalent object) — passed in rather than
@@ -79,7 +92,6 @@
       mirror: {},                                      // node id -> { side:"a"|"b", rank:int }
       elements: { earth: false, fire: false, air: false, water: true }, // water: Jon's own, open
       churchVisited: false,
-      ceremonyDone: {},                                // element -> bool
     };
   }
 
@@ -120,9 +132,6 @@
     }
     migrateBlessings(d);
     d.churchVisited = !!raw.churchVisited;
-    if (raw.ceremonyDone && typeof raw.ceremonyDone === "object") {
-      ELEMENTS.forEach((e) => { if (raw.ceremonyDone[e]) d.ceremonyDone[e] = true; });
-    }
     return d;
   }
 
@@ -143,9 +152,11 @@
 
     serialize() { return JSON.stringify(this.state); },
 
+    // No save system yet — every run starts Church meta-progression fresh.
+    // save() still writes localStorage so this can be re-wired once a real
+    // save system lands; load() just doesn't read it back yet.
     load() {
-      try { this.state = sanitize(JSON.parse(root.localStorage.getItem(KEY))); }
-      catch (e) { this.state = defaults(); }
+      this.state = defaults();
     },
     save() {
       try { root.localStorage.setItem(KEY, this.serialize()); } catch (e) { /* ignore */ }
@@ -210,10 +221,7 @@
       const JH = root.JH, L = JH.CHURCH.layout;
       const firstVisit = !this.state.churchVisited;
       this.state.churchVisited = true;
-      // Elements unlocked but not yet celebrated -> glow their shrine this visit.
-      const fresh = JH.CHURCH.shrines
-        .filter((s) => this.state.elements[s.element] && !this.state.ceremonyDone[s.element])
-        .map((s) => s.element);
+      JH.Music.setTrack("church");
       this.save();
       // Reset blessings each visit — no persistent save system yet.
       this.state.blessings = {};
@@ -223,7 +231,6 @@
         intro: true, introT: 0,
         fatherShown: false, fatherT: 0, fatherSpawnX: 0,
         dialogue: null,
-        freshShrines: fresh,
         activeStation: null,
         exiting: false, exitT: 0,
       };
@@ -256,15 +263,13 @@
           sc.dialogue.idx++; sc.t = 0;
           if (sc.dialogue.idx >= sc.dialogue.lines.length) {
             sc.dialogue = null;
-            // Seeing a freshly-redeemed shrine lit counts as its ceremony.
-            sc.freshShrines.forEach((el) => { this.state.ceremonyDone[el] = true; });
-            this.save();
           }
         }
         return;
       }
 
       // Free walk.
+      const preX = sc.jonX;
       const sp = WALK_SPEED * dt;
       sc.walking = false;
       if (In.held("right")) { sc.jonX += sp; sc.facing = 1; sc.walking = true; }
@@ -273,12 +278,24 @@
       if (In.held("up"))    { sc.jonY -= sp * 0.55; sc.walking = true; }
       sc.jonX = Math.max(12, Math.min(sc.jonX, L.length - 12));
       sc.jonY = Math.max(L.depthMin, Math.min(L.depthMax, sc.jonY));
+      // Father Jon is a solid body once materialized — block walking through
+      // his feet; step a little to either side (or up/down) to go around him.
+      if (sc.fatherShown) {
+        const dx = sc.jonX - sc.fatherSpawnX, dy = sc.jonY - sc.fatherY;
+        const dist = Math.hypot(dx, dy);
+        if (dist < FATHER_COLLIDE_R) {
+          const ang = dist > 0.01 ? Math.atan2(dy, dx) : (preX >= sc.fatherSpawnX ? 0 : Math.PI);
+          sc.jonX = sc.fatherSpawnX + Math.cos(ang) * FATHER_COLLIDE_R;
+          sc.jonY = Math.max(L.depthMin, Math.min(L.depthMax, sc.fatherY + Math.sin(ang) * FATHER_COLLIDE_R));
+        }
+      }
       if (sc.walking) sc.frame += dt * 8;
 
       // Father Jon materializes once you pass the threshold, and speaks.
       if (!sc.fatherShown && sc.jonX >= L.fatherX) {
         sc.fatherShown = true; sc.fatherT = 0; sc.t = 0;
-        sc.fatherSpawnX = sc.jonX + 50;
+        sc.fatherSpawnX = sc.jonX + 70;
+        sc.fatherY = Math.max(L.depthMin, Math.min(L.depthMax, fatherFootDepth(JH)));
         const lines = sc.firstVisit
           ? JH.CHURCH.sermon.first.slice()
           : [JH.CHURCH.sermon.repeat[(Math.random() * JH.CHURCH.sermon.repeat.length) | 0]];
@@ -315,16 +332,32 @@
       const camX = Math.max(0, Math.min(sc.jonX - VW / 2, L.length - VW));
       ctx.font = "8px monospace"; ctx.textAlign = "center";
 
+      // Backdrop — pans slower than the foreground (parallax) so the altar/
+      // shrines/stations feel like they're set against a real back wall
+      // rather than floating over a static poster. Image is scaled to fill
+      // VH height; BD_PARALLAX of the camera's travel is applied to its x,
+      // clamped so the image's edges are never exposed.
+      const BD_PARALLAX = 0.35;
+      const drawBackdrop = () => {
+        const img = ART.backdrop;
+        if (!(img && img._ready)) {
+          ctx.fillStyle = "#0a0c14"; ctx.fillRect(0, 0, VW, VH);
+          ctx.fillStyle = "#11141f"; ctx.fillRect(0, VH - 56, VW, 56);
+          return;
+        }
+        const dw = Math.round(VH * (img.naturalWidth / img.naturalHeight));
+        const maxPan = Math.max(0, dw - VW);
+        const bx = -Math.max(0, Math.min(maxPan, camX * BD_PARALLAX));
+        ctx.drawImage(img, Math.round(bx), 0, dw, VH);
+      };
+
       // ---- Intro sequence: backdrop fades in, then spirit descends to spawn. ----
       if (sc.intro) {
         const it = sc.introT;
         const backdropAlpha = Math.min(1, it / 1.5);
         ctx.fillStyle = "#000"; ctx.fillRect(0, 0, VW, VH);
         ctx.save(); ctx.globalAlpha = backdropAlpha;
-        blit(ctx, ART.backdrop, 0, 0, VW, VH, () => {
-          ctx.fillStyle = "#0a0c14"; ctx.fillRect(0, 0, VW, VH);
-          ctx.fillStyle = "#11141f"; ctx.fillRect(0, VH - 56, VW, 56);
-        });
+        drawBackdrop();
         ctx.restore();
 
         if (it > 1.2) {
@@ -352,10 +385,7 @@
       }
 
       // Backdrop.
-      blit(ctx, ART.backdrop, 0, 0, VW, VH, () => {
-        ctx.fillStyle = "#0a0c14"; ctx.fillRect(0, 0, VW, VH);
-        ctx.fillStyle = "#11141f"; ctx.fillRect(0, VH - 56, VW, 56);
-      });
+      drawBackdrop();
 
       // Altar centerpiece + the four elemental shrines flanking it.
       const ax = Math.round(L.altarX - camX);
@@ -363,18 +393,14 @@
       JH.CHURCH.shrines.forEach((s, i) => {
         const x = Math.round(L.altarX - 135 + i * 90 - camX);
         const lit = this.state.elements[s.element];
-        const fresh = sc.freshShrines.indexOf(s.element) >= 0;
         blit(ctx, lit ? ART.shrineLit : ART.shrineDim, x - 10, 48, 20, 44, () => {});
-        if (fresh) {
-          ctx.save(); ctx.globalAlpha = 0.5 * (0.5 + 0.5 * Math.sin(sc.t * 6));
-          ctx.fillStyle = "#d6f6ff"; ctx.fillRect(x - 11, 46, 22, 48); ctx.restore();
-        }
       });
 
       // Mirror node stations: pedestal + bobbing icon, rank pips; node detail when
       // near. Only UNLOCKED branches render (earth appears once Quake is redeemed).
       const ELCOL = { water: PAL.water, earth: "#e0902f", fire: "#ff8a3c", air: "#cfe9ff" };
       const maxR = this.mirrorMaxRank();
+      let nearStation = null;                  // captured, drawn after Jon/Father (stays on top)
       for (const st of L.stations) {
         if (!this.mirrorUnlocked(st.id)) continue;
         const def = this.mirrorDef(st.id); if (!def) continue;
@@ -395,16 +421,7 @@
           ctx.fillStyle = i < rank ? col : "#33384a";
           ctx.fillRect(x - 7 + i * 5, VH - 52 + bob, 3, 3);
         }
-        if (near) {
-          const side = def[this.mirrorSide(st.id)];
-          ctx.fillStyle = "#ffe9a8"; ctx.fillText(side.name + " — " + side.desc, x, VH - 84 + bob);
-          if (rank >= maxR) {
-            ctx.fillStyle = "#9be8ff"; ctx.fillText("MAX  ·  Shift: flip side", x, VH - 74 + bob);
-          } else {
-            ctx.fillStyle = this.canBuyMirror(st.id) ? "#9be8ff" : "#a66";
-            ctx.fillText(this.mirrorCost(st.id) + " Essence · E: raise · Shift: flip", x, VH - 74 + bob);
-          }
-        }
+        if (near) nearStation = { id: st.id, def, x, bob, rank };
       }
 
       // Portal at the end of the nave.
@@ -413,19 +430,22 @@
 
       // Ghost Jon — the real sprite, cyan-shifted and translucent.
       const sx = Math.round(sc.jonX - camX);
-      const ghostAlpha = sc.exiting ? Math.max(0, 0.65 - sc.exitT) : 0.65;
-      ctx.save();
-      ctx.globalAlpha = ghostAlpha;
-      ctx.filter = "sepia(1) hue-rotate(150deg) saturate(2.5) brightness(1.3)";
-      JH.Assets.draw(ctx, "jon", sx, jonScreenY, sc.facing, { state: sc.walking ? "walk" : "idle", frame: sc.frame | 0 });
-      ctx.restore();
+      const drawGhostJon = () => {
+        const ghostAlpha = sc.exiting ? Math.max(0, 0.65 - sc.exitT) : 0.65;
+        ctx.save();
+        ctx.globalAlpha = ghostAlpha;
+        ctx.filter = "sepia(1) hue-rotate(150deg) saturate(2.5) brightness(1.3)";
+        JH.Assets.draw(ctx, "jon", sx, jonScreenY, sc.facing, { state: sc.walking ? "walk" : "idle", frame: sc.frame | 0 });
+        ctx.restore();
+      };
 
-      // Father Jon: holy godray descends, then he manifests 50px above the floor just ahead of Jon.
-      if (sc.fatherShown) {
+      // Father Jon: holy godray descends, then he manifests above the floor just ahead of Jon.
+      const drawFatherJon = () => {
+        if (!sc.fatherShown) return;
         const ft = sc.fatherT;
-        const LIFT = 50, BEAM_DRP = 0.28, BEAM_FD = 0.35, FSTART = 0.18, FDUR = 0.45;
+        const BEAM_DRP = 0.28, BEAM_FD = 0.35, FSTART = 0.18, FDUR = 0.45;
         const fx = Math.round(sc.fatherSpawnX - camX);
-        const feetY = floorY - LIFT;
+        const feetY = floorY - FATHER_LIFT;
 
         // Beam grows from y=0 down to feetY, then fades out.
         const beamProg = Math.min(1, ft / BEAM_DRP);
@@ -448,13 +468,25 @@
         // Father Jon fades in as beam lands.
         const a = ft < FSTART ? 0 : Math.min(1, (ft - FSTART) / FDUR);
         if (a > 0) {
+          // Faint pulsing halo behind him — independent of the fade-in alpha
+          // so it keeps breathing once he's fully manifest.
+          const gy = feetY - FATHER_H * 0.55;
+          ctx.save();
+          ctx.globalAlpha = a * (0.3 + 0.18 * Math.sin(sc.t * 2.4));
+          const glow = ctx.createRadialGradient(fx, gy, 2, fx, gy, FATHER_H * 0.85);
+          glow.addColorStop(0, "#fff8d6");
+          glow.addColorStop(1, "rgba(255,248,214,0)");
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(fx, gy, FATHER_H * 0.85, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+
           ctx.save(); ctx.globalAlpha = a;
           const npc = ART.fatherJonNpc;
           if (npc && npc._ready) {
-            const scale = 53 / npc.naturalHeight;
+            const scale = FATHER_H / npc.naturalHeight;
             const dw = Math.round(npc.naturalWidth * scale);
             ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(npc, Math.round(fx - dw / 2), feetY - 53, dw, 53);
+            ctx.drawImage(npc, Math.round(fx - dw / 2), feetY - FATHER_H, dw, FATHER_H);
           } else {
             ctx.fillStyle = "#2a2440"; ctx.fillRect(fx - 8, feetY - 48, 16, 48);
             ctx.fillStyle = "#f1c08a"; ctx.fillRect(fx - 5, feetY - 54, 10, 8);
@@ -462,8 +494,24 @@
           }
           ctx.restore();
         }
-      } else {
-        ctx.fillStyle = "#7f8aa0"; ctx.fillText("→", sx + 18, floorY - 30);
+      };
+
+      // Depth-sort: whoever's further back (lower lane y) paints first, so
+      // passing Father Jon doesn't always clip behind him.
+      if (sc.fatherShown && sc.jonY > sc.fatherY) { drawFatherJon(); drawGhostJon(); }
+      else { drawGhostJon(); drawFatherJon(); }
+
+      // Pedestal detail text — drawn last so Jon/Father never paint over it.
+      if (nearStation) {
+        const { id, def, x, bob, rank } = nearStation;
+        const side = def[this.mirrorSide(id)];
+        ctx.fillStyle = "#ffe9a8"; ctx.fillText(side.name + " — " + side.desc, x, VH - 84 + bob);
+        if (rank >= maxR) {
+          ctx.fillStyle = "#9be8ff"; ctx.fillText("MAX  ·  Shift: flip side", x, VH - 74 + bob);
+        } else {
+          ctx.fillStyle = this.canBuyMirror(id) ? "#9be8ff" : "#a66";
+          ctx.fillText(this.mirrorCost(id) + " Essence · E: raise · Shift: flip", x, VH - 74 + bob);
+        }
       }
 
       // Holy Essence readout — always visible so the currency reads.

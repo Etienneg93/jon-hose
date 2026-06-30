@@ -101,8 +101,9 @@
     fadeDur: 0.3,                 // seconds — quick "cut-ish" fade
     _timer: null,                 // active fade interval handle
     tracks: {
-      level: { src: "audio/jon-hose-main.mp3", el: null, gain: 1 },
-      boss:  { src: "audio/jon-hose-rush.mp3", el: null, gain: 0 },
+      level:  { src: "audio/jon-hose-main.mp3", el: null, gain: 1 },
+      boss:   { src: "audio/jon-hose-rush.mp3", el: null, gain: 0 },
+      church: { src: "audio/church-of-the-holy-hose.mp3", el: null, gain: 0 },
     },
 
     init() {
@@ -168,14 +169,15 @@
       }, 16);
     },
 
-    // Back to the level theme at full gain; stop/rewind boss; cancel fades.
+    // Back to the level theme at full gain; stop/rewind every other track; cancel fades.
     reset() {
       if (this._timer) { clearInterval(this._timer); this._timer = null; }
       this.current = "level";
-      this.tracks.level.gain = 1;
-      this.tracks.boss.gain = 0;
-      const b = this.tracks.boss.el;
-      if (b && !b.paused) { try { b.currentTime = 0; } catch (e) {} b.pause(); }
+      for (const name in this.tracks) {
+        const t = this.tracks[name];
+        t.gain = name === "level" ? 1 : 0;
+        if (name !== "level" && t.el && !t.el.paused) { try { t.el.currentTime = 0; } catch (e) {} t.el.pause(); }
+      }
       this.apply();
     },
 
@@ -910,7 +912,7 @@
   {
     const makeImg = (src) => JH.Loader.img(src);
     JH.ChurchArt = {
-      backdrop:          makeImg("sprites/church/Backdrop2.jpg"),
+      backdrop:          makeImg("sprites/church/backdrop.jpg"),
       altar:             makeImg("sprites/church/altar.png"),
       shrineDim:         makeImg("sprites/church/shrine_dim.png"),
       shrineLit:         makeImg("sprites/church/shrine_lit.png"),
