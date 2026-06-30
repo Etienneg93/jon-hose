@@ -27,6 +27,7 @@
   const AudioFX = {
     ctx: null,
     enabled: true,
+    _files: {},   // cached <audio> elements, keyed by src, for playFile()
     init() {
       if (this.ctx) return;
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
@@ -70,6 +71,22 @@
         osc.connect(g);
         osc.start(t); osc.stop(t + def.dur);
       }
+    },
+    // One-shot playback of a recorded sound file (as opposed to the synth
+    // blips above). Respects the shared mute/volume controls from Music.
+    playFile(src, gain) {
+      const M = JH.Music;
+      if (M && M.muted) return;
+      const vol = M ? M.volume : 1;
+      let el = this._files[src];
+      if (!el) {
+        try { el = new Audio(src); el.preload = "auto"; } catch (e) { return; }
+        this._files[src] = el;
+      }
+      const node = el.cloneNode();
+      node.volume = Math.max(0, Math.min(1, (gain == null ? 1 : gain) * vol));
+      const p = node.play();
+      if (p && p.catch) p.catch(() => {});
     },
   };
   JH.AudioFX = AudioFX;
@@ -296,11 +313,32 @@
     _jonImgs[name] = JH.Loader.img(`sprites/jon/${name}.png`);
   });
 
+  // Death animation: a single horizontal sheet, 8 frames of 146x240 each.
+  const _jonDeathSheet = JH.Loader.img("sprites/jon/death.png");
+  const JON_DEATH_FRAMES = 8, JON_DEATH_FW = 146, JON_DEATH_FH = 240;
+
   const JON_H = 53;  // target display height in logical pixels
 
   Assets.register("jon", (p, opt, ctx, x, y, facing) => {
-    const f = (opt.frame | 0) % 5;
     const state = opt.state || "idle";
+
+    if (state === "death") {
+      const img = _jonDeathSheet;
+      if (!img || !img.complete || !img.naturalWidth) return;
+      const df = Math.max(0, Math.min(JON_DEATH_FRAMES - 1, opt.frame | 0));
+      const scale = JON_H / JON_DEATH_FH;
+      const dw = Math.round(JON_DEATH_FW * scale);
+      ctx.save();
+      ctx.translate(x, y);
+      if (facing < 0) ctx.scale(-1, 1);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, df * JON_DEATH_FW, 0, JON_DEATH_FW, JON_DEATH_FH,
+        -Math.round(dw / 2), -JON_H, dw, JON_H);
+      ctx.restore();
+      return;
+    }
+
+    const f = (opt.frame | 0) % 5;
     if (opt.hurt && (f & 1)) return;
 
     const imgName = state === "fire" ? "fire" : state === "walk" ? `walk${f}` : "idle";

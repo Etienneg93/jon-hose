@@ -736,7 +736,7 @@
       this.diedWave = this.waveIndex;        // the wave to re-arm on return
       this.state = "playerDeathSeq";
       this.deathSeqT = 0;
-      this.audio.play("die");
+      this.audio.playFile("audio/effects/jon-death.mp3", 0.9);
       this.shake(8);
       // Capture screen position for death animation overlay.
       this.deathSx = Math.round(this.player.x - JH.Camera.x);
@@ -1002,16 +1002,12 @@
         for (const e of actors) {
           if (!e.draw) continue;
           if (e === this.player && this.state === "playerDeathSeq") {
-            // Player whiten: body stays in place and turns pure white over 0.6s.
-            const t = this.deathSeqT;
-            if (t < 0.6) {
-              const w = t / 0.6;
-              ctx.save();
-              ctx.filter = `brightness(${(1 + w * 9).toFixed(1)}) saturate(${Math.max(0, 1 - w * 2).toFixed(2)})`;
-              e.draw(ctx, cam);
-              ctx.restore();
-            }
-            // After 0.6s the body is gone — only the rising ghost remains (drawn in overlay).
+            // Corpse: collapses (frames 0->7), then stays on the ground for the
+            // rest of the sequence while the ghost (drawn in the overlay below)
+            // rises out of it.
+            const df = JH.Church.deathCorpseFrame(this.deathSeqT, JH.CHURCH.deathSeq);
+            JH.Assets.shadow(ctx, this.deathSx, this.deathSy, this.player.stats.bodyW * 0.7);
+            JH.Assets.draw(ctx, "jon", this.deathSx, this.deathSy, this.deathFacing, { state: "death", frame: df });
           } else if (e.dying) {
             const t = this.deathSeqT;
             ctx.save();
@@ -1053,32 +1049,25 @@
       }
       ctx.restore();
 
-      // Player death sequence: body whitens → cyan ghost rises → beams off → fade to black.
+      // Player death sequence: corpse settles → ghost lifts out of it, stands up,
+      // drifts/beams off → fade to black.
       if (this.state === "playerDeathSeq") {
         const t = this.deathSeqT, ctx2 = this.ctx;
         const sx = this.deathSx, sy = this.deathSy, facing = this.deathFacing;
+        const ds = JH.CHURCH.deathSeq;
 
-        // Ghost: starts rising at 0.5s, slow float then snaps into a beam.
-        if (t > 0.5) {
-          const ft = t - 0.5;
-          const slowEnd = 0.8;   // seconds of slow drift
-          let rise = ft <= slowEnd
-            ? ft * 28                                      // slow: 28 px/s
-            : slowEnd * 28 + Math.pow(ft - slowEnd, 2) * 480; // accelerating beam
-          const ghostAlpha = Math.max(0, 1 - Math.max(0, ft - slowEnd) / 0.4);
-          if (ghostAlpha > 0) {
-            ctx2.save();
-            ctx2.globalAlpha = ghostAlpha * 0.82;
-            ctx2.filter = "sepia(1) hue-rotate(150deg) saturate(3) brightness(2.2)";
-            JH.Assets.draw(ctx2, "jon", sx, sy - rise, facing, { state: "idle", frame: 0 });
-            ctx2.restore();
-          }
+        const ghost = JH.Church.deathGhostState(t, ds);
+        if (ghost && ghost.alpha > 0) {
+          ctx2.save();
+          ctx2.globalAlpha = ghost.alpha;
+          ctx2.filter = "sepia(1) hue-rotate(150deg) saturate(3) brightness(2.2)";
+          JH.Assets.draw(ctx2, "jon", sx, sy - ghost.riseY, facing, { state: "death", frame: ghost.frame });
+          ctx2.restore();
         }
 
-        // Fade to black: starts at 1.6s, over 0.7s.
-        if (t > 1.6) {
-          const a = Math.min(1, (t - 1.6) / 0.7);
-          ctx2.save(); ctx2.globalAlpha = a; ctx2.fillStyle = "#000";
+        const fadeAlpha = JH.Church.deathScreenFadeAlpha(t, ds);
+        if (fadeAlpha > 0) {
+          ctx2.save(); ctx2.globalAlpha = fadeAlpha; ctx2.fillStyle = "#000";
           ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
         }
       }
