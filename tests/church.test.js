@@ -88,3 +88,72 @@ test("save() then load() round-trips state through a stubbed localStorage", () =
   assert.strictEqual(Church.state.elements.earth, true);
   delete globalThis.localStorage;
 });
+
+const DS = {
+  fallEnd: 0.6, lingerDur: 0.4, riseDur: 0.35, materializeDur: 0.15,
+  standDur: 0.45, driftDur: 0.3, beamFadeDur: 0.4, screenFadeDelay: 0.3,
+  screenFadeDur: 0.7, riseHeight: 16, ghostAlphaMax: 0.82, total: 3.2,
+};
+const approx = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} !== ${b}`);
+
+test("deathCorpseFrame plays 0->7 over fallEnd, then holds on 7 for the rest of the sequence", () => {
+  assert.strictEqual(Church.deathCorpseFrame(0, DS), 0);
+  assert.strictEqual(Church.deathCorpseFrame(0.3, DS), 4);     // 0.3/0.6*8 = 4
+  assert.strictEqual(Church.deathCorpseFrame(0.6, DS), 7);     // settled
+  assert.strictEqual(Church.deathCorpseFrame(1.0, DS), 7);     // linger
+  assert.strictEqual(Church.deathCorpseFrame(3.0, DS), 7);     // corpse stays put till the end
+});
+
+test("deathGhostState is null until the corpse has settled and lingered", () => {
+  assert.strictEqual(Church.deathGhostState(0.5, DS), null);   // mid-collapse
+  assert.strictEqual(Church.deathGhostState(1.0, DS), null);   // exactly ghostStart (0.6+0.4)
+});
+
+test("deathGhostState rise-out phase: still frame 7, rises out of the corpse, fades in", () => {
+  const s = Church.deathGhostState(1.05, DS);                  // 0.05s into riseDur (0.35)
+  assert.strictEqual(s.frame, 7);
+  approx(s.riseY, (0.05 / 0.35) * 16);
+  approx(s.alpha, Math.min(1, 0.05 / 0.15) * 0.82);
+});
+
+test("deathGhostState rise-out -> stand-up boundary is continuous (no visual pop)", () => {
+  const end = Church.deathGhostState(1.35, DS);                // riseEnd = 1.0+0.35
+  assert.strictEqual(end.frame, 7);
+  approx(end.riseY, 16);
+  approx(end.alpha, 0.82);
+});
+
+test("deathGhostState stand-up phase: frame counts 7->0, holds at riseHeight", () => {
+  const mid = Church.deathGhostState(1.5975, DS);              // 55% through standDur (0.45)
+  assert.strictEqual(mid.frame, 3);                            // step = floor(0.55*8) = 4 -> 7-4=3
+  approx(mid.riseY, 16);
+  approx(mid.alpha, 0.82);
+});
+
+test("deathGhostState stand-up -> ascend boundary is continuous", () => {
+  const end = Church.deathGhostState(1.8, DS);                 // standEnd = 1.35+0.45
+  assert.strictEqual(end.frame, 0);
+  approx(end.riseY, 16);
+  approx(end.alpha, 0.82);
+});
+
+test("deathGhostState ascend phase: slow drift then accelerating beam, fading out", () => {
+  const slow = Church.deathGhostState(2.1, DS);                // beamStart, at=driftDur=0.3
+  assert.strictEqual(slow.frame, 0);
+  approx(slow.riseY, 16 + 0.3 * 28);
+  approx(slow.alpha, 0.82);
+
+  const mid = Church.deathGhostState(2.4, DS);                 // at=0.6
+  approx(mid.riseY, 16 + 0.3 * 28 + Math.pow(0.3, 2) * 480);
+  approx(mid.alpha, Math.max(0, 1 - 0.3 / 0.4) * 0.82);
+
+  const gone = Church.deathGhostState(2.7, DS);                // at=0.9, fully faded
+  approx(gone.alpha, 0);
+});
+
+test("deathScreenFadeAlpha stays 0 until fadeStart, then ramps to 1 over screenFadeDur", () => {
+  assert.strictEqual(Church.deathScreenFadeAlpha(2.0, DS), 0);
+  assert.strictEqual(Church.deathScreenFadeAlpha(2.4, DS), 0);  // fadeStart = 2.1+0.3
+  approx(Church.deathScreenFadeAlpha(2.75, DS), 0.5);
+  assert.strictEqual(Church.deathScreenFadeAlpha(3.5, DS), 1);  // clamped
+});

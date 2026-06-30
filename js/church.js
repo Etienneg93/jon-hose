@@ -16,6 +16,52 @@
   // Scene presentation timings (seconds) — render/feel, not balance.
   const WALK_SPEED = 78, FATHER_MAT = 0.5, EXIT_FADE = 0.6;
 
+  // ---- Player death sequence (pure timing -> {frame, riseY, alpha}) ----
+  // `ds` is JH.CHURCH.deathSeq (or an equivalent object) — passed in rather than
+  // read from a global so this stays testable without a DOM/window.
+
+  function deathCorpseFrame(t, ds) {
+    if (t < ds.fallEnd) return Math.max(0, Math.min(7, Math.floor((t / ds.fallEnd) * 8)));
+    return 7; // settled: corpse stays on the ground for the rest of the sequence
+  }
+
+  function deathGhostState(t, ds) {
+    const ghostStart = ds.fallEnd + ds.lingerDur;
+    if (t <= ghostStart) return null;
+
+    const riseEnd = ghostStart + ds.riseDur;
+    const standEnd = riseEnd + ds.standDur;
+    const alphaMax = ds.ghostAlphaMax;
+
+    if (t <= riseEnd) {
+      // Still in the corpse's final (kneeling) pose, lifting straight up out of it.
+      const gt = t - ghostStart;
+      const k = gt / ds.riseDur;
+      return { frame: 7, riseY: k * ds.riseHeight, alpha: Math.min(1, gt / ds.materializeDur) * alphaMax };
+    }
+    if (t <= standEnd) {
+      // Hovering at riseHeight, playing the collapse frames in reverse (7 -> 0).
+      const k = (t - riseEnd) / ds.standDur;
+      const step = Math.min(7, Math.floor(k * 8));
+      return { frame: 7 - step, riseY: ds.riseHeight, alpha: alphaMax };
+    }
+    // Standing (frame 0): slow drift, then an accelerating beam upward, fading out.
+    const at = t - standEnd;
+    const extraRise = at <= ds.driftDur
+      ? at * 28
+      : ds.driftDur * 28 + Math.pow(at - ds.driftDur, 2) * 480;
+    const alpha = Math.max(0, 1 - Math.max(0, at - ds.driftDur) / ds.beamFadeDur) * alphaMax;
+    return { frame: 0, riseY: ds.riseHeight + extraRise, alpha };
+  }
+
+  function deathScreenFadeAlpha(t, ds) {
+    const standEnd = ds.fallEnd + ds.lingerDur + ds.riseDur + ds.standDur;
+    const beamStart = standEnd + ds.driftDur;
+    const fadeStart = beamStart + ds.screenFadeDelay;
+    if (t <= fadeStart) return 0;
+    return Math.min(1, (t - fadeStart) / ds.screenFadeDur);
+  }
+
   function wrapText(ctx, text, x, y, maxW, lh) {
     const words = text.split(" "); let line = "", yy = y;
     for (const w of words) {
@@ -91,6 +137,9 @@
     state: defaults(),
     defaults,
     sanitize,
+    deathCorpseFrame,
+    deathGhostState,
+    deathScreenFadeAlpha,
 
     serialize() { return JSON.stringify(this.state); },
 
