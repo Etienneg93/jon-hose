@@ -281,6 +281,7 @@
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.checkpointWave = 0;
       this.elapsed = 0; this.kills = 0; this.shakeAmt = 0;
+      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
       this.showScreen("hud");
@@ -519,6 +520,12 @@
     },
     onEnemyKilled(e) {
       this.kills++;
+      // GUSH combo: chained kills within a window. Self-contained feedback only
+      // (display + a milestone shake) — never affects damage/economy.
+      this.combo++;
+      this.comboTimer = JH.COMBO_WINDOW;
+      this.comboFlash = 0.18;
+      if (this.combo >= 3 && this.combo % 5 === 0) this.shake(3);  // milestone pop
       if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
     },
 
@@ -684,6 +691,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
+      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false;
@@ -831,6 +839,13 @@
       }
 
       this.elapsed += dt;
+
+      // GUSH combo decay (only ticks during live play, frozen during hitstop).
+      if (this.comboFlash > 0) this.comboFlash = Math.max(0, this.comboFlash - dt);
+      if (this.comboTimer > 0) {
+        this.comboTimer -= dt;
+        if (this.comboTimer <= 0) { this.combo = 0; this.comboTimer = 0; }
+      }
 
       // --- entities
       this.player.update(dt, this);
@@ -1033,6 +1048,8 @@
         // boss health bar (hidden while death sequence plays)
         const boss = this.enemies.find((e) => e.isBoss && !e.dying);
         if (boss) this.drawBossBar(ctx, boss);
+
+        if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
       }
       ctx.restore();
 
@@ -1395,6 +1412,27 @@
       ctx.fillStyle = "#fff";
       ctx.font = "6px monospace";
       ctx.fillText(((boss.def && boss.def.name) || "BOSS").toUpperCase(), x, y - 4);
+    },
+
+    // GUSH combo readout — scales + pulses with the chain, fades as it expires.
+    // Purely cosmetic: never feeds back into damage or economy.
+    drawCombo(ctx) {
+      const n = this.combo;
+      const frac = JH.COMBO_WINDOW > 0 ? clamp(this.comboTimer / JH.COMBO_WINDOW, 0, 1) : 0;
+      const col = n >= 20 ? "#ff5a5a" : n >= 10 ? JH.PAL.suds : JH.PAL.waterHi;
+      const pop = 1 + this.comboFlash * 1.6;                 // brief scale punch per kill
+      const size = Math.min(22, 9 + n * 0.4) * pop;
+      const alpha = Math.min(1, 0.35 + frac * 0.65);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.textAlign = "right";
+      ctx.fillStyle = col;
+      ctx.font = "bold " + size.toFixed(0) + "px monospace";
+      ctx.fillText("GUSH x" + n, JH.VIEW_W - 8, 40);
+      ctx.globalAlpha = alpha * 0.8;                          // thin expiry bar
+      ctx.fillRect(JH.VIEW_W - 8 - 46 * frac, 44, 46 * frac, 2);
+      ctx.restore();
+      ctx.textAlign = "left";
     },
   };
 

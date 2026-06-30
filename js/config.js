@@ -188,6 +188,9 @@
     pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
   };
 
+  // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
+  JH.COMBO_WINDOW = 2.5;
+
   // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
     // Death-sequence timeline (seconds): collapse -> fade -> spirit -> Church.
