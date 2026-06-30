@@ -896,26 +896,76 @@
   }
   JH.Ember = Ember;
 
-  // ---- Bulwark: slow "moving shield" super-elite ----
-  // Chases the player but only RE-FACES every `turnCooldown` seconds — that
-  // slow turn is the counter-play window (dash behind it before it pivots
-  // back). The shield-blocking itself lives in Player.doSpray (it needs to
-  // know the attacker's position, which the Bulwark doesn't track).
+  // ---- Bulwark: "shield trooper" super-elite ----
+  // Body is NEVER a blocker — it always takes full damage, in every phase.
+  // It periodically plants its shield as a separate, stationary
+  // DeployedShield (above) that hard-blocks spray, then fights shieldless
+  // until it sprints back to reclaim it. See docs/superpowers/specs/
+  // 2026-06-30-bulwark-shield-rework-design.md.
   class Bulwark extends Enemy {
     constructor(type, x, y) {
       super(type, x, y);
-      this.turnTimer = 0;
+      this.hasShield = true;   // true: can throw; false: shieldless, must retrieve
+      this.shield = null;      // its own DeployedShield instance while deployed
+      this.shieldlessTimer = 0;
+    }
+    die(game) {
+      if (this.shield) { this.shield.dead = true; this.shield = null; }
+      super.die(game);
     }
     think(dt, game) {
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
-      if (this.turnTimer > 0) this.turnTimer -= dt;
-      const wantFacing = dx >= 0 ? 1 : -1;
-      if (wantFacing !== this.facing && this.turnTimer <= 0) {
-        this.facing = wantFacing;
-        this.turnTimer = d.turnCooldown;
+      this.facing = dx >= 0 ? 1 : -1;
+
+      if (this.state === "retrieve") {
+        const sx = this.shield ? this.shield.x - this.x : 0;
+        const sy = this.shield ? this.shield.y - this.y : 0;
+        const sdist = Math.hypot(sx, sy);
+        if (!this.shield || this.shield.dead || sdist <= d.pickupRadius) {
+          if (this.shield) this.shield.dead = true;
+          this.shield = null;
+          this.hasShield = true;
+          this.state = "walk";
+          return;
+        }
+        this.x += (sx / sdist) * d.speed * d.retrieveSpeedMult * dt;
+        this.y += (sy / sdist) * d.speed * d.retrieveSpeedMult * dt * 0.7;
+        return;
       }
+
+      if (!this.hasShield) {
+        this.shieldlessTimer -= dt;
+        if (this.shieldlessTimer <= 0) { this.state = "retrieve"; return; }
+        if (dist > 18 && this.spawnGrace <= 0) {
+          this.x += (dx / (dist || 1)) * d.speed * dt;
+          this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
+          this.state = "walk";
+        } else {
+          this.state = "idle";
+        }
+        return;
+      }
+
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          const shield = new JH.DeployedShield(this.x, this.y, this);
+          game.shields.push(shield);
+          this.shield = shield;
+          this.hasShield = false;
+          this.shieldlessTimer = d.shieldlessDur;
+          this.state = "walk";
+        }
+        return;
+      }
+
+      if (this.spawnGrace <= 0 && JH.Balance.bulwarkShouldThrow(this.x, this.y, pl.x, pl.y, d.throwRange)) {
+        this.windTimer = d.throwWind; this.state = "wind";
+        return;
+      }
+
       if (dist > 18 && this.spawnGrace <= 0) {
         this.x += (dx / (dist || 1)) * d.speed * dt;
         this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
