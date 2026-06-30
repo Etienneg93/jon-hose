@@ -485,6 +485,23 @@
     p(1, 19, 2, 2, "#111");
   });
 
+  // ============================ FURNACE ================================
+  // Procedural placeholder. Bulky golem. `opt.heated` = glowing red vent phase.
+  Assets.register("furnace", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
+    if (opt.hurt && (f & 1)) return;
+    const hot = !!opt.heated;
+    p(-8 + ls, 0, 7, 12, PAL.furnaceDk);
+    p(1 - ls, 0, 7, 12, PAL.furnaceDk);
+    p(-11, 12, 22, 18, hot ? PAL.furnaceHot : PAL.furnaceBody);
+    p(-11, 12, 22, 3, PAL.furnaceDk);
+    p(-11, 24, 22, 4, hot ? PAL.smeltGlow : PAL.furnaceDk);
+    p(-5, 30, 10, 9, PAL.skin);
+    p(-5, 34, 10, 3, PAL.furnaceDk);
+    p(1, 32, 2, 2, "#111");
+  });
+
   // ========================== STALKER ==================================
   // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
   // post-blink wind-up arm.

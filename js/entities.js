@@ -419,6 +419,7 @@
         const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
         const dmg = S.sprayDamage * dmgScale * mult * pressureMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
+        if (e.onSprayHit) e.onSprayHit(dt, game);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
           burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
@@ -2843,6 +2844,93 @@
   }
   JH.Smelt = Smelt;
 
+  // ---- Furnace: rhythm-based curated elite ----
+  // Sustained spray causes it to heat up (reduced damage, visual glow), then
+  // vent steam (knockback + burn). Burst-spray rhythm is the counter. No elite-
+  // ramp (`tough: false` in its wave entry). Extends Enemy, adds onSprayHit().
+  class Furnace extends Enemy {
+    constructor(type, x, y) {
+      super(type, x, y);
+      this.continuousSprayT = 0;   // resets if spray pauses > 0.3s
+      this.lastSprayT = -99;       // game time of last onSprayHit call
+      this.heated = false;         // true during the vent wind-up
+      this.heatT = -1;             // vent wind-up countdown (-1 = inactive)
+      this.ventCdT = 0;            // post-vent cooldown
+    }
+    onSprayHit(dt, game) {
+      const d = this.def;
+      this.lastSprayT = this.t;
+      this.continuousSprayT += dt;
+      if (this.heatT >= 0) return;  // already in vent wind-up, don't re-trigger
+      if (JH.Balance.furnaceShouldVent(this.continuousSprayT, d.heatThreshold, this.ventCdT)) {
+        this.heatT = d.ventWind;
+        this.heated = true;
+      }
+    }
+    takeDamage(dmg, game, dirX, knock) {
+      // Apply heatedWaterMult when in the heated phase. `dmg` here is the raw
+      // spray damage computed by doSpray; we scale it down for the vent window.
+      const mult = this.heated ? this.def.heatedWaterMult : 1;
+      super.takeDamage(dmg * mult, game, dirX, knock);
+    }
+    update(dt, game) {
+      super.update(dt, game);   // base Enemy update (physics, contact, animate)
+      const d = this.def;
+      if (this.ventCdT > 0) this.ventCdT -= dt;
+      // If spray stopped for > 0.3s, reset heat build-up.
+      if (this.t - this.lastSprayT > 0.3) this.continuousSprayT = 0;
+      // Vent wind-up countdown.
+      if (this.heatT >= 0) {
+        this.heatT -= dt;
+        if (this.heatT <= 0) {
+          // Vent fires.
+          const pl = game.player;
+          const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
+          if (dist < this.bodyW * 4) {
+            const dir = pl.x >= this.x ? 1 : -1;
+            pl.applyKnockback(dir, d.ventKnock);
+            pl.applyBurn(d.ventBurnStacks);
+            burst(game, this.x, this.y, 10, "#d0e8ff", 14, { speed: 140, life: 0.4, up: 60 });
+            game.shake(4);
+          }
+          this.heatT = -1;
+          this.heated = false;
+          this.continuousSprayT = 0;
+          this.ventCdT = d.ventCd;
+        }
+      }
+    }
+    think(dt, game) {
+      // Slow melee chaser — inherits default Enemy.think() (no override needed).
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      if (dist > 18 && this.spawnGrace <= 0) {
+        this.x += (dx / (dist || 1)) * d.speed * dt;
+        this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.state = "walk";
+      } else { this.state = "idle"; }
+    }
+  }
+  JH.Furnace = Furnace;
+
+  Furnace.prototype.draw = function(ctx, cam) {
+    const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+    Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
+    Assets.draw(ctx, "furnace", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
+      state: this.state, frame: this.frame, t: this.t,
+      hurt: this.flashTimer > 0, hurtAlpha: this.flashTimer / 0.18,
+      heated: this.heated,
+      scale: 1,
+    });
+    if (this.hp < this.maxHp) {
+      const w = this.bodyW + 4;
+      const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, w, 3);
+      ctx.fillStyle = "#ff5a5a"; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 3);
+    }
+  };
+
   // ---- Fuse: fast rusher, fire-patch death burst ----
   // Dies in ~1.5s at full Jon DPS — the mechanic is WHERE it dies. Death
   // creates a FirePatch + applies 1 burn stack if Jon is in deathBurnRange.
@@ -2866,6 +2954,7 @@
     if (type === "stalker") return new Stalker(type, x, y);
     if (type === "smelt") return new Smelt(type, x, y);
     if (type === "fuse") return new Fuse(type, x, y);
+    if (type === "furnace") return new Furnace(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
