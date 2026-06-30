@@ -203,6 +203,9 @@
   // Reusable offscreen canvas for the hit-flash white-silhouette effect.
   // Sized to fit the largest entity (WallBoss: ~142 × 178 px). The anchor
   // point (ox, oy) matches the feet-baseline convention used by every painter.
+  // Capped below 1 so a continuous hose stream (which re-arms the flash every
+  // frame) tints rather than fully whites out the sprite.
+  const HURT_FLASH_MAX_ALPHA = 0.45;
   const _hurtOC = document.createElement("canvas");
   _hurtOC.width = 220; _hurtOC.height = 300;
   const _hurtOC2d = _hurtOC.getContext("2d");
@@ -253,7 +256,7 @@
         _hurtOC2d.fillRect(0, 0, 220, 300);
         _hurtOC2d.globalCompositeOperation = "source-over";
         // Stamp silhouette onto main canvas.
-        ctx.globalAlpha = opt.hurtAlpha;
+        ctx.globalAlpha = Math.min(opt.hurtAlpha, HURT_FLASH_MAX_ALPHA);
         ctx.drawImage(_hurtOC, x - ox, y - oy);
       }
       ctx.restore();
