@@ -76,6 +76,11 @@
     pill: "#ff77ff",
     bulwark: "#5a6b7a", bulwarkDk: "#33404c", bulwarkShield: "#cfe9ff",
     stalker: "#8a2f5a", stalkerDk: "#591b3a",
+    slayerBody: "#3a2010", slayerDk: "#1e0f00", slayerEmber: "#ff6010",
+    smelt: "#5a3020",      smeltDk: "#3a1a08",  smeltGlow: "#ff8030",
+    fuse: "#ff4810",       fuseDk: "#cc2800",
+    furnaceBody: "#4a3020",furnaceDk: "#2a1808",furnaceHot: "#ff6820",
+    firePatch: "#ff6010",  firePatchHi: "#ffd040",
   };
 
   // ---- Player base stats (pre-upgrade) --------------------------------
@@ -172,6 +177,33 @@
       strikeWind: 0.3, strikeDmg: 14, strikeRange: 22,
       suds: 22, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
     },
+    // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
+    // is a curated elite (no `tough` flag in its wave entry).
+    smelt: {
+      name: "Smelt", hp: 80, speed: 20, touchDmg: 10, contactCd: 1.0,
+      waterMult: 0.5,          // water flashes off dense/hot material
+      smashWind: 0.8, smashCd: 2.8,
+      smashPatchRadius: 32, smashPatchDur: 2.0,
+      suds: 20, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
+    },
+    fuse: {
+      name: "Fuse", hp: 28, speed: 78, touchDmg: 8, contactCd: 0.6,
+      waterMult: 1.0,
+      deathPatchRadius: 22, deathPatchDur: 0.8,
+      deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
+      suds: 12, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
+    },
+    furnace: {
+      name: "Furnace", hp: 320, speed: 18, touchDmg: 14, contactCd: 1.0,
+      waterMult: 1.0,          // normal phase: full spray damage
+      heatedWaterMult: 0.2,    // heated phase: 20% spray damage
+      heatThreshold: 1.5,      // continuous spray-seconds before heating triggers
+      ventWind: 0.5,           // delay after heat threshold before vent fires (s)
+      ventKnock: 180,          // knockback impulse on vent (px/s)
+      ventBurnStacks: 1,       // burn stacks applied by vent
+      ventCd: 4.0,             // post-vent cooldown before it can heat again
+      suds: 55, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",
+    },
   };
 
   JH.BOSS = {
@@ -214,6 +246,14 @@
 
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
+
+  // ---- Fire element tunables (Burn DoT + FirePatch) ---------------------
+  JH.FIRE = {
+    burnDpsPerStack: 4,      // hp/s per stack (3 stacks = 12 hp/s for burnDuration)
+    burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
+    maxBurnStacks: 3,
+    patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
+  };
 
   // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
@@ -368,6 +408,38 @@
     stompWind: 0.8, stompDmg: 26, stompRadius: 36,   // direct hit around his feet
     waveDmg: 18, waveSpeed: 150, waveRange: 340, enrageAt: 0.4,
     leapWind: 0.65, leapDur: 0.38, leapDmg: 32, leapRadius: 52, leapPeak: 58,
+  };
+
+  // The Slayer — Fire boss (pool cue, charge-dash movement, fireball volley).
+  // After defeat: ally cutscene, elements.fire unlocked, Fire Mirror branch lit.
+  // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
+  JH.SLAYER = {
+    name: "The Slayer", hp: 1100, bodyW: 44, bodyH: 58,
+    touchDmg: 15, contactCd: 0.9, suds: 280, color: "slayerBody",
+    // Movement: charge-up → dash (no walk cycle)
+    chargeDur: 0.75,          // fire-particle build-up before dash
+    dashSpeed: 380,           // px/s during dash
+    dashDist: 220,            // max px per dash
+    dashTell: 0.15,           // hold in dash pose before launching (visual beat)
+    dashPatchSpacing: 40,     // px between FirePatch spawns along trail
+    dashPatchRadius: 18,      // radius of each trail patch
+    dashPatchDur: 1.2,        // extinguish duration for trail patches
+    // Attack: Fireball Volley
+    volleyRange: 200,         // px: trigger volley when player within this distance
+    volleyWind: 0.9,          // cue wind-up duration (s)
+    volleyCd: 2.4,            // post-volley cooldown
+    ballCount: 2,             // balls per volley
+    enrageBallCount: 3,       // balls per volley when enraged
+    ballSpawnOffset: 22,      // px in front of Slayer where the ball materialises
+    ballStagger: 0.18,        // seconds between each ball in a volley
+    igniteDelay: 0.12,        // s after launch before fireball activates burn
+    // Attack: Slam
+    slamWind: 0.75, slamDmg: 22, slamRange: 38,
+    // Behaviour
+    enrageAt: 0.40,
+  };
+  JH.FIREBALL = {
+    speed: 155, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
   };
 
   // Act-start wave indices (bounded by boss clears) — death respawns here.
