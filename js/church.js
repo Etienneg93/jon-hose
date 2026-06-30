@@ -29,14 +29,30 @@
   function defaults() {
     return {
       essence: 0,
-      blessings: {},                                   // id -> count
-      elements: { earth: false, fire: false, air: false, water: false },
+      blessings: {},                                   // LEGACY id -> count (migrated)
+      mirror: {},                                      // node id -> { side:"a"|"b", rank:int }
+      elements: { earth: false, fire: false, air: false, water: true }, // water: Jon's own, open
       churchVisited: false,
       ceremonyDone: {},                                // element -> bool
     };
   }
 
   function num(v) { return (typeof v === "number" && isFinite(v)) ? v : 0; }
+
+  // One-time migration: old flat blessing counts -> Mirror Water nodes (side a,
+  // rank capped at maxRank). Runs only when mirror is empty and blessings exist,
+  // so it never double-applies. Keeps the legacy `blessings` field for rollback.
+  const BLESSING_TO_NODE = {
+    bless_dps: "water_pressure", bless_tank: "water_reservoir", bless_hp: "water_vigor",
+  };
+  function migrateBlessings(d) {
+    if (!d.blessings || Object.keys(d.mirror).length > 0) return;
+    const maxRank = (root.JH && root.JH.MIRROR && root.JH.MIRROR.maxRank) || 3;
+    for (const bid in BLESSING_TO_NODE) {
+      const count = num(d.blessings[bid]);
+      if (count > 0) d.mirror[BLESSING_TO_NODE[bid]] = { side: "a", rank: Math.min(count, maxRank) };
+    }
+  }
 
   function sanitize(raw) {
     const d = defaults();
@@ -48,6 +64,15 @@
     if (raw.elements && typeof raw.elements === "object") {
       ELEMENTS.forEach((e) => { d.elements[e] = !!raw.elements[e]; });
     }
+    d.elements.water = true;  // Water is always unlocked (Jon's own element).
+    if (raw.mirror && typeof raw.mirror === "object") {
+      for (const id in raw.mirror) {
+        const n = raw.mirror[id];
+        if (!n || typeof n !== "object") continue;
+        d.mirror[id] = { side: n.side === "b" ? "b" : "a", rank: Math.max(0, num(n.rank) | 0) };
+      }
+    }
+    migrateBlessings(d);
     d.churchVisited = !!raw.churchVisited;
     if (raw.ceremonyDone && typeof raw.ceremonyDone === "object") {
       ELEMENTS.forEach((e) => { if (raw.ceremonyDone[e]) d.ceremonyDone[e] = true; });
@@ -92,19 +117,43 @@
     blessingCost(id) { return root.JH.Balance.blessingCost(this.blessingCount(id)); },
     canBuyBlessing(id) { return this.state.essence >= this.blessingCost(id); },
 
-    // Spend essence, bump the count, recompute + carry the player's stats.
-    buyBlessing(id, player) {
-      if (!this.canBuyBlessing(id)) return false;
-      this.state.essence -= this.blessingCost(id);
-      this.state.blessings[id] = this.blessingCount(id) + 1;
-      this.save();
+    // Recompute effective stats from upgrades + Mirror, apply to the player,
+    // and carry HP/water headroom up when a capacity rose. Shared by purchases.
+    recarryStats(player) {
       const fresh = root.JH.Upgrades.computeStats(root.JH.Upgrades.owned);
       const hpGain = fresh.maxHp - player.stats.maxHp;
       const waterGain = fresh.maxWater - player.stats.maxWater;
       player.applyStats(fresh);
       if (hpGain > 0) player.hp = Math.min(fresh.maxHp, player.hp + hpGain);
       if (waterGain > 0) player.water = Math.min(fresh.maxWater, player.water + waterGain);
+    },
+
+    // ---- Elemental Mirror nodes (the altar) ----
+    mirrorDef(id) { return (root.JH.MIRROR.nodes || []).find((n) => n.id === id); },
+    mirrorRank(id) { return root.JH.Mirror.nodeState(this.state, id).rank; },
+    mirrorSide(id) { return root.JH.Mirror.nodeState(this.state, id).side; },
+    mirrorCost(id) { return root.JH.Mirror.cost(this.mirrorRank(id)); },
+    mirrorMaxRank() { return root.JH.MIRROR.maxRank; },
+    mirrorUnlocked(id) {
+      const d = this.mirrorDef(id);
+      return !!d && root.JH.Mirror.branchUnlocked(this.state, d.element);
+    },
+    canBuyMirror(id) {
+      return root.JH.Mirror.canBuy(this.state, this.mirrorDef(id), root.JH.MIRROR.maxRank);
+    },
+    // Buy a rank on the node's active side; recompute + carry the player's stats.
+    buyMirror(id, player) {
+      if (!root.JH.Mirror.buy(this.state, this.mirrorDef(id), root.JH.MIRROR.maxRank)) return false;
+      this.save();
+      this.recarryStats(player);
       return true;
+    },
+    // Flip a node's active side (free); recompute stats (the active effect changed).
+    toggleMirror(id, player) {
+      const d = this.mirrorDef(id); if (!d) return;
+      root.JH.Mirror.toggleSide(this.state, d);
+      this.save();
+      if (player) this.recarryStats(player);
     },
 
     // ---- The walkable Church of the Holy Hose ----------------------
@@ -188,14 +237,20 @@
         return;
       }
 
-      // Blessing stations: active when you stand near one; Press E to spend.
+      // Mirror node stations: active when you stand near an UNLOCKED one.
+      // E = buy a rank on the active side; Shift/L = flip the node's side.
       sc.activeStation = null;
       for (const st of L.stations) {
+        if (!this.mirrorUnlocked(st.id)) continue;
         if (Math.abs(sc.jonX - st.x) <= L.stationRange) { sc.activeStation = st.id; break; }
       }
-      if (sc.activeStation && In.pressed("confirm")) {
-        if (this.buyBlessing(sc.activeStation, game.player)) game.audio.play("upgrade");
-        else game.audio.play("hurt");
+      if (sc.activeStation) {
+        if (In.pressed("confirm")) {
+          if (this.buyMirror(sc.activeStation, game.player)) game.audio.play("upgrade");
+          else game.audio.play("hurt");
+        } else if (In.pressed("dash")) {
+          this.toggleMirror(sc.activeStation, game.player); game.audio.play("buy");
+        }
       }
 
       // Walk into the portal -> begin the exit transition.
@@ -267,24 +322,39 @@
         }
       });
 
-      // Blessing stations: pedestal + bobbing icon; glow + prompt when near.
-      const ICON = { bless_dps: PAL.hpPk, bless_tank: PAL.water, bless_hp: "#6cff9a" };
+      // Mirror node stations: pedestal + bobbing icon, rank pips; node detail when
+      // near. Only UNLOCKED branches render (earth appears once Quake is redeemed).
+      const ELCOL = { water: PAL.water, earth: "#e0902f", fire: "#ff8a3c", air: "#cfe9ff" };
+      const maxR = this.mirrorMaxRank();
       for (const st of L.stations) {
+        if (!this.mirrorUnlocked(st.id)) continue;
+        const def = this.mirrorDef(st.id); if (!def) continue;
         const x = Math.round(st.x - camX);
         const near = sc.activeStation === st.id;
         const bob = Math.sin(sc.t * 4 + st.x) * 2;
-        blit(ctx, ART["station_" + st.id], x - 9, VH - 50, 18, 34, () => {});
+        const col = ELCOL[def.element] || PAL.water;
+        blit(ctx, ART["station_" + st.id], x - 9, VH - 50, 18, 34, () => {
+          ctx.fillStyle = "#11141f"; ctx.fillRect(x - 7, VH - 50, 14, 34);   // fallback plinth
+        });
         if (near) {
           ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(sc.t * 8);
-          ctx.fillStyle = ICON[st.id]; ctx.fillRect(x - 10, VH - 71 + bob, 20, 20); ctx.restore();
+          ctx.fillStyle = col; ctx.fillRect(x - 10, VH - 71 + bob, 20, 20); ctx.restore();
         }
-        ctx.fillStyle = ICON[st.id]; ctx.fillRect(x - 5, VH - 66 + bob, 10, 10);
+        ctx.fillStyle = col; ctx.fillRect(x - 5, VH - 66 + bob, 10, 10);
+        const rank = this.mirrorRank(st.id);
+        for (let i = 0; i < maxR; i++) {                                     // rank pips
+          ctx.fillStyle = i < rank ? col : "#33384a";
+          ctx.fillRect(x - 7 + i * 5, VH - 52 + bob, 3, 3);
+        }
         if (near) {
-          const def = JH.CHURCH.blessings.find((b) => b.id === st.id);
-          ctx.fillStyle = "#ffe9a8"; ctx.fillText(def.name + " — " + def.desc, x, VH - 82 + bob);
-          ctx.fillStyle = this.canBuyBlessing(st.id) ? "#9be8ff" : "#a66";
-          ctx.fillText("Lvl " + this.blessingCount(st.id) + "  ·  " + this.blessingCost(st.id) +
-            " Essence of Friendship  ·  Press E", x, VH - 72 + bob);
+          const side = def[this.mirrorSide(st.id)];
+          ctx.fillStyle = "#ffe9a8"; ctx.fillText(side.name + " — " + side.desc, x, VH - 84 + bob);
+          if (rank >= maxR) {
+            ctx.fillStyle = "#9be8ff"; ctx.fillText("MAX  ·  Shift: flip side", x, VH - 74 + bob);
+          } else {
+            ctx.fillStyle = this.canBuyMirror(st.id) ? "#9be8ff" : "#a66";
+            ctx.fillText(this.mirrorCost(st.id) + " Essence · E: raise · Shift: flip", x, VH - 74 + bob);
+          }
         }
       }
 

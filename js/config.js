@@ -211,10 +211,15 @@
       length: 720, spawnX: 28, fatherX: 168, altarX: 300, portalX: 660,
       portalReach: 18, stationRange: 24,
       depthMin: 35, depthMax: 75,
+      // Walk-up Mirror node stations. id == JH.MIRROR node id; `element` gates
+      // visibility (earth appears once Quake is redeemed). Water nodes sit where
+      // the old flat blessing stations were.
       stations: [
-        { id: "bless_dps",  x: 396 },
-        { id: "bless_tank", x: 470 },
-        { id: "bless_hp",   x: 544 },
+        { id: "water_pressure",  x: 396, element: "water" },
+        { id: "water_reservoir", x: 470, element: "water" },
+        { id: "water_vigor",     x: 544, element: "water" },
+        { id: "earth_force",     x: 588, element: "earth" },
+        { id: "earth_stance",    x: 620, element: "earth" },
       ],
     },
     // Shrine -> element -> redeeming boss (s.type). null boss = capstone (Water/Jon).
@@ -224,11 +229,56 @@
       { element: "air",   boss: "assman", label: "AIR"   },
       { element: "water", boss: null,     label: "WATER" },
     ],
-    // Permanent blessings (repeatable, +1-per-level cost via Balance.blessingCost).
+    // LEGACY flat blessings — retained only so old saves migrate into the
+    // Mirror Water nodes (church.js migrateBlessings). No longer applied.
     blessings: [
       { id: "bless_dps",  name: "Anointed Pressure", desc: "+4 spray dmg",   apply: (s) => { s.sprayDamage += 4; } },
       { id: "bless_tank", name: "Deep Reservoir",    desc: "+15 max water",  apply: (s) => { s.maxWater += 15; } },
       { id: "bless_hp",   name: "Blessed Vigor",     desc: "+20 max HP",     apply: (s) => { s.maxHp += 20; } },
+    ],
+  };
+
+  // ---- The Elemental Mirror altar (permanent meta-upgrades) -----------
+  // Two-sided, Essence-bought, leveled nodes in four element branches.
+  // Water is open from the start; earth/fire/air unlock when their ally-boss
+  // is redeemed (JH.Church.state.elements). Folded into computeStats via
+  // JH.Mirror.apply. v1 effects map to existing stats (no new combat wiring);
+  // true elemental effects (burn/stun/gust) land with their acts.
+  // See docs/superpowers/specs/2026-06-30-elemental-mirror-altar-design.md.
+  JH.MIRROR = {
+    maxRank: 3,
+    nodes: [
+      // Water (open from start)
+      { id: "water_pressure", element: "water", name: "Pressure",
+        a: { name: "Anointed Pressure", desc: "+3 spray dmg",      apply: (s, r) => { s.sprayDamage += 3 * r; } },
+        b: { name: "Wide Spray",        desc: "+6 spray range",    apply: (s, r) => { s.sprayRange  += 6 * r; } } },
+      { id: "water_reservoir", element: "water", name: "Reservoir",
+        a: { name: "Deep Reservoir", desc: "+12 max water",        apply: (s, r) => { s.maxWater    += 12 * r; } },
+        b: { name: "Closed Loop",    desc: "+0.5 water return/s",  apply: (s, r) => { s.waterReturn += 0.5 * r; } } },
+      { id: "water_vigor", element: "water", name: "Vigor",
+        a: { name: "Blessed Vigor", desc: "+15 max HP",            apply: (s, r) => { s.maxHp        += 15 * r; } },
+        b: { name: "Vampiric Mist", desc: "+4% lifesteal",         apply: (s, r) => { s.vampiricRate += 0.04 * r; } } },
+      // Earth (Quake Walker)
+      { id: "earth_force", element: "earth", name: "Force",
+        a: { name: "Crushing Spray", desc: "+30 knockback",        apply: (s, r) => { s.knockback    += 30 * r; } },
+        b: { name: "Fault Line",     desc: "+3 hit band",          apply: (s, r) => { s.sprayHitBand += 3 * r; } } },
+      { id: "earth_stance", element: "earth", name: "Stance",
+        a: { name: "Sure Footing", desc: "+5% dodge",              apply: (s, r) => { s.dodgeChance += 0.05 * r; } },
+        b: { name: "Deep Roots",   desc: "+20 max water",          apply: (s, r) => { s.maxWater    += 20 * r; } } },
+      // Fire (The Slayer) — locked until redeemed
+      { id: "fire_zeal", element: "fire", name: "Zeal",
+        a: { name: "Searing Pressure", desc: "+4 spray dmg",       apply: (s, r) => { s.sprayDamage  += 4 * r; } },
+        b: { name: "Render",           desc: "+5% lifesteal",      apply: (s, r) => { s.vampiricRate += 0.05 * r; } } },
+      { id: "fire_reach", element: "fire", name: "Reach",
+        a: { name: "Long Burn",  desc: "+8 spray range",           apply: (s, r) => { s.sprayRange   += 8 * r; } },
+        b: { name: "Flashpoint", desc: "+4 hit band",              apply: (s, r) => { s.sprayHitBand += 4 * r; } } },
+      // Air (Ass Man) — locked until redeemed
+      { id: "air_swift", element: "air", name: "Swift",
+        a: { name: "Tailwind",   desc: "+8 move speed",            apply: (s, r) => { s.moveSpeed += 8 * r; } },
+        b: { name: "Slipstream", desc: "+18 dash boost",           apply: (s, r) => { s.dashBoost += 18 * r; } } },
+      { id: "air_drift", element: "air", name: "Drift",
+        a: { name: "Long Wake",  desc: "+0.25s dash boost",        apply: (s, r) => { s.dashBoostDur += 0.25 * r; } },
+        b: { name: "Slick Wake", desc: "dash leaves puddle",       apply: (s, r) => { if (r > 0) s.dashPuddle = true; } } },
     ],
   };
 

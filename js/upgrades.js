@@ -130,13 +130,12 @@
         const c = rc[n.id] || 0;
         for (let i = 0; i < c; i++) n.apply(s);
       });
-      // Permanent Church blessings (survive Upgrades.reset()).
-      const ch = (JH.Church && JH.Church.state && JH.Church.state.blessings) || {};
-      const cdefs = (JH.CHURCH && JH.CHURCH.blessings) || [];
-      cdefs.forEach((b) => {
-        const c = ch[b.id] || 0;
-        for (let i = 0; i < c; i++) b.apply(s);
-      });
+      // Permanent Elemental Mirror nodes (survive Upgrades.reset()). Folds each
+      // owned, unlocked node's active side into the stats. Replaces the legacy
+      // flat Church blessings (old saves are migrated into Mirror Water nodes).
+      if (JH.Mirror && JH.Church && JH.Church.state && JH.MIRROR) {
+        JH.Mirror.apply(s, JH.Church.state, JH.MIRROR.nodes);
+      }
       return s;
     },
 
