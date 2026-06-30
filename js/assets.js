@@ -428,11 +428,11 @@
 
   // ========================== BULWARK =================================
   // Procedural placeholder (per CLAUDE.md art pipeline — real sprite later).
-  // The shield is drawn at a fixed local +x offset so `Assets.draw`'s
-  // facing-mirror keeps it on whichever side the Bulwark is actually facing.
+  // No body-mounted shield anymore — the Bulwark's own body is never a
+  // blocker (see the deployed_shield painter below for the planted prop).
   Assets.register("bulwark", (p, opt) => {
     const f = opt.frame | 0;
-    const ls = (opt.state === "walk") ? legStep(f) * 0.6 : 0;
+    const ls = (opt.state === "walk" || opt.state === "retrieve") ? legStep(f) * 0.6 : 0;
     if (opt.hurt && (f & 1)) return;
     p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
     p(1 - ls, 0, 6, 10, PAL.bulwarkDk);
@@ -441,8 +441,16 @@
     p(-5, 26, 10, 9, PAL.skin);
     p(-5, 30, 10, 3, PAL.bulwarkDk);
     p(1, 28, 2, 2, "#111");
-    p(9, 4, 6, 26, PAL.bulwarkShield);
-    p(9, 4, 6, 3, "#fff");
+  });
+
+  // ====================== DEPLOYED SHIELD (Bulwark prop) ===============
+  // Procedural placeholder — the Bulwark's planted shield. Stationary and
+  // indestructible, so no hurt-flash branch is needed.
+  Assets.register("deployed_shield", (p) => {
+    p(-8, 0, 16, 3, PAL.bulwarkDk);
+    p(-7, 3, 14, 22, PAL.bulwarkShield);
+    p(-7, 3, 14, 3, "#fff");
+    p(-2, 9, 4, 12, PAL.bulwarkDk);
   });
 
   // ========================== STALKER ==================================
