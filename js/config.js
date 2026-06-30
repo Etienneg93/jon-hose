@@ -390,6 +390,12 @@
       { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
       // ---- Act 4: the aftermath — Quake Walker turns ally ----
+      // Super-elites: curated counters to late-game dominant tactics (pierce-spray
+      // camping vs. the Bulwark's shield; back-pedal kiting vs. the Stalker's blink).
+      // No `tough` flag — already tuned for Act 4, not elite-ramped (see
+      // docs/superpowers/specs/2026-06-28-super-elites-design.md, "No double-ramp").
+      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
