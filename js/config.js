@@ -164,7 +164,7 @@
     // side for a wind-up strike. Only the player's dash i-frames dodge it.
     stalker: {
       name: "Stalker", hp: 30, speed: 95, touchDmg: 10, contactCd: 0.8,
-      blinkCd: 3.2, blinkTell: 0.35, blinkDist: 60,
+      blinkCd: 3.2, blinkTell: 0.35, blinkDist: 30,
       strikeWind: 0.3, strikeDmg: 14, strikeRange: 22,
       suds: 22, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
     },
