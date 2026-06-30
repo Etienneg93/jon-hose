@@ -760,6 +760,11 @@
     togglePause() {
       if (this.state === "play") { this.state = "pause"; this.showScreen("screen-pause"); }
       else if (this.state === "pause") { this.state = "play"; this.showScreen("hud"); }
+      else if (this.state === "church") { this.state = "churchPause"; this.showScreen("screen-pause"); }
+      else if (this.state === "churchPause") {
+        this.state = "church";
+        document.getElementById("screen-pause").classList.add("hidden");
+      }
     },
 
     // ============================================================ LOOP
@@ -782,8 +787,9 @@
     update(dt) {
       this.input.poll();
 
-      // pause toggle works in play/pause
-      if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"))
+      // pause toggle works in play/pause and church/churchPause
+      if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"
+        || this.state === "church" || this.state === "churchPause"))
         this.togglePause();
 
       if (this.bannerTimer > 0) {
@@ -811,6 +817,7 @@
         if (JH.Church.updateScene) JH.Church.updateScene(dt, this);
         return;
       }
+      if (this.state === "churchPause") return;
 
       if (this.devMenu) return;
 
@@ -960,7 +967,7 @@
 
     // ============================================================ RENDER
     render() {
-      if (this.state === "church") {
+      if (this.state === "church" || this.state === "churchPause") {
         const ctx = this.ctx;
         ctx.save();
         ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
