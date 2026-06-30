@@ -720,7 +720,7 @@
         pl.takeHit(this.def.touchDmg, game, this.x);
         this.contactTimer = this.def.contactCd;
       }
-      const moving = this.state === "walk" || this.state === "charge";
+      const moving = this.state === "walk" || this.state === "charge" || this.state === "retrieve";
       this.animate(dt, moving);
     }
 
