@@ -651,6 +651,12 @@
       if (this.hp <= 0) this.die(game);
     }
 
+    // Bosses stand their ground — the hose can knock back mooks, not them.
+    applyKnockback(dirX, force, dirY) {
+      if (this.isBoss) return;
+      super.applyKnockback(dirX, force, dirY);
+    }
+
     die(game) {
       if (this.dead) return;
       this.dead = true;
