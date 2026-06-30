@@ -74,6 +74,8 @@
     soundwave: "#40e0ff",
     rock: "#7a6a58", rockDk: "#4e4030",
     pill: "#ff77ff",
+    bulwark: "#5a6b7a", bulwarkDk: "#33404c", bulwarkShield: "#cfe9ff",
+    stalker: "#8a2f5a", stalkerDk: "#591b3a",
   };
 
   // ---- Player base stats (pre-upgrade) --------------------------------
@@ -147,6 +149,24 @@
       soundwaveDmg: 20, soundwaveSpeed: 120, soundwaveArcs: 3, soundwaveBand: 14,
       speakerWindup: 0.5, speakerHold: 0.8, speakerChance: 0.33,
       suds: 0, waterMult: 1.3, bodyW: 14, bodyH: 28, color: "neighbor",
+    },
+    // Super-elite: slow "moving shield" — counters stand-and-pierce play. The
+    // shield faces `facing`; frontal spray is blocked (frontDmgMult), back is
+    // full damage. Re-faces only every `turnCooldown` — that's the dash-past
+    // window. See docs/superpowers/specs/2026-06-28-super-elites-design.md.
+    bulwark: {
+      name: "Bulwark", hp: 220, speed: 26, touchDmg: 14, contactCd: 1.0,
+      turnCooldown: 1.1, frontDmgMult: 0,
+      suds: 60, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
+    },
+    // Super-elite: fast "blink harasser" — counters back-pedal kiting. Chases
+    // fast, then on a cooldown telegraphs and blinks to the player's blind
+    // side for a wind-up strike. Only the player's dash i-frames dodge it.
+    stalker: {
+      name: "Stalker", hp: 30, speed: 95, touchDmg: 10, contactCd: 0.8,
+      blinkCd: 3.2, blinkTell: 0.35, blinkDist: 60,
+      strikeWind: 0.3, strikeDmg: 14, strikeRange: 22,
+      suds: 22, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
     },
   };
 
