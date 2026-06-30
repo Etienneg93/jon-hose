@@ -117,6 +117,9 @@ JH.SLAYER = {
   dashSpeed: 380,        // px/s during the dash itself (very fast)
   dashDist: 220,         // max px the dash covers
   dashTell: 0.15,        // brief hold in dash pose before launching (visual beat)
+  dashPatchSpacing: 40,  // px between FirePatch spawns along the trail
+  dashPatchRadius: 18,   // radius of each trail patch (smaller than combat patches)
+  dashPatchDur: 1.2,     // extinguish duration for trail patches
   // Attack: Fireball Volley
   volleyWind: 0.9,       // cue wind-up telegraph duration (s)
   volleyCd: 2.4,         // cooldown between volleys
@@ -158,13 +161,17 @@ JH.FIREBALL = {
    by 30%, volley timing 20% faster.
 
 **Fire trail (dash):** during the dash, emit `burst()` particles in orange/yellow along
-the path. Whether the trail also spawns `FirePatch` objects is TBD pending confirmation
-— see design note below.
+the path AND spawn `FirePatch` objects at intervals — one patch every `dashPatchSpacing:
+40` px of dash distance (so a full `dashDist: 220` dash leaves ~5 patches). Trail patches
+use a smaller radius than combat patches (e.g. `radius: 18`, `extinguishDur: 1.2`) so
+they're a short-lived but real hazard that rewards repositioning during the charge.
 
-> **Design note — dash trail hazard:** should the dash trail leave actual `FirePatch`
-> objects at intervals along the path (e.g. one patch every ~40px of dash distance),
-> or stay visual-only? Fire patches would make the trail a genuine hazard to extinguish
-> and reward players for repositioning during the charge. Awaiting user confirmation.
+Add to `JH.SLAYER` config:
+```js
+dashPatchSpacing: 40,   // px between fire patches along the dash trail
+dashPatchRadius: 18,    // radius of each trail patch
+dashPatchDur: 1.2,      // extinguish duration for trail patches
+```
 
 **Ally cutscene:** same structure as the Quake Walker branch (`waveIndex === N` check in
 `waveCleared_()`, `nextWave: N+1`, `afterCutscene()` banner). Exact wave index is
