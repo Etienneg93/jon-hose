@@ -331,20 +331,26 @@
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       const beam = S.beam | 0;                 // concentration tier 0..3
 
-      // Hydro Lance (beam=3) pierces the whole line; default stops at first target.
-      // A SHIELDING Bulwark hard-blocks the stream at every beam tier — pierce
-      // punches through everything except a raised shield (spec: "Shield mechanic").
+      // Hydro Lance (beam=3) pierces the whole line; default stops at first
+      // target. A planted DeployedShield (Bulwark's thrown shield) hard-blocks
+      // the stream at every beam tier — nothing else blocks pierce.
       const pierce = beam >= 3;
       let blocker = null;
       {
         let minFwd = Infinity;
-        for (const e of game.enemies) {
-          if (e.dead) continue;
-          if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-          const shielding = e.type === "bulwark" && JH.Balance.bulwarkShielded(e.x, e.facing, this.x);
-          if (pierce && !shielding) continue;   // pierce only stops at a shielding Bulwark
-          const fwd = (e.x - ox) * this.facing;
-          if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+        if (!pierce) {
+          for (const e of game.enemies) {
+            if (e.dead) continue;
+            if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+            const fwd = (e.x - ox) * this.facing;
+            if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+          }
+        }
+        for (const s of game.shields) {
+          if (s.dead) continue;
+          if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
+          const fwd = (s.x - ox) * this.facing;
+          if (fwd < minFwd) { minFwd = fwd; blocker = s; }
         }
       }
       // Particles die at the blocker's near face so the stream visually stops there.
@@ -378,8 +384,12 @@
         }));
       }
 
-      // Damage enemies: non-pierce hits only the closest (blocker); pierce hits
-      // everyone EXCEPT anyone standing behind a shielding Bulwark's wall.
+      // Damage enemies: non-pierce hits only the closest (blocker); pierce
+      // hits everyone EXCEPT anyone standing behind a planted shield's wall.
+      // (`blocker` can only ever be an enemy in non-pierce mode, or a
+      // DeployedShield in pierce mode — see the blocker-finding block above,
+      // so `e` here — always drawn from game.enemies — can never equal a
+      // pierce-mode `blocker`.)
       let didHit = false;
       const hitEnemies = [];
       let healAmt = 0;
@@ -388,9 +398,8 @@
         if (e.dead) continue;
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
-        if (pierce && blocker && e !== blocker && (e.x - ox) * this.facing > blockerFwd) continue;
-        const shielded = e.type === "bulwark" && JH.Balance.bulwarkShielded(e.x, e.facing, this.x);
-        const mult = shielded ? e.def.frontDmgMult : (e.def ? (e.def.waterMult || 1) : 1);
+        if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
+        const mult = e.def ? (e.def.waterMult || 1) : 1;
         const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
         const dmg = S.sprayDamage * dmgScale * mult * pressureMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
