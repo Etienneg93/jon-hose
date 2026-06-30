@@ -172,11 +172,18 @@
       this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
+      this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
+      this.burnTimer = 0;    // seconds of burn remaining
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
     }
     applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
+
+    applyBurn(n) {
+      this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
+      this.burnTimer = JH.FIRE.burnDuration;
+    }
 
     update(dt, game) {
       const In = game.input, S = this.stats;
@@ -186,6 +193,15 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
+
+      // Burn DoT: tick while burnTimer > 0; clears stacks on expiry.
+      if (this.burnTimer > 0) {
+        this.burnTimer -= dt;
+        this.hp = Math.max(0, this.hp - this.burnStacks * JH.FIRE.burnDpsPerStack * dt);
+        this.hurt();   // reuses the existing white hurt-flash to signal burn damage
+        if (this.burnTimer <= 0) { this.burnTimer = 0; this.burnStacks = 0; }
+        if (this.hp <= 0) this.alive = false;
+      }
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
