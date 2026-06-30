@@ -919,6 +919,56 @@
   }
   JH.Bulwark = Bulwark;
 
+  // ---- Stalker: fast "blink harasser" super-elite ----
+  // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
+  // blinks behind the player's facing, then winds up a strike (state
+  // "strike") that only the player's dash i-frames negate (Player.takeHit
+  // already no-ops while dashTimer > 0 — nothing new needed there).
+  class Stalker extends Enemy {
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+
+      if (this.state === "strike") {
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+          if (Geo.inHitArc(this, pl, this.facing, d.strikeRange, 16))
+            pl.takeHit(d.strikeDmg, game, this.x);
+          this.state = "idle";
+          this.cdTimer = d.blinkCd;
+        }
+        return;
+      }
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          const t = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, pl.facing, d.blinkDist, {
+            minX: game.bounds.minX, maxX: game.bounds.maxX,
+            depthMin: JH.DEPTH_MIN, depthMax: JH.DEPTH_MAX,
+          });
+          this.x = t.x; this.y = t.y;
+          this.facing = pl.x >= this.x ? 1 : -1;
+          this.attackTimer = d.strikeWind;
+          this.state = "strike";
+          game.audio.play("jump");
+        }
+        return;
+      }
+      if (this.cdTimer > 0) {
+        this.cdTimer -= dt;
+      } else if (this.spawnGrace <= 0) {
+        this.windTimer = d.blinkTell; this.state = "wind";
+        return;
+      }
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      this.x += (dx / (dist || 1)) * d.speed * dt;
+      this.y += (dy / (dist || 1)) * d.speed * dt * 0.85;
+      this.state = "walk";
+    }
+  }
+  JH.Stalker = Stalker;
+
   // ============================================================== BOSS
   class Boss extends Enemy {
     constructor(x, y, def, type) {
@@ -2612,6 +2662,7 @@
     if (type === "charger") return new Charger(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
     if (type === "bulwark") return new Bulwark(type, x, y);
+    if (type === "stalker") return new Stalker(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
