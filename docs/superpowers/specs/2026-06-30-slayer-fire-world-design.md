@@ -63,11 +63,13 @@ tracked in `game.firePatches[]`.
 - When `sprayProgress >= extinguishDur`: `dead = true` (extinguished)
 - `sprayProgress` pauses when spray is not aimed at it — does NOT decay back
 
-**Visual:** drawn as a glowing floor oval, shrinks as it's extinguished:
+**Visual:** placeholder — drawn as a glowing floor oval, shrinks as it's extinguished:
 ```js
 currentRadius = this.radius * (1 - this.sprayProgress / this.extinguishDur)
 ```
 Flicker via `Math.sin(t * 18)` modulating opacity between two fire palette colors.
+
+**TODO (art):** replace the procedural oval with a real fire-patch sprite (`sprites/environment/fire_patch.png`). Sprite should be a looping animated floor decal (3-4 frames, burning embers/flame on the ground). The shrink as-extinguished effect can still be applied by scaling the sprite down toward the center using `ctx.scale`. Add to asset-generation-prompts when prioritizing next art pass.
 
 **Sources and sizes:**
 
@@ -92,9 +94,12 @@ flight. After defeat, joins the Church as the Fire ally (same ally-cutscene patt
 Quake Walker), lighting the `elements.fire` flag and unlocking the Fire Mirror branch.
 
 **Sprite states (all created by the user):**
-- `idle` — default, weight on back foot; also used for the walk/approach phase (sprite
-  translates, no leg cycle needed)
-- `dash` — aerodynamic lean; used during the Fire Dash attack and retreat
+- `idle` — default stance; weight on back foot. Used while charging up for movement (see
+  below) — the fire-particle build-up plays over the idle pose, so no separate "charging"
+  sprite is needed.
+- `dash` — aerodynamic lean; used for **all movement**: the Slayer has no walk cycle.
+  When he wants to reposition, he charges up in the idle pose with intensifying fire
+  particles, then snaps to the dash pose and zips to the target position.
 - `cueWind` — cue drawn back, pool ball materializing in front of him (static, held for
   wind duration)
 - `cueRelease` — cue snapped forward, ball just left frame (brief flash, ~0.15s)
@@ -105,8 +110,13 @@ sprite (pool ball → catches fire); see asset-generation-prompts for the full a
 **Config block** (`js/config.js`, after `JH.QUAKE` at line ~365):
 ```js
 JH.SLAYER = {
-  name: "The Slayer", hp: 1100, speed: 28, bodyW: 44, bodyH: 58,
+  name: "The Slayer", hp: 1100, bodyW: 44, bodyH: 58,
   touchDmg: 15, contactCd: 0.9, suds: 280, color: "slayerBody",
+  // Movement: charge-up → dash (no walk cycle)
+  chargeDur: 0.75,       // seconds of fire-particle build-up before the dash executes
+  dashSpeed: 380,        // px/s during the dash itself (very fast)
+  dashDist: 220,         // max px the dash covers
+  dashTell: 0.15,        // brief hold in dash pose before launching (visual beat)
   // Attack: Fireball Volley
   volleyWind: 0.9,       // cue wind-up telegraph duration (s)
   volleyCd: 2.4,         // cooldown between volleys
@@ -120,7 +130,6 @@ JH.SLAYER = {
   slamWind: 0.75, slamDmg: 22, slamRange: 38,
   // Behaviour
   enrageAt: 0.40,        // HP fraction that triggers enrage
-  retreatRange: 160,     // px; if player inside this for >1.5s, trigger retreat
 };
 JH.FIREBALL = {
   speed: 155, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
@@ -129,20 +138,33 @@ JH.FIREBALL = {
 
 **State machine:**
 
-1. **Approach** (`"walk"` state, `idle` sprite) — chases player at `speed`.
-2. **Volley** (trigger: player within `volleyRange ≈ 200px`): enters `cueWind` state for
-   `volleyWind` seconds, then fires `ballCount` `Fireball` projectiles one after another
-   at the player's current depth row, spaced ~0.18s apart. Each `Fireball` spawns at a
-   fixed offset in front of the Slayer, starts as a pool ball (no burn), ignites after
-   `igniteDelay` (applies burn on hit, leaves a `FirePatch` at impact).
-3. **Slam** (trigger: player within `slamRange + 10px`): wind-up telegraph zone at his
+1. **Charge** (`"idle"` sprite + escalating fire particles) — the Slayer's ONLY movement
+   mode. When he needs to reposition (open volley, escape close range, or start the
+   fight), he roots in place in the idle pose while `burst()` particles build up around
+   him for `chargeDur` seconds, intensifying each frame. Then he snaps to:
+2. **Dash** (`"dash"` sprite) — holds the pose for `dashTell` seconds (brief visual beat),
+   then zips up to `dashDist` px toward the target position at `dashSpeed` px/s. The
+   dash leaves a **fire trail** (see note below). Slayer has no continuous walk motion —
+   all repositioning is charge → dash.
+3. **Volley** (trigger: player within `volleyRange` after landing from a dash OR cooldown
+   expires): enters `cueWind` state for `volleyWind` seconds, then fires `ballCount`
+   `Fireball` projectiles one after another at the player's current depth row, spaced
+   `ballStagger` seconds apart. Each `Fireball` spawns at `ballSpawnOffset` px in front
+   of the Slayer, starts as a plain pool ball, ignites after `igniteDelay` (applies burn
+   on hit, leaves a `FirePatch` at impact).
+4. **Slam** (trigger: player within `slamRange + 10px`): wind-up telegraph zone at his
    feet, then punch. If hit: `slamDmg` + `game.shake`. No burn.
-4. **Retreat** (trigger: player has been in range for > 1.5s since last volley): switches
-   to `dash` sprite, dashes backward horizontally to create space for another volley. No
-   damage during retreat, but leaves a brief flame-particle trail (cosmetic, existing
-   `burst()` system with orange/yellow particles).
-5. **Enrage** (below `enrageAt` HP): `ballCount → enrageBallCount`, volley and slam
-   timing both 20% faster, retreat speed increases.
+5. **Enrage** (below `enrageAt` HP): `ballCount → enrageBallCount`, `chargeDur` shortens
+   by 30%, volley timing 20% faster.
+
+**Fire trail (dash):** during the dash, emit `burst()` particles in orange/yellow along
+the path. Whether the trail also spawns `FirePatch` objects is TBD pending confirmation
+— see design note below.
+
+> **Design note — dash trail hazard:** should the dash trail leave actual `FirePatch`
+> objects at intervals along the path (e.g. one patch every ~40px of dash distance),
+> or stay visual-only? Fire patches would make the trail a genuine hazard to extinguish
+> and reward players for repositioning during the charge. Awaiting user confirmation.
 
 **Ally cutscene:** same structure as the Quake Walker branch (`waveIndex === N` check in
 `waveCleared_()`, `nextWave: N+1`, `afterCutscene()` banner). Exact wave index is
