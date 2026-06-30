@@ -426,6 +426,42 @@
     p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
   });
 
+  // ========================== BULWARK =================================
+  // Procedural placeholder (per CLAUDE.md art pipeline — real sprite later).
+  // The shield is drawn at a fixed local +x offset so `Assets.draw`'s
+  // facing-mirror keeps it on whichever side the Bulwark is actually facing.
+  Assets.register("bulwark", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) * 0.6 : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
+    p(1 - ls, 0, 6, 10, PAL.bulwarkDk);
+    p(-10, 10, 20, 16, PAL.bulwark);
+    p(-10, 10, 20, 3, PAL.bulwarkDk);
+    p(-5, 26, 10, 9, PAL.skin);
+    p(-5, 30, 10, 3, PAL.bulwarkDk);
+    p(1, 28, 2, 2, "#111");
+    p(9, 4, 6, 26, PAL.bulwarkShield);
+    p(9, 4, 6, 3, "#fff");
+  });
+
+  // ========================== STALKER ==================================
+  // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
+  // post-blink wind-up arm.
+  Assets.register("stalker", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-4 + ls, 0, 4, 9, PAL.stalkerDk);
+    p(0 - ls, 0, 4, 9, PAL.stalkerDk);
+    p(-6, 9, 12, 12, PAL.stalker);
+    p(-6, 9, 12, 2, PAL.stalkerDk);
+    p(-3, 19, 7, 7, PAL.skin);
+    p(1, 20, 2, 2, "#fff");
+    if (opt.state === "wind") p(-8, 22, 16, 2, "#fff");
+    if (opt.state === "strike") p(5, 12, 8, 5, PAL.stalkerDk);
+  });
+
   // ============================ BOSS ==================================
   Assets.register("boss", (p, opt) => {
     const f = opt.frame | 0;
