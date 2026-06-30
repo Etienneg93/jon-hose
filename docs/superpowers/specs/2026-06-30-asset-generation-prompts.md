@@ -6,8 +6,20 @@ Ass Man finishing, new enemies, Act 3/4 biome backdrops). Prompts are written fo
 the project's two backends — `node tools/imagen-gen.mjs <key>` (Gemini, magenta-bg)
 and the agent-sprite-forge magenta pipeline (`sprite-forge` skill).
 **Pipeline note:** all subjects on **solid magenta `#FF00FF`**, **thick 2px black
-outline**, **no shadows / flat lighting**, low-res pixel art (canvas is 480×270),
-limited palette matching `JH.PAL`. Generate 3–4× then downscale.
+outline**, **no shadows / flat lighting**, limited palette matching `JH.PAL`.
+
+**The "Logical px" column below is a world/canvas coordinate, not the output
+resolution to generate at.** The canvas buffer is rendered at full
+`devicePixelRatio`-aware native resolution (`fitCanvas()` in main.js) — a
+"~40px logical" prop actually lands on screen at ~150–250+ real device pixels
+at 1080p+. Generate native art sized for that real footprint, not the logical
+number. See CLAUDE.md's "Canvas resolution" note for the full explanation.
+
+| Logical px (≈) | Generate at (native, 1080p target) |
+|---|---|
+| 480×270 (full backdrop) | 1920×1080, then downscale for the cutout pass |
+| ~40–64px (props, pillars) | ~250–350px |
+| ~20–30px (small props) | ~150–200px |
 
 **Append this suffix to every prop/character prompt:**
 > `— 2D pixel-art game sprite, crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette (16–32 colors), single subject centered with clear margin, on a FLAT SOLID magenta (#FF00FF) background for cutout, no text, no drop shadow, must read at very low resolution.`
