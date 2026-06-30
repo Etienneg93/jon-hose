@@ -191,14 +191,14 @@
   // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
     // Death-sequence timeline (seconds): collapse -> fade -> spirit -> Church.
-    deathSeq: { animEnd: 1.2, fadeEnd: 2.0, spiritEnd: 2.8, total: 2.8 },
+    deathSeq: { whitenEnd: 0.6, ghostStart: 0.5, beamStart: 1.3, fadeStart: 1.6, total: 2.4 },
     essencePerBoss: 1,
     // Father Jon dialogue. `first` = in-character Holy-Essence tutorial (one
     // box per line); `repeat` = a single short line picked at random per visit.
     sermon: {
       first: [
         "Rise, child. You stand in the Church of the Holy Hose — where the fallen are made faithful.",
-        "Each nemesis you redeem leaves behind Holy Essence. I keep it here, gathered from your trials.",
+        "Each nemesis you redeem leaves behind Essence of Friendship. I keep it here, gathered from your trials.",
         "Spend it at the shrines along the nave — Pressure, Vigor, Reservoir — and the blessing follows you into every life to come.",
         "Death is not the end of the spray. Walk into the light when you are ready, and try again.",
       ],
@@ -210,6 +210,7 @@
     layout: {
       length: 720, spawnX: 28, fatherX: 168, altarX: 300, portalX: 660,
       portalReach: 18, stationRange: 24,
+      depthMin: 35, depthMax: 75,
       stations: [
         { id: "bless_dps",  x: 396 },
         { id: "bless_tank", x: 470 },

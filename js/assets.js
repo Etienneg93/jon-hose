@@ -292,16 +292,16 @@
   // ============================ JON ===================================
   // ---- Jon sprite image cache (preloaded at startup)
   const _jonImgs = {};
-  ["idle", "fire", "walk0", "walk1", "walk2", "walk3"].forEach(name => {
+  ["idle", "fire", "walk0", "walk1", "walk2", "walk3", "walk4"].forEach(name => {
     const img = new Image();
     img.src = `sprites/jon/${name}.png`;
     _jonImgs[name] = img;
   });
 
-  const JON_H = 58;  // target display height in logical pixels
+  const JON_H = 53;  // target display height in logical pixels
 
   Assets.register("jon", (p, opt, ctx, x, y, facing) => {
-    const f = opt.frame & 3;
+    const f = (opt.frame | 0) % 5;
     const state = opt.state || "idle";
     if (opt.hurt && (f & 1)) return;
 
@@ -917,7 +917,7 @@
       img.src = src; return img;
     }
     JH.ChurchArt = {
-      backdrop:          makeImg("sprites/church/backdrop.png"),
+      backdrop:          makeImg("sprites/church/Backdrop2.jpg"),
       altar:             makeImg("sprites/church/altar.png"),
       shrineDim:         makeImg("sprites/church/shrine_dim.png"),
       shrineLit:         makeImg("sprites/church/shrine_lit.png"),

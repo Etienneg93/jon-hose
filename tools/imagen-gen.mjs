@@ -56,11 +56,11 @@ function parseArgs() {
 // ---------------------------------------------------------------------------
 
 const PIXEL_ART_RULES = `
-Strict pixel art style. Hard pixel edges only — absolutely no anti-aliasing, no gradients, no blur.
-Limited color palette (16–32 colors max). Clean black outlines, 1px thick.
-2D side-scroller game sprite, viewed from the side (left-facing or right-facing profile).
-Pure white (#FFFFFF) background — no shadows, no gradients behind the character.
-The character should fill most of the canvas. No extra margin or padding.
+Low-res pixel art, hard edges, no anti-aliasing, no gradients.
+Thick 2-pixel black outline around entire subject, hard pixel edges, no anti-aliasing, no soft shadows, flat lighting, clean separation from background.
+Only transparent-looking foreground — no drop shadows, no glow effects baked into the bg.
+Solid magenta (#FF00FF) background, no gradients near edges, background color must not appear inside the subject.
+Limited color palette (16–32 colors max).
 `.trim();
 
 const CHARACTER_PROMPTS = {
@@ -101,6 +101,20 @@ Yellow fireman jacket. Dark pants. Large water backpack tank on back. Hose nozzl
       idle: `Standing idle. One hand on hip, hose hanging loosely at side. Facing right.`,
       spray: `Spraying pose. Leaning forward, hose extended and aimed right.
 Water stream effect coming from nozzle tip. Facing right.`,
+    },
+  },
+
+  // Church of the Holy Hose — static prop assets
+  church: {
+    refImage: "",
+    refDescription: "",
+    base: `2D pixel-art game prop for a gothic cathedral scene. Single object, flat lighting, no baked drop shadows.
+Must read clearly at very small display sizes (the game canvas is 480×270, nearest-neighbour upscaled).
+Single object centered with clear empty margin for easy cutout.`,
+    states: {
+      altar: `A small sacred stone altar of the Church of the Holy Hose: a carved dark-stone pedestal crowned with a brass fire-hydrant relic, a coiled fire-hose draped over it like holy vestment cloth, faint cyan holy-water glow rising from it.
+Dark stone #11141f, brass-gold accents #ffd23f, cyan light #6cd3ff.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
     },
   },
 };

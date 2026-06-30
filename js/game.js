@@ -711,6 +711,10 @@
       this.deathSeqT = 0;
       this.audio.play("die");
       this.shake(8);
+      // Capture screen position for death animation overlay.
+      this.deathSx = Math.round(this.player.x - JH.Camera.x);
+      this.deathSy = JH.Geo.feetScreenY(this.player.y, 0);
+      this.deathFacing = this.player.facing;
     },
 
     updatePlayerDeathSeq(dt) {
@@ -963,7 +967,18 @@
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
           if (!e.draw) continue;
-          if (e.dying) {
+          if (e === this.player && this.state === "playerDeathSeq") {
+            // Player whiten: body stays in place and turns pure white over 0.6s.
+            const t = this.deathSeqT;
+            if (t < 0.6) {
+              const w = t / 0.6;
+              ctx.save();
+              ctx.filter = `brightness(${(1 + w * 9).toFixed(1)}) saturate(${Math.max(0, 1 - w * 2).toFixed(2)})`;
+              e.draw(ctx, cam);
+              ctx.restore();
+            }
+            // After 0.6s the body is gone — only the rising ghost remains (drawn in overlay).
+          } else if (e.dying) {
             const t = this.deathSeqT;
             ctx.save();
             if (t < 0.6) {
@@ -1002,20 +1017,33 @@
       }
       ctx.restore();
 
-      // Player death sequence: fade-to-black then a flickering spirit.
+      // Player death sequence: body whitens → cyan ghost rises → beams off → fade to black.
       if (this.state === "playerDeathSeq") {
-        const D = JH.CHURCH.deathSeq, t = this.deathSeqT, ctx2 = this.ctx;
-        let a = 0;
-        if (t > D.animEnd) a = Math.min(1, (t - D.animEnd) / (D.fadeEnd - D.animEnd));
-        if (a > 0) { ctx2.save(); ctx2.globalAlpha = a; ctx2.fillStyle = "#000";
-          ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore(); }
-        if (t > D.fadeEnd) {
-          const flick = (Math.sin(t * 22) > -0.3) ? 0.85 : 0.25;   // placeholder flicker
-          ctx2.save(); ctx2.globalAlpha = flick; ctx2.fillStyle = JH.PAL.waterHi;
-          const cx = JH.VIEW_W / 2, cy = JH.VIEW_H / 2;
-          ctx2.fillRect(cx - 5, cy - 16, 10, 22);                  // body
-          ctx2.fillRect(cx - 4, cy - 24, 8, 8);                    // head
-          ctx2.restore();
+        const t = this.deathSeqT, ctx2 = this.ctx;
+        const sx = this.deathSx, sy = this.deathSy, facing = this.deathFacing;
+
+        // Ghost: starts rising at 0.5s, slow float then snaps into a beam.
+        if (t > 0.5) {
+          const ft = t - 0.5;
+          const slowEnd = 0.8;   // seconds of slow drift
+          let rise = ft <= slowEnd
+            ? ft * 28                                      // slow: 28 px/s
+            : slowEnd * 28 + Math.pow(ft - slowEnd, 2) * 480; // accelerating beam
+          const ghostAlpha = Math.max(0, 1 - Math.max(0, ft - slowEnd) / 0.4);
+          if (ghostAlpha > 0) {
+            ctx2.save();
+            ctx2.globalAlpha = ghostAlpha * 0.82;
+            ctx2.filter = "sepia(1) hue-rotate(150deg) saturate(3) brightness(2.2)";
+            JH.Assets.draw(ctx2, "jon", sx, sy - rise, facing, { state: "idle", frame: 0 });
+            ctx2.restore();
+          }
+        }
+
+        // Fade to black: starts at 1.6s, over 0.7s.
+        if (t > 1.6) {
+          const a = Math.min(1, (t - 1.6) / 0.7);
+          ctx2.save(); ctx2.globalAlpha = a; ctx2.fillStyle = "#000";
+          ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
         }
       }
 

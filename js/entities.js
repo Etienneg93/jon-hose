@@ -301,6 +301,12 @@
       this.animate(dt, moving);
     }
 
+    animate(dt, moving) {
+      this.animTimer += dt;
+      if (this.animTimer > 0.12) { this.animTimer = 0; this.frame = (this.frame + 1) % 5; }
+      if (!moving) this.frame = this.frame & 1; // settle to even frame
+    }
+
     doSpray(dt, game) {
       const S = this.stats;
       const dry = this.water <= 0 && this.concertaTimer <= 0;

@@ -117,10 +117,13 @@
         .filter((s) => this.state.elements[s.element] && !this.state.ceremonyDone[s.element])
         .map((s) => s.element);
       this.save();
+      // Reset blessings each visit — no persistent save system yet.
+      this.state.blessings = {};
       this.scene = {
-        jonX: L.spawnX, facing: 1, walking: false, frame: 0, t: 0,
+        jonX: L.spawnX, jonY: JH.DEPTH_MAX * 0.5, facing: 1, walking: false, frame: 0, t: 0,
         firstVisit: firstVisit,
-        fatherShown: false, fatherT: 0,
+        intro: true, introT: 0,
+        fatherShown: false, fatherT: 0, fatherSpawnX: 0,
         dialogue: null,
         freshShrines: fresh,
         activeStation: null,
@@ -132,6 +135,14 @@
       const sc = this.scene; if (!sc) return;
       const JH = root.JH, L = JH.CHURCH.layout, In = JH.Input;
       sc.t += dt;
+
+      // Intro: backdrop fade-in then spirit descent. No input during this phase.
+      if (sc.intro) {
+        sc.introT += dt;
+        if (sc.introT >= 2.9) sc.intro = false;
+        return;
+      }
+
       if (sc.fatherShown) sc.fatherT += dt;
 
       // Exit transition: fade out, then warp back into the world.
@@ -160,12 +171,16 @@
       sc.walking = false;
       if (In.held("right")) { sc.jonX += sp; sc.facing = 1; sc.walking = true; }
       if (In.held("left"))  { sc.jonX -= sp; sc.facing = -1; sc.walking = true; }
+      if (In.held("down"))  { sc.jonY += sp * 0.55; sc.walking = true; }
+      if (In.held("up"))    { sc.jonY -= sp * 0.55; sc.walking = true; }
       sc.jonX = Math.max(12, Math.min(sc.jonX, L.length - 12));
+      sc.jonY = Math.max(L.depthMin, Math.min(L.depthMax, sc.jonY));
       if (sc.walking) sc.frame += dt * 8;
 
       // Father Jon materializes once you pass the threshold, and speaks.
       if (!sc.fatherShown && sc.jonX >= L.fatherX) {
         sc.fatherShown = true; sc.fatherT = 0; sc.t = 0;
+        sc.fatherSpawnX = sc.jonX + 50;
         const lines = sc.firstVisit
           ? JH.CHURCH.sermon.first.slice()
           : [JH.CHURCH.sermon.repeat[(Math.random() * JH.CHURCH.sermon.repeat.length) | 0]];
@@ -190,9 +205,47 @@
     renderScene(ctx, game) {
       const sc = this.scene; if (!sc) return;
       const JH = root.JH, L = JH.CHURCH.layout, PAL = JH.PAL, ART = JH.ChurchArt || {};
+      const Geo = JH.Geo;
       const VW = JH.VIEW_W, VH = JH.VIEW_H, floorY = VH - 14;
+      const jonScreenY = Geo ? Geo.feetScreenY(sc.jonY, 0) : floorY;
       const camX = Math.max(0, Math.min(sc.jonX - VW / 2, L.length - VW));
       ctx.font = "8px monospace"; ctx.textAlign = "center";
+
+      // ---- Intro sequence: backdrop fades in, then spirit descends to spawn. ----
+      if (sc.intro) {
+        const it = sc.introT;
+        const backdropAlpha = Math.min(1, it / 1.5);
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, VW, VH);
+        ctx.save(); ctx.globalAlpha = backdropAlpha;
+        blit(ctx, ART.backdrop, 0, 0, VW, VH, () => {
+          ctx.fillStyle = "#0a0c14"; ctx.fillRect(0, 0, VW, VH);
+          ctx.fillStyle = "#11141f"; ctx.fillRect(0, VH - 56, VW, 56);
+        });
+        ctx.restore();
+
+        if (it > 1.2) {
+          const ft = it - 1.2;
+          const BEAM = 0.5, DRIFT = 1.2;
+          const totalDrop = jonScreenY - (-60);
+          let spiritY;
+          if (ft <= BEAM) {
+            // Fast beam in from above: quadratic ease-out
+            const p = ft / BEAM;
+            spiritY = -60 + totalDrop * 0.82 * (1 - (1 - p) * (1 - p));
+          } else {
+            // Slow drift to floor
+            const p = Math.min(1, (ft - BEAM) / DRIFT);
+            spiritY = -60 + totalDrop * 0.82 + totalDrop * 0.18 * p;
+          }
+          const sx = Math.round(sc.jonX - camX);
+          ctx.save();
+          ctx.globalAlpha = Math.min(1, ft / 0.12) * 0.82;
+          ctx.filter = "sepia(1) hue-rotate(150deg) saturate(2.5) brightness(1.3)";
+          JH.Assets.draw(ctx, "jon", sx, spiritY, 1, { state: "idle", frame: 0 });
+          ctx.restore();
+        }
+        return;
+      }
 
       // Backdrop.
       blit(ctx, ART.backdrop, 0, 0, VW, VH, () => {
@@ -202,16 +255,12 @@
 
       // Altar centerpiece + the four elemental shrines flanking it.
       const ax = Math.round(L.altarX - camX);
-      blit(ctx, ART.altar, ax - 16, VH - 96, 32, 40, () => {
-        ctx.fillStyle = "#39507a"; ctx.fillRect(ax - 14, VH - 92, 28, 36);
-      });
+      blit(ctx, ART.altar, ax - 16, VH - 96, 32, 40, () => {});
       JH.CHURCH.shrines.forEach((s, i) => {
         const x = Math.round(L.altarX - 135 + i * 90 - camX);
         const lit = this.state.elements[s.element];
         const fresh = sc.freshShrines.indexOf(s.element) >= 0;
-        blit(ctx, lit ? ART.shrineLit : ART.shrineDim, x - 10, 48, 20, 44, () => {
-          ctx.fillStyle = lit ? PAL.waterHi : "#1c2233"; ctx.fillRect(x - 8, 54, 16, 38);
-        });
+        blit(ctx, lit ? ART.shrineLit : ART.shrineDim, x - 10, 48, 20, 44, () => {});
         if (fresh) {
           ctx.save(); ctx.globalAlpha = 0.5 * (0.5 + 0.5 * Math.sin(sc.t * 6));
           ctx.fillStyle = "#d6f6ff"; ctx.fillRect(x - 11, 46, 22, 48); ctx.restore();
@@ -224,9 +273,7 @@
         const x = Math.round(st.x - camX);
         const near = sc.activeStation === st.id;
         const bob = Math.sin(sc.t * 4 + st.x) * 2;
-        blit(ctx, ART["station_" + st.id], x - 9, VH - 50, 18, 34, () => {
-          ctx.fillStyle = near ? "#46577a" : "#2a3344"; ctx.fillRect(x - 7, VH - 44, 14, 28);
-        });
+        blit(ctx, ART["station_" + st.id], x - 9, VH - 50, 18, 34, () => {});
         if (near) {
           ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(sc.t * 8);
           ctx.fillStyle = ICON[st.id]; ctx.fillRect(x - 10, VH - 71 + bob, 20, 20); ctx.restore();
@@ -237,45 +284,72 @@
           ctx.fillStyle = "#ffe9a8"; ctx.fillText(def.name + " — " + def.desc, x, VH - 82 + bob);
           ctx.fillStyle = this.canBuyBlessing(st.id) ? "#9be8ff" : "#a66";
           ctx.fillText("Lvl " + this.blessingCount(st.id) + "  ·  " + this.blessingCost(st.id) +
-            " essence  ·  Press E", x, VH - 72 + bob);
+            " Essence of Friendship  ·  Press E", x, VH - 72 + bob);
         }
       }
 
       // Portal at the end of the nave.
       const px = Math.round(L.portalX - camX);
-      blit(ctx, ART.portal, px - 12, VH - 104, 24, 48, () => {
-        ctx.save(); ctx.globalAlpha = 0.6 + 0.4 * Math.sin(sc.t * 6);
-        ctx.fillStyle = "#6cff9a"; ctx.fillRect(px - 7, VH - 96, 14, 40); ctx.restore();
-        ctx.strokeStyle = "#bfffd6"; ctx.strokeRect(px - 9, VH - 98, 18, 44);
-      });
+      blit(ctx, ART.portal, px - 12, VH - 104, 24, 48, () => {});
 
-      // Ghost Jon — the real sprite, translucent + a cyan soul-glow, no water.
+      // Ghost Jon — the real sprite, cyan-shifted and translucent.
       const sx = Math.round(sc.jonX - camX);
-      ctx.save(); ctx.globalAlpha = 0.26; ctx.fillStyle = "#6cd3ff";
-      ctx.beginPath(); ctx.ellipse(sx, floorY - 18, 12, 22, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      const ghostAlpha = sc.exiting ? Math.max(0, 0.65 - sc.exitT) : 0.65;
       ctx.save();
-      ctx.globalAlpha = sc.exiting ? Math.max(0, 0.62 - sc.exitT) : 0.62;
-      JH.Assets.draw(ctx, "jon", sx, floorY, sc.facing, { state: sc.walking ? "walk" : "idle", frame: sc.frame | 0 });
+      ctx.globalAlpha = ghostAlpha;
+      ctx.filter = "sepia(1) hue-rotate(150deg) saturate(2.5) brightness(1.3)";
+      JH.Assets.draw(ctx, "jon", sx, jonScreenY, sc.facing, { state: sc.walking ? "walk" : "idle", frame: sc.frame | 0 });
       ctx.restore();
 
-      // Father Jon, materializing at his threshold.
+      // Father Jon: holy godray descends, then he manifests 50px above the floor just ahead of Jon.
       if (sc.fatherShown) {
-        const fx = Math.round(L.fatherX + 20 - camX), a = Math.min(1, sc.fatherT / FATHER_MAT);
-        ctx.save(); ctx.globalAlpha = a;
-        blit(ctx, ART.fatherJonNpc, fx - 12, floorY - 56, 24, 56, () => {
-          ctx.fillStyle = "#2a2440"; ctx.fillRect(fx - 8, floorY - 48, 16, 48);   // robe
-          ctx.fillStyle = "#f1c08a"; ctx.fillRect(fx - 5, floorY - 54, 10, 8);    // face
-          ctx.fillStyle = "#d6f6ff"; ctx.fillRect(fx - 7, floorY - 61, 14, 8);    // mitre
-        });
-        if (a < 1) { ctx.globalAlpha = (1 - a) * 0.7; ctx.fillStyle = "#d6f6ff"; ctx.fillRect(fx - 12, floorY - 61, 24, 61); }
-        ctx.restore();
+        const ft = sc.fatherT;
+        const LIFT = 50, BEAM_DRP = 0.28, BEAM_FD = 0.35, FSTART = 0.18, FDUR = 0.45;
+        const fx = Math.round(sc.fatherSpawnX - camX);
+        const feetY = floorY - LIFT;
+
+        // Beam grows from y=0 down to feetY, then fades out.
+        const beamProg = Math.min(1, ft / BEAM_DRP);
+        const beamAlpha = ft < BEAM_DRP ? 0.82 : 0.82 * Math.max(0, 1 - (ft - BEAM_DRP) / BEAM_FD);
+        if (beamAlpha > 0.01) {
+          ctx.save(); ctx.globalAlpha = beamAlpha;
+          ctx.fillStyle = "#ffd23f"; ctx.fillRect(fx - 10, 0, 20, feetY * beamProg);
+          ctx.fillStyle = "#d6f6ff"; ctx.fillRect(fx - 4,  0,  8, feetY * beamProg);
+          ctx.restore();
+        }
+
+        // Landing bloom at feetY when beam arrives.
+        if (ft >= BEAM_DRP && ft < BEAM_DRP + 0.3) {
+          const bloomA = 0.7 * (1 - (ft - BEAM_DRP) / 0.3);
+          ctx.save(); ctx.globalAlpha = bloomA;
+          ctx.fillStyle = "#fffce0"; ctx.fillRect(fx - 20, feetY - 4, 40, 10);
+          ctx.restore();
+        }
+
+        // Father Jon fades in as beam lands.
+        const a = ft < FSTART ? 0 : Math.min(1, (ft - FSTART) / FDUR);
+        if (a > 0) {
+          ctx.save(); ctx.globalAlpha = a;
+          const npc = ART.fatherJonNpc;
+          if (npc && npc._ready) {
+            const scale = 53 / npc.naturalHeight;
+            const dw = Math.round(npc.naturalWidth * scale);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(npc, Math.round(fx - dw / 2), feetY - 53, dw, 53);
+          } else {
+            ctx.fillStyle = "#2a2440"; ctx.fillRect(fx - 8, feetY - 48, 16, 48);
+            ctx.fillStyle = "#f1c08a"; ctx.fillRect(fx - 5, feetY - 54, 10, 8);
+            ctx.fillStyle = "#d6f6ff"; ctx.fillRect(fx - 7, feetY - 61, 14, 8);
+          }
+          ctx.restore();
+        }
       } else {
         ctx.fillStyle = "#7f8aa0"; ctx.fillText("→", sx + 18, floorY - 30);
       }
 
       // Holy Essence readout — always visible so the currency reads.
       ctx.textAlign = "right"; ctx.fillStyle = "#d6f6ff";
-      ctx.fillText("✦ Holy Essence: " + this.state.essence, VW - 8, 14);
+      ctx.fillText("✦ Essence of Friendship: " + this.state.essence, VW - 8, 14);
 
       // Father Jon's dialogue box.
       if (sc.dialogue) {
