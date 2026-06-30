@@ -354,7 +354,12 @@
       // Father Jon's dialogue box.
       if (sc.dialogue) {
         ctx.fillStyle = "rgba(0,0,0,0.78)"; ctx.fillRect(0, VH - 58, VW, 58);
-        blit(ctx, ART.fatherJonPortrait, 8, VH - 56, 44, 50, () => {
+        // Mouth-flaps for the first 1.6s of each line, then settles closed.
+        const talking = sc.t < 1.6;
+        const mouthOpen = talking && (Math.floor(sc.t * 7) & 1);
+        const portrait = (mouthOpen && ART.fatherJonPortraitOpen._ready)
+          ? ART.fatherJonPortraitOpen : ART.fatherJonPortrait;
+        blit(ctx, portrait, 8, VH - 56, 44, 50, () => {
           ctx.fillStyle = "#1a1530"; ctx.fillRect(8, VH - 56, 44, 50);
           ctx.fillStyle = "#f1c08a"; ctx.fillRect(24, VH - 44, 12, 12);
           ctx.fillStyle = "#d6f6ff"; ctx.fillRect(22, VH - 50, 16, 6);

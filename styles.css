@@ -179,6 +179,8 @@ h2.win  { color: var(--hp); }
 }
 .btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #000; }
 .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+.btn:disabled { opacity: 0.55; cursor: progress; }
+.btn:disabled:hover { transform: none; box-shadow: 4px 4px 0 #000; }
 
 /* ---------- HUD ---------- */
 #hud {

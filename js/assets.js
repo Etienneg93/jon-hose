@@ -293,9 +293,7 @@
   // ---- Jon sprite image cache (preloaded at startup)
   const _jonImgs = {};
   ["idle", "fire", "walk0", "walk1", "walk2", "walk3", "walk4"].forEach(name => {
-    const img = new Image();
-    img.src = `sprites/jon/${name}.png`;
-    _jonImgs[name] = img;
+    _jonImgs[name] = JH.Loader.img(`sprites/jon/${name}.png`);
   });
 
   const JON_H = 53;  // target display height in logical pixels
@@ -469,17 +467,9 @@
   }
 
   // Lazy-load the atlas (works regardless of script order).
-  let _qImg = null, _qTried = false;
-  function quakeImg() {
-    if (_qTried) return _qImg;
-    _qTried = true;
-    if (JH.QUAKE_FRAMES) {
-      _qImg = new Image(); _qImg._ready = false;
-      _qImg.onload = () => { _qImg._ready = true; };
-      _qImg.src = JH.QUAKE_FRAMES.sheet;
-    }
-    return _qImg;
-  }
+  // Eager-loaded at boot so the preloader gate waits for the atlas.
+  const _qImg = JH.QUAKE_FRAMES ? JH.Loader.img(JH.QUAKE_FRAMES.sheet) : null;
+  function quakeImg() { return _qImg; }
   function quakeFrame(opt) {
     const F = JH.QUAKE_FRAMES && JH.QUAKE_FRAMES.frames; if (!F) return null;
     if (opt.state === "tele" || opt.state === "leapWind" || opt.state === "leaping") return F.stompUp;
@@ -531,15 +521,8 @@
   // Row y=16 = gold, y=32 = silver, y=64 = bronze
   const COIN_SRC_X = 64, COIN_FRAMES = 6, COIN_W = 16, COIN_H = 16;
   const COIN_Y = { gold: 16, silver: 32, bronze: 64 };
-  let _coinSheet = null, _coinSheetTried = false;
-  function getCoinSheet() {
-    if (_coinSheetTried) return _coinSheet;
-    _coinSheetTried = true;
-    _coinSheet = new Image(); _coinSheet._ready = false;
-    _coinSheet.onload = () => { _coinSheet._ready = true; };
-    _coinSheet.src = "sprites/coins-chests-etc-2-0.png";
-    return _coinSheet;
-  }
+  const _coinSheet = JH.Loader.img("sprites/coins-chests-etc-2-0.png");
+  function getCoinSheet() { return _coinSheet; }
   function registerCoin(key, srcY, fallbackColor) {
     Assets.register(key, (p, opt, ctx, x, y) => {
       const bob = Math.sin((opt.t || 0) * 6) * 1.5;
@@ -565,15 +548,8 @@
     p(-3, 3 + bob, 6, 7, PAL.water);
     p(-2, 8 + bob, 4, 1, PAL.waterHi);
   });
-  let _kibbleImg = null, _kibbleTried = false;
-  function getKibble() {
-    if (_kibbleTried) return _kibbleImg;
-    _kibbleTried = true;
-    _kibbleImg = new Image(); _kibbleImg._ready = false;
-    _kibbleImg.onload = () => { _kibbleImg._ready = true; };
-    _kibbleImg.src = "sprites/Kibble.png";
-    return _kibbleImg;
-  }
+  const _kibbleImg = JH.Loader.img("sprites/Kibble.png");
+  function getKibble() { return _kibbleImg; }
   Assets.register("health", (p, opt, ctx, x, y) => {
     const bob = Math.sin((opt.t || 0) * 6) * 1.5;
     const img = getKibble();
@@ -728,17 +704,8 @@
   // ====================== THE NEIGHBOR (garden enemy) =================
   // Image-blit painter backed by neighbor-frames.js atlas.
   // Falls back to procedural if the sheet isn't loaded yet.
-  let _nbImg = null, _nbTried = false;
-  function neighborImg() {
-    if (_nbTried) return _nbImg;
-    _nbTried = true;
-    if (JH.NEIGHBOR_FRAMES) {
-      _nbImg = new Image(); _nbImg._ready = false;
-      _nbImg.onload = () => { _nbImg._ready = true; };
-      _nbImg.src = JH.NEIGHBOR_FRAMES.sheet;
-    }
-    return _nbImg;
-  }
+  const _nbImg = JH.NEIGHBOR_FRAMES ? JH.Loader.img(JH.NEIGHBOR_FRAMES.sheet) : null;
+  function neighborImg() { return _nbImg; }
   function neighborFrame(state) {
     const F = JH.NEIGHBOR_FRAMES && JH.NEIGHBOR_FRAMES.frames;
     if (!F) return null;
@@ -807,15 +774,8 @@
   // ========================= ROCK (neighbor projectile) ===============
   // Sprite sheet: sprites/neighbor/rocks.png — 3x2 grid, 24x24 cells, 6 variants.
   const ROCK_CELL = 24, ROCK_COLS = 3, ROCK_SCALE = 0.38;
-  let _rockSheet = null, _rockSheetTried = false;
-  function rockSheetImg() {
-    if (_rockSheetTried) return _rockSheet;
-    _rockSheetTried = true;
-    _rockSheet = new Image(); _rockSheet._ready = false;
-    _rockSheet.onload = () => { _rockSheet._ready = true; };
-    _rockSheet.src = "sprites/neighbor/rocks.png";
-    return _rockSheet;
-  }
+  const _rockSheet = JH.Loader.img("sprites/neighbor/rocks.png");
+  function rockSheetImg() { return _rockSheet; }
   Assets.register("rock", (p, opt, ctx, x, y) => {
     const img = rockSheetImg();
     if (img && img._ready) {
@@ -897,11 +857,7 @@
   // =================== QUAKE WALKER CUTSCENE PORTRAIT ================
   // Pre-load both mouth-closed and mouth-open JPGs immediately.
   {
-    function makeImg(src) {
-      const img = new Image(); img._ready = false;
-      img.onload = () => { img._ready = true; };
-      img.src = src; return img;
-    }
+    const makeImg = (src) => JH.Loader.img(src);
     const _closed = makeImg("sprites/quake_walker_portrait.jpg");
     const _open   = makeImg("sprites/quake_walker_portrait_mouthopen.jpg");
     JH.getQuakePortrait = (mouthOpen) => mouthOpen ? _open : _closed;
@@ -911,20 +867,17 @@
   // Transparent PNGs; church.js renderScene falls back to ctx-rects if a
   // file is missing/unloaded (the documented neighbor blit+fallback seam).
   {
-    function makeImg(src) {
-      const img = new Image(); img._ready = false;
-      img.onload = () => { img._ready = true; };
-      img.src = src; return img;
-    }
+    const makeImg = (src) => JH.Loader.img(src);
     JH.ChurchArt = {
       backdrop:          makeImg("sprites/church/Backdrop2.jpg"),
       altar:             makeImg("sprites/church/altar.png"),
       shrineDim:         makeImg("sprites/church/shrine_dim.png"),
       shrineLit:         makeImg("sprites/church/shrine_lit.png"),
       portal:            makeImg("sprites/church/portal.png"),
-      // Father Jon: in-world NPC + codec dialogue portrait.
-      fatherJonNpc:      makeImg("sprites/church/father_jon.png"),
-      fatherJonPortrait: makeImg("sprites/church/father_jon_portrait.png"),
+      // Father Jon: in-world NPC + codec dialogue portrait (mouth closed/open).
+      fatherJonNpc:          makeImg("sprites/church/father_jon.png"),
+      fatherJonPortrait:     makeImg("sprites/church/father_jon_portrait.png"),
+      fatherJonPortraitOpen: makeImg("sprites/church/father_jon_portrait_openmouth.png"),
       // Walk-up blessing stations (keyed by blessing id).
       station_bless_dps:  makeImg("sprites/church/station_dmg.png"),
       station_bless_tank: makeImg("sprites/church/station_water.png"),

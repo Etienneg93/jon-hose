@@ -15,9 +15,7 @@
   const JH = (window.JH = window.JH || {});
 
   // Debris pile sprite (Act 3 floor dressing). 309×272 source art.
-  const _debrisImg = new Image(); _debrisImg._ready = false;
-  _debrisImg.onload = () => { _debrisImg._ready = true; };
-  _debrisImg.src = "sprites/environment/debris.png";
+  const _debrisImg = JH.Loader.img("sprites/environment/debris.png");
 
   // ----------------------------------------------------------- geometry
   const Geo = {

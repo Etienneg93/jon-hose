@@ -61,13 +61,32 @@
       // Overlay buttons dispatch by data-action.
       document.querySelectorAll("[data-action]").forEach((el) => {
         el.addEventListener("click", () => {
-          startAudio();
           const a = el.getAttribute("data-action");
+          // Gate the title "start" until every tracked image has settled.
+          if (a === "start" && !JH.Loader.ready()) return;
+          startAudio();
           if (a === "start" || a === "retry") this.startGame();
           else if (a === "resume") this.closeShop();
           else if (a === "resume-pause") this.togglePause();
         });
       });
+
+      // Asset preloader gate: keep the title "PRESS START" disabled, showing
+      // progress, until all shipped images have loaded (or 404'd).
+      const startBtn = document.querySelector('#screen-title [data-action="start"]');
+      if (startBtn) {
+        const updateGate = () => {
+          if (JH.Loader.ready()) {
+            startBtn.disabled = false;
+            startBtn.textContent = "PRESS START";
+          } else {
+            startBtn.disabled = true;
+            startBtn.textContent = `LOADING… ${JH.Loader.settled}/${JH.Loader.total}`;
+          }
+        };
+        updateGate();
+        JH.Loader.onProgress(updateGate);
+      }
 
       // Audio controls (master volume + mute) on the title & pause menus.
       // Multiple copies stay in sync since we query them all.
