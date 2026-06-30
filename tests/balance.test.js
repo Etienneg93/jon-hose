@@ -122,3 +122,17 @@ test("stalkerBlinkTarget: clamps to the arena/depth bounds", () => {
   const t2 = Balance.stalkerBlinkTarget(500, 90, 1, 60, bounds);    // y past depthMax
   assert.strictEqual(t2.y, 86);
 });
+
+test("furnaceShouldVent: true when spray threshold reached and not on cooldown", () => {
+  assert.strictEqual(Balance.furnaceShouldVent(1.5, 1.5, 0), true);   // exactly at threshold
+  assert.strictEqual(Balance.furnaceShouldVent(2.0, 1.5, 0), true);   // over threshold
+});
+
+test("furnaceShouldVent: false when still building up spray time", () => {
+  assert.strictEqual(Balance.furnaceShouldVent(1.4, 1.5, 0), false);  // just under threshold
+  assert.strictEqual(Balance.furnaceShouldVent(0, 1.5, 0), false);    // no spray yet
+});
+
+test("furnaceShouldVent: false when on cooldown even if threshold reached", () => {
+  assert.strictEqual(Balance.furnaceShouldVent(2.0, 1.5, 0.1), false); // ventCdT > 0
+});

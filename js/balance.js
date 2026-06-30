@@ -99,6 +99,13 @@
       const y = Math.max(bounds.depthMin, Math.min(bounds.depthMax, playerY));
       return { x, y };
     },
+
+    // Should the Furnace enter its vent wind-up? True when the player has
+    // sprayed it continuously past the heat threshold and the post-vent
+    // cooldown has expired. Pure — inputs are all passed in.
+    furnaceShouldVent(continuousSprayT, heatThreshold, ventCdT) {
+      return continuousSprayT >= heatThreshold && ventCdT <= 0;
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;
