@@ -87,3 +87,34 @@ test("repeatableCost rises 1.5x per purchase", () => {
   assert.strictEqual(Balance.repeatableCost(60, 2), 135);
   assert.strictEqual(Balance.repeatableCost(60, 3), 203); // round(202.5)
 });
+
+test("bulwarkShielded: attacker in front of the Bulwark's facing is shielded", () => {
+  assert.strictEqual(Balance.bulwarkShielded(100, 1, 150), true);   // facing right, attacker to the right
+  assert.strictEqual(Balance.bulwarkShielded(100, -1, 50), true);   // facing left, attacker to the left
+});
+
+test("bulwarkShielded: attacker behind the Bulwark's facing is NOT shielded", () => {
+  assert.strictEqual(Balance.bulwarkShielded(100, 1, 50), false);   // facing right, attacker to the left
+  assert.strictEqual(Balance.bulwarkShielded(100, -1, 150), false); // facing left, attacker to the right
+});
+
+test("bulwarkShielded: attacker exactly at the Bulwark's x counts as in front", () => {
+  assert.strictEqual(Balance.bulwarkShielded(100, 1, 100), true);
+});
+
+test("stalkerBlinkTarget: lands behind the player relative to their facing", () => {
+  const bounds = { minX: 0, maxX: 1000, depthMin: 0, depthMax: 86 };
+  const t = Balance.stalkerBlinkTarget(500, 40, 1, 60, bounds);     // facing right -> blink lands LEFT
+  assert.strictEqual(t.x, 440);
+  assert.strictEqual(t.y, 40);
+  const t2 = Balance.stalkerBlinkTarget(500, 40, -1, 60, bounds);   // facing left -> blink lands RIGHT
+  assert.strictEqual(t2.x, 560);
+});
+
+test("stalkerBlinkTarget: clamps to the arena/depth bounds", () => {
+  const bounds = { minX: 0, maxX: 1000, depthMin: 0, depthMax: 86 };
+  const t = Balance.stalkerBlinkTarget(20, 5, 1, 60, bounds);       // would land at x=-40
+  assert.strictEqual(t.x, 0);
+  const t2 = Balance.stalkerBlinkTarget(500, 90, 1, 60, bounds);    // y past depthMax
+  assert.strictEqual(t2.y, 86);
+});
