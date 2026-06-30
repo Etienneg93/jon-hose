@@ -83,6 +83,14 @@
       return { health, water };
     },
 
+    // Is the player within throwRange of the Bulwark? Pure distance check —
+    // facing/angle doesn't matter since Bulwark.facing now updates freely
+    // every frame (no turn-cooldown), so it's already oriented correctly.
+    bulwarkShouldThrow(bulwarkX, bulwarkY, playerX, playerY, throwRange) {
+      const dist = Math.hypot(playerX - bulwarkX, playerY - bulwarkY);
+      return dist <= throwRange;
+    },
+
     // Is `attackerX` on the side the Bulwark's shield (facing) currently
     // covers? true = frontal/shielded, false = the Bulwark's back is exposed.
     bulwarkShielded(bulwarkX, bulwarkFacing, attackerX) {

@@ -88,6 +88,24 @@ test("repeatableCost rises 1.5x per purchase", () => {
   assert.strictEqual(Balance.repeatableCost(60, 3), 203); // round(202.5)
 });
 
+test("bulwarkShouldThrow: true when the player is within range", () => {
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 150, 40, 80), true);  // dist 50 <= 80
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 100, 40, 80), true);  // dist 0
+});
+
+test("bulwarkShouldThrow: false when the player is out of range", () => {
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 250, 40, 80), false); // dist 150
+});
+
+test("bulwarkShouldThrow: accounts for depth (y), not just x", () => {
+  // hypot(30, 80) ≈ 85.44 > 80
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 0, 130, 80, 80), false);
+});
+
+test("bulwarkShouldThrow: exactly at range counts as in range", () => {
+  assert.strictEqual(Balance.bulwarkShouldThrow(0, 0, 80, 0, 80), true);
+});
+
 test("bulwarkShielded: attacker in front of the Bulwark's facing is shielded", () => {
   assert.strictEqual(Balance.bulwarkShielded(100, 1, 150), true);   // facing right, attacker to the right
   assert.strictEqual(Balance.bulwarkShielded(100, -1, 50), true);   // facing left, attacker to the left
