@@ -10,7 +10,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920, 5100, 5280, 5440, 5960, 6480, 7000, 7100, 7200, 7300];
+  const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000];
   if (WAVE_TRIGGERS.length !== JH.LEVEL1.waves.length)
     console.warn("WAVE_TRIGGERS length (" + WAVE_TRIGGERS.length + ") !== waves length (" + JH.LEVEL1.waves.length + ") — progression will break");
 

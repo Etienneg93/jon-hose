@@ -137,3 +137,16 @@ test("furnaceShouldVent: false when still building up spray time", () => {
 test("furnaceShouldVent: false when on cooldown even if threshold reached", () => {
   assert.strictEqual(Balance.furnaceShouldVent(2.0, 1.5, 0.1), false); // ventCdT > 0
 });
+
+test("actLevelForWave with expanded ACT_STARTS assigns new act tiers", () => {
+  const AS = [0, 5, 10, 16, 23];
+  assert.strictEqual(Balance.actLevelForWave(4, AS), -1);   // Act 1
+  assert.strictEqual(Balance.actLevelForWave(5, AS), 0);    // Act 2 start
+  assert.strictEqual(Balance.actLevelForWave(9, AS), 0);    // Act 2 (Switch)
+  assert.strictEqual(Balance.actLevelForWave(10, AS), 1);   // Act 3 start
+  assert.strictEqual(Balance.actLevelForWave(15, AS), 1);   // Act 3 (Quake)
+  assert.strictEqual(Balance.actLevelForWave(16, AS), 2);   // Act 4 start
+  assert.strictEqual(Balance.actLevelForWave(22, AS), 2);   // Act 4 (GK)
+  assert.strictEqual(Balance.actLevelForWave(23, AS), 3);   // Fire start
+  assert.strictEqual(Balance.actLevelForWave(28, AS), 3);   // Fire (Slayer)
+});

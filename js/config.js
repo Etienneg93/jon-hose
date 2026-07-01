@@ -20,7 +20,7 @@
   JH.FLOOR_TOP = 168;       // screen-y of the back edge of the floor
   JH.DEPTH_MIN = 0;
   JH.DEPTH_MAX = 86;        // floor depth span in px
-  JH.LEVEL_LEN = 7400;      // world length of level 1 (logical px)
+  JH.LEVEL_LEN = 11200;     // world length of level 1 (logical px)
   JH.ZONE2_START = 4100;    // world-x where the ruined district (Act 3) begins
   JH.ZONE3_START = 7000;    // world-x where the Boiler District (fire world) begins
                             // (placeholder — realign when wave pacing is respaced)
@@ -38,6 +38,11 @@
     { x: 5300, y: JH.DEPTH_MAX - 12 },
     { x: 5900, y: JH.DEPTH_MIN + 10 },
     { x: 6700, y: JH.DEPTH_MAX - 14 },
+    { x: 7500, y: JH.DEPTH_MIN + 12 },
+    { x: 8300, y: JH.DEPTH_MAX - 12 },
+    { x: 9100, y: JH.DEPTH_MIN + 12 },   // fire world
+    { x: 9900, y: JH.DEPTH_MAX - 12 },
+    { x: 10700, y: JH.DEPTH_MIN + 12 },
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
 
@@ -463,8 +468,8 @@
   };
 
   // Act-start wave indices (bounded by boss clears) — death respawns here.
-  // 0 Act1 · 5 Act2 (after Big Drip) · 8 Act3 (after Switch) · 10 Act4 (after Quake).
-  JH.ACT_STARTS = [0, 5, 8, 10];
+  // 0 Act1 · 5 Act2 (after Big Drip) · 10 Act3 (after Switch) · 16 Act4 (after Quake) · 23 Fire (after GK).
+  JH.ACT_STARTS = [0, 5, 10, 16, 23];
 
   // ---- Level 1 waves --------------------------------------------------
   // Each wave: list of {type, count}. Gate progress until cleared, then
@@ -473,32 +478,38 @@
     waves: [
       { name: "WAVE 1", spawns: [{ type: "mook", count: 3 }] },
       { name: "WAVE 2", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }] },
-      // Gentle intro to the Pyro — mostly familiar mooks plus a single pyro.
       { name: "WAVE 3", spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }] },
       { name: "WAVE 4", spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 2 }] },
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
-      // ---- Act 2: everything from here is ELITE (much tougher) ----
+      // ---- Act 2: ELITE ----
       { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
-        spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] }, // spawn pool while wall stands
-      { name: "THE SWITCH", boss: true, bossType: "switch" }, // act-2 boss: The Switch of Doom
-      // ---- Act 3: the ruined district — broken buildings & debris ----
+        spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] },
+      { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "THE SWITCH", boss: true, bossType: "switch" },
+      // ---- Act 3: the ruined district ----
       { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "HOLD THE LINE", holdout: true, tough: true, holdDur: 22,
+        spawns: [{ type: "mook", count: 2 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
+      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }] },
+      { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }, { type: "charger", count: 1 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
-      // ---- Act 4: the aftermath — Quake Walker turns ally ----
-      // Super-elites: curated counters to late-game dominant tactics (pierce-spray
-      // camping vs. the Bulwark's shield; back-pedal kiting vs. the Stalker's blink).
-      // No `tough` flag — already tuned for Act 4, not elite-ramped (see
-      // docs/superpowers/specs/2026-06-28-super-elites-design.md, "No double-ramp").
+      // ---- Act 4: the aftermath ----
       { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 3 }] },
       { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
+      { name: "OVERRUN", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }, { type: "pyro", count: 1 }] },
       { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
-      // ---- Fire World (placeholder position — move with wave-flow pacing spec) ----
+      // ---- Fire World (curated, un-tough) ----
       { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "EMBER RUSH", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "DOUSE THE FLAMES", douse: true, spawns: [{ type: "smelt", count: 2 }] },
       { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 2 }] },
+      { name: "MELTDOWN", spawns: [{ type: "smelt", count: 1 }, { type: "fuse", count: 3 }] },
       { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };
