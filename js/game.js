@@ -1171,6 +1171,26 @@
           }
         }
       }
+      // Enemies can't stand inside Jon either: soft-push them out (only the
+      // enemy moves — Jon stays solid). The half-overlap-per-frame push leaves
+      // a sliver of overlap at the boundary, so contact damage (checked in
+      // Enemy.update, which runs before separate()) still triggers. Charging
+      // enemies pass through — body-blocking a charge would stop it short of
+      // its hit arc. Stationary NPC-ish types hold their posts.
+      const pl = this.player;
+      if (pl && pl.alive) {
+        for (const e of a) {
+          if (e.isBoss || e.dead || e.dropping || e.state === "charge") continue;
+          if (e.type === "dummy" || e.type === "neighbor") continue;
+          if (Math.abs(e.z - pl.z) > 20) continue;
+          const dx = e.x - pl.x, dy = e.y - pl.y;
+          const minX = (e.bodyW + pl.bodyW) * 0.5, minY = 10;
+          if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
+            const push = (minX - Math.abs(dx)) * 0.5 + 0.2;
+            e.x += (dx >= 0 ? 1 : -1) * push;
+          }
+        }
+      }
     },
 
     updateHUD() {
