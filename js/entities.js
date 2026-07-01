@@ -828,6 +828,10 @@
       if (this.contactTimer > 0) this.contactTimer -= dt;
       this.think(dt, game);
       resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
+      // Arena containment: hose knockback (and charge overshoot) can't shove
+      // an enemy past the locked wave bounds where Jon can't follow — waves
+      // only clear on kills, so an unreachable enemy would soft-lock the wave.
+      this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
       // contact damage
       const pl = game.player;
       if (!this.dead && pl.alive && Geo.bodiesOverlap(this, pl) && this.contactTimer <= 0
