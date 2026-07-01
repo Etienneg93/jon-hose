@@ -3025,7 +3025,7 @@
               JH.PAL.smeltGlow, 1, { speed: 100, life: 0.4, up: 50 });
           game.shake(8); game.audio.play("whack");
           this.strikeFx = 0.2;
-          this.cdTimer = enraged ? d.volleyCd * 0.6 : d.volleyCd * 0.5;
+          this.cdTimer = enraged ? d.volleyCd * 0.8 : d.volleyCd;
           this.state = "idle";
         }
         return;
@@ -3070,6 +3070,13 @@
           this.state = "idle";
         }
         return;
+      }
+
+      // Fall-through: "idle" state waits out cdTimer (handled at the top) then
+      // re-enters the charge cycle. Any unhandled state also falls through here.
+      if (this.state === "idle") {
+        this.chargeT = 0;
+        this.state = "charge";
       }
     }
 
