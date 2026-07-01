@@ -1224,7 +1224,11 @@
       }
 
       // ---- APPROACH: close on the player, then plant ----
-      if (this.spawnGrace <= 0 && dist < d.plantRange) {
+      // With pyros alive it plants proactively wherever it stands — the dome
+      // shelters its shooters (they run to it and huddle inside), so it
+      // doesn't wait for Jon to get in range.
+      const hasPyros = game.enemies.some((e) => !e.dead && e.type === "pyro");
+      if (this.spawnGrace <= 0 && (dist < d.plantRange || hasPyros)) {
         this.windTimer = d.plantWind; this.phase = "plant"; return;
       }
       this._chase(dt, dx, dy, dist, 1);
