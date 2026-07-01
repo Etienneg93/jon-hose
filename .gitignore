@@ -15,3 +15,6 @@ desktop.ini
 # API keys / secrets
 .env
 .env.*
+
+# raw generated artwork — source/scratch, never loaded by the game
+sprites/**/gen/
