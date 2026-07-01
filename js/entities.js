@@ -1400,7 +1400,7 @@
       // Animated pack flames, scaled to the patch; wide patches get two extra
       // offset flames with desynced loop phases. The globalAlpha set above
       // (fades with extinguish progress) carries into these draws.
-      const fscale = Math.max(0.35, (r * 1.2) / 48);
+      const fscale = Math.max(0.5, (r * 1.6) / 48);
       Assets.drawFx(ctx, "fire-small", sx, sy + 2, t, { scale: fscale });
       if (r > 20) {
         Assets.drawFx(ctx, "fire-small", sx - r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
