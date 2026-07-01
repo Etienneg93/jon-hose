@@ -343,7 +343,7 @@
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
-      const oz = this.z + (this.state === "walk" ? 28 : 34); // lower when walk-firing
+      const oz = this.z + 28;                  // nozzle height — static, matches new sprite
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       const beam = S.beam | 0;                 // concentration tier 0..3
 
@@ -559,6 +559,12 @@
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
+      if (this.burnStacks > 0) {
+        ctx.save();
+        const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
+        ctx.shadowColor = "#ff4400";
+        ctx.shadowBlur = 5 + 7 * bIntensity + 3 * Math.sin(this.t * 12);
+      }
       if (this.kibbleTimer > 0) {
         ctx.save();
         ctx.shadowColor = "#44ee66";
@@ -569,7 +575,8 @@
         ctx.shadowColor = "#cc44ff";
         ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
       }
-      Assets.draw(ctx, "jon", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
+      const spriteSy = Geo.feetScreenY(this.y, this.z);
+      Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
@@ -577,6 +584,28 @@
       });
       if (this.concertaTimer > 0) ctx.restore();
       if (this.kibbleTimer > 0) ctx.restore();
+      if (this.burnStacks > 0) {
+        ctx.restore();
+        // Draw flame tongues rising from feet to show burn stacks
+        const stacks = this.burnStacks, t = this.t;
+        const offsets = stacks >= 3 ? [-6, 0, 6] : stacks >= 2 ? [-4, 4] : [0];
+        ctx.save();
+        ctx.globalAlpha = 0.82;
+        for (const ox of offsets) {
+          const sway = Math.sin(t * 10 + ox) * 2.5;
+          const h = 9 + 4 * Math.sin(t * 13 + ox * 0.5);
+          const fw = 2.2;
+          const fx = sx + ox + sway;
+          ctx.beginPath();
+          ctx.moveTo(fx - fw, spriteSy);
+          ctx.bezierCurveTo(fx - fw * 0.8, spriteSy - h * 0.45, fx - fw * 0.2, spriteSy - h, fx, spriteSy - h);
+          ctx.bezierCurveTo(fx + fw * 0.2, spriteSy - h, fx + fw * 0.8, spriteSy - h * 0.45, fx + fw, spriteSy);
+          ctx.closePath();
+          ctx.fillStyle = stacks >= 2 ? JH.PAL.firePatchHi : JH.PAL.firePatch;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
 
       // DEBUG: collision box
@@ -624,6 +653,12 @@
         ctx.fillStyle = "#ff88ff";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
         ctx.fillText("FOCUSED " + this.concertaTimer.toFixed(1) + "s", sx, indY);
+        indY -= 7;
+      }
+      if (this.burnStacks > 0) {
+        ctx.fillStyle = "#ff6610";
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillText("BURN x" + this.burnStacks, sx, indY);
       }
       // label
       ctx.font = "bold 6px monospace";
@@ -1130,17 +1165,35 @@
       if (this.sprayProgress >= this.extinguishDur) this.dead = true;
     }
     draw(ctx, cam) {
-      const sx = this.x - cam;
-      const sy = Geo.feetScreenY(this.y, 0);
+      const sx = Math.round(this.x - cam);
+      const sy = Math.round(Geo.feetScreenY(this.y, 0));
       const prog = this.sprayProgress / this.extinguishDur;
-      const r = Math.max(2, this.radius * (1 - prog));
-      const flick = 0.5 + 0.5 * Math.sin(this.t * 18);
+      const r = Math.max(3, this.radius * (1 - prog * 0.55));
+      const t = this.t;
       ctx.save();
-      ctx.globalAlpha = (0.55 + 0.25 * flick) * (1 - prog * 0.4);
+      ctx.globalAlpha = Math.max(0, 0.88 - prog * 0.45);
+      // Scorch base oval
       ctx.beginPath();
-      ctx.ellipse(Math.round(sx), Math.round(sy), r, r * 0.38, 0, 0, Math.PI * 2);
-      ctx.fillStyle = flick > 0.5 ? JH.PAL.firePatch : JH.PAL.firePatchHi;
+      ctx.ellipse(sx, sy, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#440800";
       ctx.fill();
+      // Flame tongues
+      const n = r > 15 ? 3 : 2;
+      for (let i = 0; i < n; i++) {
+        const ox = n > 1 ? ((i / (n - 1)) - 0.5) * r * 0.6 : 0;
+        const phase = i * 1.3;
+        const sway = Math.sin(t * 8 + phase) * r * 0.2;
+        const h = r * (0.85 + 0.35 * Math.sin(t * 11 + phase));
+        const fw = r * (0.25 + 0.08 * Math.sin(t * 7 + phase + 0.5));
+        const fx = sx + ox + sway;
+        ctx.beginPath();
+        ctx.moveTo(fx - fw, sy);
+        ctx.bezierCurveTo(fx - fw * 0.8, sy - h * 0.45, fx - fw * 0.2, sy - h, fx, sy - h);
+        ctx.bezierCurveTo(fx + fw * 0.2, sy - h, fx + fw * 0.8, sy - h * 0.45, fx + fw, sy);
+        ctx.closePath();
+        ctx.fillStyle = i === n - 1 ? JH.PAL.firePatchHi : i === 0 ? JH.PAL.firePatch : "#ff8020";
+        ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -2936,6 +2989,7 @@
       this.chargeT = 0;
       this.dashTarget = null;    // {x,y} computed when charge completes
       this.dashTellT = 0;
+      this.dashElapsed = 0;      // time in "dash" state; guards against wall-stuck
       this.dashPatchAcc = 0;     // accumulated travel px for trail patch spawning
       // Volley state
       this.windTimer = 0;
@@ -2964,7 +3018,10 @@
             this.y + (Math.random() - 0.5) * 8, 12 + Math.random() * 16,
             JH.PAL.slayerEmber, 1, { speed: 50, life: 0.22, up: 30 });
         if (this.chargeT >= d.chargeDur) {
-          this.dashTarget = { x: pl.x, y: clamp(pl.y, JH.DEPTH_MIN, JH.DEPTH_MAX) };
+          this.dashTarget = {
+            x: clamp(pl.x, game.bounds.minX + 24, game.bounds.maxX - 24),
+            y: clamp(pl.y, JH.DEPTH_MIN, JH.DEPTH_MAX),
+          };
           this.dashTellT = d.dashTell;
           this.dashPatchAcc = 0;
           this.state = "pre_dash";
@@ -2976,15 +3033,17 @@
       if (this.state === "pre_dash") {
         this.dashTellT -= dt;
         this.state = "pre_dash";   // keep as pre_dash; painter reads "dash" sprite
-        if (this.dashTellT <= 0) this.state = "dash";
+        if (this.dashTellT <= 0) { this.dashElapsed = 0; this.state = "dash"; }
         return;
       }
 
       // ---- DASH: move to dashTarget, spawn trail patches ----
       if (this.state === "dash") {
+        this.dashElapsed += dt;
         const tdx = this.dashTarget.x - this.x, tdy = this.dashTarget.y - this.y;
         const tdist = Math.hypot(tdx, tdy);
-        if (tdist < 8) {
+        const dashMaxDur = d.dashDist / d.dashSpeed + 0.5;
+        if (tdist < 8 || this.dashElapsed > dashMaxDur) {
           // Dash complete — decide next attack.
           this.chargeT = 0;
           if (dist < d.slamRange + 10) {
