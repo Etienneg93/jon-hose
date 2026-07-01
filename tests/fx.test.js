@@ -17,5 +17,7 @@ test("every JH.FX entry has its curated frames on disk", () => {
       const p = path.join(__dirname, "..", "sprites", "fx", key, i + ".png");
       assert.ok(fs.existsSync(p), key + " missing frame " + i + ".png");
     }
+    const extra = path.join(__dirname, "..", "sprites", "fx", key, (m.count + 1) + ".png");
+    assert.ok(!fs.existsSync(extra), key + " has stale frame " + (m.count + 1) + ".png beyond the manifest count");
   }
 });

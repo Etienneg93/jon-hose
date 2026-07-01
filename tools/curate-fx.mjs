@@ -27,6 +27,7 @@ for (const [key, pick] of Object.entries(PICKS)) {
   const files = fs.readdirSync(src).filter((f) => pick.match.test(f)).sort(natural);
   if (!files.length) { console.error(`${key}: NO MATCHES in ${pick.dir}`); process.exitCode = 1; continue; }
   const out = path.join(ROOT, "sprites", "fx", key);
+  fs.rmSync(out, { recursive: true, force: true });   // drop stale frames from a prior pick
   fs.mkdirSync(out, { recursive: true });
   files.forEach((f, i) => fs.copyFileSync(path.join(src, f), path.join(out, `${i + 1}.png`)));
   console.log(`${key}: ${files.length} frames <- ${pick.dir}`);
