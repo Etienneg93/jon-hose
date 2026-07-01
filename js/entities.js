@@ -1407,22 +1407,14 @@
       ctx.ellipse(sx, sy, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
       ctx.fillStyle = "#440800";
       ctx.fill();
-      // Flame tongues
-      const n = r > 15 ? 3 : 2;
-      for (let i = 0; i < n; i++) {
-        const ox = n > 1 ? ((i / (n - 1)) - 0.5) * r * 0.6 : 0;
-        const phase = i * 1.3;
-        const sway = Math.sin(t * 8 + phase) * r * 0.2;
-        const h = r * (0.85 + 0.35 * Math.sin(t * 11 + phase));
-        const fw = r * (0.25 + 0.08 * Math.sin(t * 7 + phase + 0.5));
-        const fx = sx + ox + sway;
-        ctx.beginPath();
-        ctx.moveTo(fx - fw, sy);
-        ctx.bezierCurveTo(fx - fw * 0.8, sy - h * 0.45, fx - fw * 0.2, sy - h, fx, sy - h);
-        ctx.bezierCurveTo(fx + fw * 0.2, sy - h, fx + fw * 0.8, sy - h * 0.45, fx + fw, sy);
-        ctx.closePath();
-        ctx.fillStyle = i === n - 1 ? JH.PAL.firePatchHi : i === 0 ? JH.PAL.firePatch : "#ff8020";
-        ctx.fill();
+      // Animated pack flames, scaled to the patch; wide patches get two extra
+      // offset flames with desynced loop phases. The globalAlpha set above
+      // (fades with extinguish progress) carries into these draws.
+      const fscale = Math.max(0.35, (r * 1.2) / 48);
+      Assets.drawFx(ctx, "fire-small", sx, sy + 2, t, { scale: fscale });
+      if (r > 20) {
+        Assets.drawFx(ctx, "fire-small", sx - r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
+        Assets.drawFx(ctx, "fire-small", sx + r * 0.4, sy + 3, t + 0.6, { scale: fscale * 0.75 });
       }
       ctx.restore();
     }
@@ -2586,19 +2578,10 @@
       const sy = Geo.feetScreenY(this.y, 0) - 4;
       const gf = this.grow / this.growMax;
       if (this.flame) {
-        // Placeholder flame that shrinks as it's doused (gf: 0 = raging, 1 = out).
+        // Pack flame that shrinks as it's doused (gf: 0 = raging, 1 = out).
         const rem = 1 - gf;
-        const baseY = sy;
-        for (let i = 0; i < 3; i++) {
-          const fh = (14 + i * 6) * rem * (0.8 + 0.3 * Math.sin(this.t * 12 + i));
-          const fw = (10 - i * 2);
-          ctx.fillStyle = i === 0 ? "#ff7a1a" : i === 1 ? "#ffb020" : "#ffe070";
-          ctx.beginPath();
-          ctx.moveTo(sx - fw, baseY);
-          ctx.quadraticCurveTo(sx, baseY - fh * 1.4, sx + fw, baseY);
-          ctx.closePath();
-          ctx.fill();
-        }
+        if (rem > 0.02)
+          JH.Assets.drawFx(ctx, "fire-big", sx, sy, this.t, { scale: 0.9 * (0.35 + 0.65 * rem) });
       } else {
         JH.Assets.draw(ctx, "garden_box", sx, sy, 1, { growFrac: gf });
       }
