@@ -1,7 +1,15 @@
 # Super-Elites: Bulwark & Stalker — Design
 
 **Date:** 2026-06-28
-**Status:** Approved design — to become an implementation plan.
+**Status:** ✅ SHIPPED as gameplay (both enemies built via
+`2026-06-30-super-elites-bulwark-stalker.md`). Historical record — archived.
+
+> ⚠️ **The Bulwark section below (Archetype 1) is SUPERSEDED.** The "moving
+> front-shield / body-block" model described here was scrapped as unplayable and
+> replaced by the **shield-throw / deployable-cover** rework
+> (`2026-06-30-bulwark-shield-rework-design.md`, shipped `795b121`). A further
+> **dome/bubble redesign** is now the ASAP Bulwark task — see the next-level
+> vision's open-work list. The **Stalker section (Archetype 2) is accurate.**
 **Context:** Follow-up to the v1.0 balance pass (`balance-pass` branch). Playtest finding: late-game enemies don't threaten a maxed player because you out-range, out-DPS, and Hydro-Lance-pierce the whole line. Pure stat-scaling (the existing elite ramp) just makes bullet-sponges. This feature adds two brand-new late-game enemy archetypes that punish the dominant tactics directly.
 
 ## Goal

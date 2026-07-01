@@ -1,7 +1,13 @@
 # Elemental Mirror Altar — Design Spec
 
 **Date:** 2026-06-30
-**Status:** Approved design → implementation (autonomous build on `next-level-pass`).
+**Status:** ⚠️ **v1 BUILT (`bf36abc`) but the CONCEPT is UNDER RECONSIDERATION
+(2026-07-01).** The two-sided "Mirror of Night" node/altar model got muddled into
+the Church docs before the church flow was fully thought through, and the user is
+**not sold on the elemental-upgrade-pillars-as-talent-tree** framing. Do **not**
+treat this as settled canon or build further on it until the church flow is
+re-decided — see the corrected flow in
+`2026-06-29-church-of-the-hose-progression-overhaul-vision.md` (§ "Corrected flow").
 **Parent vision:** `2026-06-30-next-level-vision.md` (Pillar 1).
 **Realizes:** Phase 3 of the Church progression north-star (elemental archetypes),
 simplified so the Mirror *is* the spiritual talent tree.

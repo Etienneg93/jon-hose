@@ -1,9 +1,40 @@
 # The Church of the Hose — Progression Overhaul (North-Star Vision)
 
-**Date:** 2026-06-29
-**Status:** Approved vision / north star. Not an implementation spec — this is the
-umbrella document. Each phase below gets its own brainstorm → design spec → plan.
-**First phase to spec:** Phase 0 (the Church & the death loop).
+**Date:** 2026-06-29 (corrected-flow section added 2026-07-01)
+**Status:** North star, **partially revised**. Phase 0/0.1 (the death loop) shipped.
+The **elemental-progression half got ahead of itself** — the "Elemental Mirror
+altar / two-sided talent-tree pillars" (`2026-06-30-elemental-mirror-altar-design.md`,
+v1 built) was speced before the church flow was nailed down, and the user is **not
+sold on it**. The authoritative church flow is now the "Corrected flow" section
+below; the Mirror-altar node model is **under reconsideration** and should not be
+extended until this is re-decided.
+**First phase to spec:** Phase 0 (the Church & the death loop) — done.
+
+## Corrected flow (2026-07-01 — authoritative over the pillars/Mirror model)
+
+The intended church loop, as decided by the user:
+
+1. **Die → Church of the Hose → try again.** (Shipped — Phase 0/0.1.)
+2. **Ally reveal cutscenes gate the elemental chamber.** After you redeem an
+   ally, the *next* time you enter the Church that ally is **present in the
+   church**, and on that visit performs a reveal beat:
+   - **Quake Walker (Earth):** the first ally redeemed. On his church appearance
+     he does his **signature stomp**, which **cracks open a doorway to a new
+     room — the elemental chamber**. He then **lights up the Earth section**.
+   - **The Slayer (Fire):** next visit after redeeming him, he's in the church and
+     **lights the Fire section**.
+   - **Ass Man (Air):** lights the **Air section**.
+   - **Water:** **undecided.** Candidate: **Jon must face his inner demon** — a
+     Dark/corrupted Jon — to light his own (Water) section.
+3. **What the light-ups DO is undecided.** They may power Jon up in some way —
+   mechanic TBD. This is the open design question, *not* the two-sided
+   Essence-node talent tree (that model is parked).
+
+**Implication for the Mirror-altar spec:** the *chamber* and the *ally-lights-its-
+section* framing survive; the specific **"Mirror of Night two-sided leveled nodes"
+upgrade mechanic does not** (parked pending the light-up-effect decision).
+
+The remainder of this doc is the original 2026-06-29 vision, kept for context.
 
 ## Why this exists
 

@@ -1,11 +1,32 @@
 # Jon Hose — "Next Level" Vision (juice, agency, elements, new acts)
 
-**Date:** 2026-06-30
+**Date:** 2026-06-30 (progress/reprioritization update 2026-07-01)
 **Status:** Approved direction (brainstorm w/ user). Umbrella vision — each pillar
-below gets its own spec + plan. **First spec:** the Elemental Mirror altar
-(`2026-06-30-elemental-mirror-altar-design.md`).
+below gets its own spec + plan.
 **Branch:** `next-level-pass` (off `balance-pass`). Nothing here ships to the live
 game until reviewed.
+
+## Progress & reprioritization (2026-07-01)
+
+- **DONE:** Elemental Mirror altar v1 (Pillar 1) — **but the concept is now under
+  reconsideration**, see its spec banner + the church "Corrected flow." GUSH combo
+  meter (Pillar 2). Bulwark & Stalker enemies (Pillar 4 / row 6). Fire world +
+  Slayer boss (Act 3) — in progress.
+- **🔥 ASAP — Bulwark dome fix:** the shipped shield-throw Bulwark is *still*
+  unplayable. Next iteration: **shield-throw + Bulwark hides inside a translucent
+  dome/bubble fortress**. Needs its own spec + plan. Highest-priority open item.
+- **Juice pass is partly already there:** pickup magnetism exists in some form;
+  GUSH combo is **visual-only** (candidate: tie it to an ability/upgrade later).
+  Remaining juice: hit-stop, soaked stacks, camera punch/slow-mo.
+- **Church elemental progression is being rethought.** The two-sided Mirror-node
+  talent-tree is parked; see `2026-06-29-church-of-the-hose-progression-overhaul-vision.md`
+  § "Corrected flow" for the authoritative ally-lights-the-chamber model.
+- **NOT near-term — "Finale act" (Act 5):** a full clear is currently <10 min
+  (the fire world lengthens it a bit). The game is nowhere near needing a finale;
+  Act 5 / Firewall → Gateway Krusher capstone is **deferred indefinitely**, not an
+  open work item.
+- **Player agency (Pillar 3) still mostly unbuilt** and wanted: charged blast,
+  keepsakes, door-choice, dash-attack.
 
 ## Why this exists
 
@@ -70,15 +91,14 @@ Hades' "every hit feels chunky." Impact order:
 3. **"Soaked" stacks** — sustained spray visibly drenches an enemy (darken + drip
    particles); soaked enemies take slightly more damage. Hooks Fire later
    (soaked = extra burn).
-4. **GUSH combo meter** — chained kills build a combo; rising audio pitch + a
-   vignette at high combo. Rewards aggression.
+4. **GUSH combo meter** — ✅ built, but **visual-only**. Candidate next step: tie
+   it to an ability or upgrade so it's mechanically meaningful.
 5. **Camera punch-in** on boss intros + **slow-mo on the final blow** (hangs on
    the existing boss-death sequence).
-6. **Pickup magnetism** — Suds/coins arc toward Jon with trails + escalating
-   "ching."
+6. **Pickup magnetism** — ✅ already exists in some form (Suds/coins arc toward Jon).
 
-First increment (this branch, if time): hit-stop + hit-flash/squash + death-pop +
-pickup magnetism. Combo meter, soaked stacks, camera/slow-mo follow.
+Remaining juice to build: hit-stop, hit-flash/squash + death-pop, soaked stacks,
+camera punch/slow-mo.
 
 ### 3. Player agency — Hades-flavored
 
@@ -115,7 +135,7 @@ adds that friend to the church.
 | 2 | Construction / Rubble | + Bulwark | **Quake Walker** | 🪨 Earth → opens Mirror |
 | 3 | **Boiler District** (lava/furnace) | Cinder Imp, Slag Bloater | **The Slayer** | 🔥 Fire |
 | 4 | **Windy Heights** (rooftops) | Drifter, Gust Sprite, + Stalker | **Ass Man** | 🌬️ Air |
-| 5 | Finale | curated pincers | Firewall → Gateway Krusher | 💧 Water capstone |
+| ~~5~~ | ~~Finale~~ | ~~curated pincers~~ | ~~Firewall → Gateway Krusher~~ | ~~💧 Water capstone~~ *(deferred indefinitely — game is nowhere near a finale)* |
 
 Water beats fire — the Slayer is the most thematically perfect hose fight. Ass
 Man's act is where **wind physically pushes Jon** (gust as a mechanic).

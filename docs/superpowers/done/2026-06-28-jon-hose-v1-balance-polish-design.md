@@ -2,7 +2,8 @@
 
 **Date:** 2026-06-28
 **Current version:** 0.10.2
-**Status:** Approved design — balance pass (Track 1) is the first spec to turn into an implementation plan.
+**Status:** ✅ SHIPPED (v0.12.0). Track 1 balance pass built via the
+`2026-06-28-jon-hose-v1-balance-pass.md` plan. Historical record — archived.
 
 ## Source of truth
 

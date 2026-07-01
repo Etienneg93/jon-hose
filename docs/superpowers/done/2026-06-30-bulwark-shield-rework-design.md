@@ -1,7 +1,15 @@
 # Bulwark Shield Rework — Design
 
 **Date:** 2026-06-30
-**Status:** Approved design — to become an implementation plan.
+**Status:** ✅ SHIPPED (`795b121`, via `2026-06-30-bulwark-shield-rework.md`).
+Historical record — archived.
+
+> ⚠️ **Still not good enough.** Playtest verdict (2026-07-01): the shipped
+> Bulwark is *still* unplayable in practice. The next iteration — **shield-throw
+> + Bulwark hides inside a translucent dome/bubble fortress** — is the **ASAP**
+> Bulwark task (needs its own spec + plan). See the next-level vision open-work
+> list and the `project_bulwark_dome_redesign` note.
+
 **Context:** Playtest finding on the just-shipped Bulwark (`docs/superpowers/specs/2026-06-28-super-elites-design.md`). The original "moving shield" — a permanent, facing-tracked block on the Bulwark's own body (`frontDmgMult: 0` whenever the player stood in front of its `facing`, with `facing` re-acquiring the player every `turnCooldown` seconds) — read as **completely unkillable** in practice: the slow re-face window wasn't a meaningful dash-past opportunity, so the body was effectively always shielded. This spec replaces that mechanic.
 
 ## Goal
