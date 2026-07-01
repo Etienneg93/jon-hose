@@ -22,7 +22,7 @@
     player: null,
     enemies: [], embers: [], pickups: [], particles: [],
     hydrants: [], shopNpc: null, nearShop: false,
-    wall: null, wallSpawnTimer: 0, wallPool: [],
+    wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
 
@@ -334,6 +334,14 @@
         wave.spawns.forEach((g) => { for (let k = 0; k < g.count; k++) this.wallPool.push(g.type); });
         this.dropBudget = { suds: 14, items: 7 };             // anti-farm cap
         this.banner("BARRICADE! SMASH THROUGH", 1.6);
+      } else if (wave.holdout) {
+        // Survival hold-out: reuse the barricade's pool-spawn loop, end on a timer.
+        this.holdoutTimer = wave.holdDur || 22;
+        this.wallSpawnTimer = 0.4;
+        this.wallPool = [];
+        wave.spawns.forEach((g) => { for (let k = 0; k < g.count; k++) this.wallPool.push(g.type); });
+        this.dropBudget = { suds: 14, items: 7 };            // anti-farm cap
+        this.banner("HOLD THE LINE!  SURVIVE!", 1.8);
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
@@ -1064,6 +1072,26 @@
             }
           }
           if (!this.wall || this.wall.dead) this.waveCleared_();
+        } else if (wave && wave.holdout) {
+          this.holdoutTimer -= dt;
+          this.wallSpawnTimer -= dt;
+          if (this.wallSpawnTimer <= 0 && this.enemies.length < JH.WALL.maxAlive) {
+            this.wallSpawnTimer = JH.WALL.spawnEvery;
+            const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
+            const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
+            const sc = wave.tough
+              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
+              : null;
+            const ex = this.bounds.maxX - 10 - Math.random() * 40;
+            const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: sc });
+            e.spawnGrace = 0.2;
+          }
+          if (this.holdoutTimer <= 0) {
+            // Survived: remaining enemies retreat (removed WITHOUT suds reward — the
+            // dropBudget already capped income during the hold).
+            for (const e of this.enemies) e.dead = true;
+            this.waveCleared_();
+          }
         } else if (wave && wave.garden) {
           for (const g of this.gardens) g.update(dt);
           if (this.gardens.length > 0 && this.gardens.every((g) => g.done)) {
@@ -1205,6 +1233,19 @@
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
       }
       ctx.restore();
+
+      // Hold-the-line countdown readout (screen-space HUD, drawn on top).
+      if (this.state === "play" && this.waveActive) {
+        const hw = JH.LEVEL1.waves[this.waveIndex];
+        if (hw && hw.holdout && this.holdoutTimer > 0) {
+          const label = "HOLD  " + Math.ceil(this.holdoutTimer) + "s";
+          ctx.save();
+          ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
+          ctx.fillStyle = "#000"; ctx.fillText(label, JH.VIEW_W / 2 + 1, 25);
+          ctx.fillStyle = "#ffd23f"; ctx.fillText(label, JH.VIEW_W / 2, 24);
+          ctx.restore();
+        }
+      }
 
       // Player death sequence: corpse settles → ghost lifts out of it, stands up,
       // drifts/beams off → fade to black.
