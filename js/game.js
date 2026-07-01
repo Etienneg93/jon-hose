@@ -142,7 +142,8 @@
     devTriggerCutscene() {
       this.startGame();
       this.state = "cutscene";
-      this.cutscene = { phase: 0, nextWave: 10 };
+      const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+      this.cutscene = { phase: 0, nextWave: quakeIdx + 1 };
       document.getElementById("hud").classList.add("hidden");
       document.getElementById("banner").classList.add("hidden");
       this.devMenu = false;
@@ -365,11 +366,12 @@
       JH.Music.setTrack("level");
       this.waveActive = false;
 
-      // After Quake Walker (index 9), play his ally cutscene before continuing.
-      if (this.waveIndex === 9) {
+      // After Quake Walker, play his ally cutscene before continuing.
+      const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+      if (quakeIdx >= 0 && this.waveIndex === quakeIdx) {
         JH.Camera.unlock();
         this.state = "cutscene";
-        this.cutscene = { phase: 0, nextWave: 10 };
+        this.cutscene = { phase: 0, nextWave: quakeIdx + 1 };
         document.getElementById("hud").classList.add("hidden");
         document.getElementById("banner").classList.add("hidden");
         return;
@@ -419,7 +421,8 @@
     afterCutscene(nextWaveIdx) {
       this.cutscene = null;
       this.state = "play";
-      const clearedWave = JH.LEVEL1.waves[9];
+      const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+      const clearedWave = JH.LEVEL1.waves[quakeIdx];
       if (clearedWave) {
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
