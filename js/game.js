@@ -368,17 +368,40 @@
         const ownedCount = Object.keys(JH.Upgrades.owned).length;
         const eliteScale = wave.tough
           ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
-        let slot = 0;
         const spawnList = JH.Balance.capEnemyType(
           wave.spawns, "charger", JH.WAVECAP.charger, "mook");
-        spawnList.forEach((grp) => {
-          for (let k = 0; k < grp.count; k++) {
-            const ex = right - 6 - (slot % 3) * 16 + Math.random() * 10;
-            const ey = JH.DEPTH_MIN + 8 + ((slot * 27) % (JH.DEPTH_MAX - JH.DEPTH_MIN - 16));
-            const e = this.spawnEnemy(grp.type, clamp(ex, left, right), ey, { elite: eliteScale });
+        // Flatten authored spawns, then sprinkle extras from the unlocked pool
+        // on top (variety pass) — the authored list stays the tuned backbone.
+        const types = [];
+        spawnList.forEach((g) => { for (let k = 0; k < g.count; k++) types.push(g.type); });
+        const SPR = JH.SPRINKLE;
+        const sprinkleCount = SPR.counts[actLevel + 1] || 0;
+        const pool = JH.Balance.unlockedPool(JH.LEVEL1.waves, this.waveIndex);
+        const chargerRoom = Math.max(0, JH.WAVECAP.charger - types.filter((t) => t === "charger").length);
+        types.push(...JH.Balance.pickSprinkles(pool, sprinkleCount, {
+          weights: SPR.weights, heavies: SPR.heavies, heavyCap: SPR.heavyCap,
+          typeCaps: { charger: chargerRoom },
+        }));
+        const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
+        let slot = 0, fuseIdx = 0;
+        types.forEach((type) => {
+          const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
+          if (type === "fuse") {
+            // Fuses drop in at a random arena spot, staggered so they don't
+            // all land at once.
+            const ex = left + 30 + Math.random() * (right - left - 60);
+            this.spawnEnemy(type, ex, ey, {
+              elite: eliteScale, dropIn: true, dropDelay: fuseIdx * JH.FUSE_DROP.stagger,
+            });
+            fuseIdx++;
+          } else {
+            // Enter from a random screen edge at a random depth.
+            const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
+                                             : right - 6 - Math.random() * 10;
+            const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
             e.spawnGrace = 0.3 + slot * 0.25; // stagger entrances
-            slot++;
           }
+          slot++;
         });
       }
     },
