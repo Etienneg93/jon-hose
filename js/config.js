@@ -223,6 +223,7 @@
       ventKnock: 180,          // knockback impulse on vent (px/s)
       ventBurnStacks: 1,       // burn stacks applied by vent
       ventCd: 4.0,             // post-vent cooldown before it can heat again
+      cooldownSpeedMult: 2,    // movespeed multiplier while cooling (ventCdT > 0)
       ventPatchRadius: 26,     // fire-zone patch radius left around it on vent
       ventPatchDur: 2.6,       // how long the vent fire zone burns (s)
       suds: 44, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",

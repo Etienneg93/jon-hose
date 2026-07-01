@@ -3576,6 +3576,7 @@
       this.ventCdT = 0;            // post-vent cooldown
     }
     onSprayHit(dt, game) {
+      if (this.ventCdT > 0) return;   // cooling: no damage taken, no heat built
       const d = this.def;
       this.lastSprayT = this.t;
       this.continuousSprayT += dt;
@@ -3586,6 +3587,7 @@
       }
     }
     takeDamage(dmg, game, dirX, knock) {
+      if (this.ventCdT > 0) return;   // cooling: invulnerable until it settles
       // Apply heatedWaterMult when in the heated phase. `dmg` here is the raw
       // spray damage computed by doSpray; we scale it down for the vent window.
       const mult = this.heated ? this.def.heatedWaterMult : 1;
@@ -3637,9 +3639,10 @@
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       this.facing = dx >= 0 ? 1 : -1;
+      const sp = d.speed * (this.ventCdT > 0 ? d.cooldownSpeedMult : 1);
       if (dist > 18 && this.spawnGrace <= 0) {
-        this.x += (dx / (dist || 1)) * d.speed * dt;
-        this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.x += (dx / (dist || 1)) * sp * dt;
+        this.y += (dy / (dist || 1)) * sp * dt * 0.7;
         this.state = "walk";
       } else { this.state = "idle"; }
     }
@@ -3668,6 +3671,12 @@
       ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
       ctx.fillText("!", sx, hy); ctx.textAlign = "left";
     }
+    // Cooling phase: hot, fast, untouchable — glow signals "stop spraying, kite".
+    if (this.ventCdT > 0) {
+      ctx.save();
+      ctx.shadowColor = "#ff5a20";
+      ctx.shadowBlur = 8 + 4 * Math.sin(this.t * 10);
+    }
     Assets.draw(ctx, "furnace", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
       state: this.state, frame: this.frame, t: this.t,
       hurt: this.flashTimer > 0, hurtAlpha: this.flashTimer / 0.18,
@@ -3675,6 +3684,7 @@
       heated: this.heated,
       scale: 1,
     });
+    if (this.ventCdT > 0) ctx.restore();
     if (this.hp < this.maxHp) {
       const w = this.bodyW + 4;
       const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
