@@ -1049,15 +1049,26 @@
   JH.Ember = Ember;
 
   // ---- Fireball: Slayer's pool-cue projectile ----
-  // Spawns as a plain pool ball, ignites after igniteDelay (visual + burn on hit).
-  // Travels horizontally at a fixed depth row. Leaves a FirePatch on player hit.
-  // Pushed into game.embers so it runs through the same update/draw pipeline.
+  // Spawns as a plain pool ball at cue height, ignites after igniteDelay
+  // (visual + burn on hit). Aimed at the player's position at fire time —
+  // same convention as the Pyro's Ember (depth velocity scaled 0.6 for 2.5D)
+  // — so staggered volley balls fan out tracking the player's dodge. Sinks
+  // from spawnZ into the hittable z-band as it flies. Leaves a FirePatch on
+  // player hit. Pushed into game.embers for the shared update/draw pipeline.
   class Fireball {
     constructor(x, y, dir, game) {
       const d = JH.FIREBALL;
-      this.x = x; this.y = y; this.z = 8;
-      this.dir = dir;
-      this.vx = d.speed * dir;
+      this.x = x; this.y = y; this.z = d.spawnZ;
+      const pl = game && game.player;
+      if (pl && pl.alive) {
+        const ang = Math.atan2(pl.y - y, pl.x - x);
+        this.vx = Math.cos(ang) * d.speed;
+        this.vy = Math.sin(ang) * d.speed * 0.6;
+      } else {
+        this.vx = d.speed * dir;
+        this.vy = 0;
+      }
+      this.dir = this.vx >= 0 ? 1 : -1;
       this.dmg = d.dmg;
       this.radius = d.radius;
       this.burnStacks = d.burnStacks;
@@ -1070,7 +1081,8 @@
       this.t += dt;
       if (this.igniteT > 0) this.igniteT -= dt;
       this.x += this.vx * dt;
-      this.z = Math.max(0, this.z - 4 * dt);  // slight droop
+      this.y += this.vy * dt;
+      this.z = Math.max(0, this.z - JH.FIREBALL.droop * dt);  // sink off the cue line
       this.life -= dt;
       if (this.life <= 0) { this.dead = true; return !this.dead; }
       // Emit trailing fire particles once ignited.

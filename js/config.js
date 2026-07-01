@@ -474,7 +474,6 @@
     enrageBallCount: 6,       // balls per volley when enraged
     ballSpawnOffset: 32,      // px in front of Slayer — at the cue tip, so the release connects
     ballStagger: 0.1,         // seconds between each ball in a volley (rapid)
-    igniteDelay: 0.12,        // s after launch before fireball activates burn
     // Attack: Slam
     slamWind: 0.75, slamDmg: 22, slamRange: 38,
     // Attack: dash-landing fire ring (radiates from where he lands)
@@ -483,7 +482,10 @@
     enrageAt: 0.40,
   };
   JH.FIREBALL = {
-    speed: 155, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
+    speed: 230, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
+    spawnZ: 30,        // launch height — the cue tip on the release sprite
+    droop: 48,         // z px/s the ball sinks; reaches the <24px hit band in ~0.15s
+    igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
   };
 
   // Act-start wave indices (bounded by boss clears) — death respawns here.
