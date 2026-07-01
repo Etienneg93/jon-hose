@@ -491,6 +491,16 @@
         if (fwd > 0 && fwd - this.bodyW * 0.5 - wall.bodyW * 0.5 <= reach)
           wall.takeDamage(S.sprayDamage * dmgScale * dt, game);
       }
+      // Fire patches: spray aimed at a patch's depth advances its extinguish timer.
+      if (game.firePatches) {
+        for (const fp of game.firePatches) {
+          if (fp.dead) continue;
+          const fwd = (fp.x - ox) * this.facing;
+          if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
+              && Math.abs(fp.y - oy) < S.sprayHitBand)
+            fp.sprayProgress += dt;
+        }
+      }
       // Garden boxes: face each box and match its depth to water it.
       if (game.gardens) {
         for (const garden of game.gardens) {
@@ -921,6 +931,73 @@
     }
   }
   JH.Ember = Ember;
+
+  // ---- Fireball: Slayer's pool-cue projectile ----
+  // Spawns as a plain pool ball, ignites after igniteDelay (visual + burn on hit).
+  // Travels horizontally at a fixed depth row. Leaves a FirePatch on player hit.
+  // Pushed into game.embers so it runs through the same update/draw pipeline.
+  class Fireball {
+    constructor(x, y, dir, game) {
+      const d = JH.FIREBALL;
+      this.x = x; this.y = y; this.z = 8;
+      this.dir = dir;
+      this.vx = d.speed * dir;
+      this.dmg = d.dmg;
+      this.radius = d.radius;
+      this.burnStacks = d.burnStacks;
+      this.igniteT = d.igniteDelay;  // counts down to 0; burn only activates after this
+      this.life = d.lifespan;
+      this.t = 0;
+      this.dead = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.igniteT > 0) this.igniteT -= dt;
+      this.x += this.vx * dt;
+      this.z = Math.max(0, this.z - 4 * dt);  // slight droop
+      this.life -= dt;
+      if (this.life <= 0) { this.dead = true; return !this.dead; }
+      // Emit trailing fire particles once ignited.
+      if (this.igniteT <= 0 && Math.random() < 0.6) {
+        game.particles.push(new Particle({
+          x: this.x - this.dir * 4, y: this.y, z: this.z + 4,
+          vx: -this.dir * 20 + (Math.random() - 0.5) * 30,
+          vy: (Math.random() - 0.5) * 20,
+          vz: 15 + Math.random() * 20,
+          life: 0.18 + Math.random() * 0.12,
+          color: Math.random() > 0.4 ? JH.PAL.firePatch : JH.PAL.firePatchHi,
+          size: 2, grav: 160,
+        }));
+      }
+      // Hit check against player.
+      const pl = game.player;
+      if (pl.alive && this.igniteT <= 0) {
+        const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
+        const zDiff = Math.abs((pl.z || 0) - this.z);
+        if (dist < this.radius + pl.bodyW * 0.5 && zDiff < 24) {
+          pl.takeHit(this.dmg, game, this.x);
+          pl.applyBurn(this.burnStacks);
+          game.firePatches.push(new JH.FirePatch(this.x, this.y, 28, 1.4));
+          burst(game, this.x, this.y, this.z, JH.PAL.firePatch, 8, { speed: 90, life: 0.35, up: 50 });
+          game.shake(3);
+          this.dead = true;
+        }
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      const ignited = this.igniteT <= 0;
+      const flick = Math.floor(this.t * 14) & 1;
+      ctx.save();
+      ctx.fillStyle = ignited ? (flick ? JH.PAL.firePatch : JH.PAL.firePatchHi) : "#f0eecc";
+      ctx.beginPath();
+      ctx.arc(Math.round(sx), Math.round(sy), ignited ? 5 : 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  JH.Fireball = Fireball;
 
   // ---- Bulwark: "shield trooper" super-elite ----
   // Body is NEVER a blocker — it always takes full damage, in every phase.

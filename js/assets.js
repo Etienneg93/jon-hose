@@ -502,6 +502,16 @@
     p(1, 32, 2, 2, "#111");
   });
 
+  // ============================ FIREBALL ===============================
+  // Slayer's pool ball — plain off-white before igniting, then orange/yellow.
+  // The update() method draws this directly via the draw() on the class itself;
+  // `Assets.register` is used only if other code calls `Assets.draw("fireball")`.
+  Assets.register("fireball", (p, opt) => {
+    const ignited = !!(opt.ignited);
+    const flick = Math.floor((opt.t || 0) * 14) & 1;
+    p(-5, 4, 10, 10, ignited ? (flick ? PAL.firePatch : PAL.firePatchHi) : "#f0eecc");
+  });
+
   // ========================== STALKER ==================================
   // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
   // post-blink wind-up arm.
