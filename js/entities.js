@@ -1115,14 +1115,7 @@
     }
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
-      const ignited = this.igniteT <= 0;
-      const flick = Math.floor(this.t * 14) & 1;
-      ctx.save();
-      ctx.fillStyle = ignited ? (flick ? JH.PAL.firePatch : JH.PAL.firePatchHi) : "#f0eecc";
-      ctx.beginPath();
-      ctx.arc(Math.round(sx), Math.round(sy), ignited ? 5 : 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      Assets.draw(ctx, "fireball", sx, sy, 1, { ignited: this.igniteT <= 0, t: this.t, dir: this.dir });
     }
   }
   JH.Fireball = Fireball;
@@ -3424,11 +3417,14 @@
         const tdist = Math.hypot(tdx, tdy);
         const dashMaxDur = d.dashDist / d.dashSpeed + 0.5;
         if (tdist < 8 || this.dashElapsed > dashMaxDur) {
-          // Dash complete — a fire ring radiates from the landing point.
+          // Dash complete. Enraged only: a fire ring radiates from the landing
+          // point (always-on it punished dodging the dash correctly).
           this.chargeT = 0;
-          game.embers.push(new JH.FireRing(this.x, this.y, {
-            dmg: d.dashRingDmg, burn: d.dashRingBurn, maxR: d.dashRingMaxR, speed: d.dashRingSpeed,
-          }));
+          if (enraged) {
+            game.embers.push(new JH.FireRing(this.x, this.y, {
+              dmg: d.dashRingDmg, burn: d.dashRingBurn, maxR: d.dashRingMaxR, speed: d.dashRingSpeed,
+            }));
+          }
           burst(game, this.x, this.y, 14, JH.PAL.firePatchHi, 12, { speed: 120, life: 0.4, up: 40 });
           game.shake(5); game.audio.play("whack");
           if (dist < d.slamRange + 10) {

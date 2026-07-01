@@ -537,13 +537,37 @@
   });
 
   // ============================ FIREBALL ===============================
-  // Slayer's pool ball — plain off-white before igniting, then orange/yellow.
-  // The update() method draws this directly via the draw() on the class itself;
-  // `Assets.register` is used only if other code calls `Assets.draw("fireball")`.
-  Assets.register("fireball", (p, opt) => {
-    const ignited = !!(opt.ignited);
-    const flick = Math.floor((opt.t || 0) * 14) & 1;
-    p(-5, 4, 10, 10, ignited ? (flick ? PAL.firePatch : PAL.firePatchHi) : "#f0eecc");
+  // Slayer's pool ball — the 8-ball sprite rolling in flight; once ignited a
+  // flame halo + glow wrap it (the flight trail comes from the Fireball class).
+  // Drawn CENTERED on the anchor (the class passes its z-inclusive position).
+  const _ballImg = JH.Loader.img("sprites/slayer/8ball.png");
+  const BALL_D = 11;   // drawn diameter (logical px)
+  Assets.register("fireball", (p, opt, ctx, x, y) => {
+    const ignited = !!opt.ignited;
+    const t = opt.t || 0;
+    const flick = Math.floor(t * 14) & 1;
+    if (ignited) {
+      // Flame halo behind the ball.
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = flick ? PAL.firePatch : PAL.firePatchHi;
+      ctx.beginPath();
+      ctx.arc(x, y, BALL_D * 0.78, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    if (!_ballImg || !_ballImg.complete || !_ballImg.naturalWidth) {
+      // Fallback while the sprite loads.
+      p(-5, 4, 10, 10, ignited ? (flick ? PAL.firePatch : PAL.firePatchHi) : "#f0eecc");
+      return;
+    }
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((opt.dir || 1) * t * 9);   // rolling spin in the flight direction
+    ctx.imageSmoothingEnabled = false;
+    if (ignited) { ctx.shadowColor = PAL.firePatchHi; ctx.shadowBlur = 5 + 3 * flick; }
+    ctx.drawImage(_ballImg, -BALL_D / 2, -BALL_D / 2, BALL_D, BALL_D);
+    ctx.restore();
   });
 
   // ============================ SLAYER (BOSS) ==========================
