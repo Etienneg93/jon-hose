@@ -1588,6 +1588,7 @@
       }
       for (let i = 0; i < 5; i++)
         game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.startBossDeathSeq(this);
     }
@@ -1910,6 +1911,7 @@
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 6; i++)
         game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       this.coreEjected = true;     // draw a black hole where the core was
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
@@ -2410,6 +2412,7 @@
       game.audio.play("win");
       for (let i = 0; i < 7; i++)
         game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
@@ -2911,6 +2914,7 @@
       // Ejects the surviving core (same as the Switch) and leaves a hole.
       this.coreEjected = true;
       ejectBossCore(game, this);
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.startBossDeathSeq(this);
     }
@@ -3214,6 +3218,7 @@
           JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), 10 + Math.random() * 120,
           Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossHaz, 16,
           { speed: 180, life: 0.8, up: 150 }));
+      game.embers.push(new JH.FxBurst(this.x - 40, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.startBossDeathSeq(this);
@@ -3279,6 +3284,7 @@
       if (this.z <= 0) {
         const d = this.def;
         game.firePatches.push(new JH.FirePatch(this.x, this.y, d.lobBombRadius, d.lobBombDur));
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.6 }));
         burst(game, this.x, this.y, 4, JH.PAL.smeltGlow, 14, { speed: 115, life: 0.5, up: 60, size: 3 });
         burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
         game.shake(3);
@@ -3591,6 +3597,7 @@
       if (this.dead) return;
       this.dead = true;
       game.audio.play("win");
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);  // local fn in same IIFE
       game.onEnemyKilled(this);   // triggers Church.markBossDefeated("slayer")
     }
@@ -3645,6 +3652,7 @@
           const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
           burst(game, this.x, this.y, 10, "#d0e8ff",        18, { speed: 150, life: 0.45, up: 70, size: 3 });
           burst(game, this.x, this.y, 4,  JH.PAL.firePatchHi, 10, { speed: 85, life: 0.4, up: 18, size: 2 });
+          game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.75 }));
           game.shake(3);
           // Fire zone: venting scorches the ground around it — punishes the trigger.
           game.firePatches.push(new JH.FirePatch(this.x, this.y, d.ventPatchRadius, d.ventPatchDur));
@@ -3772,9 +3780,8 @@
     die(game) {
       const d = this.def;
       game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
       burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
-      burst(game, this.x, this.y, 8, JH.PAL.firePatchHi, 10, { speed: 80,  life: 0.4, up: 30, size: 2 });
-      burst(game, this.x, this.y, 2, "#ff2200",           6,  { speed: 50,  life: 0.3, up: 15, size: 2 });
       game.shake(3);
       if (Math.hypot(game.player.x - this.x, game.player.y - this.y) < d.deathBurnRange)
         game.player.applyBurn(1);
