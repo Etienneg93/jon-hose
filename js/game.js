@@ -448,6 +448,7 @@
     drawCutscene(ctx) {
       const cs = this.cutscene;
       if (!cs) return;
+      if (cs.who === "slayer") { this.drawSlayerCutscene(ctx, cs); return; }
       const lines = [
         ["...You're stronger than I expected.", "I underestimated you."],
         ["The quake in my heart...", "You've silenced it."],
@@ -529,6 +530,73 @@
         f(-14, 34, 28, 4, D);
         f(-20, 58, 6, 4, HI); f(14, 58, 6, 4, HI);
         f(-20, 26, 4, 4, HI); f(16, 26, 4, 4, HI);
+      }
+    },
+
+    drawSlayerCutscene(ctx, cs) {
+      const lines = [
+        ["...Clean shot. I'll give you that.", "Nobody's sunk me before."],
+        ["The fire in me...", "You've cooled it."],
+        ["Next game, I'm on your side.", "Let's run the table."],
+      ];
+      const phase = clamp(cs.phase, 0, lines.length - 1);
+
+      ctx.fillStyle = "rgba(0,0,0,0.88)";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+
+      const PX = 10, PY = 10, PW = 96, PH = 108;
+      ctx.fillStyle = "#1a0800";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = JH.PAL.slayerEmber;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      const talking = (cs.timer || 0) < 2.0;
+      const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
+      const img = JH.getSlayerPortrait ? JH.getSlayerPortrait(mouthOpen) : null;
+      if (img && img._ready) {
+        ctx.drawImage(img, PX, PY, PW, PH);
+      } else {
+        // Procedural fallback
+        const cx = PX + PW / 2, cy = PY + PH - 4;
+        const f = (lx, ly, w, h, col) => {
+          ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+        };
+        f(-20, 0, 40, 60, JH.PAL.slayerBody);
+        f(-6, 60, 12, 30, JH.PAL.slayerDk);
+        f(-20, 40, 40, 6, JH.PAL.slayerDk);
+        f(-4, 30, 8, 12, "#cc8844");
+      }
+
+      ctx.fillStyle = JH.PAL.slayerEmber;
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("THE SLAYER", PX, PY + PH + 9);
+
+      const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
+      ctx.fillStyle = "#0d0800";
+      ctx.fillRect(DX, DY, DW, DH);
+      ctx.strokeStyle = "#4a2810";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(DX, DY, DW, DH);
+
+      ctx.fillStyle = "#f0d8b0";
+      ctx.font = "6px monospace";
+      const dl = lines[phase];
+      ctx.fillText(dl[0], DX + 6, DY + 18);
+      if (dl[1]) ctx.fillText(dl[1], DX + 6, DY + 30);
+
+      if (Math.floor(performance.now() / 500) % 2) {
+        ctx.fillStyle = "#7a4820";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ E ]  ADVANCE", DX + DW - 4, DY + DH - 5);
+        ctx.textAlign = "left";
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillStyle = i <= phase ? JH.PAL.slayerEmber : "#3a2010";
+        ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
       }
     },
 
@@ -706,7 +774,6 @@
     // Suds are kept (no Upgrades.reset).
     respawnFromChurch() {
       const next = Math.max(0, this.diedWave);     // the wave to re-fight
-      JH.Camera.reset();
       const p = this.player;
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
       const maxX = WAVE_TRIGGERS[next] + 30;
@@ -715,6 +782,7 @@
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
       p.alive = true;
+      JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
@@ -726,8 +794,12 @@
       this.waveIndex = next - 1;
       this.waveActive = false; this.waveCleared = false;
       this.bounds = { minX: 8, maxX: maxX };
-      this.worldFadeT = 0.6;     // black -> clear (continues the Church fade)
-      this.warpInT = 0.5;        // Mega Man-style materialize beam
+      // Church-return arrival: hold on black, then a water jet drops Jon from the
+      // sky into a splash landing. updateArrival() drives it; player logic is
+      // frozen until it finishes. Jon starts high (z) and eases to the ground.
+      this.arrival = { t: 0, blackDur: 0.4, fallDur: 0.6, splashDur: 0.4, height: 240, splashed: false };
+      p.z = this.arrival.height;
+      this.worldFadeT = 0; this.warpInT = 0;
       this.state = "play";
       this.showScreen("hud");
       JH.Music.reset(); JH.Music.start();
@@ -737,6 +809,36 @@
     closeShop() {
       this.state = "play";
       this.showScreen("hud");
+    },
+
+    // Church-return landing: black hold -> water-jet sky-drop -> splash. Freezes
+    // player/enemy logic; only particles animate. Jon's z eases from sky to ground.
+    updateArrival(dt) {
+      const a = this.arrival, p = this.player;
+      a.t += dt;
+      const fallStart = a.blackDur;
+      const fallEnd = a.blackDur + a.fallDur;
+      const splashEnd = fallEnd + a.splashDur;
+      if (a.t < fallStart) {
+        p.z = a.height;                        // still in the sky, hidden by black
+      } else if (a.t < fallEnd) {
+        const k = (a.t - fallStart) / a.fallDur;
+        p.z = a.height * (1 - k * k);          // ease-in fall (gravity)
+      } else {
+        p.z = 0;
+        if (!a.splashed) {
+          a.splashed = true;
+          JH.burst(this, p.x, p.y, 20, JH.PAL.waterHi, 10, { speed: 90, life: 0.5, up: 70, size: 2 });
+          JH.burst(this, p.x, p.y, 14, JH.PAL.water,   14, { speed: 60, life: 0.45, up: 30, size: 2 });
+          this.shake(5);
+          this.audio.play("whack");
+        }
+      }
+      this.particles = this.particles.filter((pp) => pp.update(dt));
+      this.embers = this.embers.filter((pp) => pp.update(dt, this));
+      for (const h of this.hydrants) h.t += dt;
+      this.updateHUD();
+      if (a.t >= splashEnd) { this.arrival = null; p.z = 0; }
     },
 
     // ------------------------------------------------------- end states
@@ -868,6 +970,9 @@
       }
 
       if (this.state !== "play") { this.updateHUD(); return; }
+
+      // Church-return landing sequence owns play input/logic until it finishes.
+      if (this.arrival) { this.updateArrival(dt); return; }
 
       // Hitstop: freeze entities briefly on impact; embers + particles keep running.
       if (this.hitStopTimer > 0) {
@@ -1123,19 +1228,33 @@
 
       // Returning from the Church: Mega Man-style warp beam at Jon, then the
       // world fades in from black (continuing the Church's fade-out).
-      if (this.state === "play" && (this.warpInT > 0 || this.worldFadeT > 0)) {
-        const ctx2 = this.ctx;
-        if (this.warpInT > 0 && this.player) {
-          const sx = Math.round(this.player.x - JH.Camera.x);
-          const k = this.warpInT / 0.5;                 // 1 -> 0
-          ctx2.save(); ctx2.globalAlpha = 0.35 + 0.45 * k; ctx2.fillStyle = JH.PAL.waterHi;
-          const w = Math.max(2, Math.round(10 * k));
-          ctx2.fillRect(sx - w / 2, 0, w, JH.VIEW_H);   // descending light column
-          ctx2.restore();
+      // Church-return landing overlay: black hold, then a water jet descends with
+      // Jon (drawn at his falling z in the actor pass) and ends in a splash.
+      if (this.state === "play" && this.arrival && this.player) {
+        const ctx2 = this.ctx, a = this.arrival;
+        const fallStart = a.blackDur, fallEnd = a.blackDur + a.fallDur;
+        // Black holds fully during blackDur, then clears as the jet descends.
+        let blackA = 1;
+        if (a.t >= fallStart) blackA = Math.max(0, 1 - (a.t - fallStart) / (a.fallDur * 0.6));
+        if (blackA > 0) {
+          ctx2.save(); ctx2.globalAlpha = blackA; ctx2.fillStyle = "#000";
+          ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
         }
-        if (this.worldFadeT > 0) {
-          ctx2.save(); ctx2.globalAlpha = Math.min(1, this.worldFadeT / 0.6);
-          ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
+        // Water jet: bright column from the top of the screen down to Jon.
+        if (a.t >= fallStart && a.t <= fallEnd + 0.12) {
+          const sx = Math.round(this.player.x - JH.Camera.x);
+          const jonSy = Math.max(0, JH.Geo.feetScreenY(this.player.y, this.player.z));
+          ctx2.save();
+          ctx2.globalAlpha = 0.7;
+          const g = ctx2.createLinearGradient(0, 0, 0, jonSy);
+          g.addColorStop(0, "rgba(120,200,255,0.05)");
+          g.addColorStop(1, JH.PAL.waterHi);
+          ctx2.fillStyle = g;
+          ctx2.fillRect(sx - 5, 0, 10, jonSy);
+          ctx2.globalAlpha = 0.45; ctx2.fillStyle = JH.PAL.water;
+          ctx2.fillRect(sx - 8, 0, 2, jonSy);
+          ctx2.fillRect(sx + 6, 0, 2, jonSy);
+          ctx2.restore();
         }
       }
 
@@ -1230,8 +1349,21 @@
         const sx = h.x - cam;
         if (sx < -20 || sx > JH.VIEW_W + 20) continue;
         const active = this.player && this.player.nearHydrant === h;
-        JH.Assets.shadow(ctx, sx, JH.Geo.feetScreenY(h.y, 0), 7);
-        JH.Assets.draw(ctx, "hydrant", sx, JH.Geo.feetScreenY(h.y, 0), 1, {});
+        // The hydrant Jon last touched is the current respawn point (golden).
+        const isRespawn = this.lastHydrantX > 0 && Math.abs(h.x - this.lastHydrantX) < 1;
+        const fy = JH.Geo.feetScreenY(h.y, 0);
+        JH.Assets.shadow(ctx, sx, fy, 7);
+        if (isRespawn) {
+          // Golden glow-outline of the hydrant model, matching Jon's kibble-heal
+          // effect (shadowColor/shadowBlur around the sprite silhouette).
+          ctx.save();
+          ctx.shadowColor = "#ffce3a";
+          ctx.shadowBlur = 6 + 4 * Math.sin(h.t * 5);
+          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true });
+          ctx.restore();
+        } else {
+          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, {});
+        }
         // glow + "FILL" tag when actively refilling
         if (active) {
           const fy = JH.Geo.feetScreenY(h.y, 0) - 24 + Math.sin(h.t * 8) * 1.5;

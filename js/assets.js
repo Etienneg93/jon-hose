@@ -290,6 +290,13 @@
     ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = PAL.switchBody; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.stroke();
+    if (opt.hole) {
+      // Core has fled — empty black socket (a hole in the switch), no glow/lens.
+      ctx.fillStyle = "#050609";
+      ctx.beginPath(); ctx.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
     // outer glow
     ctx.globalAlpha = 0.5 * pulse;
     ctx.fillStyle = PAL.wallbossCore;
@@ -485,21 +492,47 @@
     p(1, 19, 2, 2, "#111");
   });
 
+  // Lerp between two #rrggbb colors → "rgb(r,g,b)".
+  function lerpHex(a, b, t) {
+    t = Math.max(0, Math.min(1, t));
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const ar = (pa >> 16) & 255, ag = (pa >> 8) & 255, ab = pa & 255;
+    const br = (pb >> 16) & 255, bg = (pb >> 8) & 255, bb = pb & 255;
+    return "rgb(" + Math.round(ar + (br - ar) * t) + "," +
+                    Math.round(ag + (bg - ag) * t) + "," +
+                    Math.round(ab + (bb - ab) * t) + ")";
+  }
+
   // ============================ FURNACE ================================
-  // Procedural placeholder. Bulky golem. `opt.heated` = glowing red vent phase.
-  Assets.register("furnace", (p, opt) => {
+  // Procedural placeholder. Bulky golem. `opt.heat` (0..1) = spray build-up so
+  // you can gauge the vent; `opt.heated` = the full vent wind-up.
+  Assets.register("furnace", (p, opt, ctx) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
     if (opt.hurt && (f & 1)) return;
+    const heat = Math.max(0, Math.min(1, opt.heat || 0));
     const hot = !!opt.heated;
+    const level = hot ? 1 : heat;                 // 0 cold → 1 about to vent
+    // Body ramps from cold to hot as it's hosed.
+    const body = hot ? PAL.furnaceHot : lerpHex(PAL.furnaceBody, PAL.furnaceHot, heat * 0.85);
     p(-8 + ls, 0, 7, 12, PAL.furnaceDk);
     p(1 - ls, 0, 7, 12, PAL.furnaceDk);
-    p(-11, 12, 22, 18, hot ? PAL.furnaceHot : PAL.furnaceBody);
+    p(-11, 12, 22, 18, body);
     p(-11, 12, 22, 3, PAL.furnaceDk);
-    p(-11, 24, 22, 4, hot ? PAL.smeltGlow : PAL.furnaceDk);
+    // Vent slats glow warmer with heat.
+    p(-11, 24, 22, 4, hot ? PAL.furnaceHot : lerpHex(PAL.furnaceDk, PAL.smeltGlow, level));
     p(-5, 30, 10, 9, PAL.skin);
     p(-5, 34, 10, 3, PAL.furnaceDk);
-    p(1, 32, 2, 2, "#111");
+    // Eye: dark when cold, glowing hot as it heats.
+    if (level > 0.05 && ctx) {
+      ctx.save();
+      ctx.shadowColor = "#ffb020";
+      ctx.shadowBlur = 2 + 6 * level;
+      p(1, 32, 2, 2, lerpHex("#5a2a08", "#ffe070", level));
+      ctx.restore();
+    } else {
+      p(1, 32, 2, 2, "#111");
+    }
   });
 
   // ============================ FIREBALL ===============================
@@ -610,7 +643,7 @@
   });
 
   // ========================= QUAKE WALKER (boss 3) ====================
-  // Uses the real sprite-sheet frames (sprites/quake-frames.png) when loaded;
+  // Uses the real sprite-sheet frames (sprites/quake_walker/quake-frames.png) when loaded;
   // falls back to a procedural steel-bruiser drawing otherwise.
   function proceduralQuake(p, opt) {
     const f = opt.frame | 0;
@@ -1021,21 +1054,31 @@
     p(-1, 22, 2, 2, "#ff8030");           // bullseye
   });
 
-  Assets.register("hydrant", (p) => {
-    p(-4, 0, 8, 3, "#7a1010");
-    p(-3, 3, 6, 9, "#c81f1f");
-    p(-3, 12, 6, 3, "#7a1010");
-    p(-1, 15, 2, 2, "#c81f1f");
-    p(-5, 7, 2, 2, "#7a1010");
-    p(3, 7, 2, 2, "#7a1010");
+  // opt.gold = this is the active respawn point (red -> golden).
+  Assets.register("hydrant", (p, opt) => {
+    const gold = opt && opt.gold;
+    const dk = gold ? "#8a5e0c" : "#7a1010";
+    const br = gold ? "#ffce3a" : "#c81f1f";
+    p(-4, 0, 8, 3, dk);
+    p(-3, 3, 6, 9, br);
+    p(-3, 12, 6, 3, dk);
+    p(-1, 15, 2, 2, br);
+    p(-5, 7, 2, 2, dk);
+    p(3, 7, 2, 2, dk);
   });
   // =================== QUAKE WALKER CUTSCENE PORTRAIT ================
   // Pre-load both mouth-closed and mouth-open JPGs immediately.
   {
     const makeImg = (src) => JH.Loader.img(src);
-    const _closed = makeImg("sprites/quake_walker_portrait.jpg");
-    const _open   = makeImg("sprites/quake_walker_portrait_mouthopen.jpg");
+    const _closed = makeImg("sprites/quake_walker/quake_walker_portrait.jpg");
+    const _open   = makeImg("sprites/quake_walker/quake_walker_portrait_mouthopen.jpg");
     JH.getQuakePortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
+
+  {
+    const _closed = JH.Loader.img("sprites/slayer/slayer-portrait-mouthclosed.png");
+    const _open   = JH.Loader.img("sprites/slayer/slayer-portrait-mouthopen.png");
+    JH.getSlayerPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
   }
 
   // =================== CHURCH OF THE HOSE ART =======================

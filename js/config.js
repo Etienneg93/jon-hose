@@ -22,6 +22,8 @@
   JH.DEPTH_MAX = 86;        // floor depth span in px
   JH.LEVEL_LEN = 7400;      // world length of level 1 (logical px)
   JH.ZONE2_START = 4100;    // world-x where the ruined district (Act 3) begins
+  JH.ZONE3_START = 7000;    // world-x where the Boiler District (fire world) begins
+                            // (placeholder — realign when wave pacing is respaced)
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
   // level). Spread along the street so you're never far from a top-up.
@@ -37,7 +39,7 @@
     { x: 5900, y: JH.DEPTH_MIN + 10 },
     { x: 6700, y: JH.DEPTH_MAX - 14 },
   ];
-  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
+  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
 
   // Floor collision for Act-3 rubble piles. Ellipse footprint scaled by pile's `s`.
   // rx/ry are a touch larger than the sprite so the visual edge always blocks.
@@ -162,10 +164,18 @@
     // 2026-06-30-bulwark-shield-rework-design.md.
     bulwark: {
       name: "Bulwark", hp: 420, speed: 26, touchDmg: 14, contactCd: 1.0,
-      // Shield-throw cycle (seconds/px) — see docs/superpowers/specs/
-      // 2026-06-30-bulwark-shield-rework-design.md.
-      throwRange: 80, throwWind: 0.5, shieldlessDur: 3.5,
+      // Dome-shield cycle: approaches, plants a dome barrier centered on itself,
+      // shelters inside it (spray is blocked from outside) and big-slams when the
+      // player steps in, then retrieves the shield once the dome fades and
+      // redeploys. See project memory project_bulwark_dome_redesign.
+      plantRange: 90,          // approach until within this of the player, then plant
+      plantWind: 0.5,          // wind-up before the dome forms
+      domeRadius: 58,          // dome radius (world units — x and depth)
+      domeDur: 7.0,            // seconds the barrier holds before fading out
+      redeployCd: 1.4,         // cooldown after retrieving before it can plant again
       retrieveSpeedMult: 1.6, pickupRadius: 16, shieldBodyW: 16,
+      // Big slam (à la The Big Drip) when the player is close/inside the dome.
+      slamRange: 46, slamWind: 0.65, slamDmg: 22, slamBand: 20,
       suds: 60, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
     },
     // Super-elite: fast "blink harasser" — counters back-pedal kiting. Chases
@@ -203,10 +213,13 @@
       waterMult: 1.0,          // normal phase: full spray damage
       heatedWaterMult: 0.2,    // heated phase: 20% spray damage
       heatThreshold: 1.5,      // continuous spray-seconds before heating triggers
+      coolRate: 2.5,           // heat lost per second once spray pauses (>0.3s) — cools, not resets
       ventWind: 0.5,           // delay after heat threshold before vent fires (s)
       ventKnock: 180,          // knockback impulse on vent (px/s)
       ventBurnStacks: 1,       // burn stacks applied by vent
       ventCd: 4.0,             // post-vent cooldown before it can heat again
+      ventPatchRadius: 26,     // fire-zone patch radius left around it on vent
+      ventPatchDur: 2.6,       // how long the vent fire zone burns (s)
       suds: 55, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",
     },
   };
@@ -288,7 +301,7 @@
         "Spend it at the shrines along the nave — Pressure, Vigor, Reservoir — and the blessing follows you into every life to come.",
         "Death is not the end of the spray. Walk into the light when you are ready, and try again.",
       ],
-      repeat: ["The water remembers you, child.", "Again you fall — again you rise.", "Spend what you have earned; the street still thirsts.", "Pressure builds in the faithful. Return to the light."],
+      repeat: ["The water remembers you, child.", "Again you fall — again you rise.", "Spend what you have earned; the street still thirsts.", "Pressure builds in the faithful. Return to the light.", "Hose before Hoes, child."],
     },
     // Walkable scene layout (logical px). Jon spawns at spawnX and walks right:
     // Father Jon materializes at fatherX; blessing stations sit along the nave;
@@ -429,17 +442,19 @@
     dashPatchSpacing: 40,     // px between FirePatch spawns along trail
     dashPatchRadius: 18,      // radius of each trail patch
     dashPatchDur: 1.2,        // extinguish duration for trail patches
-    // Attack: Fireball Volley
+    // Attack: Fireball Volley (rapid-fire pool-cue break)
     volleyRange: 200,         // px: trigger volley when player within this distance
-    volleyWind: 0.9,          // cue wind-up duration (s)
-    volleyCd: 2.4,            // post-volley cooldown
-    ballCount: 2,             // balls per volley
-    enrageBallCount: 3,       // balls per volley when enraged
-    ballSpawnOffset: 22,      // px in front of Slayer where the ball materialises
-    ballStagger: 0.18,        // seconds between each ball in a volley
+    volleyWind: 0.7,          // cue wind-up duration (s) before the first ball
+    volleyCd: 1.9,            // post-volley cooldown
+    ballCount: 4,             // balls per volley (rapid fire)
+    enrageBallCount: 6,       // balls per volley when enraged
+    ballSpawnOffset: 32,      // px in front of Slayer — at the cue tip, so the release connects
+    ballStagger: 0.1,         // seconds between each ball in a volley (rapid)
     igniteDelay: 0.12,        // s after launch before fireball activates burn
     // Attack: Slam
     slamWind: 0.75, slamDmg: 22, slamRange: 38,
+    // Attack: dash-landing fire ring (radiates from where he lands)
+    dashRingDmg: 16, dashRingBurn: 1, dashRingMaxR: 95, dashRingSpeed: 280,
     // Behaviour
     enrageAt: 0.40,
   };
@@ -475,7 +490,7 @@
       // camping vs. the Bulwark's shield; back-pedal kiting vs. the Stalker's blink).
       // No `tough` flag — already tuned for Act 4, not elite-ramped (see
       // docs/superpowers/specs/2026-06-28-super-elites-design.md, "No double-ramp").
-      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 3 }] },
       { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
