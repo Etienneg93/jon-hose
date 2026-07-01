@@ -94,7 +94,11 @@
       for (let x = -40; x < JH.LEVEL_LEN + 200; ) {
         const w = 24 + Math.floor(rA() * 30);
         const h = 40 + Math.floor(rA() * 70);
-        const broken = x > JH.ZONE2_START;       // Act 3: ruined district
+        // Act 3: ruined district. The near skyline scrolls at 0.5 parallax, so
+        // the foreground zone boundary maps to building-x at HALF scale (plus a
+        // screen width so the first broken silhouette enters from the right
+        // edge as the player crosses into the district, not two acts later).
+        const broken = x > (JH.ZONE2_START - 200) * 0.5 + JH.VIEW_W;
         const b = {
           x, w, h, broken, jag: null, windows: [],
           c: broken ? (rA() > 0.5 ? "#241f24" : "#2b242a")

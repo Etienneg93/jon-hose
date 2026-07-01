@@ -21,9 +21,10 @@
   JH.DEPTH_MIN = 0;
   JH.DEPTH_MAX = 86;        // floor depth span in px
   JH.LEVEL_LEN = 11200;     // world length of level 1 (logical px)
-  JH.ZONE2_START = 4100;    // world-x where the ruined district (Act 3) begins
-  JH.ZONE3_START = 7000;    // world-x where the Boiler District (fire world) begins
-                            // (placeholder — realign when wave pacing is respaced)
+  // Zone boundaries sit in the free-walk corridor after each act's boss so the
+  // 500px tint ramp (world.js) never bleeds into the locked boss arena behind it.
+  JH.ZONE2_START = 4250;    // ruined district (Act 3) — Switch at 3780, Rubble Row at 4160
+  JH.ZONE3_START = 8950;    // Boiler District (fire world) — GK at 8720, Fire Intro at 9100
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
   // level). Spread along the street so you're never far from a top-up.
