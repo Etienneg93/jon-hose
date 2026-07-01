@@ -325,6 +325,19 @@
         const nb = this.spawnEnemy("neighbor", left + 28, JH.DEPTH_MAX * 0.4);
         nb.spawnGrace = 1.0;
         this.banner("WATER ALL 4 CROPS!  DODGE THE ROCKS!", 2.8);
+      } else if (wave.douse) {
+        // Fire set-piece: spray 4 flame sources out while Smelts harass you.
+        const xs = [left + 70, left + 172, left + 274, left + 370];
+        const ys = [JH.DEPTH_MIN + 14, JH.DEPTH_MAX - 14, JH.DEPTH_MIN + 22, JH.DEPTH_MAX - 22];
+        this.gardens = xs.map((x, i) => new JH.GardenBox(x, ys[i], i, { flame: true }));
+        this.dropBudget = { suds: 0, items: 0 };
+        (wave.spawns || [{ type: "smelt", count: 2 }]).forEach((g) => {
+          for (let k = 0; k < g.count; k++) {
+            const e = this.spawnEnemy(g.type, left + 40 + k * 30, JH.DEPTH_MAX * 0.4);
+            e.spawnGrace = 1.0;
+          }
+        });
+        this.banner("DOUSE ALL 4 FLAMES!", 2.8);
       } else if (wave.wall) {
         // Barricade encounter: wall on the right, enemies keep coming.
         this.bounds = { minX: left, maxX: right - 26 };       // can't pass the wall
@@ -1092,12 +1105,15 @@
             for (const e of this.enemies) e.dead = true;
             this.waveCleared_();
           }
-        } else if (wave && wave.garden) {
+        } else if (wave && (wave.garden || wave.douse)) {
           for (const g of this.gardens) g.update(dt);
           if (this.gardens.length > 0 && this.gardens.every((g) => g.done)) {
-            // All boxes watered — the neighbor disappears for good, wave clears
+            // Objective done — harassers leave. Neighbor dies (0 suds); douse
+            // harassers are removed WITHOUT reward (dropBudget was 0 anyway).
             for (const e of this.enemies) {
-              if (e.type === "neighbor" && !e.dead) e.die(this);
+              if (e.dead) continue;
+              if (wave.douse) e.dead = true;
+              else if (e.type === "neighbor") e.die(this);
             }
             this.waveCleared_();
           }

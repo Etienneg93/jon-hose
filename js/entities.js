@@ -2503,12 +2503,13 @@
 
   // ================================================= GARDEN BOX
   class GardenBox {
-    constructor(x, y, idx) {
+    constructor(x, y, idx, opts) {
       this.x = x; this.y = (y != null) ? y : JH.DEPTH_MAX * 0.5; this.z = 0;
       this.idx = idx || 0;
+      this.flame = !!(opts && opts.flame);
       this.grow = 0; this.growMax = JH.GARDEN.growMax;
       this.bodyW = 42; this.dead = false; this.done = false; this.t = 0; this.hitFx = 0;
-      this.doneFx = 0;   // countdown that drives the "GREAT!" pop on completion
+      this.doneFx = 0;   // countdown that drives the completion pop
     }
     addGrow(amt, game) {
       if (this.done) return;
@@ -2520,13 +2521,15 @@
         game.audio.play("win"); game.shake(4);
         burst(game, this.x, this.y, 20, "#5a9a40", 18, { speed: 80, life: 0.7, up: 60 });
         burst(game, this.x, this.y, 10, "#fff7a0", 10, { speed: 60, life: 0.5, up: 40 });
-        // Every box drops a pill; first box also unlocks elite drops and shows banner
-        if (!game.concertaUnlocked) {
-          game.concertaUnlocked = true;
-          game.banner("CONCERTA UNLOCKED!", 4.0);
+        if (!this.flame) {
+          // Garden reward: pill + first-box Concerta unlock. Flame boxes give none.
+          if (!game.concertaUnlocked) {
+            game.concertaUnlocked = true;
+            game.banner("CONCERTA UNLOCKED!", 4.0);
+          }
+          game.spawnPickup("pill", this.x, this.y, 1);
+          game.gardensCleared = (game.gardensCleared || 0) + 1;
         }
-        game.spawnPickup("pill", this.x, this.y, 1);
-        game.gardensCleared = (game.gardensCleared || 0) + 1;
       }
     }
     update(dt) { this.t += dt; if (this.hitFx > 0) this.hitFx -= dt; if (this.doneFx > 0) this.doneFx -= dt; }
@@ -2534,8 +2537,24 @@
       const sx = this.x - cam;
       const sy = Geo.feetScreenY(this.y, 0) - 4;
       const gf = this.grow / this.growMax;
-      JH.Assets.draw(ctx, "garden_box", sx, sy, 1, { growFrac: gf });
-      // Growth bar (rises with the plants)
+      if (this.flame) {
+        // Placeholder flame that shrinks as it's doused (gf: 0 = raging, 1 = out).
+        const rem = 1 - gf;
+        const baseY = sy;
+        for (let i = 0; i < 3; i++) {
+          const fh = (14 + i * 6) * rem * (0.8 + 0.3 * Math.sin(this.t * 12 + i));
+          const fw = (10 - i * 2);
+          ctx.fillStyle = i === 0 ? "#ff7a1a" : i === 1 ? "#ffb020" : "#ffe070";
+          ctx.beginPath();
+          ctx.moveTo(sx - fw, baseY);
+          ctx.quadraticCurveTo(sx, baseY - fh * 1.4, sx + fw, baseY);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else {
+        JH.Assets.draw(ctx, "garden_box", sx, sy, 1, { growFrac: gf });
+      }
+      // Progress bar (extinguish progress for flame, growth for garden)
       const w = 44, bx = sx - w / 2, by = sy - 28 - Math.round(gf * 16);
       ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 7);
       ctx.fillStyle = "#1a3a10"; ctx.fillRect(bx, by, w, 5);
@@ -2551,13 +2570,15 @@
         const k = this.doneFx / 1.6;                 // 1 → 0
         const ty = by - 6 - (1 - k) * 14;            // rises as it fades
         ctx.globalAlpha = Math.min(1, k * 1.4);
-        ctx.fillStyle = "#0a2a08"; ctx.fillText("GREAT!", sx + 1, ty + 1);
-        ctx.fillStyle = "#7dff5a"; ctx.fillText("GREAT!", sx, ty);
+        const doneMsg = this.flame ? "OUT!" : "GREAT!";
+        ctx.fillStyle = "#0a2a08"; ctx.fillText(doneMsg, sx + 1, ty + 1);
+        ctx.fillStyle = "#7dff5a"; ctx.fillText(doneMsg, sx, ty);
       } else if (!this.done && this.hitFx > 0) {
         const ty = by - 6 + Math.sin(this.t * 6) * 1.5;
         ctx.globalAlpha = 0.92;
-        ctx.fillStyle = "#062033"; ctx.fillText("Keep watering!", sx + 1, ty + 1);
-        ctx.fillStyle = "#bfefff"; ctx.fillText("Keep watering!", sx, ty);
+        const msg = this.flame ? "Douse it!" : "Keep watering!";
+        ctx.fillStyle = "#062033"; ctx.fillText(msg, sx + 1, ty + 1);
+        ctx.fillStyle = "#bfefff"; ctx.fillText(msg, sx, ty);
       }
       ctx.restore();
     }
