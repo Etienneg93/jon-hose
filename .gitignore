@@ -18,3 +18,7 @@ desktop.ini
 
 # raw generated artwork — source/scratch, never loaded by the game
 sprites/**/gen/
+
+# editable art sources (Aseprite) — the game loads the exported PNGs, not these
+*.aseprite
+*.ase
