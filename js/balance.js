@@ -107,6 +107,60 @@
     furnaceShouldVent(continuousSprayT, heatThreshold, ventCdT) {
       return continuousSprayT >= heatThreshold && ventCdT <= 0;
     },
+
+    // Enemy types introduced by authored waves up to and including waveIndex
+    // (from their `spawns` lists — bosses have none). dummy/neighbor excluded.
+    // Order = first-seen order. Pure.
+    unlockedPool(waves, waveIndex) {
+      const seen = [];
+      const last = Math.min(waveIndex, waves.length - 1);
+      for (let i = 0; i <= last; i++) {
+        (waves[i].spawns || []).forEach((g) => {
+          if (g.type === "dummy" || g.type === "neighbor") return;
+          if (!seen.includes(g.type)) seen.push(g.type);
+        });
+      }
+      return seen;
+    },
+
+    // Weighted sprinkle picks from an unlocked pool. opts (all optional):
+    //   weights  — {type: weight}; unlisted types weigh 1
+    //   heavies  — types sharing one combined heavyCap
+    //   heavyCap — max TOTAL heavy picks (default 1)
+    //   typeCaps — {type: max picks} hard per-type caps
+    //   rng      — injectable () => [0,1) for deterministic tests
+    // May return fewer than `count` when nothing is eligible. Pure.
+    pickSprinkles(pool, count, opts) {
+      const o = opts || {};
+      const rng = o.rng || Math.random;
+      const heavies = o.heavies || [];
+      const heavyCap = o.heavyCap != null ? o.heavyCap : 1;
+      const typeCaps = o.typeCaps || {};
+      const weights = o.weights || {};
+      const w = (t) => (weights[t] != null ? weights[t] : 1);
+      const picks = [];
+      let heavyN = 0;
+      for (let n = 0; n < count; n++) {
+        const eligible = pool.filter((t) => {
+          if (heavies.includes(t) && heavyN >= heavyCap) return false;
+          const cap = typeCaps[t];
+          if (cap != null && picks.filter((p) => p === t).length >= cap) return false;
+          return true;
+        });
+        if (!eligible.length) break;
+        let total = 0;
+        eligible.forEach((t) => { total += w(t); });
+        let r = rng() * total;
+        let picked = eligible[eligible.length - 1];
+        for (const t of eligible) {
+          r -= w(t);
+          if (r <= 0) { picked = t; break; }
+        }
+        picks.push(picked);
+        if (heavies.includes(picked)) heavyN++;
+      }
+      return picks;
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

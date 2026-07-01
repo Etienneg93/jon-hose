@@ -254,6 +254,16 @@
   // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
   JH.WAVECAP = { charger: 2 };
 
+  // Wave sprinkle: extra enemies drawn from the already-introduced pool,
+  // added on top of authored spawns (variety, not economy — counts stay low).
+  // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
+  JH.SPRINKLE = {
+    counts: [0, 1, 2, 2, 2],
+    weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
+    heavies: ["bulwark", "furnace", "smelt"],
+    heavyCap: 1,
+  };
+
   // Garden event: spray water on the planter to grow crops. Neighbor throws rocks.
   JH.GARDEN = { growMax: 280 };
 

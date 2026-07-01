@@ -150,3 +150,49 @@ test("actLevelForWave with expanded ACT_STARTS assigns new act tiers", () => {
   assert.strictEqual(Balance.actLevelForWave(23, AS), 3);   // Fire start
   assert.strictEqual(Balance.actLevelForWave(28, AS), 3);   // Fire (Slayer)
 });
+
+test("unlockedPool: types accumulate up to the wave index, deduped", () => {
+  const waves = [
+    { spawns: [{ type: "mook", count: 3 }] },
+    { spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] },
+    { boss: true },
+    { spawns: [{ type: "pyro", count: 2 }] },
+  ];
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 0), ["mook"]);
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 1), ["mook", "charger"]);
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 2), ["mook", "charger"]); // boss wave adds nothing
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 3), ["mook", "charger", "pyro"]);
+});
+
+test("unlockedPool excludes dummy and neighbor", () => {
+  const waves = [{ spawns: [{ type: "dummy", count: 1 }, { type: "neighbor", count: 1 }, { type: "fuse", count: 2 }] }];
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 0), ["fuse"]);
+});
+
+test("pickSprinkles: deterministic picks from the pool, honors count", () => {
+  const picks = Balance.pickSprinkles(["mook", "pyro"], 3, { rng: () => 0 });
+  assert.strictEqual(picks.length, 3);
+  picks.forEach((p) => assert.ok(["mook", "pyro"].includes(p)));
+});
+
+test("pickSprinkles caps heavies at heavyCap total", () => {
+  // rng()=0 walks the cumulative weights and lands on the first eligible type;
+  // bulwark's huge weight would win every roll if it weren't heavy-capped.
+  const picks = Balance.pickSprinkles(["bulwark", "mook"], 3, {
+    weights: { bulwark: 100, mook: 1 }, heavies: ["bulwark"], heavyCap: 1, rng: () => 0,
+  });
+  assert.strictEqual(picks.filter((p) => p === "bulwark").length, 1);
+  assert.strictEqual(picks.filter((p) => p === "mook").length, 2);
+});
+
+test("pickSprinkles honors per-type caps", () => {
+  const picks = Balance.pickSprinkles(["charger", "mook"], 3, {
+    typeCaps: { charger: 1 }, rng: () => 0,
+  });
+  assert.deepStrictEqual(picks, ["charger", "mook", "mook"]);
+});
+
+test("pickSprinkles returns fewer picks when nothing is eligible", () => {
+  const picks = Balance.pickSprinkles(["bulwark"], 3, { heavies: ["bulwark"], heavyCap: 1, rng: () => 0 });
+  assert.deepStrictEqual(picks, ["bulwark"]);
+});
