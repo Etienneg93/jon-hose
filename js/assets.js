@@ -512,6 +512,35 @@
     p(-5, 4, 10, 10, ignited ? (flick ? PAL.firePatch : PAL.firePatchHi) : "#f0eecc");
   });
 
+  // ============================ SLAYER (BOSS) ==========================
+  // Real sprite sheets — 4 static PNG states (no walk cycle).
+  const SLAYER_H = 58;
+  const _slayerImgs = {
+    idle:       JH.Loader.img("sprites/slayer/idle.png"),
+    dash:       JH.Loader.img("sprites/slayer/dash.png"),
+    cueWind:    JH.Loader.img("sprites/slayer/cueWind.png"),
+    cueRelease: JH.Loader.img("sprites/slayer/cueRelease.png"),
+  };
+  Assets.register("slayer", (p, opt, ctx, x, y, facing) => {
+    if (opt.hurt && (Math.floor((opt.t || 0) * 10) & 1)) return;
+    const key = _slayerImgs[opt.state] ? opt.state : "idle";
+    const img = _slayerImgs[key];
+    if (!img || !img.complete || !img.naturalWidth) {
+      // Fallback placeholder while sprites are loading.
+      p(-22, 0, 44, SLAYER_H, PAL.slayerBody);
+      p(-22, 0, 44, 3, PAL.slayerDk);
+      return;
+    }
+    const scale = SLAYER_H / img.naturalHeight;
+    const dw = Math.round(img.naturalWidth * scale);
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -SLAYER_H, dw, SLAYER_H);
+    ctx.restore();
+  });
+
   // ========================== STALKER ==================================
   // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
   // post-blink wind-up arm.

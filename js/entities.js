@@ -2919,6 +2919,210 @@
       }
     }
   }
+  // ---- SlayerBoss: Fire boss ----
+  // Charge-up/dash movement (no walk cycle), fireball volley, slam attack.
+  // After defeat: ally cutscene triggers in waveCleared_() → fire element unlocked.
+  // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
+  class SlayerBoss extends Enemy {
+    constructor(x, y) {
+      super("mook", x, y);
+      this.def = JH.SLAYER;
+      this.type = "slayer";
+      this.hp = this.maxHp = JH.SLAYER.hp;
+      this.bodyW = JH.SLAYER.bodyW; this.bodyH = JH.SLAYER.bodyH;
+      this.isBoss = true;
+      this.state = "charge";     // initial: charge up before first dash
+      // Charge/dash state
+      this.chargeT = 0;
+      this.dashTarget = null;    // {x,y} computed when charge completes
+      this.dashTellT = 0;
+      this.dashPatchAcc = 0;     // accumulated travel px for trail patch spawning
+      // Volley state
+      this.windTimer = 0;
+      this.volleyBallsLeft = 0;
+      this.volleyT = 0;
+      // Cooldown between attack cycles
+      this.cdTimer = 0.8;        // initial settle time
+      this.strikeFx = 0;
+    }
+
+    think(dt, game) {
+      this.x = clamp(this.x, game.bounds.minX + 24, game.bounds.maxX - 24);
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      const enraged = this.hp / this.maxHp < d.enrageAt;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
+
+      // ---- CHARGE: fire particles build up, then snap to dash ----
+      if (this.state === "charge") {
+        this.chargeT += dt;
+        this.facing = dx >= 0 ? 1 : -1;
+        const density = Math.min(1, this.chargeT / d.chargeDur);
+        if (Math.random() < density * 2.5 * dt * 60)
+          burst(game, this.x + (Math.random() - 0.5) * 16,
+            this.y + (Math.random() - 0.5) * 8, 12 + Math.random() * 16,
+            JH.PAL.slayerEmber, 1, { speed: 50, life: 0.22, up: 30 });
+        if (this.chargeT >= d.chargeDur) {
+          this.dashTarget = { x: pl.x, y: clamp(pl.y, JH.DEPTH_MIN, JH.DEPTH_MAX) };
+          this.dashTellT = d.dashTell;
+          this.dashPatchAcc = 0;
+          this.state = "pre_dash";
+        }
+        return;
+      }
+
+      // ---- PRE_DASH: brief hold in dash pose ----
+      if (this.state === "pre_dash") {
+        this.dashTellT -= dt;
+        this.state = "pre_dash";   // keep as pre_dash; painter reads "dash" sprite
+        if (this.dashTellT <= 0) this.state = "dash";
+        return;
+      }
+
+      // ---- DASH: move to dashTarget, spawn trail patches ----
+      if (this.state === "dash") {
+        const tdx = this.dashTarget.x - this.x, tdy = this.dashTarget.y - this.y;
+        const tdist = Math.hypot(tdx, tdy);
+        if (tdist < 8) {
+          // Dash complete — decide next attack.
+          this.chargeT = 0;
+          if (dist < d.slamRange + 10) {
+            this.windTimer = enraged ? d.slamWind * 0.8 : d.slamWind;
+            this.state = "slam";
+          } else if (dist < d.volleyRange) {
+            this.volleyBallsLeft = enraged ? d.enrageBallCount : d.ballCount;
+            this.windTimer = enraged ? d.volleyWind * 0.8 : d.volleyWind;
+            this.state = "cueWind";
+          } else {
+            this.state = "charge";
+          }
+          return;
+        }
+        const step = Math.min(tdist, d.dashSpeed * dt);
+        const nx = tdx / tdist, ny = tdy / tdist;
+        this.x += nx * step; this.y += ny * step;
+        this.dashPatchAcc += step;
+        // Emit particles and spawn trail fire patches.
+        if (Math.random() < 0.7)
+          burst(game, this.x, this.y, 4, JH.PAL.slayerEmber, 1, { speed: 70, life: 0.15, up: 10 });
+        while (this.dashPatchAcc >= d.dashPatchSpacing) {
+          this.dashPatchAcc -= d.dashPatchSpacing;
+          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.dashPatchRadius, d.dashPatchDur));
+        }
+        this.facing = tdx >= 0 ? 1 : -1;
+        return;
+      }
+
+      // ---- SLAM ----
+      if (this.state === "slam") {
+        this.windTimer -= dt;
+        if (this.windTimer <= 0) {
+          if (Math.abs(dx) < d.slamRange && Math.abs(dy) < 24)
+            pl.takeHit(d.slamDmg, game, this.x);
+          for (let i = 0; i < 10; i++)
+            burst(game, this.x + (Math.random() - 0.5) * 24, this.y + (Math.random() - 0.5) * 16, 4,
+              JH.PAL.smeltGlow, 1, { speed: 100, life: 0.4, up: 50 });
+          game.shake(8); game.audio.play("whack");
+          this.strikeFx = 0.2;
+          this.cdTimer = enraged ? d.volleyCd * 0.6 : d.volleyCd * 0.5;
+          this.state = "idle";
+        }
+        return;
+      }
+
+      // ---- CUE WIND-UP ----
+      if (this.state === "cueWind") {
+        this.windTimer -= dt;
+        if (this.windTimer <= 0) {
+          // Fire first ball, transition to volley-fire state.
+          this._fireOneBall(game, enraged);
+          this.volleyBallsLeft--;
+          this.volleyT = d.ballStagger;
+          this.state = this.volleyBallsLeft > 0 ? "volley" : "post_volley";
+          if (this.state === "post_volley") this.windTimer = 0.15;
+        }
+        return;
+      }
+
+      // ---- VOLLEY: stagger remaining balls ----
+      if (this.state === "volley") {
+        this.volleyT -= dt;
+        if (this.volleyT <= 0) {
+          this._fireOneBall(game, enraged);
+          this.volleyBallsLeft--;
+          if (this.volleyBallsLeft > 0) {
+            this.volleyT = d.ballStagger;
+          } else {
+            this.windTimer = 0.15;   // brief cueRelease hold
+            this.state = "post_volley";
+          }
+        }
+        return;
+      }
+
+      // ---- POST_VOLLEY: cueRelease sprite flash ----
+      if (this.state === "post_volley") {
+        this.windTimer -= dt;
+        if (this.windTimer <= 0) {
+          this.cdTimer = enraged ? d.volleyCd * 0.8 : d.volleyCd;
+          this.chargeT = 0;
+          this.state = "idle";
+        }
+        return;
+      }
+    }
+
+    _fireOneBall(game, enraged) {
+      const d = this.def;
+      const bx = this.x + this.facing * d.ballSpawnOffset;
+      game.embers.push(new JH.Fireball(bx, this.y, this.facing, game));
+      game.audio.play("jump");
+    }
+
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.75);
+      // Map internal state to sprite state string.
+      let spriteState = "idle";
+      if (this.state === "dash" || this.state === "pre_dash") spriteState = "dash";
+      else if (this.state === "cueWind") spriteState = "cueWind";
+      else if (this.state === "post_volley") spriteState = "cueRelease";
+      Assets.draw(ctx, "slayer", sx, sy, this.facing, {
+        state: spriteState,
+        hurt: this.flashTimer > 0,
+        hurtAlpha: Math.min(this.flashTimer / 0.18, 1),
+      });
+      if (this.hp < this.maxHp) {
+        const w = this.bodyW + 8;
+        const bx = Math.round(sx - w / 2), by = Math.round(Geo.feetScreenY(this.y, 0) - this.bodyH - 10);
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 6);
+        ctx.fillStyle = "#5a2a1a"; ctx.fillRect(bx, by, w, 4);
+        ctx.fillStyle = JH.PAL.slayerEmber; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 4);
+      }
+      // Slam telegraph zone.
+      if (this.state === "slam" && this.strikeFx <= 0) {
+        const d = this.def;
+        const flash = Math.floor(this.t * 12) & 1;
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = flash ? "#ff6010" : "#ff3000";
+        ctx.fillRect(Math.round(sx - d.slamRange), Math.round(Geo.feetScreenY(this.y - 24, 0)),
+          d.slamRange * 2, Math.round(Geo.feetScreenY(this.y + 24, 0) - Geo.feetScreenY(this.y - 24, 0)));
+        ctx.restore();
+      }
+    }
+
+    die(game) {
+      if (this.dead) return;
+      this.dead = true;
+      game.audio.play("win");
+      spawnCoinFountain(game, this.x, this.y, this.def.suds);  // local fn in same IIFE
+      game.onEnemyKilled(this);   // triggers Church.markBossDefeated("slayer")
+    }
+  }
+  JH.SlayerBoss = SlayerBoss;
+
   // ---- Furnace: rhythm-based curated elite ----
   // Sustained spray causes it to heat up (reduced damage, visual glow), then
   // vent steam (knockback + burn). Burst-spray rhythm is the counter. No elite-
@@ -3035,6 +3239,7 @@
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
+    if (type === "slayer") return new SlayerBoss(x, y);
     if (type === "gatewaykrusher") return new GatewayKrusherBoss(x, y);
     if (type === "wallboss") return new WallBoss(x, y);
     if (type === "neighbor") return new NeighborNPC(x, y);
