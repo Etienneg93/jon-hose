@@ -352,6 +352,7 @@
         if (!pierce) {
           for (const e of game.enemies) {
             if (e.dead) continue;
+            if (e.dropping) continue;   // airborne drop-ins can't block or be hit
             if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
             if (fwd < minFwd) { minFwd = fwd; blocker = e; }
@@ -446,6 +447,7 @@
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
       for (const e of game.enemies) {
         if (e.dead) continue;
+        if (e.dropping) continue;   // airborne drop-ins can't be hit
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
         if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
@@ -3687,6 +3689,41 @@
   // Dies in ~1.5s at full Jon DPS — the mechanic is WHERE it dies. Death
   // creates a FirePatch + applies 1 burn stack if Jon is in deathBurnRange.
   class Fuse extends Enemy {
+    // Aerial drop-in entry: hidden during the stagger delay, then falls from
+    // FUSE_DROP.height with a landing ring, slams on touchdown, then chases.
+    beginDrop(delay) {
+      this.dropping = true;
+      this.dropWait = delay || 0;
+      this.z = 0;               // stays hidden until the fall starts
+    }
+    update(dt, game) {
+      if (this.dropping) {
+        this.t += dt;
+        if (this.dropWait > 0) {
+          this.dropWait -= dt;
+          if (this.dropWait <= 0) { this.z = JH.FUSE_DROP.height; this.vz = 0; }
+          return;
+        }
+        // Falling — gravity only; inert (no think/contact) until it lands.
+        this.vz -= JH.PLAYER.gravity * dt;
+        this.z += this.vz * dt;
+        if (this.z <= 0) {
+          this.z = 0; this.vz = 0; this.dropping = false;
+          this.spawnGrace = 0.25;
+          const pl = game.player;
+          burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });
+          game.shake(2);
+          if (Math.hypot(pl.x - this.x, pl.y - this.y) < JH.FUSE_DROP.slamRadius && pl.z < 20)
+            pl.takeHit(JH.FUSE_DROP.slamDmg, game, this.x);
+        }
+        return;
+      }
+      super.update(dt, game);
+    }
+    takeDamage(dmg, game, dirX, knock) {
+      if (this.dropping) return;   // inert until landed
+      super.takeDamage(dmg, game, dirX, knock);
+    }
     die(game) {
       const d = this.def;
       game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
@@ -3700,6 +3737,30 @@
     }
   }
   JH.Fuse = Fuse;
+
+  // Drop-in visuals: landing ring (shrinks as it falls) + the falling body.
+  Fuse.prototype.draw = function (ctx, cam) {
+    if (this.dropping) {
+      if (this.dropWait > 0) return;               // not on screen yet
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const frac = Math.max(0, Math.min(1, this.z / JH.FUSE_DROP.height));  // 1 top → 0 land
+      const r = JH.FUSE_DROP.slamRadius * (0.6 + 0.4 * frac);
+      const flash = (Math.floor(this.t * 12) & 1);
+      ctx.save();
+      ctx.fillStyle = "rgba(255,110,40,0.10)";
+      ctx.strokeStyle = flash ? "#ff8030" : "rgba(255,110,40,0.5)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.5 * (1 - frac * 0.5));
+      Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing,
+        { state: "walk", frame: this.frame, t: this.t });
+      return;
+    }
+    JH.Enemy.prototype.draw.call(this, ctx, cam);
+  };
 
   JH.makeEnemy = function (type, x, y) {
     if (type === "dummy") return new TargetDummy(x, y);

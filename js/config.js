@@ -288,6 +288,14 @@
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
   };
 
+  // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.
+  JH.FUSE_DROP = {
+    height: 150,      // spawn z (px); gravity (620) lands it in ~0.7s
+    slamRadius: 20,   // landing hit zone (world px; also the ring size)
+    slamDmg: 8,       // light and dodgeable — no burn stack
+    stagger: 0.5,     // per-fuse drop delay (s)
+  };
+
   // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
     // Player death/ghost sequence (seconds) — durations of each phase, consumed by

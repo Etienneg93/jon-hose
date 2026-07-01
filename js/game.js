@@ -630,6 +630,7 @@
       if (opts) {
         if (opts.infinite) e.infinite = true;
         if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
+        if (opts.dropIn && e.beginDrop) e.beginDrop(opts.dropDelay || 0);
       }
       this.enemies.push(e);
       return e;
@@ -1137,6 +1138,7 @@
         for (let j = i + 1; j < a.length; j++) {
           const e1 = a[i], e2 = a[j];
           if (e1.isBoss || e2.isBoss) continue;
+          if (e1.dropping || e2.dropping) continue;  // don't shove airborne drop-ins
           const dx = e2.x - e1.x, dy = e2.y - e1.y;
           const minX = (e1.bodyW + e2.bodyW) * 0.5, minY = 10;
           if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
