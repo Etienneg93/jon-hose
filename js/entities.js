@@ -498,7 +498,7 @@
       if (S.splitStream && hitEnemies.length > 0) {
         for (const primary of hitEnemies) {
           for (const e of game.enemies) {
-            if (e.dead || e === primary || hitEnemies.includes(e)) continue;
+            if (e.dead || e.dropping || e === primary || hitEnemies.includes(e)) continue;
             const d = Math.hypot(e.x - primary.x, e.y - primary.y);
             if (d > 80) continue;
             const m2 = e.def ? (e.def.waterMult || 1) : 1;
