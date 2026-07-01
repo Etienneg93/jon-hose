@@ -2208,6 +2208,30 @@
   }
   JH.ejectBossCore = ejectBossCore;
 
+  // One-shot FX animation at a world point (explosions etc.). Rides the
+  // game.embers pipeline like BossCore: update(dt)->keep, draw(ctx,cam).
+  // Cosmetic only — never affects wave-clear or collision.
+  class FxBurst {
+    constructor(x, y, key, opt) {
+      const m = JH.FX[key];
+      this.x = x; this.y = y; this.z = (opt && opt.z) || 0;
+      this.key = key;
+      this.scale = (opt && opt.scale) || 1;
+      this.life = m ? m.count / m.fps : 0.5;
+      this.t = 0; this.dead = false;
+    }
+    update(dt) {
+      this.t += dt;
+      if (this.t >= this.life) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      Assets.drawFx(ctx, this.key, this.x - cam, Geo.feetScreenY(this.y, this.z), this.t,
+        { scale: this.scale, loop: false });
+    }
+  }
+  JH.FxBurst = FxBurst;
+
   // ================================================ QUAKE WALKER (boss 3)
   class QuakeBoss extends Enemy {
     constructor(x, y) {

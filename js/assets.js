@@ -263,6 +263,35 @@
       }
       ctx.restore();
     },
+
+    // ---- FX frame-player: pack animations declared in JH.FX ----
+    // Frames load via JH.Loader (gates the title screen like all art).
+    fx: {},
+    registerFx(key, dir, count, fps) {
+      const frames = [];
+      for (let i = 1; i <= count; i++) frames.push(JH.Loader.img(dir + "/" + i + ".png"));
+      this.fx[key] = { frames, fps };
+    },
+    // Draws centered-bottom at (x, y): fi = floor(t*fps), looping unless
+    // opt.loop === false (then clamps to the last frame). Skips frames that
+    // haven't loaded. Inherits the caller's globalAlpha unless opt.alpha set.
+    drawFx(ctx, key, x, y, t, opt) {
+      const a = this.fx[key];
+      if (!a) return;
+      opt = opt || {};
+      const n = a.frames.length;
+      let fi = Math.floor((t || 0) * a.fps);
+      fi = (opt.loop === false) ? Math.min(fi, n - 1) : ((fi % n) + n) % n;
+      const img = a.frames[fi];
+      if (!img || !img._ready) return;
+      const scale = opt.scale || 1;
+      const dw = Math.round(img.naturalWidth * scale), dh = Math.round(img.naturalHeight * scale);
+      ctx.save();
+      if (opt.alpha != null) ctx.globalAlpha = opt.alpha;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, Math.round(x - dw / 2), Math.round(y - dh), dw, dh);
+      ctx.restore();
+    },
   };
   JH.Assets = Assets;
 
@@ -1127,4 +1156,7 @@
       station_bless_hp:   makeImg("sprites/church/station_hp.png"),
     };
   }
+
+  // Register all curated FX declared in the config manifest.
+  for (const k in JH.FX) Assets.registerFx(k, "sprites/fx/" + k, JH.FX[k].count, JH.FX[k].fps);
 })();

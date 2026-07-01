@@ -489,6 +489,19 @@
     igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
   };
 
+  // FX frame animations, curated from the local itch.io packs (sprites/effects/,
+  // gitignored) into sprites/fx/<key>/1..count.png by tools/curate-fx.mjs.
+  // Re-pick a variant there and rerun it; update count here if it changes.
+  JH.FX = {
+    "fire-small": { count: 8,  fps: 14 },   // FirePatch flames
+    "fire-big":   { count: 8,  fps: 12 },   // douse objective flames
+    "fire-jon":   { count: 8,  fps: 14 },   // burning player
+    "boom-small": { count: 8,  fps: 16 },   // fuse death pop
+    "boom-mid":   { count: 12, fps: 16 },   // smelt bomb impact, furnace vent
+    "boom-big":   { count: 12, fps: 14 },   // boss deaths
+    "portal":     { count: 6,  fps: 8 },    // church return portal
+  };
+
   // Act-start wave indices (bounded by boss clears) — death respawns here.
   // 0 Act1 · 5 Act2 (after Big Drip) · 10 Act3 (after Switch) · 16 Act4 (after Quake) · 23 Fire (after GK).
   JH.ACT_STARTS = [0, 5, 10, 16, 23];

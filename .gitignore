@@ -16,8 +16,14 @@ desktop.ini
 .env
 .env.*
 
+# AI-generated artwork (Gemini) — local reference/scratch only, never committed
+generated-art/
+
 # raw generated artwork — source/scratch, never loaded by the game
 sprites/**/gen/
+
+# itch.io effect packs — local picking library; curated frames live in sprites/fx/
+sprites/effects/
 
 # editable art sources (Aseprite) — the game loads the exported PNGs, not these
 *.aseprite
