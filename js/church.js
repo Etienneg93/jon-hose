@@ -431,7 +431,8 @@
 
       // Portal at the end of the nave.
       const px = Math.round(L.portalX - camX);
-      blit(ctx, ART.portal, px - 12, VH - 104, 24, 48, () => {});
+      // Animated blue return portal (sprites/fx/portal), scene timer drives it.
+      JH.Assets.drawFx(ctx, "portal", px, VH - 56, sc.t, { scale: 1.5 });
       // "Press E" prompt when Jon is close enough to activate the portal.
       if (sc.nearPortal && !sc.exiting) {
         ctx.save();

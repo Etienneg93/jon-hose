@@ -645,19 +645,9 @@
         const stacks = this.burnStacks, t = this.t;
         const offsets = stacks >= 3 ? [-6, 0, 6] : stacks >= 2 ? [-4, 4] : [0];
         ctx.save();
-        ctx.globalAlpha = 0.82;
+        ctx.globalAlpha = 0.85;
         for (const ox of offsets) {
-          const sway = Math.sin(t * 10 + ox) * 2.5;
-          const h = 9 + 4 * Math.sin(t * 13 + ox * 0.5);
-          const fw = 2.2;
-          const fx = sx + ox + sway;
-          ctx.beginPath();
-          ctx.moveTo(fx - fw, spriteSy);
-          ctx.bezierCurveTo(fx - fw * 0.8, spriteSy - h * 0.45, fx - fw * 0.2, spriteSy - h, fx, spriteSy - h);
-          ctx.bezierCurveTo(fx + fw * 0.2, spriteSy - h, fx + fw * 0.8, spriteSy - h * 0.45, fx + fw, spriteSy);
-          ctx.closePath();
-          ctx.fillStyle = stacks >= 2 ? JH.PAL.firePatchHi : JH.PAL.firePatch;
-          ctx.fill();
+          Assets.drawFx(ctx, "fire-jon", sx + ox, spriteSy + 2, t + (ox + 8) * 0.13, { scale: 0.5 });
         }
         ctx.restore();
       }
