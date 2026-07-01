@@ -172,11 +172,18 @@
       this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
+      this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
+      this.burnTimer = 0;    // seconds of burn remaining
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
     }
     applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
+
+    applyBurn(n) {
+      this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
+      this.burnTimer = JH.FIRE.burnDuration;
+    }
 
     update(dt, game) {
       const In = game.input, S = this.stats;
@@ -186,6 +193,15 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
+
+      // Burn DoT: tick while burnTimer > 0; clears stacks on expiry.
+      if (this.burnTimer > 0) {
+        this.burnTimer -= dt;
+        this.hp = Math.max(0, this.hp - this.burnStacks * JH.FIRE.burnDpsPerStack * dt);
+        this.hurt();   // reuses the existing white hurt-flash to signal burn damage
+        if (this.burnTimer <= 0) { this.burnTimer = 0; this.burnStacks = 0; }
+        if (this.hp <= 0) this.alive = false;
+      }
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
@@ -251,6 +267,7 @@
       // ---- spray hose (held)
       this.spraying = false;
       if (wantSpray) this.doSpray(dt, game);
+      else this.sprayHeldT = 0;   // reset the stream-front timer on release
 
       // ---- water regen (after a short delay since last spray)
       if (!this.spraying && this.regenLock <= 0 && this.water < S.maxWater) {
@@ -258,7 +275,9 @@
         this.water = Math.min(S.maxWater, this.water + (S.waterRegen + moveBon) * dt);
       }
 
-      // ---- hydrant: stand next to one to refill water and (out of combat) heal HP.
+      // ---- hydrant: stand next to one to refill water only. HP is NOT healed
+      // here anymore — heals must be bought at the shop (death isn't punishing,
+      // so out-of-combat free healing trivialized attrition).
       this.nearHydrant = null;
       if (game.hydrants) {
         for (const h of game.hydrants) {
@@ -271,15 +290,6 @@
                   x: h.x + (Math.random() - 0.5) * 6, y: h.y, z: 8 + Math.random() * 8,
                   vx: (this.x - h.x) * 1.5, vy: 0, vz: 30,
                   life: 0.4, color: JH.PAL.waterHi, size: 2, grav: 120,
-                }));
-            }
-            if (!game.waveActive && this.hp < S.maxHp) {
-              this.hp = Math.min(S.maxHp, this.hp + JH.HYDRANT.healRate * dt);
-              if (Math.random() < 0.5)
-                game.particles.push(new Particle({
-                  x: h.x + (Math.random() - 0.5) * 8, y: h.y, z: 8 + Math.random() * 12,
-                  vx: (this.x - h.x) * 1.2, vy: 0, vz: 25,
-                  life: 0.5, color: "#44ff88", size: 2, grav: 100,
                 }));
             }
             break;
@@ -311,6 +321,7 @@
       const S = this.stats;
       const dry = this.water <= 0 && this.concertaTimer <= 0;
       this.spraying = true;
+      this.sprayHeldT = (this.sprayHeldT || 0) + dt;  // continuous spray time (reset on release)
       this.sprayDry = dry;
       this.regenLock = S.regenDelay;
 
@@ -327,26 +338,55 @@
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
-      const oz = this.z + (this.state === "walk" ? 28 : 34); // lower when walk-firing
+      const oz = this.z + 30;                  // nozzle height — static, matches new sprite
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       const beam = S.beam | 0;                 // concentration tier 0..3
 
-      // Hydro Lance (beam=3) pierces the whole line; default stops at first target.
+      // Hydro Lance (beam=3) pierces the whole line; default stops at first
+      // target. A planted DeployedShield (Bulwark's thrown shield) hard-blocks
+      // the stream at every beam tier — nothing else blocks pierce.
       const pierce = beam >= 3;
       let blocker = null;
-      if (!pierce) {
-        let minFwd = Infinity;
-        for (const e of game.enemies) {
-          if (e.dead) continue;
-          if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-          const fwd = (e.x - ox) * this.facing;
-          if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+      let minFwd = Infinity;   // near-edge distance of the chosen blocker (used below)
+      {
+        if (!pierce) {
+          for (const e of game.enemies) {
+            if (e.dead) continue;
+            if (e.dropping) continue;   // airborne drop-ins can't block or be hit
+            if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+            const fwd = (e.x - ox) * this.facing;
+            if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+          }
+        }
+        for (const s of game.shields) {
+          if (s.dead) continue;
+          if (s.radius) {
+            // Dome barrier: blocks the stream at the near edge of its VISIBLE
+            // ground ellipse, but ONLY while you're OUTSIDE it (step in and spray
+            // freely — the counter). Depth uses the flattened screen footprint so
+            // it lines up with the drawn circle.
+            if (!s.active) continue;
+            if (insideDome(s, this.x, this.y)) continue;                    // player inside
+            const dyS = Geo.feetScreenY(this.y, 0) - Geo.feetScreenY(s.y, 0);
+            const ry = s.radius * DOME_RY;
+            if (Math.abs(dyS) >= ry) continue;                             // beam misses the footprint
+            const half = s.radius * Math.sqrt(1 - (dyS * dyS) / (ry * ry));// x half-width at this depth
+            const edgeFwd = (s.x - ox) * this.facing - half;               // near edge along facing
+            if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
+            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
+          } else {
+            if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
+            const fwd = (s.x - ox) * this.facing;
+            if (fwd < minFwd) { minFwd = fwd; blocker = s; }
+          }
         }
       }
       // Particles die at the blocker's near face so the stream visually stops there.
-      const blockDist = blocker
-        ? Math.max(4, (blocker.x - ox) * this.facing - (blocker.bodyW || 14) * 0.5)
-        : reach;
+      const blockDist = !blocker
+        ? reach
+        : blocker.radius
+          ? Math.max(4, minFwd)                                             // dome: near edge
+          : Math.max(4, (blocker.x - ox) * this.facing - (blocker.bodyW || 14) * 0.5);
 
       // Emit a CONTAINED stream of droplets shaped like a beam. Climbing the
       // Pressure branch makes it DENSER (more particles) and TIGHTER (less
@@ -374,18 +414,59 @@
         }));
       }
 
-      // Damage enemies: non-pierce hits only the closest (blocker), pierce hits all.
+      // Dome deflection: water sprays back off the barrier at the contact point,
+      // so it's obvious the dome is stopping the stream (a "bounce"). Gated on the
+      // stream FRONT having travelled the distance (~blockDist / stream speed) so
+      // it doesn't splash back before the water visually reaches the dome.
+      if (!dry && blocker && blocker.radius && this.sprayHeldT >= blockDist / 220) {
+        const hx = ox + this.facing * blockDist;
+        for (let i = 0; i < 3; i++) {
+          game.particles.push(new Particle({
+            x: hx,
+            y: oy + (Math.random() - 0.5) * S.sprayWidth * 0.5,
+            z: oz + (Math.random() - 0.5) * 6,
+            vx: -this.facing * (50 + Math.random() * 90),   // ricochet back toward the player
+            vy: (Math.random() - 0.5) * 130,                // fan out along the dome face
+            vz: 25 + Math.random() * 85,                    // splash upward
+            life: 0.16 + Math.random() * 0.16,
+            color: Math.random() > 0.4 ? JH.PAL.waterHi : JH.PAL.water,
+            size: 2, grav: 260,
+          }));
+        }
+      }
+
+      // Damage enemies: non-pierce hits only the closest (blocker); pierce
+      // hits everyone EXCEPT anyone standing behind a planted shield's wall.
+      // (`blocker` can only ever be an enemy in non-pierce mode, or a
+      // DeployedShield in pierce mode — see the blocker-finding block above,
+      // so `e` here — always drawn from game.enemies — can never equal a
+      // pierce-mode `blocker`.)
       let didHit = false;
       const hitEnemies = [];
       let healAmt = 0;
+      const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
       for (const e of game.enemies) {
         if (e.dead) continue;
+        if (e.dropping) continue;   // airborne drop-ins can't be hit
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
+        if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
+        // Dome shelter: an enemy inside an active dome is immune while you're
+        // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
+        if (game.shields) {
+          let sheltered = false;
+          for (const s of game.shields) {
+            if (s.dead || !s.radius || !s.active) continue;
+            if (!insideDome(s, e.x, e.y)) continue;                          // enemy not in this dome
+            if (!insideDome(s, this.x, this.y)) { sheltered = true; break; } // ...and you're outside it
+          }
+          if (sheltered) continue;
+        }
         const mult = e.def ? (e.def.waterMult || 1) : 1;
         const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
         const dmg = S.sprayDamage * dmgScale * mult * pressureMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
+        if (e.onSprayHit) e.onSprayHit(dt, game);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
           burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
@@ -408,7 +489,9 @@
           }
         }
         didHit = true;
-        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate;
+        // Vampiric lifesteal at half rate against bosses — their huge HP pools
+        // gave full-rate sustain near-permanent uptime, trivializing the fights.
+        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * (e.isBoss ? 0.5 : 1);
         if (S.splitStream) hitEnemies.push(e);
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
@@ -417,7 +500,7 @@
       if (S.splitStream && hitEnemies.length > 0) {
         for (const primary of hitEnemies) {
           for (const e of game.enemies) {
-            if (e.dead || e === primary || hitEnemies.includes(e)) continue;
+            if (e.dead || e.dropping || e === primary || hitEnemies.includes(e)) continue;
             const d = Math.hypot(e.x - primary.x, e.y - primary.y);
             if (d > 80) continue;
             const m2 = e.def ? (e.def.waterMult || 1) : 1;
@@ -456,6 +539,16 @@
         const fwd = (wall.x - this.x) * this.facing;
         if (fwd > 0 && fwd - this.bodyW * 0.5 - wall.bodyW * 0.5 <= reach)
           wall.takeDamage(S.sprayDamage * dmgScale * dt, game);
+      }
+      // Fire patches: spray aimed at a patch's depth advances its extinguish timer.
+      if (game.firePatches) {
+        for (const fp of game.firePatches) {
+          if (fp.dead) continue;
+          const fwd = (fp.x - ox) * this.facing;
+          if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
+              && Math.abs(fp.y - oy) < S.sprayHitBand)
+            fp.sprayProgress += dt;
+        }
       }
       // Garden boxes: face each box and match its depth to water it.
       if (game.gardens) {
@@ -515,17 +608,30 @@
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
+      if (this.burnStacks > 0) {
+        ctx.save();
+        const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
+        ctx.shadowColor = "#ff4400";
+        ctx.shadowBlur = 5 + 7 * bIntensity + 3 * Math.sin(this.t * 12);
+      }
+      // Kibble/Concerta glows yield to the burn glow — being on fire is the
+      // priority read, so its red glow wins when both are active.
       if (this.kibbleTimer > 0) {
         ctx.save();
-        ctx.shadowColor = "#44ee66";
-        ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
+        if (this.burnStacks === 0) {
+          ctx.shadowColor = "#44ee66";
+          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
+        }
       }
       if (this.concertaTimer > 0) {
         ctx.save();
-        ctx.shadowColor = "#cc44ff";
-        ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
+        if (this.burnStacks === 0) {
+          ctx.shadowColor = "#cc44ff";
+          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
+        }
       }
-      Assets.draw(ctx, "jon", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
+      const spriteSy = Geo.feetScreenY(this.y, this.z);
+      Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
@@ -533,6 +639,18 @@
       });
       if (this.concertaTimer > 0) ctx.restore();
       if (this.kibbleTimer > 0) ctx.restore();
+      if (this.burnStacks > 0) {
+        ctx.restore();
+        // Draw flame tongues rising from feet to show burn stacks
+        const stacks = this.burnStacks, t = this.t;
+        const offsets = stacks >= 3 ? [-6, 0, 6] : stacks >= 2 ? [-4, 4] : [0];
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        for (const ox of offsets) {
+          Assets.drawFx(ctx, "fire-jon", sx + ox, spriteSy + 2, t + (ox + 8) * 0.13, { scale: 0.5 });
+        }
+        ctx.restore();
+      }
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
 
       // DEBUG: collision box
@@ -580,6 +698,12 @@
         ctx.fillStyle = "#ff88ff";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
         ctx.fillText("FOCUSED " + this.concertaTimer.toFixed(1) + "s", sx, indY);
+        indY -= 7;
+      }
+      if (this.burnStacks > 0) {
+        ctx.fillStyle = "#ff6610";
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillText("BURN x" + this.burnStacks, sx, indY);
       }
       // label
       ctx.font = "bold 6px monospace";
@@ -696,6 +820,10 @@
       if (this.contactTimer > 0) this.contactTimer -= dt;
       this.think(dt, game);
       resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
+      // Arena containment: hose knockback (and charge overshoot) can't shove
+      // an enemy past the locked wave bounds where Jon can't follow — waves
+      // only clear on kills, so an unreachable enemy would soft-lock the wave.
+      this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
       // contact damage
       const pl = game.player;
       if (!this.dead && pl.alive && Geo.bodiesOverlap(this, pl) && this.contactTimer <= 0
@@ -703,7 +831,7 @@
         pl.takeHit(this.def.touchDmg, game, this.x);
         this.contactTimer = this.def.contactCd;
       }
-      const moving = this.state === "walk" || this.state === "charge";
+      const moving = this.state === "walk" || this.state === "charge" || this.state === "retrieve";
       this.animate(dt, moving);
     }
 
@@ -821,6 +949,12 @@
     JH.Enemy.prototype.draw.call(this, ctx, cam);
   };
 
+  // The single active Bulwark dome, if any (Pyros huddle inside it for cover).
+  function activeDome(game) {
+    if (game.shields) for (const s of game.shields) if (!s.dead && s.radius && s.active) return s;
+    return null;
+  }
+
   // ---- Pyro: ranged ember thrower, flammable ----
   class Pyro extends Enemy {
     think(dt, game) {
@@ -841,6 +975,24 @@
         }
         return;
       }
+
+      // If a Bulwark dome is up, huddle inside it (spray-protected) and fire out
+      // instead of kiting — the "Bulwark shelters its shooters" fantasy.
+      const dome = activeDome(game);
+      if (dome && this.spawnGrace <= 0) {
+        if (!insideDome(dome, this.x, this.y)) {
+          const mx = dome.x - this.x, my = dome.y - this.y, md = Math.hypot(mx, my) || 1;
+          this.x += (mx / md) * d.speed * dt;
+          this.y += (my / md) * d.speed * dt * 0.8;
+          this.state = "walk";
+          return;
+        }
+        // Inside the dome: hold and shoot when able (don't back out of cover).
+        if (this.cdTimer <= 0) { this.windTimer = 0.35; this.state = "wind"; }
+        else this.state = "idle";
+        return;
+      }
+
       if (dist < d.shootRange && this.cdTimer <= 0 && this.spawnGrace <= 0) {
         this.windTimer = 0.35; this.state = "wind";
       } else if (dist > d.shootRange * 0.7) {
@@ -887,6 +1039,427 @@
     }
   }
   JH.Ember = Ember;
+
+  // ---- Fireball: Slayer's pool-cue projectile ----
+  // Spawns as a plain pool ball at cue height, ignites after igniteDelay
+  // (visual + burn on hit). Aimed at the player's position at fire time —
+  // same convention as the Pyro's Ember (depth velocity scaled 0.6 for 2.5D)
+  // — so staggered volley balls fan out tracking the player's dodge. Sinks
+  // from spawnZ into the hittable z-band as it flies. Leaves a FirePatch on
+  // player hit. Pushed into game.embers for the shared update/draw pipeline.
+  class Fireball {
+    constructor(x, y, dir, game) {
+      const d = JH.FIREBALL;
+      this.x = x; this.y = y; this.z = d.spawnZ;
+      const pl = game && game.player;
+      if (pl && pl.alive) {
+        const ang = Math.atan2(pl.y - y, pl.x - x);
+        this.vx = Math.cos(ang) * d.speed;
+        this.vy = Math.sin(ang) * d.speed * 0.6;
+      } else {
+        this.vx = d.speed * dir;
+        this.vy = 0;
+      }
+      this.dir = this.vx >= 0 ? 1 : -1;
+      this.dmg = d.dmg;
+      this.radius = d.radius;
+      this.burnStacks = d.burnStacks;
+      this.igniteT = d.igniteDelay;  // counts down to 0; burn only activates after this
+      this.life = d.lifespan;
+      this.t = 0;
+      this.dead = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.igniteT > 0) this.igniteT -= dt;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.z = Math.max(0, this.z - JH.FIREBALL.droop * dt);  // sink off the cue line
+      this.life -= dt;
+      if (this.life <= 0) { this.dead = true; return !this.dead; }
+      // Emit trailing fire particles once ignited.
+      if (this.igniteT <= 0 && Math.random() < 0.6) {
+        game.particles.push(new Particle({
+          x: this.x - this.dir * 4, y: this.y, z: this.z + 4,
+          vx: -this.dir * 20 + (Math.random() - 0.5) * 30,
+          vy: (Math.random() - 0.5) * 20,
+          vz: 15 + Math.random() * 20,
+          life: 0.18 + Math.random() * 0.12,
+          color: Math.random() > 0.4 ? JH.PAL.firePatch : JH.PAL.firePatchHi,
+          size: 2, grav: 160,
+        }));
+      }
+      // Hit check against player.
+      const pl = game.player;
+      if (pl.alive && this.igniteT <= 0) {
+        const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
+        const zDiff = Math.abs((pl.z || 0) - this.z);
+        if (dist < this.radius + pl.bodyW * 0.5 && zDiff < 24) {
+          pl.takeHit(this.dmg, game, this.x);
+          pl.applyBurn(this.burnStacks);
+          game.firePatches.push(new JH.FirePatch(this.x, this.y, 28, 1.4));
+          burst(game, this.x, this.y, this.z, JH.PAL.firePatch, 8, { speed: 90, life: 0.35, up: 50 });
+          game.shake(3);
+          this.dead = true;
+        }
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      Assets.draw(ctx, "fireball", sx, sy, 1, { ignited: this.igniteT <= 0, t: this.t, dir: this.dir });
+    }
+  }
+  JH.Fireball = Fireball;
+
+  // ---- Bulwark: "shield trooper" super-elite ----
+  // Body is NEVER a blocker — it always takes full damage, in every phase.
+  // It periodically plants its shield as a separate, stationary
+  // DeployedShield (above) that hard-blocks spray, then fights shieldless
+  // until it sprints back to reclaim it. See docs/superpowers/specs/
+  // 2026-06-30-bulwark-shield-rework-design.md.
+  class Bulwark extends Enemy {
+    constructor(type, x, y) {
+      super(type, x, y);
+      this.hasShield = true;   // true: holding the shield; false: deployed/retrieving
+      this.shield = null;      // its DeployedShield while deployed
+      this.phase = "approach"; // approach | plant | shelter | slam | retrieve | cooldown
+      this.windTimer = 0;
+      this.cdTimer = 0;
+      this.strikeFx = 0;
+      this.slam = null;        // active slam telegraph {range, band, dmg, dur, t}
+      this.state = "idle";     // animation state only ("walk"/"idle")
+    }
+    die(game) {
+      if (this.shield) { this.shield.dead = true; this.shield = null; }
+      super.die(game);
+    }
+    // Chase the player at `mult` speed; sets walk/idle anim. Returns the distance.
+    _chase(dt, dx, dy, dist, mult) {
+      if (dist > 18 && this.spawnGrace <= 0) {
+        const d = this.def;
+        this.x += (dx / (dist || 1)) * d.speed * mult * dt;
+        this.y += (dy / (dist || 1)) * d.speed * mult * dt * 0.7;
+        this.state = "walk";
+      } else this.state = "idle";
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+
+      // ---- SLAM: big overhead strike (à la The Big Drip) ----
+      if (this.phase === "slam") {
+        this.slam.t -= dt; this.windTimer = this.slam.t; this.state = "wind";
+        if (this.slam.t <= 0) {
+          if (Geo.inHitArc(this, pl, this.facing, this.slam.range, this.slam.band))
+            pl.takeHit(this.slam.dmg, game, this.x);
+          game.shake(9); game.audio.play("whack");
+          const front = this.x + this.facing * this.bodyW * 0.5;
+          for (let i = 0; i < 12; i++)
+            burst(game, front + this.facing * Math.random() * this.slam.range,
+              this.y + (Math.random() - 0.5) * this.slam.band * 2, 2, "#fff", 1,
+              { speed: 130, life: 0.32, up: 30 });
+          this.strikeFx = 0.2; this.cdTimer = 0.7; this.phase = "shelter";
+        }
+        return;
+      }
+
+      // ---- RETRIEVE: sprint to the depleted shield prop and reclaim it ----
+      if (this.phase === "retrieve") {
+        if (!this.shield || this.shield.dead) {
+          this.shield = null; this.hasShield = true;
+          this.phase = "cooldown"; this.cdTimer = d.redeployCd; return;
+        }
+        const sx = this.shield.x - this.x, sy = this.shield.y - this.y, sdist = Math.hypot(sx, sy);
+        if (sdist <= d.pickupRadius) {
+          this.shield.dead = true; this.shield = null; this.hasShield = true;
+          this.phase = "cooldown"; this.cdTimer = d.redeployCd; this.state = "idle"; return;
+        }
+        this.x += (sx / (sdist || 1)) * d.speed * d.retrieveSpeedMult * dt;
+        this.y += (sy / (sdist || 1)) * d.speed * d.retrieveSpeedMult * dt * 0.7;
+        this.state = "walk";
+        return;
+      }
+
+      // ---- SHELTER: dome up; wait inside, slam when the player steps in ----
+      if (this.phase === "shelter") {
+        if (!this.shield || !this.shield.active) { this.phase = "retrieve"; return; }
+        if (this.cdTimer > 0) this.cdTimer -= dt;
+        // Slam when the player is close (they've usually entered the dome).
+        if (this.cdTimer <= 0 && dist < d.slamRange && this.spawnGrace <= 0) {
+          this.slam = { range: d.slamRange, band: d.slamBand, dmg: d.slamDmg, dur: d.slamWind, t: d.slamWind };
+          this.phase = "slam"; game.audio.play("jump");
+          return;
+        }
+        // Drift toward the player but stay near the dome center.
+        const fromCenter = Math.hypot(this.shield.x - this.x, this.shield.y - this.y);
+        if (dist > d.slamRange * 0.8 && fromCenter < d.domeRadius * 0.5) this._chase(dt, dx, dy, dist, 0.5);
+        else this.state = "idle";
+        return;
+      }
+
+      // ---- PLANT: wind up, then drop the dome centered on itself ----
+      if (this.phase === "plant") {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          const shield = new JH.DeployedShield(this.x, this.y, this);
+          game.shields.push(shield);
+          this.shield = shield; this.hasShield = false;
+          this.phase = "shelter"; this.cdTimer = 0.4;
+        }
+        return;
+      }
+
+      // ---- COOLDOWN after retrieving: shuffle toward the player ----
+      if (this.phase === "cooldown") {
+        this.cdTimer -= dt;
+        this._chase(dt, dx, dy, dist, 1);
+        if (this.cdTimer <= 0) this.phase = "approach";
+        return;
+      }
+
+      // ---- APPROACH: close on the player, then plant ----
+      // With pyros alive it plants proactively wherever it stands — the dome
+      // shelters its shooters (they run to it and huddle inside), so it
+      // doesn't wait for Jon to get in range.
+      const hasPyros = game.enemies.some((e) => !e.dead && e.type === "pyro");
+      if (this.spawnGrace <= 0 && (dist < d.plantRange || hasPyros)) {
+        this.windTimer = d.plantWind; this.phase = "plant"; return;
+      }
+      this._chase(dt, dx, dy, dist, 1);
+    }
+
+    draw(ctx, cam) {
+      if (this.phase === "slam" || this.strikeFx > 0) this.drawSlamTelegraph(ctx, cam);
+      JH.Enemy.prototype.draw.call(this, ctx, cam);
+      if (this.phase === "slam") {
+        const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
+        ctx.fillStyle = (Math.floor(this.t * 10) & 1) ? "#ff5a5a" : "#fff";
+        ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
+        ctx.fillText("!", sx, sy); ctx.textAlign = "left";
+      }
+    }
+    drawSlamTelegraph(ctx, cam) {
+      const a = this.slam; if (!a) return;
+      const baseY = Geo.feetScreenY(this.y, 0);
+      const x0 = (this.x - cam) + this.facing * this.bodyW * 0.5;
+      const x1 = x0 + this.facing * a.range;
+      const xL = Math.min(x0, x1), xW = Math.abs(x1 - x0);
+      const yT = baseY - a.band, yH = a.band * 2;
+      const strike = this.strikeFx > 0;
+      const prog = strike ? 1 : 1 - a.t / a.dur;
+      ctx.save();
+      ctx.fillStyle = strike ? "rgba(255,255,255,0.5)" : "rgba(255,60,60,0.16)";
+      ctx.fillRect(xL, yT, xW, yH);
+      if (!strike) {
+        const fx = this.facing > 0 ? xL : xL + xW * (1 - prog);
+        ctx.fillStyle = "rgba(255,60,60,0.4)";
+        ctx.fillRect(fx, yT, xW * prog, yH);
+      }
+      ctx.strokeStyle = strike ? "#fff" : ((Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f");
+      ctx.lineWidth = 1.5; ctx.strokeRect(xL, yT, xW, yH);
+      ctx.restore();
+    }
+  }
+  JH.Bulwark = Bulwark;
+
+  // Dome ground-ellipse depth ratio — the DRAWN ground disc and the COLLISION
+  // footprint (insideDome) share this so the barrier only affects you where the
+  // visible circle is (depth is compared in screen space via feetScreenY).
+  const DOME_RY = 0.45;
+
+  // ---- DeployedShield: a Bulwark's planted shield ----
+  // Stationary, indestructible (no takeDamage path — the player can never
+  // destroy it directly). Hard-blocks Player.doSpray at every beam tier (see
+  // doSpray's blocker-finding). Owned by exactly one Bulwark, which reclaims
+  // (and removes) it when it returns — `dead` is only ever set by the owner
+  // reclaiming it or dying, never by combat.
+  class DeployedShield {
+    constructor(x, y, owner) {
+      const b = JH.ENEMIES.bulwark;
+      this.x = x; this.y = y; this.z = 0;
+      this.bodyW = b.shieldBodyW;
+      this.radius = b.domeRadius;   // presence of `radius` marks this as a dome (doSpray)
+      this.domeDur = b.domeDur;     // full barrier lifespan (for the glow-fade math)
+      this.domeT = b.domeDur;       // barrier lifespan remaining; counts to 0 then fades
+      this.active = true;           // dome up (blocks/​shelters); false once faded
+      this.owner = owner;
+      this.dead = false; this.t = 0;
+    }
+    update(dt) {
+      this.t += dt;
+      if (this.active) { this.domeT -= dt; if (this.domeT <= 0) { this.domeT = 0; this.active = false; } }
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.6);
+      // Depleted shield prop at the center (what the Bulwark returns to reclaim).
+      // While the dome holds, a faint glow-outline wavers harder as the timer
+      // runs down, then goes dark once the dome is gone.
+      if (this.active) {
+        const frac = this.domeDur > 0 ? this.domeT / this.domeDur : 0;   // 1 fresh → 0 expiring
+        const waver = 1 - frac;                                          // 0 fresh → 1 about to die
+        const flick = 1 - waver * (0.45 + 0.45 * Math.sin(this.t * (5 + 26 * waver)));
+        ctx.save();
+        ctx.shadowColor = JH.PAL.bulwarkShield || "#cfe9ff";
+        ctx.shadowBlur = Math.max(0, (3 + 5 * frac) * flick);
+        Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
+        ctx.restore();
+      } else {
+        Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
+      }
+      if (!this.active) return;
+      // Translucent dome barrier. Top half-ellipse rises from the ground line so
+      // its endpoints (sx±r, sy) meet the ground disc exactly — one clean bubble.
+      const r = this.radius;
+      const domeH = r * 1.25;       // bubble height off the ground
+      const col = JH.PAL.bulwarkShield || "#cfe9ff";
+      const fade = this.domeT < 1.2 ? Math.max(0.15, this.domeT / 1.2) : 1;
+      const flick = 0.85 + 0.15 * Math.sin(this.t * 9);
+      ctx.save();
+      // Bubble body
+      ctx.fillStyle = col; ctx.globalAlpha = 0.14 * fade * flick;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, domeH, 0, Math.PI, Math.PI * 2); ctx.fill();
+      // Ground contact disc (front lip)
+      ctx.globalAlpha = 0.10 * fade;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * DOME_RY, 0, 0, Math.PI * 2); ctx.fill();
+      // Rims
+      ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.55 * fade * flick;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, domeH, 0, Math.PI, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.30 * fade;
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * DOME_RY, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  JH.DeployedShield = DeployedShield;
+
+  // Is world point (px,py) inside a dome's VISIBLE ground ellipse? x is 1:1
+  // world→screen; depth is compared in screen space (feetScreenY) against the
+  // drawn ground disc (radius × radius·DOME_RY), so shelter/blocking line up with
+  // what you see — you must stand in the circle, no phantom depth reach.
+  function insideDome(dome, px, py) {
+    const dx = px - dome.x;
+    const dyS = Geo.feetScreenY(py, 0) - Geo.feetScreenY(dome.y, 0);
+    const ry = dome.radius * DOME_RY;
+    return (dx * dx) / (dome.radius * dome.radius) + (dyS * dyS) / (ry * ry) < 1;
+  }
+  JH.insideDome = insideDome;
+
+  // ---- FirePatch: stationary burning ground zone ----
+  // Left behind by Fuse deaths, Smelt smashes, Slayer fireballs, and the
+  // Slayer's dash trail. Applies burn stacks to the player on overlap;
+  // extinguished by spraying directly (tracked in Player.doSpray, not here).
+  // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
+  class FirePatch {
+    constructor(x, y, radius, extinguishDur) {
+      this.x = x; this.y = y; this.z = 0;
+      this.radius = radius;
+      this.extinguishDur = extinguishDur;
+      this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
+      this.patchBurnT = 0;     // cooldown between burn-stack applications
+      this.dead = false; this.t = 0;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.patchBurnT > 0) this.patchBurnT -= dt;
+      const pl = game.player;
+      if (pl && pl.alive) {
+        const prog = this.sprayProgress / this.extinguishDur;
+        const r = Math.max(6, this.radius * (1 - prog * 0.55));
+        // Match the DRAWN scorch oval (draw(): ellipse r*0.85 wide, ~r*0.28 tall).
+        // x is 1:1 world->screen; depth compares screen-Y via feetScreenY (cam-
+        // independent). Jon's FEET must be inside the visible flame footprint —
+        // no body padding — so the flame no longer burns from a depth row away.
+        const dx = pl.x - this.x;
+        const dyScreen = Geo.feetScreenY(pl.y, 0) - Geo.feetScreenY(this.y, 0);
+        const rx = r * 0.85, ry = r * 0.30;
+        const inside = (dx * dx) / (rx * rx) + (dyScreen * dyScreen) / (ry * ry) < 1;
+        if (inside && this.patchBurnT <= 0) {
+          pl.applyBurn(1);
+          this.patchBurnT = JH.FIRE.patchBurnInterval;
+        }
+      }
+      if (this.sprayProgress >= this.extinguishDur) this.dead = true;
+    }
+    draw(ctx, cam) {
+      const sx = Math.round(this.x - cam);
+      const sy = Math.round(Geo.feetScreenY(this.y, 0));
+      const prog = this.sprayProgress / this.extinguishDur;
+      const r = Math.max(3, this.radius * (1 - prog * 0.55));
+      const t = this.t;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 0.88 - prog * 0.45);
+      // Scorch base oval
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#440800";
+      ctx.fill();
+      // Animated pack flames, scaled to the patch; wide patches get two extra
+      // offset flames with desynced loop phases. The globalAlpha set above
+      // (fades with extinguish progress) carries into these draws.
+      const fscale = Math.max(0.5, (r * 1.6) / 48);
+      Assets.drawFx(ctx, "fire-small", sx, sy + 2, t, { scale: fscale });
+      if (r > 20) {
+        Assets.drawFx(ctx, "fire-small", sx - r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
+        Assets.drawFx(ctx, "fire-small", sx + r * 0.4, sy + 3, t + 0.6, { scale: fscale * 0.75 });
+      }
+      ctx.restore();
+    }
+  }
+  JH.FirePatch = FirePatch;
+
+  // ---- Stalker: fast "blink harasser" super-elite ----
+  // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
+  // blinks behind the player's facing, then winds up a strike (state
+  // "strike") that only the player's dash i-frames negate (Player.takeHit
+  // already no-ops while dashTimer > 0 — nothing new needed there).
+  class Stalker extends Enemy {
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+
+      if (this.state === "strike") {
+        this.attackTimer -= dt;
+        if (this.attackTimer <= 0) {
+          if (Geo.inHitArc(this, pl, this.facing, d.strikeRange, 16))
+            pl.takeHit(d.strikeDmg, game, this.x);
+          this.state = "idle";
+          this.cdTimer = d.blinkCd;
+        }
+        return;
+      }
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          const t = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, pl.facing, d.blinkDist, {
+            minX: game.bounds.minX, maxX: game.bounds.maxX,
+            depthMin: JH.DEPTH_MIN, depthMax: JH.DEPTH_MAX,
+          });
+          this.x = t.x; this.y = t.y;
+          this.facing = pl.x >= this.x ? 1 : -1;
+          this.attackTimer = d.strikeWind;
+          this.state = "strike";
+          game.audio.play("jump");
+        }
+        return;
+      }
+      if (this.cdTimer > 0) {
+        this.cdTimer -= dt;
+      } else if (this.spawnGrace <= 0) {
+        this.windTimer = d.blinkTell; this.state = "wind";
+        return;
+      }
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      this.x += (dx / (dist || 1)) * d.speed * dt;
+      this.y += (dy / (dist || 1)) * d.speed * dt * 0.85;
+      this.state = "walk";
+    }
+  }
+  JH.Stalker = Stalker;
 
   // ============================================================== BOSS
   class Boss extends Enemy {
@@ -1005,6 +1578,7 @@
       }
       for (let i = 0; i < 5; i++)
         game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 40, this.y, Math.random() * 30, "#fff", 14, { speed: 140, life: 0.6, up: 120 }));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.startBossDeathSeq(this);
     }
@@ -1097,6 +1671,8 @@
       this.bodyW = JH.SWITCH.bodyW; this.bodyH = JH.SWITCH.bodyH;
       this.isBoss = true;
       this.state = "hover";
+      this.coreEjected = false; // true after die() ejects the core -> draw a hole
+      this.coreFrac = 0.5;      // core-glyph height as a fraction of bodyH
       this.lines = [];          // active danger-line depths
       this.whipTargets = [];    // active column X positions
       this._doLine = false; this._doWhip = false;
@@ -1185,9 +1761,9 @@
       if (this._doLine && (this.state === "tele" || this.fireFx > 0)) this.drawLines(ctx, cam);
       if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
-      // shared boss core glyph
+      // shared boss core glyph (a black hole once the core has escaped)
       const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.5;
-      Assets.bossCore(ctx, cx, cy, 4, this.t, { flash: this.fireFx > 0 });
+      Assets.bossCore(ctx, cx, cy, 4, this.t, { flash: this.fireFx > 0, hole: this.coreEjected });
     }
     // Doc-Ock cables waving out of the chassis.
     drawCables(ctx, cam) {
@@ -1325,7 +1901,9 @@
       for (const e of game.enemies) if (e !== this && !e.dead && !e.isBoss) e.dead = true;
       for (let i = 0; i < 6; i++)
         game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 50, this.y, Math.random() * 30, "#9be8ff", 14, { speed: 150, life: 0.6, up: 120 }));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
+      this.coreEjected = true;     // draw a black hole where the core was
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.startBossDeathSeq(this);
     }
@@ -1438,6 +2016,51 @@
   }
   JH.Shockwave = Shockwave;
 
+  // ---- FireRing: expanding fire shockwave from the Slayer's dash landing ----
+  // Rides game.embers. Radiates outward as a flat 2.5D ground ring; deals one
+  // hit (+burn) to the player when the expanding edge crosses them.
+  class FireRing {
+    constructor(x, y, opt) {
+      this.x = x; this.y = y; this.z = 0;
+      this.r = 6;
+      this.maxR = opt.maxR; this.speed = opt.speed;
+      this.dmg = opt.dmg; this.burn = opt.burn || 0;
+      this.t = 0; this.dead = false; this.hit = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.r += this.speed * dt;
+      const pl = game.player;
+      if (!this.hit && pl && pl.alive) {
+        const pd = Math.hypot(pl.x - this.x, pl.y - this.y);
+        if (Math.abs(pd - this.r) < 14) {
+          pl.takeHit(this.dmg, game, this.x);
+          if (this.burn) pl.applyBurn(this.burn);
+          this.hit = true; game.shake(3);
+        }
+      }
+      if (Math.random() < 0.9) {
+        const a = Math.random() * Math.PI * 2;
+        burst(game, this.x + Math.cos(a) * this.r, this.y + Math.sin(a) * this.r * 0.5, 3,
+          Math.random() < 0.5 ? JH.PAL.firePatch : JH.PAL.firePatchHi, 1, { speed: 30, life: 0.28, up: 22 });
+      }
+      if (this.r >= this.maxR) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const fade = Math.max(0, 1 - this.r / this.maxR);
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.5 * fade;
+      ctx.strokeStyle = JH.PAL.firePatchHi; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(sx, sy, this.r, this.r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.25 * fade; ctx.strokeStyle = JH.PAL.firePatch; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.ellipse(sx, sy, this.r * 0.92, this.r * 0.41, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  JH.FireRing = FireRing;
+
   // ================================================ LIGHTNING WAVE (Firewall SURGE)
   // Depth-lane attack: rolls left at the core's depth row. Distinct from Shockwave —
   // dodge by stepping out of the core's depth lane (not dashing through it).
@@ -1509,13 +2132,14 @@
 
   // ============================================== ESCAPING BOSS CORE
   // A red core that ejects from a defeated boss, bounces off the floor and
-  // skitters left across the arena before fading. Cosmetic only: rides the
-  // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)), so it never
-  // affects wave-clear or collision. Spawned via ejectBossCore().
+  // skitters right — ahead of the player, deeper into the level — before
+  // fading. Cosmetic only: rides the game.embers pipeline
+  // (update(dt,game)->keep, draw(ctx,cam)), so it never affects wave-clear
+  // or collision. Spawned via ejectBossCore().
   class BossCore {
     constructor(x, y, z) {
       this.x = x; this.y = y; this.z = z != null ? z : 26;
-      this.vx = -70 - Math.random() * 40;        // flee left, past the player
+      this.vx = 70 + Math.random() * 40;         // flee right, up the road ahead
       this.vz = 150 + Math.random() * 40;
       this.t = 0; this.life = 3.0; this.dead = false; this.bounces = 0;
       this.wob = Math.random() * Math.PI * 2;
@@ -1534,7 +2158,7 @@
       if (Math.random() < 0.7)
         burst(game, this.x, this.y, this.z + 4, Math.random() < 0.5 ? JH.PAL.wallbossCore : "#ff8a3c", 1,
           { speed: 36, life: 0.3, up: 16, grav: 120 });
-      if (this.t > this.life || this.x < (game.bounds ? game.bounds.minX - 40 : -40)) this.dead = true;
+      if (this.t > this.life || this.x > (game.bounds ? game.bounds.maxX + 40 : JH.LEVEL_LEN + 40)) this.dead = true;
       return !this.dead;
     }
     draw(ctx, cam) {
@@ -1556,14 +2180,41 @@
   }
   JH.BossCore = BossCore;
 
-  // Spawn an escaping BossCore from a defeated boss (cosmetic).
+  // Spawn an escaping BossCore from a defeated boss (cosmetic). Originates at the
+  // boss's core-glyph position so it reads as the SAME core detaching (the glyph
+  // sits bodyH*0.5 above the feet; BossCore.draw offsets its sprite up 5px).
   function ejectBossCore(game, boss) {
-    const z = (boss.bodyH || 30) * 0.5;
+    const frac = boss.coreFrac != null ? boss.coreFrac : 0.5;
+    const z = (boss.z || 0) + (boss.bodyH || 30) * frac - 5;
     game.embers.push(new BossCore(boss.x, boss.y, z));
     game.audio.play("hurt");
     game.banner("…THE CORE SURVIVES", 1.6);
   }
   JH.ejectBossCore = ejectBossCore;
+
+  // One-shot FX animation at a world point (explosions etc.). Rides the
+  // game.embers pipeline like BossCore: update(dt)->keep, draw(ctx,cam).
+  // Cosmetic only — never affects wave-clear or collision.
+  class FxBurst {
+    constructor(x, y, key, opt) {
+      const m = JH.FX[key];
+      this.x = x; this.y = y; this.z = (opt && opt.z) || 0;
+      this.key = key;
+      this.scale = (opt && opt.scale) || 1;
+      this.life = m ? m.count / m.fps : 0.5;
+      this.t = 0; this.dead = false;
+    }
+    update(dt) {
+      this.t += dt;
+      if (this.t >= this.life) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      Assets.drawFx(ctx, this.key, this.x - cam, Geo.feetScreenY(this.y, this.z), this.t,
+        { scale: this.scale, loop: false });
+    }
+  }
+  JH.FxBurst = FxBurst;
 
   // ================================================ QUAKE WALKER (boss 3)
   class QuakeBoss extends Enemy {
@@ -1751,6 +2402,7 @@
       game.audio.play("win");
       for (let i = 0; i < 7; i++)
         game.defer(i * 90, () => burst(game, this.x + (Math.random() - 0.5) * 56, this.y, Math.random() * 36, "#e0902f", 14, { speed: 150, life: 0.7, up: 130 }));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.onEnemyKilled(this);
     }
@@ -1884,12 +2536,13 @@
 
   // ================================================= GARDEN BOX
   class GardenBox {
-    constructor(x, y, idx) {
+    constructor(x, y, idx, opts) {
       this.x = x; this.y = (y != null) ? y : JH.DEPTH_MAX * 0.5; this.z = 0;
       this.idx = idx || 0;
+      this.flame = !!(opts && opts.flame);
       this.grow = 0; this.growMax = JH.GARDEN.growMax;
       this.bodyW = 42; this.dead = false; this.done = false; this.t = 0; this.hitFx = 0;
-      this.doneFx = 0;   // countdown that drives the "GREAT!" pop on completion
+      this.doneFx = 0;   // countdown that drives the completion pop
     }
     addGrow(amt, game) {
       if (this.done) return;
@@ -1901,13 +2554,15 @@
         game.audio.play("win"); game.shake(4);
         burst(game, this.x, this.y, 20, "#5a9a40", 18, { speed: 80, life: 0.7, up: 60 });
         burst(game, this.x, this.y, 10, "#fff7a0", 10, { speed: 60, life: 0.5, up: 40 });
-        // Every box drops a pill; first box also unlocks elite drops and shows banner
-        if (!game.concertaUnlocked) {
-          game.concertaUnlocked = true;
-          game.banner("CONCERTA UNLOCKED!", 4.0);
+        if (!this.flame) {
+          // Garden reward: pill + first-box Concerta unlock. Flame boxes give none.
+          if (!game.concertaUnlocked) {
+            game.concertaUnlocked = true;
+            game.banner("CONCERTA UNLOCKED!", 4.0);
+          }
+          game.spawnPickup("pill", this.x, this.y, 1);
+          game.gardensCleared = (game.gardensCleared || 0) + 1;
         }
-        game.spawnPickup("pill", this.x, this.y, 1);
-        game.gardensCleared = (game.gardensCleared || 0) + 1;
       }
     }
     update(dt) { this.t += dt; if (this.hitFx > 0) this.hitFx -= dt; if (this.doneFx > 0) this.doneFx -= dt; }
@@ -1915,8 +2570,15 @@
       const sx = this.x - cam;
       const sy = Geo.feetScreenY(this.y, 0) - 4;
       const gf = this.grow / this.growMax;
-      JH.Assets.draw(ctx, "garden_box", sx, sy, 1, { growFrac: gf });
-      // Growth bar (rises with the plants)
+      if (this.flame) {
+        // Pack flame that shrinks as it's doused (gf: 0 = raging, 1 = out).
+        const rem = 1 - gf;
+        if (rem > 0.02)
+          JH.Assets.drawFx(ctx, "fire-big", sx, sy, this.t, { scale: 0.9 * (0.35 + 0.65 * rem) });
+      } else {
+        JH.Assets.draw(ctx, "garden_box", sx, sy, 1, { growFrac: gf });
+      }
+      // Progress bar (extinguish progress for flame, growth for garden)
       const w = 44, bx = sx - w / 2, by = sy - 28 - Math.round(gf * 16);
       ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 7);
       ctx.fillStyle = "#1a3a10"; ctx.fillRect(bx, by, w, 5);
@@ -1932,13 +2594,15 @@
         const k = this.doneFx / 1.6;                 // 1 → 0
         const ty = by - 6 - (1 - k) * 14;            // rises as it fades
         ctx.globalAlpha = Math.min(1, k * 1.4);
-        ctx.fillStyle = "#0a2a08"; ctx.fillText("GREAT!", sx + 1, ty + 1);
-        ctx.fillStyle = "#7dff5a"; ctx.fillText("GREAT!", sx, ty);
+        const doneMsg = this.flame ? "OUT!" : "GREAT!";
+        ctx.fillStyle = "#0a2a08"; ctx.fillText(doneMsg, sx + 1, ty + 1);
+        ctx.fillStyle = "#7dff5a"; ctx.fillText(doneMsg, sx, ty);
       } else if (!this.done && this.hitFx > 0) {
         const ty = by - 6 + Math.sin(this.t * 6) * 1.5;
         ctx.globalAlpha = 0.92;
-        ctx.fillStyle = "#062033"; ctx.fillText("Keep watering!", sx + 1, ty + 1);
-        ctx.fillStyle = "#bfefff"; ctx.fillText("Keep watering!", sx, ty);
+        const msg = this.flame ? "Douse it!" : "Keep watering!";
+        ctx.fillStyle = "#062033"; ctx.fillText(msg, sx + 1, ty + 1);
+        ctx.fillStyle = "#bfefff"; ctx.fillText(msg, sx, ty);
       }
       ctx.restore();
     }
@@ -2105,6 +2769,7 @@
       this.type = "gatewaykrusher";
       this.hp = this.maxHp = JH.GATEWAYKRUSHER.hp;
       this.bodyW = JH.GATEWAYKRUSHER.bodyW; this.bodyH = JH.GATEWAYKRUSHER.bodyH;
+      this.coreFrac = 0.55;     // its core glyph sits a touch higher than the Switch's
       this._doRow = false; this._rowY = 0;
       this.cdTimer = 1.6;
     }
@@ -2198,9 +2863,9 @@
       if (this._doWhip && (this.state === "tele" || this.fireFx > 0)) this.drawColumns(ctx, cam);
       if (this._doRow && (this.state === "tele" || this.fireFx > 0)) this.drawDepthRow(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);
-      // shared boss core glyph (larger)
+      // shared boss core glyph (larger; a black hole once the core has escaped)
       const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.55;
-      Assets.bossCore(ctx, cx, cy, 5, this.t, { flash: this.fireFx > 0 });
+      Assets.bossCore(ctx, cx, cy, 5, this.t, { flash: this.fireFx > 0, hole: this.coreEjected });
     }
     drawDepthRow(ctx, cam) {
       const d = this.def;
@@ -2236,12 +2901,10 @@
       for (let i = 0; i < 9; i++)
         game.defer(i * 80, () => burst(game, this.x + (Math.random() - 0.5) * 60, this.y, Math.random() * 36,
           Math.random() < 0.5 ? "#ff3a3a" : "#ffcc44", 16, { speed: 170, life: 0.8, up: 150 }));
-      // No core ejection here — it shatters instead.
-      const cy = this.bodyH * 0.55;
-      for (let i = 0; i < 22; i++)
-        burst(game, this.x + (Math.random() - 0.5) * 18, this.y, cy + (Math.random() - 0.5) * 20,
-          Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossCoreHi, 1, { speed: 200, life: 0.7, up: 40 });
-      game.banner("CORE DESTROYED!", 2.0);
+      // Ejects the surviving core (same as the Switch) and leaves a hole.
+      this.coreEjected = true;
+      ejectBossCore(game, this);
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);
       game.startBossDeathSeq(this);
     }
@@ -2545,6 +3208,7 @@
           JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN), 10 + Math.random() * 120,
           Math.random() < 0.5 ? JH.PAL.wallbossCore : JH.PAL.wallbossHaz, 16,
           { speed: 180, life: 0.8, up: 150 }));
+      game.embers.push(new JH.FxBurst(this.x - 40, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x - 40, this.y, this.def.suds);
       ejectBossCore(game, this);   // non-final form: eject the surviving core (cosmetic)
       game.startBossDeathSeq(this);
@@ -2576,13 +3240,583 @@
     }
   }
 
+  // ---- Smelt: slow, arena-control, half-effective spray ----
+  // ---- SmeltBomb: Smelt's lobbed fire bomb ----
+  // Arcing projectile (parabolic z). Spawns FirePatch + burst on landing.
+  // Pushed into game.embers; update() returns false when dead.
+  class SmeltBomb {
+    constructor(x, y, tx, ty, d) {
+      this.x = x; this.y = y; this.z = 10;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      const flightT = Math.max(0.45, dist / d.lobBombSpeed);
+      this.vx = (tx - x) / flightT;
+      this.vy = (ty - y) / flightT;
+      // vz so that z returns to 0 at flightT: vz = 0.5*g*flightT - z0/flightT
+      this.vz = 0.5 * d.lobGravity * flightT - this.z / flightT;
+      this.def = d;
+      this.t = 0;
+      this.dead = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.vz -= this.def.lobGravity * dt;
+      this.z += this.vz * dt;
+      if (Math.random() < 0.5)
+        game.particles.push(new Particle({
+          x: this.x, y: this.y, z: this.z + 4,
+          vx: (Math.random() - 0.5) * 35, vy: (Math.random() - 0.5) * 20, vz: 18,
+          life: 0.2 + Math.random() * 0.1,
+          color: Math.random() > 0.4 ? JH.PAL.smeltGlow : JH.PAL.firePatch,
+          size: 3, grav: 140,
+        }));
+      if (this.z <= 0) {
+        const d = this.def;
+        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.lobBombRadius, d.lobBombDur));
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.6 }));
+        burst(game, this.x, this.y, 4, JH.PAL.smeltGlow, 14, { speed: 115, life: 0.5, up: 60, size: 3 });
+        burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
+        game.shake(3);
+        const pl = game.player;
+        if (pl.alive && Math.hypot(pl.x - this.x, pl.y - this.y) < d.lobBombRadius)
+          pl.applyBurn(1);
+        this.dead = true;
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      const groundSy = Geo.feetScreenY(this.y, 0);
+      const sy = Geo.feetScreenY(this.y, this.z);
+      const flick = Math.floor(this.t * 12) & 1;
+      ctx.save();
+      // Ground shadow — grows as bomb descends
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#220800";
+      ctx.beginPath();
+      const shadowR = Math.max(2, 8 - this.z * 0.18);
+      ctx.ellipse(Math.round(sx), Math.round(groundSy), shadowR, shadowR * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Bomb
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = JH.PAL.smeltGlow;
+      ctx.shadowBlur = 7;
+      ctx.fillStyle = flick ? JH.PAL.smeltGlow : JH.PAL.firePatchHi;
+      ctx.beginPath();
+      ctx.arc(Math.round(sx), Math.round(sy), 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Stands back; lobs arcing SmeltBombs at the player on a cooldown.
+  // waterMult:0.5 means sustained spray does half damage.
+  class Smelt extends Enemy {
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
+          this.cdTimer = d.lobCd;
+        }
+        return;
+      }
+      if (this.cdTimer > 0) this.cdTimer -= dt;
+      if (this.spawnGrace > 0) { this.state = "idle"; return; }
+
+      // Maintain standoff range
+      if (dist < d.preferRange - 20) {
+        this.x -= (dx / (dist || 1)) * d.speed * dt;
+        this.y -= (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.state = "walk";
+      } else if (dist > d.preferRange + 30) {
+        this.x += (dx / (dist || 1)) * d.speed * dt;
+        this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.state = "walk";
+      } else {
+        this.state = "idle";
+      }
+
+      // Lob when in range and cooldown ready
+      if (dist < 200 && this.cdTimer <= 0)
+        { this.windTimer = d.lobWindup; this.state = "wind"; }
+    }
+  }
+  // ---- SlayerBoss: Fire boss ----
+  // Charge-up/dash movement (no walk cycle), fireball volley, slam attack.
+  // After defeat: ally cutscene triggers in waveCleared_() → fire element unlocked.
+  // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
+  class SlayerBoss extends Enemy {
+    constructor(x, y) {
+      super("mook", x, y);
+      this.def = JH.SLAYER;
+      this.type = "slayer";
+      this.hp = this.maxHp = JH.SLAYER.hp;
+      this.bodyW = JH.SLAYER.bodyW; this.bodyH = JH.SLAYER.bodyH;
+      this.isBoss = true;
+      this.state = "idle";       // opens on a volley (alternator picks it first)
+      this._lastMove = "dash";   // so the first idle pick is a volley
+      this.shootPoseT = 0;       // >0 = show the cueRelease (strike) pose
+      // Charge/dash state
+      this.chargeT = 0;
+      this.dashTarget = null;    // {x,y} computed when charge completes
+      this.dashTellT = 0;
+      this.dashElapsed = 0;      // time in "dash" state; guards against wall-stuck
+      this.dashPatchAcc = 0;     // accumulated travel px for trail patch spawning
+      // Volley state
+      this.windTimer = 0;
+      this.volleyBallsLeft = 0;
+      this.volleyT = 0;
+      // Cooldown between attack cycles
+      this.cdTimer = 0.8;        // initial settle time
+      this.strikeFx = 0;
+    }
+
+    think(dt, game) {
+      this.x = clamp(this.x, game.bounds.minX + 24, game.bounds.maxX - 24);
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      const enraged = this.hp / this.maxHp < d.enrageAt;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+      if (this.shootPoseT > 0) this.shootPoseT -= dt;
+      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
+
+      // ---- CHARGE: fire particles build up, then snap to dash ----
+      if (this.state === "charge") {
+        this.chargeT += dt;
+        this.facing = dx >= 0 ? 1 : -1;
+        const density = Math.min(1, this.chargeT / d.chargeDur);
+        if (Math.random() < density * 2.5 * dt * 60)
+          burst(game, this.x + (Math.random() - 0.5) * 16,
+            this.y + (Math.random() - 0.5) * 8, 12 + Math.random() * 16,
+            JH.PAL.slayerEmber, 1, { speed: 50, life: 0.22, up: 30 });
+        if (this.chargeT >= d.chargeDur) {
+          this.dashTarget = {
+            x: clamp(pl.x, game.bounds.minX + 24, game.bounds.maxX - 24),
+            y: clamp(pl.y, JH.DEPTH_MIN, JH.DEPTH_MAX),
+          };
+          this.dashTellT = d.dashTell;
+          this.dashPatchAcc = 0;
+          this.state = "pre_dash";
+        }
+        return;
+      }
+
+      // ---- PRE_DASH: brief hold in dash pose ----
+      if (this.state === "pre_dash") {
+        this.dashTellT -= dt;
+        this.state = "pre_dash";   // keep as pre_dash; painter reads "dash" sprite
+        if (this.dashTellT <= 0) { this.dashElapsed = 0; this.state = "dash"; }
+        return;
+      }
+
+      // ---- DASH: move to dashTarget, spawn trail patches ----
+      if (this.state === "dash") {
+        this.dashElapsed += dt;
+        const tdx = this.dashTarget.x - this.x, tdy = this.dashTarget.y - this.y;
+        const tdist = Math.hypot(tdx, tdy);
+        const dashMaxDur = d.dashDist / d.dashSpeed + 0.5;
+        if (tdist < 8 || this.dashElapsed > dashMaxDur) {
+          // Dash complete. Enraged only: a fire ring radiates from the landing
+          // point (always-on it punished dodging the dash correctly).
+          this.chargeT = 0;
+          if (enraged) {
+            game.embers.push(new JH.FireRing(this.x, this.y, {
+              dmg: d.dashRingDmg, burn: d.dashRingBurn, maxR: d.dashRingMaxR, speed: d.dashRingSpeed,
+            }));
+          }
+          burst(game, this.x, this.y, 14, JH.PAL.firePatchHi, 12, { speed: 120, life: 0.4, up: 40 });
+          game.shake(5); game.audio.play("whack");
+          if (dist < d.slamRange + 10) {
+            this.windTimer = enraged ? d.slamWind * 0.8 : d.slamWind;
+            this.state = "slam";
+          } else {
+            this.cdTimer = 0.5; this.state = "idle";  // alternator picks the volley next
+          }
+          return;
+        }
+        const step = Math.min(tdist, d.dashSpeed * dt);
+        const nx = tdx / tdist, ny = tdy / tdist;
+        this.x += nx * step; this.y += ny * step;
+        this.dashPatchAcc += step;
+        // Emit particles and spawn trail fire patches.
+        if (Math.random() < 0.7)
+          burst(game, this.x, this.y, 4, JH.PAL.slayerEmber, 1, { speed: 70, life: 0.15, up: 10 });
+        while (this.dashPatchAcc >= d.dashPatchSpacing) {
+          this.dashPatchAcc -= d.dashPatchSpacing;
+          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.dashPatchRadius, d.dashPatchDur));
+        }
+        this.facing = tdx >= 0 ? 1 : -1;
+        return;
+      }
+
+      // ---- SLAM ----
+      if (this.state === "slam") {
+        this.windTimer -= dt;
+        if (this.windTimer <= 0) {
+          if (Math.abs(dx) < d.slamRange && Math.abs(dy) < 24)
+            pl.takeHit(d.slamDmg, game, this.x);
+          for (let i = 0; i < 10; i++)
+            burst(game, this.x + (Math.random() - 0.5) * 24, this.y + (Math.random() - 0.5) * 16, 4,
+              JH.PAL.smeltGlow, 1, { speed: 100, life: 0.4, up: 50 });
+          game.shake(8); game.audio.play("whack");
+          this.strikeFx = 0.2;
+          this.cdTimer = enraged ? d.volleyCd * 0.8 : d.volleyCd;
+          this.state = "idle";
+        }
+        return;
+      }
+
+      // ---- CUE WIND-UP ----
+      if (this.state === "cueWind") {
+        this.windTimer -= dt;
+        if (this.windTimer <= 0) {
+          // Fire first ball, transition to volley-fire state.
+          this._fireOneBall(game, enraged);
+          this.volleyBallsLeft--;
+          this.volleyT = d.ballStagger;
+          this.state = this.volleyBallsLeft > 0 ? "volley" : "post_volley";
+          if (this.state === "post_volley") this.windTimer = 0.15;
+        }
+        return;
+      }
+
+      // ---- VOLLEY: stagger remaining balls ----
+      if (this.state === "volley") {
+        this.volleyT -= dt;
+        if (this.volleyT <= 0) {
+          this._fireOneBall(game, enraged);
+          this.volleyBallsLeft--;
+          if (this.volleyBallsLeft > 0) {
+            this.volleyT = d.ballStagger;
+          } else {
+            this.windTimer = 0.15;   // brief cueRelease hold
+            this.state = "post_volley";
+          }
+        }
+        return;
+      }
+
+      // ---- POST_VOLLEY: cueRelease sprite flash ----
+      if (this.state === "post_volley") {
+        this.windTimer -= dt;
+        if (this.windTimer <= 0) {
+          this.cdTimer = enraged ? d.volleyCd * 0.8 : d.volleyCd;
+          this.chargeT = 0;
+          this.state = "idle";
+        }
+        return;
+      }
+
+      // Fall-through: "idle" alternates his two moves so he isn't just dashing.
+      // Opens on a volley (constructor sets _lastMove = "dash").
+      if (this.state === "idle") {
+        this.chargeT = 0;
+        this.facing = dx >= 0 ? 1 : -1;
+        if (this._lastMove === "volley") { this._lastMove = "dash"; this.state = "charge"; }
+        else { this._lastMove = "volley"; this._startVolley(enraged); }
+      }
+    }
+
+    _startVolley(enraged) {
+      const d = this.def;
+      this.volleyBallsLeft = enraged ? d.enrageBallCount : d.ballCount;
+      this.windTimer = enraged ? d.volleyWind * 0.8 : d.volleyWind;
+      this.state = "cueWind";
+    }
+
+    _fireOneBall(game, enraged) {
+      const d = this.def;
+      const bx = this.x + this.facing * d.ballSpawnOffset;  // materialise at the cue tip
+      game.embers.push(new JH.Fireball(bx, this.y, this.facing, game));
+      this.shootPoseT = 0.09;   // flick to the cueRelease pose so the strike connects
+      burst(game, bx, this.y, 6, JH.PAL.slayerEmber, 8, { speed: 60, life: 0.2, up: 20 });
+      game.audio.play("jump");
+    }
+
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.75);
+      // Map internal state to sprite state string.
+      let spriteState = "idle";
+      if (this.state === "dash" || this.state === "pre_dash") spriteState = "dash";
+      else if (this.state === "cueWind") spriteState = "cueWind";
+      else if (this.state === "volley") spriteState = this.shootPoseT > 0 ? "cueRelease" : "cueWind";
+      else if (this.state === "post_volley") spriteState = "cueRelease";
+      Assets.draw(ctx, "slayer", sx, sy, this.facing, {
+        state: spriteState,
+        hurt: this.flashTimer > 0,
+        hurtAlpha: Math.min(this.flashTimer / 0.18, 1),
+      });
+      if (this.hp < this.maxHp) {
+        const w = this.bodyW + 8;
+        const bx = Math.round(sx - w / 2), by = Math.round(Geo.feetScreenY(this.y, 0) - this.bodyH - 10);
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 6);
+        ctx.fillStyle = "#5a2a1a"; ctx.fillRect(bx, by, w, 4);
+        ctx.fillStyle = JH.PAL.slayerEmber; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 4);
+      }
+      // Slam telegraph zone.
+      if (this.state === "slam" && this.strikeFx <= 0) {
+        // Same zone as before (slamRange x ±24 depth) but drawn as a flashing
+        // ground ellipse — the bare fillRect read as a glitch, not a telegraph.
+        const d = this.def;
+        const flash = Math.floor(this.t * 12) & 1;
+        const gy = Geo.feetScreenY(this.y, 0);
+        const ry = (Geo.feetScreenY(this.y + 24, 0) - Geo.feetScreenY(this.y - 24, 0)) / 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(gy), d.slamRange, Math.max(6, ry), 0, 0, Math.PI * 2);
+        ctx.fillStyle = flash ? "#ff6010" : "#ff3000";
+        ctx.globalAlpha = 0.20;
+        ctx.fill();
+        ctx.globalAlpha = flash ? 0.8 : 0.45;
+        ctx.strokeStyle = flash ? "#ffb060" : "#ff5a20";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    die(game) {
+      if (this.dead) return;
+      this.dead = true;
+      game.audio.play("win");
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
+      spawnCoinFountain(game, this.x, this.y, this.def.suds);  // local fn in same IIFE
+      game.onEnemyKilled(this);   // triggers Church.markBossDefeated("slayer")
+    }
+  }
+  JH.SlayerBoss = SlayerBoss;
+
+  // ---- Furnace: rhythm-based curated elite ----
+  // Sustained spray causes it to heat up (reduced damage, visual glow), then
+  // vent steam (knockback + burn). Burst-spray rhythm is the counter. No elite-
+  // ramp (`tough: false` in its wave entry). Extends Enemy, adds onSprayHit().
+  class Furnace extends Enemy {
+    constructor(type, x, y) {
+      super(type, x, y);
+      this.continuousSprayT = 0;   // resets if spray pauses > 0.3s
+      this.lastSprayT = -99;       // game time of last onSprayHit call
+      this.heated = false;         // true during the vent wind-up
+      this.heatT = -1;             // vent wind-up countdown (-1 = inactive)
+      this.ventCdT = 0;            // post-vent cooldown
+    }
+    onSprayHit(dt, game) {
+      if (this.ventCdT > 0) return;   // cooling: no damage taken, no heat built
+      const d = this.def;
+      this.lastSprayT = this.t;
+      this.continuousSprayT += dt;
+      if (this.heatT >= 0) return;  // already in vent wind-up, don't re-trigger
+      if (JH.Balance.furnaceShouldVent(this.continuousSprayT, d.heatThreshold, this.ventCdT)) {
+        this.heatT = d.ventWind;
+        this.heated = true;
+      }
+    }
+    takeDamage(dmg, game, dirX, knock) {
+      if (this.ventCdT > 0) return;   // cooling: invulnerable until it settles
+      // Apply heatedWaterMult when in the heated phase. `dmg` here is the raw
+      // spray damage computed by doSpray; we scale it down for the vent window.
+      const mult = this.heated ? this.def.heatedWaterMult : 1;
+      super.takeDamage(dmg * mult, game, dirX, knock);
+    }
+    update(dt, game) {
+      super.update(dt, game);   // base Enemy update (physics, contact, animate)
+      const d = this.def;
+      if (this.ventCdT > 0) this.ventCdT -= dt;
+      // Stop spraying for > 0.3s and it cools down rapidly (not an instant reset) —
+      // you must pause a beat to cool it off before it heats up, then resume.
+      if (this.t - this.lastSprayT > 0.3 && this.continuousSprayT > 0)
+        this.continuousSprayT = Math.max(0, this.continuousSprayT - d.coolRate * dt);
+      // Vent wind-up countdown.
+      if (this.heatT >= 0) {
+        this.heatT -= dt;
+        if (this.heatT <= 0) {
+          // Vent fires — always show the visual, only apply effects in range.
+          const pl = game.player;
+          const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
+          burst(game, this.x, this.y, 10, "#d0e8ff",        18, { speed: 150, life: 0.45, up: 70, size: 3 });
+          burst(game, this.x, this.y, 4,  JH.PAL.firePatchHi, 10, { speed: 85, life: 0.4, up: 18, size: 2 });
+          game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.75 }));
+          game.shake(3);
+          // Fire zone: venting scorches the ground around it — punishes the trigger.
+          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.ventPatchRadius, d.ventPatchDur));
+          const ringN = 6, ringR = this.bodyW * 1.4;
+          for (let i = 0; i < ringN; i++) {
+            const a = (i / ringN) * Math.PI * 2;
+            game.firePatches.push(new JH.FirePatch(
+              this.x + Math.cos(a) * ringR,
+              this.y + Math.sin(a) * ringR * 0.5,   // flattened in depth (2.5D)
+              d.ventPatchRadius * 0.8, d.ventPatchDur));
+          }
+          if (dist < this.bodyW * 4) {
+            const dir = pl.x >= this.x ? 1 : -1;
+            pl.applyKnockback(dir, d.ventKnock);
+            pl.applyBurn(d.ventBurnStacks);
+            game.shake(2);
+          }
+          this.heatT = -1;
+          this.heated = false;
+          this.continuousSprayT = 0;
+          this.ventCdT = d.ventCd;
+        }
+      }
+    }
+    think(dt, game) {
+      // Slow melee chaser — inherits default Enemy.think() (no override needed).
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      const sp = d.speed * (this.ventCdT > 0 ? d.cooldownSpeedMult : 1);
+      if (dist > 18 && this.spawnGrace <= 0) {
+        this.x += (dx / (dist || 1)) * sp * dt;
+        this.y += (dy / (dist || 1)) * sp * dt * 0.7;
+        this.state = "walk";
+      } else { this.state = "idle"; }
+    }
+  }
+  JH.Furnace = Furnace;
+
+  Furnace.prototype.draw = function(ctx, cam) {
+    const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+    const d = this.def;
+    Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
+    // Vent telegraph: about to blow — flashing danger ring (the knockback zone)
+    // + "!" so you can back out of range.
+    if (this.heatT >= 0) {
+      const R = this.bodyW * 4;
+      const prog = 1 - this.heatT / d.ventWind;   // 0 → 1 across the wind-up
+      const flash = Math.floor(this.t * 16) & 1;
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.3 * prog;
+      ctx.strokeStyle = flash ? "#fff" : "#ff5a2a"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(sx, sy, R, R * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.10 + 0.20 * prog; ctx.fillStyle = "#ff3000";
+      ctx.beginPath(); ctx.ellipse(sx, sy, R * prog, R * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      const hy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
+      ctx.fillStyle = flash ? "#ff5a5a" : "#fff";
+      ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
+      ctx.fillText("!", sx, hy); ctx.textAlign = "left";
+    }
+    // Cooling phase: hot, fast, untouchable — glow signals "stop spraying, kite".
+    if (this.ventCdT > 0) {
+      ctx.save();
+      ctx.shadowColor = "#ff5a20";
+      ctx.shadowBlur = 8 + 4 * Math.sin(this.t * 10);
+    }
+    Assets.draw(ctx, "furnace", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
+      state: this.state, frame: this.frame, t: this.t,
+      hurt: this.flashTimer > 0, hurtAlpha: this.flashTimer / 0.18,
+      heat: Math.min(1, this.continuousSprayT / d.heatThreshold),
+      heated: this.heated,
+      scale: 1,
+    });
+    if (this.ventCdT > 0) ctx.restore();
+    if (this.hp < this.maxHp) {
+      const w = this.bodyW + 4;
+      const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, w, 3);
+      ctx.fillStyle = "#ff5a5a"; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 3);
+    }
+  };
+
+  JH.Smelt = Smelt;
+
+  // ---- Fuse: fast rusher, fire-patch death burst ----
+  // Dies in ~1.5s at full Jon DPS — the mechanic is WHERE it dies. Death
+  // creates a FirePatch + applies 1 burn stack if Jon is in deathBurnRange.
+  class Fuse extends Enemy {
+    // Aerial drop-in entry: hidden during the stagger delay, then falls from
+    // FUSE_DROP.height with a landing ring, slams on touchdown, then chases.
+    beginDrop(delay) {
+      this.dropping = true;
+      this.dropWait = delay || 0;
+      this.z = 0;               // stays hidden until the fall starts
+    }
+    update(dt, game) {
+      if (this.dropping) {
+        this.t += dt;
+        if (this.dropWait > 0) {
+          this.dropWait -= dt;
+          if (this.dropWait <= 0) { this.z = JH.FUSE_DROP.height; this.vz = 0; }
+          return;
+        }
+        // Falling — gravity only; inert (no think/contact) until it lands.
+        this.vz -= JH.PLAYER.gravity * dt;
+        this.z += this.vz * dt;
+        if (this.z <= 0) {
+          this.z = 0; this.vz = 0; this.dropping = false;
+          this.spawnGrace = 0.25;
+          const pl = game.player;
+          burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });
+          game.shake(2);
+          if (Math.hypot(pl.x - this.x, pl.y - this.y) < JH.FUSE_DROP.slamRadius && pl.z < 20)
+            pl.takeHit(JH.FUSE_DROP.slamDmg, game, this.x);
+        }
+        return;
+      }
+      super.update(dt, game);
+    }
+    takeDamage(dmg, game, dirX, knock) {
+      if (this.dropping) return;   // inert until landed
+      super.takeDamage(dmg, game, dirX, knock);
+    }
+    die(game) {
+      const d = this.def;
+      game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
+      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
+      burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
+      game.shake(3);
+      if (Math.hypot(game.player.x - this.x, game.player.y - this.y) < d.deathBurnRange)
+        game.player.applyBurn(1);
+      super.die(game);
+    }
+  }
+  JH.Fuse = Fuse;
+
+  // Drop-in visuals: landing ring (shrinks as it falls) + the falling body.
+  Fuse.prototype.draw = function (ctx, cam) {
+    if (this.dropping) {
+      if (this.dropWait > 0) return;               // not on screen yet
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const frac = Math.max(0, Math.min(1, this.z / JH.FUSE_DROP.height));  // 1 top → 0 land
+      const r = JH.FUSE_DROP.slamRadius * (0.6 + 0.4 * frac);
+      const flash = (Math.floor(this.t * 12) & 1);
+      ctx.save();
+      ctx.fillStyle = "rgba(255,110,40,0.10)";
+      ctx.strokeStyle = flash ? "#ff8030" : "rgba(255,110,40,0.5)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+      Assets.shadow(ctx, sx, sy, this.bodyW * 0.5 * (1 - frac * 0.5));
+      Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing,
+        { state: "walk", frame: this.frame, t: this.t });
+      return;
+    }
+    JH.Enemy.prototype.draw.call(this, ctx, cam);
+  };
+
   JH.makeEnemy = function (type, x, y) {
     if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
+    if (type === "bulwark") return new Bulwark(type, x, y);
+    if (type === "stalker") return new Stalker(type, x, y);
+    if (type === "smelt") return new Smelt(type, x, y);
+    if (type === "fuse") return new Fuse(type, x, y);
+    if (type === "furnace") return new Furnace(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);
     if (type === "quake") return new QuakeBoss(x, y);
+    if (type === "slayer") return new SlayerBoss(x, y);
     if (type === "gatewaykrusher") return new GatewayKrusherBoss(x, y);
     if (type === "wallboss") return new WallBoss(x, y);
     if (type === "neighbor") return new NeighborNPC(x, y);

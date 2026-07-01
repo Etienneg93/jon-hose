@@ -17,7 +17,7 @@
  *   node tools/imagen-gen.mjs --char=assman --state=walk --ref --count=1
  *
  * Requires GOOGLE_API_KEY in .env (project root).
- * Output PNGs land in sprites/<char>/gen/.
+ * Output PNGs land in generated-art/<char>/gen/ (gitignored — local only).
  */
 
 import fs from "fs";
@@ -122,16 +122,126 @@ Water stream effect coming from nozzle tip. Facing right.`,
     },
   },
 
-  // Church of the Holy Hose — static prop assets
+  // ===================== STREET / FIRE-WORLD ENEMIES =====================
+  // Small pixel-art grunt characters. Match the palette + silhouette of the
+  // procedural painters in js/assets.js. Bake ONLY the flat solid character:
+  // NO glow, halo, aura, particles, sparks, fire bloom, heat shimmer, or
+  // emitted light — those runtime effects are layered on in code and are much
+  // easier to add than to scrub out of a baked sprite. Full-body, feet visible,
+  // single idle pose facing RIGHT, front-3/4 view, chunky readable proportions
+  // (these render tiny — ~24–36 logical px tall).
+  mook: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Mook": a basic short stocky street-thug enemy.
+Muted brick-red shirt/hoodie torso #a04848 with darker #6e2f2f trim and dark trousers.
+Tan skin face #f1c08a, dark knit beanie, small dark eyes, scrappy and low-rent. Short chunky build.`,
+    states: { idle: `Standing idle, arms loose at sides, slight menacing hunch. Full body, feet visible. Facing right.` },
+  },
+
+  charger: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Charger": a bull-rush brute enemy that hunches forward to ram.
+Purple tunic/padded-armor torso #7a4fb0 with darker #523078 trim, dark trousers.
+Tan skin face #f1c08a, angry white eyes, broad forward shoulders, heavier than a basic thug.`,
+    states: { idle: `Aggressive forward-leaning stance, shoulders lowered ready to charge, fists down. Full body, feet visible. Facing right.` },
+  },
+
+  pyro: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Pyro": a lean arsonist enemy that lobs fire.
+Orange jacket torso #ff8a3c with darker #c1531a trim, dark trousers, tan skin face #f1c08a.
+A small STYLIZED static flame-tuft as its hair/crown, painted in flat yellow #ffd23f and orange #ff8a3c shapes (a design element, NOT a glow — no particles, no light bloom).`,
+    states: { idle: `Standing idle, one throwing arm slightly raised, wiry and twitchy. Full body, feet visible. Facing right.` },
+  },
+
+  bulwark: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Bulwark": a heavy armored shield-tank enemy shown WITHOUT any shield (the shield is a separate deployable prop, so hands are empty).
+Steel blue-grey plated armor torso #5a6b7a with dark #33404c trim, tan skin face #f1c08a, single visible eye.
+Big, broad, sturdy tank build — the tallest and widest of the grunts.`,
+    states: { idle: `Standing guard, feet planted wide, empty hands at sides, immovable. Full body, feet visible. Facing right.` },
+  },
+
+  stalker: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Stalker": a lithe teleporting assassin enemy.
+Dark magenta-pink cloak/bodysuit torso #8a2f5a with darker #591b3a trim, tan skin face #f1c08a, a single glinting white eye.
+Slender, sleek, sinister, slightly crouched.`,
+    states: { idle: `Low predatory idle crouch, arms ready, coiled to blink-strike. Full body, feet visible. Facing right.` },
+  },
+
+  smelt: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Smelt": a heavy slow fire-forge worker enemy.
+Dark brown leather-and-iron apron torso #5a3020 with darker #3a1a08 trim, tan skin face #f1c08a.
+Big burly blacksmith build, thick heavy arms. Flat solid colors — NO glowing bands, NO embers, NO fire.`,
+    states: { idle: `Heavy hunched idle, thick arms hanging, slow and lumbering. Full body, feet visible. Facing right.` },
+  },
+
+  fuse: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Fuse": a small fast twitchy walking-bomb enemy.
+Bright red-orange rounded body #ff4810 with darker #cc2800 trim, tiny arms and legs, tan skin face #f1c08a, wide nervous eyes.
+A short unlit fuse-wick sticking up from its head (flat, no spark, no glow, no fire). Smallest of the enemies.`,
+    states: { idle: `Jittery idle, small arms up, about to scurry. Full body, feet visible. Facing right.` },
+  },
+
+  furnace: {
+    refImage: "", refDescription: "",
+    base: `Pixel art game sprite of a "Furnace": a bulky boiler-golem enemy in its COLD, DORMANT state.
+Blocky iron-golem body dark iron-brown #4a3020 with darker #2a1808 trim, a row of horizontal vent-slats across its chest (dark, closed, unlit), tan skin face #f1c08a.
+Heavy blocky build — the biggest grunt. Flat, dark, dormant — NO glowing eyes, NO hot vents, NO fire, NO heat glow (all added in code).`,
+    states: { idle: `Standing dormant idle, heavy and blocky, arms at sides. Full body, feet visible. Facing right.` },
+  },
+
+  // Church of the Holy Hose — static prop assets.
+  // IMPORTANT: bake only the flat solid object. NO emitted glow, halo, rim-
+  // light, aura, light rays, sparkles, particles, water jets, shimmer, or
+  // motion effects — those are added at runtime in code, and are far easier to
+  // layer on than to scrub out of a baked sprite. "Lit"/element states differ
+  // only by LOCAL material color (a brighter/tinted relic), not by emitted light.
   church: {
     refImage: "",
     refDescription: "",
-    base: `2D pixel-art game prop for a gothic cathedral scene. Single object, flat lighting, no baked drop shadows.
+    base: `2D pixel-art game prop for a gothic cathedral scene. Single solid object, flat even lighting, no baked drop shadows.
+NO glow, NO halo, NO rim-light, NO aura, NO light rays, NO sparkles/particles, NO shimmer, NO emitted light of any kind — just the plain solid object as if unlit.
 Must read clearly at very small display sizes (the game canvas is 480×270, nearest-neighbour upscaled).
 Single object centered with clear empty margin for easy cutout.`,
     states: {
-      altar: `A small sacred stone altar of the Church of the Holy Hose: a carved dark-stone pedestal crowned with a brass fire-hydrant relic, a coiled fire-hose draped over it like holy vestment cloth, faint cyan holy-water glow rising from it.
-Dark stone #11141f, brass-gold accents #ffd23f, cyan light #6cd3ff.
+      altar: `A small sacred stone altar of the Church of the Holy Hose: a carved dark-stone pedestal crowned with a brass fire-hydrant relic, a coiled fire-hose draped over it like holy vestment cloth.
+Dark stone #11141f, brass-gold accents #ffd23f, cyan hose #6cd3ff. Flat solid colors only — NO glow, aura, or rising light.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
+
+      shrine_dim: `A tall narrow gothic stone shrine niche of the Church of the Holy Hose, UNLIT and dormant.
+A slender arched stone alcove housing a small coiled fire-hose relic inside, cold and dark.
+Cold grey-blue stone #1c2233, dark grey coiled hose relic. Flat solid colors only — NO glow, NO light.
+Tall vertical proportions, roughly twice as tall as wide.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
+
+      shrine_lit: `A tall narrow gothic stone shrine niche of the Church of the Holy Hose, in its ACTIVATED state — shown ONLY by the relic's material color, not by any emitted light.
+The SAME slender arched stone alcove as the dim version, but the coiled fire-hose relic inside is painted in bright solid cyan instead of dark grey.
+Stone #1c2233, bright cyan relic #6cd3ff / #d6f6ff as flat fill. NO glow, NO halo, NO rim-light, NO rays — just the relic recolored bright cyan.
+Tall vertical proportions, roughly twice as tall as wide.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
+
+      portal: `A tall upright doorway-shaped rift that returns to the street.
+A simple vertical rounded-top slab of solid green energy with a clean hard pixel edge, flat fill, like a plain green portal surface. NO wisps, NO shimmer, NO glow, NO particles, NO luminous bloom.
+Solid green fill #6cff9a with a slightly darker green edge band #1f6f3f. No stone frame. Tall vertical proportions, roughly twice as tall as wide.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
+
+      station_dmg: `A small blessing-station of the Church of the Holy Hose for "Anointed Pressure" (increased spray damage).
+A short dark-stone pedestal crowned with an upright brass fire-hose nozzle relic, pointing up. Plain and static.
+Dark stone pedestal #11141f, brass-gold nozzle #ffd23f, a small red-orange band #ff5a2a as a painted accent on the nozzle. NO jet, NO spray, NO aura, NO glow, NO particles.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
+
+      station_water: `A small blessing-station of the Church of the Holy Hose for "Deep Reservoir" (increased max water).
+A short dark-stone pedestal crowned with a brass basin/font relic holding still cyan water. Same pedestal style as the other stations. Plain and static.
+Dark stone pedestal #11141f, brass-gold rim #ffd23f, flat cyan water #6cd3ff filling the basin. NO overflow, NO glow, NO sparkle, NO particles.
+Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
+
+      station_hp: `A small blessing-station of the Church of the Holy Hose for "Blessed Vigor" (increased max health).
+A short dark-stone pedestal crowned with a solid green holy cross-and-heart relic. Same pedestal style as the other stations. Plain and static.
+Dark stone pedestal #11141f, gold trim #ffd23f, flat solid green heart/cross relic #6cff9a. NO glow, NO halo, NO rays, NO sparkle, NO particles.
 Crisp hard-edged pixels, no anti-aliasing, no gradients, limited palette, no text, no drop shadow, must read clearly at very low resolution.`,
     },
   },
@@ -317,7 +427,8 @@ async function main() {
     images = await generateImagen({ prompt, count, aspectRatio });
   }
 
-  const outDir = path.join(ROOT, "sprites", charKey, "gen");
+  // Output lands in the gitignored generated-art/ tree — local reference only.
+  const outDir = path.join(ROOT, "generated-art", charKey, "gen");
   const prefix = `${charKey}_${stateKey}_${model.replace("-", "")}${useRef ? "_ref" : ""}`;
   await saveImages(images, outDir, prefix);
 

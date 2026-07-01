@@ -263,6 +263,35 @@
       }
       ctx.restore();
     },
+
+    // ---- FX frame-player: pack animations declared in JH.FX ----
+    // Frames load via JH.Loader (gates the title screen like all art).
+    fx: {},
+    registerFx(key, dir, count, fps) {
+      const frames = [];
+      for (let i = 1; i <= count; i++) frames.push(JH.Loader.img(dir + "/" + i + ".png"));
+      this.fx[key] = { frames, fps };
+    },
+    // Draws centered-bottom at (x, y): fi = floor(t*fps), looping unless
+    // opt.loop === false (then clamps to the last frame). Skips frames that
+    // haven't loaded. Inherits the caller's globalAlpha unless opt.alpha set.
+    drawFx(ctx, key, x, y, t, opt) {
+      const a = this.fx[key];
+      if (!a) return;
+      opt = opt || {};
+      const n = a.frames.length;
+      let fi = Math.floor((t || 0) * a.fps);
+      fi = (opt.loop === false) ? Math.min(fi, n - 1) : ((fi % n) + n) % n;
+      const img = a.frames[fi];
+      if (!img || !img._ready) return;
+      const scale = opt.scale || 1;
+      const dw = Math.round(img.naturalWidth * scale), dh = Math.round(img.naturalHeight * scale);
+      ctx.save();
+      if (opt.alpha != null) ctx.globalAlpha = opt.alpha;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, Math.round(x - dw / 2), Math.round(y - dh), dw, dh);
+      ctx.restore();
+    },
   };
   JH.Assets = Assets;
 
@@ -290,6 +319,13 @@
     ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = PAL.switchBody; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(cx, cy, r + 2, r + 2, 0, 0, Math.PI * 2); ctx.stroke();
+    if (opt.hole) {
+      // Core has fled — empty black socket (a hole in the switch), no glow/lens.
+      ctx.fillStyle = "#050609";
+      ctx.beginPath(); ctx.ellipse(cx, cy, r, r, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
     // outer glow
     ctx.globalAlpha = 0.5 * pulse;
     ctx.fillStyle = PAL.wallbossCore;
@@ -395,11 +431,12 @@
     p(-9, 17, 18, 2, "#2a1740");
     p(-4, 19, 9, 8, PAL.skin);
     p(-4, 23, 9, 3, "#3a1f5a");
-    p(2, 20, 2, 2, "#fff");                // angry eye
+    const eyeHot = opt.wind || charging;    // telegraph: eye glows red when about to charge / charging
+    if (eyeHot) p(1, 19, 4, 4, "#7a0000");  // red glow behind the eye
+    p(2, 20, 2, 2, eyeHot ? "#ff3030" : "#111");  // eye: black, glows red on the charge tell
     // Shoulders forward when charging
     p(charging ? 7 : 5, 10, charging ? 8 : 5, 7, PAL.chargerDk);
     if (elite) p(-11, 11, 4, 7, PAL.chargerDk);
-    if (opt.wind) p(-9, 25, 18, 2, "#fff"); // tell flash
   });
 
   // ============================ PYRO ==================================
@@ -424,6 +461,188 @@
     p(1, 25, 4, 4 + (1 - flick) * (elite ? 4 : 3), PAL.pyro);
     p(-1, 25, 2, 2 + flick * 2, "#fff");
     p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
+  });
+
+  // ========================== BULWARK =================================
+  // Procedural placeholder (per CLAUDE.md art pipeline — real sprite later).
+  // No body-mounted shield anymore — the Bulwark's own body is never a
+  // blocker (see the deployed_shield painter below for the planted prop).
+  Assets.register("bulwark", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk" || opt.state === "retrieve") ? legStep(f) * 0.6 : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
+    p(1 - ls, 0, 6, 10, PAL.bulwarkDk);
+    p(-10, 10, 20, 16, PAL.bulwark);
+    p(-10, 10, 20, 3, PAL.bulwarkDk);
+    p(-5, 26, 10, 9, PAL.skin);
+    p(-5, 30, 10, 3, PAL.bulwarkDk);
+    p(1, 28, 2, 2, "#111");
+  });
+
+  // ====================== DEPLOYED SHIELD (Bulwark prop) ===============
+  // Procedural placeholder — the Bulwark's planted shield. Stationary and
+  // indestructible, so no hurt-flash branch is needed.
+  Assets.register("deployed_shield", (p) => {
+    p(-8, 0, 16, 3, PAL.bulwarkDk);
+    p(-7, 3, 14, 22, PAL.bulwarkShield);
+    p(-7, 3, 14, 3, "#fff");
+    p(-2, 9, 4, 12, PAL.bulwarkDk);
+  });
+
+  // ============================ SMELT ==================================
+  // Procedural placeholder. Heavy, slow fire-worker. `wind` = smash wind-up.
+  Assets.register("smelt", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) * 0.4 : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-8 + ls, 0, 7, 12, PAL.smeltDk);
+    p(1 - ls, 0, 7, 12, PAL.smeltDk);
+    p(-11, 12, 22, 16, PAL.smelt);
+    p(-11, 12, 22, 3, PAL.smeltDk);
+    p(-5, 28, 10, 9, PAL.skin);
+    p(-5, 32, 10, 3, PAL.smeltDk);
+    p(1, 30, 2, 2, "#111");
+    if (opt.state === "wind") {
+      p(-13, 10, 26, 4, PAL.smeltGlow);   // glowing wind-up band
+    }
+  });
+
+  // ============================ FUSE ===================================
+  // Procedural placeholder. Fast, low-HP, dangerous in death.
+  Assets.register("fuse", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-4 + ls, 0, 4, 8, PAL.fuseDk);
+    p(0 - ls, 0, 4, 8, PAL.fuseDk);
+    p(-5, 8, 10, 12, PAL.fuse);
+    p(-5, 8, 10, 2, PAL.fuseDk);
+    p(-3, 18, 6, 7, PAL.skin);
+    p(1, 19, 2, 2, "#111");
+  });
+
+  // Lerp between two #rrggbb colors → "rgb(r,g,b)".
+  function lerpHex(a, b, t) {
+    t = Math.max(0, Math.min(1, t));
+    const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    const ar = (pa >> 16) & 255, ag = (pa >> 8) & 255, ab = pa & 255;
+    const br = (pb >> 16) & 255, bg = (pb >> 8) & 255, bb = pb & 255;
+    return "rgb(" + Math.round(ar + (br - ar) * t) + "," +
+                    Math.round(ag + (bg - ag) * t) + "," +
+                    Math.round(ab + (bb - ab) * t) + ")";
+  }
+
+  // ============================ FURNACE ================================
+  // Procedural placeholder. Bulky golem. `opt.heat` (0..1) = spray build-up so
+  // you can gauge the vent; `opt.heated` = the full vent wind-up.
+  Assets.register("furnace", (p, opt, ctx) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
+    if (opt.hurt && (f & 1)) return;
+    const heat = Math.max(0, Math.min(1, opt.heat || 0));
+    const hot = !!opt.heated;
+    const level = hot ? 1 : heat;                 // 0 cold → 1 about to vent
+    // Body ramps from cold to hot as it's hosed.
+    const body = hot ? PAL.furnaceHot : lerpHex(PAL.furnaceBody, PAL.furnaceHot, heat * 0.85);
+    p(-8 + ls, 0, 7, 12, PAL.furnaceDk);
+    p(1 - ls, 0, 7, 12, PAL.furnaceDk);
+    p(-11, 12, 22, 18, body);
+    p(-11, 12, 22, 3, PAL.furnaceDk);
+    // Vent slats glow warmer with heat.
+    p(-11, 24, 22, 4, hot ? PAL.furnaceHot : lerpHex(PAL.furnaceDk, PAL.smeltGlow, level));
+    p(-5, 30, 10, 9, PAL.skin);
+    p(-5, 34, 10, 3, PAL.furnaceDk);
+    // Eye: dark when cold, glowing hot as it heats.
+    if (level > 0.05 && ctx) {
+      ctx.save();
+      ctx.shadowColor = "#ffb020";
+      ctx.shadowBlur = 2 + 6 * level;
+      p(1, 32, 2, 2, lerpHex("#5a2a08", "#ffe070", level));
+      ctx.restore();
+    } else {
+      p(1, 32, 2, 2, "#111");
+    }
+  });
+
+  // ============================ FIREBALL ===============================
+  // Slayer's pool ball — the 8-ball sprite rolling in flight; once ignited a
+  // flame halo + glow wrap it (the flight trail comes from the Fireball class).
+  // Drawn CENTERED on the anchor (the class passes its z-inclusive position).
+  const _ballImg = JH.Loader.img("sprites/slayer/8ball.png");
+  const BALL_D = 11;   // drawn diameter (logical px)
+  Assets.register("fireball", (p, opt, ctx, x, y) => {
+    const ignited = !!opt.ignited;
+    const t = opt.t || 0;
+    const flick = Math.floor(t * 14) & 1;
+    if (ignited) {
+      // Flame halo behind the ball.
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = flick ? PAL.firePatch : PAL.firePatchHi;
+      ctx.beginPath();
+      ctx.arc(x, y, BALL_D * 0.78, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+    if (!_ballImg || !_ballImg.complete || !_ballImg.naturalWidth) {
+      // Fallback while the sprite loads.
+      p(-5, 4, 10, 10, ignited ? (flick ? PAL.firePatch : PAL.firePatchHi) : "#f0eecc");
+      return;
+    }
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((opt.dir || 1) * t * 9);   // rolling spin in the flight direction
+    ctx.imageSmoothingEnabled = false;
+    if (ignited) { ctx.shadowColor = PAL.firePatchHi; ctx.shadowBlur = 5 + 3 * flick; }
+    ctx.drawImage(_ballImg, -BALL_D / 2, -BALL_D / 2, BALL_D, BALL_D);
+    ctx.restore();
+  });
+
+  // ============================ SLAYER (BOSS) ==========================
+  // Real sprite sheets — 4 static PNG states (no walk cycle).
+  const SLAYER_H = 58;
+  const _slayerImgs = {
+    idle:       JH.Loader.img("sprites/slayer/slayer-idle.png"),
+    dash:       JH.Loader.img("sprites/slayer/slayer-dash.png"),
+    cueWind:    JH.Loader.img("sprites/slayer/slayer-windup.png"),
+    cueRelease: JH.Loader.img("sprites/slayer/slayer-shoot.png"),
+  };
+  Assets.register("slayer", (p, opt, ctx, x, y, facing) => {
+    if (opt.hurt && (Math.floor((opt.t || 0) * 10) & 1)) return;
+    const key = _slayerImgs[opt.state] ? opt.state : "idle";
+    const img = _slayerImgs[key];
+    if (!img || !img.complete || !img.naturalWidth) {
+      // Fallback placeholder while sprites are loading.
+      p(-22, 0, 44, SLAYER_H, PAL.slayerBody);
+      p(-22, 0, 44, 3, PAL.slayerDk);
+      return;
+    }
+    const scale = SLAYER_H / img.naturalHeight;
+    const dw = Math.round(img.naturalWidth * scale);
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -SLAYER_H, dw, SLAYER_H);
+    ctx.restore();
+  });
+
+  // ========================== STALKER ==================================
+  // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
+  // post-blink wind-up arm.
+  Assets.register("stalker", (p, opt) => {
+    const f = opt.frame | 0;
+    const ls = (opt.state === "walk") ? legStep(f) : 0;
+    if (opt.hurt && (f & 1)) return;
+    p(-4 + ls, 0, 4, 9, PAL.stalkerDk);
+    p(0 - ls, 0, 4, 9, PAL.stalkerDk);
+    p(-6, 9, 12, 12, PAL.stalker);
+    p(-6, 9, 12, 2, PAL.stalkerDk);
+    p(-3, 19, 7, 7, PAL.skin);
+    p(1, 20, 2, 2, "#fff");
+    if (opt.state === "wind") p(-8, 22, 16, 2, "#fff");
+    if (opt.state === "strike") p(5, 12, 8, 5, PAL.stalkerDk);
   });
 
   // ============================ BOSS ==================================
@@ -478,7 +697,7 @@
   });
 
   // ========================= QUAKE WALKER (boss 3) ====================
-  // Uses the real sprite-sheet frames (sprites/quake-frames.png) when loaded;
+  // Uses the real sprite-sheet frames (sprites/quake_walker/quake-frames.png) when loaded;
   // falls back to a procedural steel-bruiser drawing otherwise.
   function proceduralQuake(p, opt) {
     const f = opt.frame | 0;
@@ -889,21 +1108,31 @@
     p(-1, 22, 2, 2, "#ff8030");           // bullseye
   });
 
-  Assets.register("hydrant", (p) => {
-    p(-4, 0, 8, 3, "#7a1010");
-    p(-3, 3, 6, 9, "#c81f1f");
-    p(-3, 12, 6, 3, "#7a1010");
-    p(-1, 15, 2, 2, "#c81f1f");
-    p(-5, 7, 2, 2, "#7a1010");
-    p(3, 7, 2, 2, "#7a1010");
+  // opt.gold = this is the active respawn point (red -> golden).
+  Assets.register("hydrant", (p, opt) => {
+    const gold = opt && opt.gold;
+    const dk = gold ? "#8a5e0c" : "#7a1010";
+    const br = gold ? "#ffce3a" : "#c81f1f";
+    p(-4, 0, 8, 3, dk);
+    p(-3, 3, 6, 9, br);
+    p(-3, 12, 6, 3, dk);
+    p(-1, 15, 2, 2, br);
+    p(-5, 7, 2, 2, dk);
+    p(3, 7, 2, 2, dk);
   });
   // =================== QUAKE WALKER CUTSCENE PORTRAIT ================
   // Pre-load both mouth-closed and mouth-open JPGs immediately.
   {
     const makeImg = (src) => JH.Loader.img(src);
-    const _closed = makeImg("sprites/quake_walker_portrait.jpg");
-    const _open   = makeImg("sprites/quake_walker_portrait_mouthopen.jpg");
+    const _closed = makeImg("sprites/quake_walker/quake_walker_portrait.jpg");
+    const _open   = makeImg("sprites/quake_walker/quake_walker_portrait_mouthopen.jpg");
     JH.getQuakePortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
+
+  {
+    const _closed = JH.Loader.img("sprites/slayer/slayer-portrait-mouthclosed.png");
+    const _open   = JH.Loader.img("sprites/slayer/slayer-portrait-mouthopen.png");
+    JH.getSlayerPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
   }
 
   // =================== CHURCH OF THE HOSE ART =======================
@@ -927,4 +1156,7 @@
       station_bless_hp:   makeImg("sprites/church/station_hp.png"),
     };
   }
+
+  // Register all curated FX declared in the config manifest.
+  for (const k in JH.FX) Assets.registerFx(k, "sprites/fx/" + k, JH.FX[k].count, JH.FX[k].fps);
 })();

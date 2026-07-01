@@ -4,14 +4,15 @@ const assert = require("node:assert");
 const Balance = require("../js/balance.js");
 
 test("actLevelForWave maps wave index to elite act tier", () => {
-  assert.strictEqual(Balance.actLevelForWave(0), -1);  // Act 1, no elites
-  assert.strictEqual(Balance.actLevelForWave(4), -1);  // mid-boss wave
-  assert.strictEqual(Balance.actLevelForWave(5), 0);   // first elite wave
-  assert.strictEqual(Balance.actLevelForWave(7), 0);   // Act 2
-  assert.strictEqual(Balance.actLevelForWave(8), 1);   // Act 3
-  assert.strictEqual(Balance.actLevelForWave(9), 1);
-  assert.strictEqual(Balance.actLevelForWave(10), 2);  // Act 4
-  assert.strictEqual(Balance.actLevelForWave(13), 2);
+  const AS = [0, 5, 8, 10];
+  assert.strictEqual(Balance.actLevelForWave(0, AS), -1);  // Act 1, no elites
+  assert.strictEqual(Balance.actLevelForWave(4, AS), -1);  // mid-boss wave
+  assert.strictEqual(Balance.actLevelForWave(5, AS), 0);   // first elite wave
+  assert.strictEqual(Balance.actLevelForWave(7, AS), 0);   // Act 2
+  assert.strictEqual(Balance.actLevelForWave(8, AS), 1);   // Act 3
+  assert.strictEqual(Balance.actLevelForWave(9, AS), 1);
+  assert.strictEqual(Balance.actLevelForWave(10, AS), 2);  // Act 4
+  assert.strictEqual(Balance.actLevelForWave(13, AS), 2);
 });
 
 test("dropThresholds reproduces base rates at mult 1", () => {
@@ -86,4 +87,112 @@ test("repeatableCost rises 1.5x per purchase", () => {
   assert.strictEqual(Balance.repeatableCost(60, 1), 90);
   assert.strictEqual(Balance.repeatableCost(60, 2), 135);
   assert.strictEqual(Balance.repeatableCost(60, 3), 203); // round(202.5)
+});
+
+test("bulwarkShouldThrow: true when the player is within range", () => {
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 150, 40, 80), true);  // dist 50 <= 80
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 100, 40, 80), true);  // dist 0
+});
+
+test("bulwarkShouldThrow: false when the player is out of range", () => {
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 250, 40, 80), false); // dist 150
+});
+
+test("bulwarkShouldThrow: accounts for depth (y), not just x", () => {
+  // hypot(30, 80) ≈ 85.44 > 80
+  assert.strictEqual(Balance.bulwarkShouldThrow(100, 0, 130, 80, 80), false);
+});
+
+test("bulwarkShouldThrow: exactly at range counts as in range", () => {
+  assert.strictEqual(Balance.bulwarkShouldThrow(0, 0, 80, 0, 80), true);
+});
+
+test("stalkerBlinkTarget: lands behind the player relative to their facing", () => {
+  const bounds = { minX: 0, maxX: 1000, depthMin: 0, depthMax: 86 };
+  const t = Balance.stalkerBlinkTarget(500, 40, 1, 60, bounds);     // facing right -> blink lands LEFT
+  assert.strictEqual(t.x, 440);
+  assert.strictEqual(t.y, 40);
+  const t2 = Balance.stalkerBlinkTarget(500, 40, -1, 60, bounds);   // facing left -> blink lands RIGHT
+  assert.strictEqual(t2.x, 560);
+});
+
+test("stalkerBlinkTarget: clamps to the arena/depth bounds", () => {
+  const bounds = { minX: 0, maxX: 1000, depthMin: 0, depthMax: 86 };
+  const t = Balance.stalkerBlinkTarget(20, 5, 1, 60, bounds);       // would land at x=-40
+  assert.strictEqual(t.x, 0);
+  const t2 = Balance.stalkerBlinkTarget(500, 90, 1, 60, bounds);    // y past depthMax
+  assert.strictEqual(t2.y, 86);
+});
+
+test("furnaceShouldVent: true when spray threshold reached and not on cooldown", () => {
+  assert.strictEqual(Balance.furnaceShouldVent(1.5, 1.5, 0), true);   // exactly at threshold
+  assert.strictEqual(Balance.furnaceShouldVent(2.0, 1.5, 0), true);   // over threshold
+});
+
+test("furnaceShouldVent: false when still building up spray time", () => {
+  assert.strictEqual(Balance.furnaceShouldVent(1.4, 1.5, 0), false);  // just under threshold
+  assert.strictEqual(Balance.furnaceShouldVent(0, 1.5, 0), false);    // no spray yet
+});
+
+test("furnaceShouldVent: false when on cooldown even if threshold reached", () => {
+  assert.strictEqual(Balance.furnaceShouldVent(2.0, 1.5, 0.1), false); // ventCdT > 0
+});
+
+test("actLevelForWave with expanded ACT_STARTS assigns new act tiers", () => {
+  const AS = [0, 5, 10, 16, 23];
+  assert.strictEqual(Balance.actLevelForWave(4, AS), -1);   // Act 1
+  assert.strictEqual(Balance.actLevelForWave(5, AS), 0);    // Act 2 start
+  assert.strictEqual(Balance.actLevelForWave(9, AS), 0);    // Act 2 (Switch)
+  assert.strictEqual(Balance.actLevelForWave(10, AS), 1);   // Act 3 start
+  assert.strictEqual(Balance.actLevelForWave(15, AS), 1);   // Act 3 (Quake)
+  assert.strictEqual(Balance.actLevelForWave(16, AS), 2);   // Act 4 start
+  assert.strictEqual(Balance.actLevelForWave(22, AS), 2);   // Act 4 (GK)
+  assert.strictEqual(Balance.actLevelForWave(23, AS), 3);   // Fire start
+  assert.strictEqual(Balance.actLevelForWave(28, AS), 3);   // Fire (Slayer)
+});
+
+test("unlockedPool: types accumulate up to the wave index, deduped", () => {
+  const waves = [
+    { spawns: [{ type: "mook", count: 3 }] },
+    { spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] },
+    { boss: true },
+    { spawns: [{ type: "pyro", count: 2 }] },
+  ];
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 0), ["mook"]);
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 1), ["mook", "charger"]);
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 2), ["mook", "charger"]); // boss wave adds nothing
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 3), ["mook", "charger", "pyro"]);
+});
+
+test("unlockedPool excludes dummy and neighbor", () => {
+  const waves = [{ spawns: [{ type: "dummy", count: 1 }, { type: "neighbor", count: 1 }, { type: "fuse", count: 2 }] }];
+  assert.deepStrictEqual(Balance.unlockedPool(waves, 0), ["fuse"]);
+});
+
+test("pickSprinkles: deterministic picks from the pool, honors count", () => {
+  const picks = Balance.pickSprinkles(["mook", "pyro"], 3, { rng: () => 0 });
+  assert.strictEqual(picks.length, 3);
+  picks.forEach((p) => assert.ok(["mook", "pyro"].includes(p)));
+});
+
+test("pickSprinkles caps heavies at heavyCap total", () => {
+  // rng()=0 walks the cumulative weights and lands on the first eligible type;
+  // bulwark's huge weight would win every roll if it weren't heavy-capped.
+  const picks = Balance.pickSprinkles(["bulwark", "mook"], 3, {
+    weights: { bulwark: 100, mook: 1 }, heavies: ["bulwark"], heavyCap: 1, rng: () => 0,
+  });
+  assert.strictEqual(picks.filter((p) => p === "bulwark").length, 1);
+  assert.strictEqual(picks.filter((p) => p === "mook").length, 2);
+});
+
+test("pickSprinkles honors per-type caps", () => {
+  const picks = Balance.pickSprinkles(["charger", "mook"], 3, {
+    typeCaps: { charger: 1 }, rng: () => 0,
+  });
+  assert.deepStrictEqual(picks, ["charger", "mook", "mook"]);
+});
+
+test("pickSprinkles returns fewer picks when nothing is eligible", () => {
+  const picks = Balance.pickSprinkles(["bulwark"], 3, { heavies: ["bulwark"], heavyCap: 1, rng: () => 0 });
+  assert.deepStrictEqual(picks, ["bulwark"]);
 });

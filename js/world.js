@@ -65,6 +65,14 @@
     lock() { this.locked = true; this.lockX = this.x; },
     unlock() { this.locked = false; },
     reset() { this.x = 0; this.locked = false; this.lockX = 0; },
+    // Jump the camera straight to where it would settle following `player`,
+    // with no lerp — used on Church respawn so the world fades in AT the spot
+    // instead of scrolling across the whole map to reach it.
+    snapTo(player) {
+      const max = Math.max(0, JH.LEVEL_LEN - JH.VIEW_W);
+      this.x = Math.max(0, Math.min(max, player.x - JH.VIEW_W * 0.42));
+      this.locked = false; this.lockX = 0;
+    },
   };
   JH.Camera = Camera;
 
@@ -86,7 +94,11 @@
       for (let x = -40; x < JH.LEVEL_LEN + 200; ) {
         const w = 24 + Math.floor(rA() * 30);
         const h = 40 + Math.floor(rA() * 70);
-        const broken = x > JH.ZONE2_START;       // Act 3: ruined district
+        // Act 3: ruined district. The near skyline scrolls at 0.5 parallax, so
+        // the foreground zone boundary maps to building-x at HALF scale (plus a
+        // screen width so the first broken silhouette enters from the right
+        // edge as the player crosses into the district, not two acts later).
+        const broken = x > (JH.ZONE2_START - 200) * 0.5 + JH.VIEW_W;
         const b = {
           x, w, h, broken, jag: null, windows: [],
           c: broken ? (rA() > 0.5 ? "#241f24" : "#2b242a")
@@ -163,6 +175,18 @@
         ctx.fillStyle = g; ctx.fillRect(0, top - 44, W, 44);
       }
 
+      // Boiler District (fire world) — hot red sky wash + molten horizon glow.
+      // Ramps in past ZONE3_START, same pattern as the Act-3 haze above.
+      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500));
+      if (fireT > 0) {
+        ctx.fillStyle = "rgba(120,20,0," + (0.42 * fireT).toFixed(3) + ")";
+        ctx.fillRect(0, 0, W, top);
+        const fg = ctx.createLinearGradient(0, top - 60, 0, top);
+        fg.addColorStop(0, "rgba(255,90,20,0)");
+        fg.addColorStop(1, "rgba(255,110,20," + (0.55 * fireT).toFixed(3) + ")");
+        ctx.fillStyle = fg; ctx.fillRect(0, top - 60, W, 60);
+      }
+
       // Far skyline (slow parallax)
       const pFar = cam * 0.25;
       for (const b of this.farBuildings) {
@@ -209,6 +233,11 @@
       // Ruined-district floor: dust tint + scattered debris piles.
       if (zoneT > 0) {
         ctx.fillStyle = "rgba(74,64,50," + (0.5 * zoneT).toFixed(3) + ")";
+        ctx.fillRect(0, top, W, H - top);
+      }
+      // Boiler District floor: scorched warm tint.
+      if (fireT > 0) {
+        ctx.fillStyle = "rgba(120,40,10," + (0.5 * fireT).toFixed(3) + ")";
         ctx.fillRect(0, top, W, H - top);
       }
       if (this.debris) {

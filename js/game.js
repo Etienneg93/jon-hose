@@ -10,7 +10,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920, 5440, 5960, 6480, 7000];
+  const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000];
   if (WAVE_TRIGGERS.length !== JH.LEVEL1.waves.length)
     console.warn("WAVE_TRIGGERS length (" + WAVE_TRIGGERS.length + ") !== waves length (" + JH.LEVEL1.waves.length + ") — progression will break");
 
@@ -22,7 +22,7 @@
     player: null,
     enemies: [], embers: [], pickups: [], particles: [],
     hydrants: [], shopNpc: null, nearShop: false,
-    wall: null, wallSpawnTimer: 0, wallPool: [],
+    wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
 
@@ -142,7 +142,8 @@
     devTriggerCutscene() {
       this.startGame();
       this.state = "cutscene";
-      this.cutscene = { phase: 0, nextWave: 10 };
+      const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+      this.cutscene = { phase: 0, nextWave: quakeIdx + 1 };
       document.getElementById("hud").classList.add("hidden");
       document.getElementById("banner").classList.add("hidden");
       this.devMenu = false;
@@ -269,7 +270,7 @@
       JH.Upgrades.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -324,6 +325,19 @@
         const nb = this.spawnEnemy("neighbor", left + 28, JH.DEPTH_MAX * 0.4);
         nb.spawnGrace = 1.0;
         this.banner("WATER ALL 4 CROPS!  DODGE THE ROCKS!", 2.8);
+      } else if (wave.douse) {
+        // Fire set-piece: spray 4 flame sources out while Smelts harass you.
+        const xs = [left + 70, left + 172, left + 274, left + 370];
+        const ys = [JH.DEPTH_MIN + 14, JH.DEPTH_MAX - 14, JH.DEPTH_MIN + 22, JH.DEPTH_MAX - 22];
+        this.gardens = xs.map((x, i) => new JH.GardenBox(x, ys[i], i, { flame: true }));
+        this.dropBudget = { suds: 0, items: 0 };
+        (wave.spawns || [{ type: "smelt", count: 2 }]).forEach((g) => {
+          for (let k = 0; k < g.count; k++) {
+            const e = this.spawnEnemy(g.type, left + 40 + k * 30, JH.DEPTH_MAX * 0.4);
+            e.spawnGrace = 1.0;
+          }
+        });
+        this.banner("DOUSE ALL 4 FLAMES!", 2.8);
       } else if (wave.wall) {
         // Barricade encounter: wall on the right, enemies keep coming.
         this.bounds = { minX: left, maxX: right - 26 };       // can't pass the wall
@@ -333,6 +347,14 @@
         wave.spawns.forEach((g) => { for (let k = 0; k < g.count; k++) this.wallPool.push(g.type); });
         this.dropBudget = { suds: 14, items: 7 };             // anti-farm cap
         this.banner("BARRICADE! SMASH THROUGH", 1.6);
+      } else if (wave.holdout) {
+        // Survival hold-out: reuse the barricade's pool-spawn loop, end on a timer.
+        this.holdoutTimer = wave.holdDur || 22;
+        this.wallSpawnTimer = 0.4;
+        this.wallPool = [];
+        wave.spawns.forEach((g) => { for (let k = 0; k < g.count; k++) this.wallPool.push(g.type); });
+        this.dropBudget = { suds: 14, items: 7 };            // anti-farm cap
+        this.banner("HOLD THE LINE!  SURVIVE!", 1.8);
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
@@ -342,21 +364,44 @@
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
       } else {
         this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
-        const actLevel = JH.Balance.actLevelForWave(this.waveIndex);
+        const actLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
         const ownedCount = Object.keys(JH.Upgrades.owned).length;
         const eliteScale = wave.tough
           ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
-        let slot = 0;
         const spawnList = JH.Balance.capEnemyType(
           wave.spawns, "charger", JH.WAVECAP.charger, "mook");
-        spawnList.forEach((grp) => {
-          for (let k = 0; k < grp.count; k++) {
-            const ex = right - 6 - (slot % 3) * 16 + Math.random() * 10;
-            const ey = JH.DEPTH_MIN + 8 + ((slot * 27) % (JH.DEPTH_MAX - JH.DEPTH_MIN - 16));
-            const e = this.spawnEnemy(grp.type, clamp(ex, left, right), ey, { elite: eliteScale });
+        // Flatten authored spawns, then sprinkle extras from the unlocked pool
+        // on top (variety pass) — the authored list stays the tuned backbone.
+        const types = [];
+        spawnList.forEach((g) => { for (let k = 0; k < g.count; k++) types.push(g.type); });
+        const SPR = JH.SPRINKLE;
+        const sprinkleCount = SPR.counts[actLevel + 1] || 0;
+        const pool = JH.Balance.unlockedPool(JH.LEVEL1.waves, this.waveIndex);
+        const chargerRoom = Math.max(0, JH.WAVECAP.charger - types.filter((t) => t === "charger").length);
+        types.push(...JH.Balance.pickSprinkles(pool, sprinkleCount, {
+          weights: SPR.weights, heavies: SPR.heavies, heavyCap: SPR.heavyCap,
+          typeCaps: { charger: chargerRoom },
+        }));
+        const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
+        let slot = 0, fuseIdx = 0;
+        types.forEach((type) => {
+          const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
+          if (type === "fuse") {
+            // Fuses drop in at a random arena spot, staggered so they don't
+            // all land at once.
+            const ex = left + 30 + Math.random() * (right - left - 60);
+            this.spawnEnemy(type, ex, ey, {
+              elite: eliteScale, dropIn: true, dropDelay: fuseIdx * JH.FUSE_DROP.stagger,
+            });
+            fuseIdx++;
+          } else {
+            // Enter from a random screen edge at a random depth.
+            const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
+                                             : right - 6 - Math.random() * 10;
+            const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
             e.spawnGrace = 0.3 + slot * 0.25; // stagger entrances
-            slot++;
           }
+          slot++;
         });
       }
     },
@@ -365,11 +410,24 @@
       JH.Music.setTrack("level");
       this.waveActive = false;
 
-      // After Quake Walker (index 9), play his ally cutscene before continuing.
-      if (this.waveIndex === 9) {
+      // After Quake Walker, play his ally cutscene before continuing.
+      const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+      if (quakeIdx >= 0 && this.waveIndex === quakeIdx) {
         JH.Camera.unlock();
         this.state = "cutscene";
-        this.cutscene = { phase: 0, nextWave: 10 };
+        this.cutscene = { phase: 0, nextWave: quakeIdx + 1 };
+        document.getElementById("hud").classList.add("hidden");
+        document.getElementById("banner").classList.add("hidden");
+        return;
+      }
+
+      // After The Slayer, play his ally cutscene before continuing.
+      // Dynamic findIndex so this survives wave-list reordering.
+      const slayerIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+      if (slayerIdx >= 0 && this.waveIndex === slayerIdx) {
+        JH.Camera.unlock();
+        this.state = "cutscene";
+        this.cutscene = { phase: 0, nextWave: slayerIdx + 1, who: "slayer" };
         document.getElementById("hud").classList.add("hidden");
         document.getElementById("banner").classList.add("hidden");
         return;
@@ -407,7 +465,8 @@
     afterCutscene(nextWaveIdx) {
       this.cutscene = null;
       this.state = "play";
-      const clearedWave = JH.LEVEL1.waves[9];
+      const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+      const clearedWave = JH.LEVEL1.waves[quakeIdx];
       if (clearedWave) {
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
@@ -418,9 +477,25 @@
       this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
     },
 
+    afterSlayerCutscene(nextWaveIdx) {
+      this.cutscene = null;
+      this.state = "play";
+      const slayerIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+      const clearedWave = JH.LEVEL1.waves[slayerIdx];
+      if (clearedWave) {
+        document.getElementById("hud-wave").textContent = clearedWave.name;
+        document.getElementById("hud-wave-label").classList.remove("hidden");
+      }
+      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
+      this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
+      this.showScreen("hud");
+      this.banner("THE SLAYER JOINS YOUR SIDE!", 2.4);
+    },
+
     drawCutscene(ctx) {
       const cs = this.cutscene;
       if (!cs) return;
+      if (cs.who === "slayer") { this.drawSlayerCutscene(ctx, cs); return; }
       const lines = [
         ["...You're stronger than I expected.", "I underestimated you."],
         ["The quake in my heart...", "You've silenced it."],
@@ -505,12 +580,80 @@
       }
     },
 
+    drawSlayerCutscene(ctx, cs) {
+      const lines = [
+        ["...Clean shot. I'll give you that.", "Nobody's sunk me before."],
+        ["The fire in me...", "You've cooled it."],
+        ["Next game, I'm on your side.", "Let's run the table."],
+      ];
+      const phase = clamp(cs.phase, 0, lines.length - 1);
+
+      ctx.fillStyle = "rgba(0,0,0,0.88)";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+
+      const PX = 10, PY = 10, PW = 96, PH = 108;
+      ctx.fillStyle = "#1a0800";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = JH.PAL.slayerEmber;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      const talking = (cs.timer || 0) < 2.0;
+      const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
+      const img = JH.getSlayerPortrait ? JH.getSlayerPortrait(mouthOpen) : null;
+      if (img && img._ready) {
+        ctx.drawImage(img, PX, PY, PW, PH);
+      } else {
+        // Procedural fallback
+        const cx = PX + PW / 2, cy = PY + PH - 4;
+        const f = (lx, ly, w, h, col) => {
+          ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+        };
+        f(-20, 0, 40, 60, JH.PAL.slayerBody);
+        f(-6, 60, 12, 30, JH.PAL.slayerDk);
+        f(-20, 40, 40, 6, JH.PAL.slayerDk);
+        f(-4, 30, 8, 12, "#cc8844");
+      }
+
+      ctx.fillStyle = JH.PAL.slayerEmber;
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("THE SLAYER", PX, PY + PH + 9);
+
+      const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
+      ctx.fillStyle = "#0d0800";
+      ctx.fillRect(DX, DY, DW, DH);
+      ctx.strokeStyle = "#4a2810";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(DX, DY, DW, DH);
+
+      ctx.fillStyle = "#f0d8b0";
+      ctx.font = "6px monospace";
+      const dl = lines[phase];
+      ctx.fillText(dl[0], DX + 6, DY + 18);
+      if (dl[1]) ctx.fillText(dl[1], DX + 6, DY + 30);
+
+      if (Math.floor(performance.now() / 500) % 2) {
+        ctx.fillStyle = "#7a4820";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ E ]  ADVANCE", DX + DW - 4, DY + DH - 5);
+        ctx.textAlign = "left";
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillStyle = i <= phase ? JH.PAL.slayerEmber : "#3a2010";
+        ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
+      }
+    },
+
     // ------------------------------------------------------- spawning
     spawnEnemy(type, x, y, opts) {
       const e = JH.makeEnemy(type, x, y);
       if (opts) {
         if (opts.infinite) e.infinite = true;
         if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
+        if (opts.dropIn && e.beginDrop) e.beginDrop(opts.dropDelay || 0);
       }
       this.enemies.push(e);
       return e;
@@ -679,7 +822,6 @@
     // Suds are kept (no Upgrades.reset).
     respawnFromChurch() {
       const next = Math.max(0, this.diedWave);     // the wave to re-fight
-      JH.Camera.reset();
       const p = this.player;
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
       const maxX = WAVE_TRIGGERS[next] + 30;
@@ -688,7 +830,8 @@
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
       p.alive = true;
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = [];
+      JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
@@ -699,8 +842,12 @@
       this.waveIndex = next - 1;
       this.waveActive = false; this.waveCleared = false;
       this.bounds = { minX: 8, maxX: maxX };
-      this.worldFadeT = 0.6;     // black -> clear (continues the Church fade)
-      this.warpInT = 0.5;        // Mega Man-style materialize beam
+      // Church-return arrival: hold on black, then a water jet drops Jon from the
+      // sky into a splash landing. updateArrival() drives it; player logic is
+      // frozen until it finishes. Jon starts high (z) and eases to the ground.
+      this.arrival = { t: 0, blackDur: 0.4, fallDur: 0.6, splashDur: 0.4, height: 240, splashed: false };
+      p.z = this.arrival.height;
+      this.worldFadeT = 0; this.warpInT = 0;
       this.state = "play";
       this.showScreen("hud");
       JH.Music.reset(); JH.Music.start();
@@ -710,6 +857,36 @@
     closeShop() {
       this.state = "play";
       this.showScreen("hud");
+    },
+
+    // Church-return landing: black hold -> water-jet sky-drop -> splash. Freezes
+    // player/enemy logic; only particles animate. Jon's z eases from sky to ground.
+    updateArrival(dt) {
+      const a = this.arrival, p = this.player;
+      a.t += dt;
+      const fallStart = a.blackDur;
+      const fallEnd = a.blackDur + a.fallDur;
+      const splashEnd = fallEnd + a.splashDur;
+      if (a.t < fallStart) {
+        p.z = a.height;                        // still in the sky, hidden by black
+      } else if (a.t < fallEnd) {
+        const k = (a.t - fallStart) / a.fallDur;
+        p.z = a.height * (1 - k * k);          // ease-in fall (gravity)
+      } else {
+        p.z = 0;
+        if (!a.splashed) {
+          a.splashed = true;
+          JH.burst(this, p.x, p.y, 20, JH.PAL.waterHi, 10, { speed: 90, life: 0.5, up: 70, size: 2 });
+          JH.burst(this, p.x, p.y, 14, JH.PAL.water,   14, { speed: 60, life: 0.45, up: 30, size: 2 });
+          this.shake(5);
+          this.audio.play("whack");
+        }
+      }
+      this.particles = this.particles.filter((pp) => pp.update(dt));
+      this.embers = this.embers.filter((pp) => pp.update(dt, this));
+      for (const h of this.hydrants) h.t += dt;
+      this.updateHUD();
+      if (a.t >= splashEnd) { this.arrival = null; p.z = 0; }
     },
 
     // ------------------------------------------------------- end states
@@ -760,6 +937,11 @@
     togglePause() {
       if (this.state === "play") { this.state = "pause"; this.showScreen("screen-pause"); }
       else if (this.state === "pause") { this.state = "play"; this.showScreen("hud"); }
+      else if (this.state === "church") { this.state = "churchPause"; this.showScreen("screen-pause"); }
+      else if (this.state === "churchPause") {
+        this.state = "church";
+        document.getElementById("screen-pause").classList.add("hidden");
+      }
     },
 
     // ============================================================ LOOP
@@ -782,8 +964,9 @@
     update(dt) {
       this.input.poll();
 
-      // pause toggle works in play/pause
-      if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"))
+      // pause toggle works in play/pause and church/churchPause
+      if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"
+        || this.state === "church" || this.state === "churchPause"))
         this.togglePause();
 
       if (this.bannerTimer > 0) {
@@ -811,6 +994,7 @@
         if (JH.Church.updateScene) JH.Church.updateScene(dt, this);
         return;
       }
+      if (this.state === "churchPause") return;
 
       if (this.devMenu) return;
 
@@ -822,13 +1006,21 @@
           if (this.input.pressed("confirm") && (cs.timer || 0) > 0.3) {
             cs.phase++;
             cs.timer = 0;
-            if (cs.phase >= 3) this.afterCutscene(cs.nextWave);
+            if (cs.phase >= 3) {
+              if (this.cutscene && this.cutscene.who === "slayer")
+                this.afterSlayerCutscene(this.cutscene.nextWave);
+              else
+                this.afterCutscene(this.cutscene ? this.cutscene.nextWave : 10);
+            }
           }
         }
         return;
       }
 
       if (this.state !== "play") { this.updateHUD(); return; }
+
+      // Church-return landing sequence owns play input/logic until it finishes.
+      if (this.arrival) { this.updateArrival(dt); return; }
 
       // Hitstop: freeze entities briefly on impact; embers + particles keep running.
       if (this.hitStopTimer > 0) {
@@ -850,6 +1042,8 @@
       // --- entities
       this.player.update(dt, this);
       for (const e of this.enemies) e.update(dt, this);
+      for (const s of this.shields) s.update(dt);
+      for (const fp of this.firePatches) fp.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.particles = this.particles.filter((p) => p.update(dt));
@@ -887,6 +1081,8 @@
 
       // --- cull dead enemies
       this.enemies = this.enemies.filter((e) => !e.dead);
+      this.shields = this.shields.filter((s) => !s.dead);
+      this.firePatches = this.firePatches.filter((fp) => !fp.dead);
 
       // --- camera
       JH.Camera.follow(this.player);
@@ -906,19 +1102,44 @@
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
               const sc = wave.tough
-                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex), Object.keys(JH.Upgrades.owned).length)
+                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
                 : null;
               const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
               e.spawnGrace = 0.2;
             }
           }
           if (!this.wall || this.wall.dead) this.waveCleared_();
-        } else if (wave && wave.garden) {
+        } else if (wave && wave.holdout) {
+          this.holdoutTimer -= dt;
+          this.wallSpawnTimer -= dt;
+          if (this.wallSpawnTimer <= 0 && this.enemies.length < JH.WALL.maxAlive) {
+            this.wallSpawnTimer = JH.WALL.spawnEvery;
+            const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
+            const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
+            const sc = wave.tough
+              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
+              : null;
+            // Spawn from either edge so pressure comes from ahead AND behind.
+            const ex = (Math.random() < 0.5)
+              ? this.bounds.minX + 10 + Math.random() * 40
+              : this.bounds.maxX - 10 - Math.random() * 40;
+            const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: sc });
+            e.spawnGrace = 0.2;
+          }
+          if (this.holdoutTimer <= 0) {
+            // Survived: the wave clears but any enemies still standing are left
+            // alive to keep harassing as the player moves on.
+            this.waveCleared_();
+          }
+        } else if (wave && (wave.garden || wave.douse)) {
           for (const g of this.gardens) g.update(dt);
           if (this.gardens.length > 0 && this.gardens.every((g) => g.done)) {
-            // All boxes watered — the neighbor disappears for good, wave clears
+            // Objective done — harassers leave. Neighbor dies (0 suds); douse
+            // harassers are removed WITHOUT reward (dropBudget was 0 anyway).
             for (const e of this.enemies) {
-              if (e.type === "neighbor" && !e.dead) e.die(this);
+              if (e.dead) continue;
+              if (wave.douse) e.dead = true;
+              else if (e.type === "neighbor") e.die(this);
             }
             this.waveCleared_();
           }
@@ -940,12 +1161,33 @@
         for (let j = i + 1; j < a.length; j++) {
           const e1 = a[i], e2 = a[j];
           if (e1.isBoss || e2.isBoss) continue;
+          if (e1.dropping || e2.dropping) continue;  // don't shove airborne drop-ins
           const dx = e2.x - e1.x, dy = e2.y - e1.y;
           const minX = (e1.bodyW + e2.bodyW) * 0.5, minY = 10;
           if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
             const push = (minX - Math.abs(dx)) * 0.5 + 0.2;
             const s = dx >= 0 ? 1 : -1;
             e1.x -= s * push * 0.5; e2.x += s * push * 0.5;
+          }
+        }
+      }
+      // Enemies can't stand inside Jon either: soft-push them out (only the
+      // enemy moves — Jon stays solid). The half-overlap-per-frame push leaves
+      // a sliver of overlap at the boundary, so contact damage (checked in
+      // Enemy.update, which runs before separate()) still triggers. Charging
+      // enemies pass through — body-blocking a charge would stop it short of
+      // its hit arc. Stationary NPC-ish types hold their posts.
+      const pl = this.player;
+      if (pl && pl.alive) {
+        for (const e of a) {
+          if (e.isBoss || e.dead || e.dropping || e.state === "charge") continue;
+          if (e.type === "dummy" || e.type === "neighbor") continue;
+          if (Math.abs(e.z - pl.z) > 20) continue;
+          const dx = e.x - pl.x, dy = e.y - pl.y;
+          const minX = (e.bodyW + pl.bodyW) * 0.5, minY = 10;
+          if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
+            const push = (minX - Math.abs(dx)) * 0.5 + 0.2;
+            e.x += (dx >= 0 ? 1 : -1) * push;
           }
         }
       }
@@ -960,7 +1202,7 @@
 
     // ============================================================ RENDER
     render() {
-      if (this.state === "church") {
+      if (this.state === "church" || this.state === "churchPause") {
         const ctx = this.ctx;
         ctx.save();
         ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
@@ -990,6 +1232,12 @@
 
         // garden boxes (if a garden encounter is active)
         if (this.gardens) for (const g of this.gardens) g.draw(ctx, cam);
+
+        // planted Bulwark shields (static world props, drawn like the wall/gardens)
+        for (const s of this.shields) s.draw(ctx, cam);
+
+        // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
+        for (const fp of this.firePatches) fp.draw(ctx, cam);
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
@@ -1049,6 +1297,19 @@
       }
       ctx.restore();
 
+      // Hold-the-line countdown readout (screen-space HUD, drawn on top).
+      if (this.state === "play" && this.waveActive) {
+        const hw = JH.LEVEL1.waves[this.waveIndex];
+        if (hw && hw.holdout && this.holdoutTimer > 0) {
+          const label = "HOLD  " + Math.ceil(this.holdoutTimer) + "s";
+          ctx.save();
+          ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
+          ctx.fillStyle = "#000"; ctx.fillText(label, JH.VIEW_W / 2 + 1, 25);
+          ctx.fillStyle = "#ffd23f"; ctx.fillText(label, JH.VIEW_W / 2, 24);
+          ctx.restore();
+        }
+      }
+
       // Player death sequence: corpse settles → ghost lifts out of it, stands up,
       // drifts/beams off → fade to black.
       if (this.state === "playerDeathSeq") {
@@ -1074,19 +1335,33 @@
 
       // Returning from the Church: Mega Man-style warp beam at Jon, then the
       // world fades in from black (continuing the Church's fade-out).
-      if (this.state === "play" && (this.warpInT > 0 || this.worldFadeT > 0)) {
-        const ctx2 = this.ctx;
-        if (this.warpInT > 0 && this.player) {
-          const sx = Math.round(this.player.x - JH.Camera.x);
-          const k = this.warpInT / 0.5;                 // 1 -> 0
-          ctx2.save(); ctx2.globalAlpha = 0.35 + 0.45 * k; ctx2.fillStyle = JH.PAL.waterHi;
-          const w = Math.max(2, Math.round(10 * k));
-          ctx2.fillRect(sx - w / 2, 0, w, JH.VIEW_H);   // descending light column
-          ctx2.restore();
+      // Church-return landing overlay: black hold, then a water jet descends with
+      // Jon (drawn at his falling z in the actor pass) and ends in a splash.
+      if (this.state === "play" && this.arrival && this.player) {
+        const ctx2 = this.ctx, a = this.arrival;
+        const fallStart = a.blackDur, fallEnd = a.blackDur + a.fallDur;
+        // Black holds fully during blackDur, then clears as the jet descends.
+        let blackA = 1;
+        if (a.t >= fallStart) blackA = Math.max(0, 1 - (a.t - fallStart) / (a.fallDur * 0.6));
+        if (blackA > 0) {
+          ctx2.save(); ctx2.globalAlpha = blackA; ctx2.fillStyle = "#000";
+          ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
         }
-        if (this.worldFadeT > 0) {
-          ctx2.save(); ctx2.globalAlpha = Math.min(1, this.worldFadeT / 0.6);
-          ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
+        // Water jet: bright column from the top of the screen down to Jon.
+        if (a.t >= fallStart && a.t <= fallEnd + 0.12) {
+          const sx = Math.round(this.player.x - JH.Camera.x);
+          const jonSy = Math.max(0, JH.Geo.feetScreenY(this.player.y, this.player.z));
+          ctx2.save();
+          ctx2.globalAlpha = 0.7;
+          const g = ctx2.createLinearGradient(0, 0, 0, jonSy);
+          g.addColorStop(0, "rgba(120,200,255,0.05)");
+          g.addColorStop(1, JH.PAL.waterHi);
+          ctx2.fillStyle = g;
+          ctx2.fillRect(sx - 5, 0, 10, jonSy);
+          ctx2.globalAlpha = 0.45; ctx2.fillStyle = JH.PAL.water;
+          ctx2.fillRect(sx - 8, 0, 2, jonSy);
+          ctx2.fillRect(sx + 6, 0, 2, jonSy);
+          ctx2.restore();
         }
       }
 
@@ -1100,11 +1375,25 @@
 
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
+      const count = waves.length + 3;          // +cutscene +range +firewall
       const W = 224, ROW = 11, PAD = 14;
-      const H = PAD + (waves.length + 3) * ROW + PAD;
+      // Fit inside the canvas: cap the visible rows and scroll so the cursor
+      // stays shown. maxRows is how many ROW-tall lines fit between the header
+      // and footer padding; the panel height follows from it.
+      const maxRows = Math.min(count, Math.floor((JH.VIEW_H - 2 * PAD - 16) / ROW));
+      const H = PAD + maxRows * ROW + PAD;
       const PX = Math.round((JH.VIEW_W - W) / 2);
       const PY = Math.round((JH.VIEW_H - H) / 2);
       const MID = PX + W / 2;
+
+      // Scroll window: keep the cursor near the middle, clamped to the ends.
+      let firstVisible = this.devCursor - Math.floor(maxRows / 2);
+      firstVisible = Math.max(0, Math.min(firstVisible, count - maxRows));
+      // Screen-y for a global row index, or null when it's scrolled out of view.
+      const rowY = (gi) => {
+        const vp = gi - firstVisible;
+        return (vp >= 0 && vp < maxRows) ? (PY + PAD + vp * ROW) : null;
+      };
 
       // Background panel
       ctx.fillStyle = "rgba(4,7,14,0.95)";
@@ -1119,9 +1408,10 @@
       ctx.textAlign = "center";
       ctx.fillText("DEV — JUMP TO WAVE", MID, PY + 9);
 
-      // Wave rows
+      // Wave rows (only those inside the scroll window)
       waves.forEach((wave, i) => {
-        const ry = PY + PAD + i * ROW;
+        const ry = rowY(i);
+        if (ry === null) return;
         const sel = i === this.devCursor;
         if (sel) {
           ctx.fillStyle = "rgba(255,210,63,0.18)";
@@ -1139,34 +1429,48 @@
       });
 
       // Extra entry: cutscene test
-      const csRy = PY + PAD + waves.length * ROW;
-      const csSel = this.devCursor === waves.length;
-      if (csSel) { ctx.fillStyle = "rgba(255,120,255,0.18)"; ctx.fillRect(PX + 3, csRy, W - 6, ROW - 1); }
-      ctx.fillStyle = csSel ? "#ff88ff" : "#667788";
-      ctx.font = (csSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("✦  QUAKE CUTSCENE", PX + 8, csRy + ROW - 3);
-      ctx.fillStyle = csSel ? "#ff88ff" : "#445566"; ctx.textAlign = "right";
-      ctx.fillText("CS", PX + W - 6, csRy + ROW - 3);
+      const csRy = rowY(waves.length);
+      if (csRy !== null) {
+        const csSel = this.devCursor === waves.length;
+        if (csSel) { ctx.fillStyle = "rgba(255,120,255,0.18)"; ctx.fillRect(PX + 3, csRy, W - 6, ROW - 1); }
+        ctx.fillStyle = csSel ? "#ff88ff" : "#667788";
+        ctx.font = (csSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("✦  QUAKE CUTSCENE", PX + 8, csRy + ROW - 3);
+        ctx.fillStyle = csSel ? "#ff88ff" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("CS", PX + W - 6, csRy + ROW - 3);
+      }
 
       // Target range entry
-      const rangeRy = PY + PAD + (waves.length + 1) * ROW;
-      const rangeSel = this.devCursor === waves.length + 1;
-      if (rangeSel) { ctx.fillStyle = "rgba(100,220,100,0.18)"; ctx.fillRect(PX + 3, rangeRy, W - 6, ROW - 1); }
-      ctx.fillStyle = rangeSel ? "#80ff80" : "#667788";
-      ctx.font = (rangeSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("⊕  TARGET RANGE", PX + 8, rangeRy + ROW - 3);
-      ctx.fillStyle = rangeSel ? "#80ff80" : "#445566"; ctx.textAlign = "right";
-      ctx.fillText("DEV", PX + W - 6, rangeRy + ROW - 3);
+      const rangeRy = rowY(waves.length + 1);
+      if (rangeRy !== null) {
+        const rangeSel = this.devCursor === waves.length + 1;
+        if (rangeSel) { ctx.fillStyle = "rgba(100,220,100,0.18)"; ctx.fillRect(PX + 3, rangeRy, W - 6, ROW - 1); }
+        ctx.fillStyle = rangeSel ? "#80ff80" : "#667788";
+        ctx.font = (rangeSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("⊕  TARGET RANGE", PX + 8, rangeRy + ROW - 3);
+        ctx.fillStyle = rangeSel ? "#80ff80" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, rangeRy + ROW - 3);
+      }
 
       // Wall boss entry (standalone concept — not in the wave list)
-      const wbRy = PY + PAD + (waves.length + 2) * ROW;
-      const wbSel = this.devCursor === waves.length + 2;
-      if (wbSel) { ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(PX + 3, wbRy, W - 6, ROW - 1); }
-      ctx.fillStyle = wbSel ? "#ff8a4a" : "#667788";
-      ctx.font = (wbSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
-      ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
-      ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
+      const wbRy = rowY(waves.length + 2);
+      if (wbRy !== null) {
+        const wbSel = this.devCursor === waves.length + 2;
+        if (wbSel) { ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(PX + 3, wbRy, W - 6, ROW - 1); }
+        ctx.fillStyle = wbSel ? "#ff8a4a" : "#667788";
+        ctx.font = (wbSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
+        ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
+      }
+
+      // Scroll indicators when the list overflows the window (right edge, clear
+      // of the centred header/footer text).
+      ctx.fillStyle = "#ffd23f";
+      ctx.font = "6px monospace";
+      ctx.textAlign = "right";
+      if (firstVisible > 0)                ctx.fillText("▲", PX + W - 8, PY + 9);
+      if (firstVisible + maxRows < count)  ctx.fillText("▼", PX + W - 8, PY + H - 4);
 
       // Footer hint
       ctx.fillStyle = "#445566";
@@ -1181,8 +1485,21 @@
         const sx = h.x - cam;
         if (sx < -20 || sx > JH.VIEW_W + 20) continue;
         const active = this.player && this.player.nearHydrant === h;
-        JH.Assets.shadow(ctx, sx, JH.Geo.feetScreenY(h.y, 0), 7);
-        JH.Assets.draw(ctx, "hydrant", sx, JH.Geo.feetScreenY(h.y, 0), 1, {});
+        // The hydrant Jon last touched is the current respawn point (golden).
+        const isRespawn = this.lastHydrantX > 0 && Math.abs(h.x - this.lastHydrantX) < 1;
+        const fy = JH.Geo.feetScreenY(h.y, 0);
+        JH.Assets.shadow(ctx, sx, fy, 7);
+        if (isRespawn) {
+          // Golden glow-outline of the hydrant model, matching Jon's kibble-heal
+          // effect (shadowColor/shadowBlur around the sprite silhouette).
+          ctx.save();
+          ctx.shadowColor = "#ffce3a";
+          ctx.shadowBlur = 6 + 4 * Math.sin(h.t * 5);
+          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true });
+          ctx.restore();
+        } else {
+          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, {});
+        }
         // glow + "FILL" tag when actively refilling
         if (active) {
           const fy = JH.Geo.feetScreenY(h.y, 0) - 24 + Math.sin(h.t * 8) * 1.5;

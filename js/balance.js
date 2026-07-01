@@ -6,13 +6,14 @@
 (function (root) {
   "use strict";
   const Balance = {
-    // Elite difficulty tier by wave index. -1 = no elites (Act 1).
-    // Act 2 = waves 5-7 (0), Act 3 = 8-9 (1), Act 4 = 10+ (2).
-    actLevelForWave(waveIndex) {
-      if (waveIndex < 5) return -1;
-      if (waveIndex < 8) return 0;
-      if (waveIndex < 10) return 1;
-      return 2;
+    // Elite difficulty tier by wave index, derived from act-start markers.
+    // Returns -1 for Act 1 (no elites), then 0,1,2,… per crossed boundary.
+    actLevelForWave(waveIndex, actStarts) {
+      let level = -1;
+      for (let i = 0; i < actStarts.length; i++) {
+        if (waveIndex >= actStarts[i]) level = i - 1;
+      }
+      return level;
     },
 
     // Elite stat multipliers: ramp by act tier and by player power
@@ -81,6 +82,84 @@
       const waterChance = 0.27 * m;
       const water = Math.min(0.9, health + waterChance);
       return { health, water };
+    },
+
+    // Is the player within throwRange of the Bulwark? Pure distance check —
+    // facing/angle doesn't matter since Bulwark.facing now updates freely
+    // every frame (no turn-cooldown), so it's already oriented correctly.
+    bulwarkShouldThrow(bulwarkX, bulwarkY, playerX, playerY, throwRange) {
+      const dist = Math.hypot(playerX - bulwarkX, playerY - bulwarkY);
+      return dist <= throwRange;
+    },
+
+    // Where a Stalker reappears after a blink: directly behind the player
+    // relative to their current facing, offset by `blinkDist`, clamped into
+    // the arena bounds. Pure — bounds/inputs are all passed in.
+    stalkerBlinkTarget(playerX, playerY, playerFacing, blinkDist, bounds) {
+      const x = Math.max(bounds.minX, Math.min(bounds.maxX, playerX - playerFacing * blinkDist));
+      const y = Math.max(bounds.depthMin, Math.min(bounds.depthMax, playerY));
+      return { x, y };
+    },
+
+    // Should the Furnace enter its vent wind-up? True when the player has
+    // sprayed it continuously past the heat threshold and the post-vent
+    // cooldown has expired. Pure — inputs are all passed in.
+    furnaceShouldVent(continuousSprayT, heatThreshold, ventCdT) {
+      return continuousSprayT >= heatThreshold && ventCdT <= 0;
+    },
+
+    // Enemy types introduced by authored waves up to and including waveIndex
+    // (from their `spawns` lists — bosses have none). dummy/neighbor excluded.
+    // Order = first-seen order. Pure.
+    unlockedPool(waves, waveIndex) {
+      const seen = [];
+      const last = Math.min(waveIndex, waves.length - 1);
+      for (let i = 0; i <= last; i++) {
+        (waves[i].spawns || []).forEach((g) => {
+          if (g.type === "dummy" || g.type === "neighbor") return;
+          if (!seen.includes(g.type)) seen.push(g.type);
+        });
+      }
+      return seen;
+    },
+
+    // Weighted sprinkle picks from an unlocked pool. opts (all optional):
+    //   weights  — {type: weight}; unlisted types weigh 1
+    //   heavies  — types sharing one combined heavyCap
+    //   heavyCap — max TOTAL heavy picks (default 1)
+    //   typeCaps — {type: max picks} hard per-type caps
+    //   rng      — injectable () => [0,1) for deterministic tests
+    // May return fewer than `count` when nothing is eligible. Pure.
+    pickSprinkles(pool, count, opts) {
+      const o = opts || {};
+      const rng = o.rng || Math.random;
+      const heavies = o.heavies || [];
+      const heavyCap = o.heavyCap != null ? o.heavyCap : 1;
+      const typeCaps = o.typeCaps || {};
+      const weights = o.weights || {};
+      const w = (t) => (weights[t] != null ? weights[t] : 1);
+      const picks = [];
+      let heavyN = 0;
+      for (let n = 0; n < count; n++) {
+        const eligible = pool.filter((t) => {
+          if (heavies.includes(t) && heavyN >= heavyCap) return false;
+          const cap = typeCaps[t];
+          if (cap != null && picks.filter((p) => p === t).length >= cap) return false;
+          return true;
+        });
+        if (!eligible.length) break;
+        let total = 0;
+        eligible.forEach((t) => { total += w(t); });
+        let r = rng() * total;
+        let picked = eligible[eligible.length - 1];
+        for (const t of eligible) {
+          r -= w(t);
+          if (r <= 0) { picked = t; break; }
+        }
+        picks.push(picked);
+        if (heavies.includes(picked)) heavyN++;
+      }
+      return picks;
     },
   };
   root.JH = root.JH || {};

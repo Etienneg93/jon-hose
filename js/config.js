@@ -20,8 +20,11 @@
   JH.FLOOR_TOP = 168;       // screen-y of the back edge of the floor
   JH.DEPTH_MIN = 0;
   JH.DEPTH_MAX = 86;        // floor depth span in px
-  JH.LEVEL_LEN = 7400;      // world length of level 1 (logical px)
-  JH.ZONE2_START = 4100;    // world-x where the ruined district (Act 3) begins
+  JH.LEVEL_LEN = 11200;     // world length of level 1 (logical px)
+  // Zone boundaries sit in the free-walk corridor after each act's boss so the
+  // 500px tint ramp (world.js) never bleeds into the locked boss arena behind it.
+  JH.ZONE2_START = 4250;    // ruined district (Act 3) — Switch at 3780, Rubble Row at 4160
+  JH.ZONE3_START = 8950;    // Boiler District (fire world) — GK at 8720, Fire Intro at 9100
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
   // level). Spread along the street so you're never far from a top-up.
@@ -36,8 +39,13 @@
     { x: 5300, y: JH.DEPTH_MAX - 12 },
     { x: 5900, y: JH.DEPTH_MIN + 10 },
     { x: 6700, y: JH.DEPTH_MAX - 14 },
+    { x: 7500, y: JH.DEPTH_MIN + 12 },
+    { x: 8300, y: JH.DEPTH_MAX - 12 },
+    { x: 9100, y: JH.DEPTH_MIN + 12 },   // fire world
+    { x: 9900, y: JH.DEPTH_MAX - 12 },
+    { x: 10700, y: JH.DEPTH_MIN + 12 },
   ];
-  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50, healRate: 8 }; // healRate: HP/sec out of combat
+  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
 
   // Floor collision for Act-3 rubble piles. Ellipse footprint scaled by pile's `s`.
   // rx/ry are a touch larger than the sprite so the visual edge always blocks.
@@ -74,6 +82,13 @@
     soundwave: "#40e0ff",
     rock: "#7a6a58", rockDk: "#4e4030",
     pill: "#ff77ff",
+    bulwark: "#5a6b7a", bulwarkDk: "#33404c", bulwarkShield: "#cfe9ff",
+    stalker: "#8a2f5a", stalkerDk: "#591b3a",
+    slayerBody: "#3a2010", slayerDk: "#1e0f00", slayerEmber: "#ff6010",
+    smelt: "#5a3020",      smeltDk: "#3a1a08",  smeltGlow: "#ff8030",
+    fuse: "#ff4810",       fuseDk: "#cc2800",
+    furnaceBody: "#4a3020",furnaceDk: "#2a1808",furnaceHot: "#ff6820",
+    firePatch: "#ff6010",  firePatchHi: "#ffd040",
   };
 
   // ---- Player base stats (pre-upgrade) --------------------------------
@@ -123,18 +138,18 @@
   JH.ENEMIES = {
     mook: {
       name: "Mook", hp: 40, speed: 46, touchDmg: 8, contactCd: 0.8,
-      meleeDmg: 10, meleeRange: 20, meleeWind: 0.45, suds: 8,
+      meleeDmg: 10, meleeRange: 20, meleeWind: 0.45, suds: 5,
       waterMult: 1, dropMult: 1, bodyW: 16, bodyH: 28, color: "mook",
     },
     charger: {
       name: "Charger", hp: 55, speed: 40, touchDmg: 6, contactCd: 0.8,
       chargeSpeed: 200, chargeWind: 0.6, chargeDur: 0.55, chargeCd: 1.8,
-      chargeDmg: 16, suds: 13, waterMult: 1, dropMult: 1.8, bodyW: 18, bodyH: 30, color: "charger",
+      chargeDmg: 16, suds: 8, waterMult: 1, dropMult: 1.8, bodyW: 18, bodyH: 30, color: "charger",
     },
     pyro: {
       name: "Pyro", hp: 36, speed: 38, touchDmg: 10, contactCd: 0.7,
       shootRange: 150, shootCd: 1.6, emberSpeed: 130, emberDmg: 9,
-      suds: 16, waterMult: 1.5, dropMult: 1.8, bodyW: 16, bodyH: 28, color: "pyro",
+      suds: 10, waterMult: 1.5, dropMult: 1.8, bodyW: 16, bodyH: 28, color: "pyro",
     },
     dummy: {
       name: "Target Dummy", hp: 9999, speed: 0, touchDmg: 0, contactCd: 99,
@@ -147,6 +162,72 @@
       soundwaveDmg: 20, soundwaveSpeed: 120, soundwaveArcs: 3, soundwaveBand: 14,
       speakerWindup: 0.5, speakerHold: 0.8, speakerChance: 0.33,
       suds: 0, waterMult: 1.3, bodyW: 14, bodyH: 28, color: "neighbor",
+    },
+    // Super-elite: "shield trooper" — counters stand-and-pierce play. The
+    // body is never a blocker; it periodically plants its shield as a
+    // separate, stationary, indestructible obstacle, then fights shieldless
+    // until it sprints back to reclaim it. See docs/superpowers/specs/
+    // 2026-06-30-bulwark-shield-rework-design.md.
+    bulwark: {
+      name: "Bulwark", hp: 420, speed: 26, touchDmg: 14, contactCd: 1.0,
+      // Dome-shield cycle: approaches, plants a dome barrier centered on itself,
+      // shelters inside it (spray is blocked from outside) and big-slams when the
+      // player steps in, then retrieves the shield once the dome fades and
+      // redeploys. See project memory project_bulwark_dome_redesign.
+      plantRange: 90,          // approach until within this of the player, then plant
+      plantWind: 0.5,          // wind-up before the dome forms
+      domeRadius: 58,          // dome radius (world units — x and depth)
+      domeDur: 7.0,            // seconds the barrier holds before fading out
+      redeployCd: 1.4,         // cooldown after retrieving before it can plant again
+      retrieveSpeedMult: 1.6, pickupRadius: 16, shieldBodyW: 16,
+      // Big slam (à la The Big Drip) when the player is close/inside the dome.
+      slamRange: 46, slamWind: 0.65, slamDmg: 22, slamBand: 20,
+      suds: 48, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
+    },
+    // Super-elite: fast "blink harasser" — counters back-pedal kiting. Chases
+    // fast, then on a cooldown telegraphs and blinks to the player's blind
+    // side for a wind-up strike. Only the player's dash i-frames dodge it.
+    stalker: {
+      name: "Stalker", hp: 30, speed: 95, touchDmg: 10, contactCd: 0.8,
+      blinkCd: 3.2, blinkTell: 0.35, blinkDist: 30,
+      strikeWind: 0.3, strikeDmg: 14, strikeRange: 22,
+      suds: 13, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
+    },
+    // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
+    // is a curated elite (no `tough` flag in its wave entry).
+    smelt: {
+      name: "Smelt", hp: 300, speed: 26, touchDmg: 10, contactCd: 1.0,
+      waterMult: 0.5,          // water flashes off dense/hot material
+      preferRange: 110,        // standoff distance — backs away if closer, advances if farther
+      lobWindup: 0.55,         // telegraph before throw
+      lobCd: 3.0,              // cooldown between lobs
+      lobBombSpeed: 130,       // horizontal speed of the arcing bomb
+      lobGravity: 300,         // arc gravity
+      lobBombRadius: 34,       // FirePatch radius on landing
+      lobBombDur: 2.2,         // FirePatch duration
+      suds: 12, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
+    },
+    fuse: {
+      name: "Fuse", hp: 65, speed: 78, touchDmg: 8, contactCd: 0.6,
+      waterMult: 1.0,
+      deathPatchRadius: 22, deathPatchDur: 0.8,
+      deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
+      suds: 7, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
+    },
+    furnace: {
+      name: "Furnace", hp: 850, speed: 18, touchDmg: 14, contactCd: 1.0,
+      waterMult: 1.0,          // normal phase: full spray damage
+      heatedWaterMult: 0.2,    // heated phase: 20% spray damage
+      heatThreshold: 1.5,      // continuous spray-seconds before heating triggers
+      coolRate: 2.5,           // heat lost per second once spray pauses (>0.3s) — cools, not resets
+      ventWind: 0.5,           // delay after heat threshold before vent fires (s)
+      ventKnock: 180,          // knockback impulse on vent (px/s)
+      ventBurnStacks: 1,       // burn stacks applied by vent
+      ventCd: 4.0,             // post-vent cooldown before it can heat again
+      cooldownSpeedMult: 2,    // movespeed multiplier while cooling (ventCdT > 0)
+      ventPatchRadius: 26,     // fire-zone patch radius left around it on vent
+      ventPatchDur: 2.6,       // how long the vent fire zone burns (s)
+      suds: 44, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",
     },
   };
 
@@ -175,6 +256,16 @@
   // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
   JH.WAVECAP = { charger: 2 };
 
+  // Wave sprinkle: extra enemies drawn from the already-introduced pool,
+  // added on top of authored spawns (variety, not economy — counts stay low).
+  // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
+  JH.SPRINKLE = {
+    counts: [0, 1, 2, 2, 2],
+    weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
+    heavies: ["bulwark", "furnace", "smelt"],
+    heavyCap: 1,
+  };
+
   // Garden event: spray water on the planter to grow crops. Neighbor throws rocks.
   JH.GARDEN = { growMax: 280 };
 
@@ -190,6 +281,22 @@
 
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
+
+  // ---- Fire element tunables (Burn DoT + FirePatch) ---------------------
+  JH.FIRE = {
+    burnDpsPerStack: 4,      // hp/s per stack (3 stacks = 12 hp/s for burnDuration)
+    burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
+    maxBurnStacks: 3,
+    patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
+  };
+
+  // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.
+  JH.FUSE_DROP = {
+    height: 150,      // spawn z (px); gravity (620) lands it in ~0.7s
+    slamRadius: 20,   // landing hit zone (world px; also the ring size)
+    slamDmg: 8,       // light and dodgeable — no burn stack
+    stagger: 0.5,     // per-fuse drop delay (s)
+  };
 
   // ---- Church of the Holy Hose (Phase 0 meta-progression) -------------
   JH.CHURCH = {
@@ -219,7 +326,7 @@
         "Spend it at the shrines along the nave — Pressure, Vigor, Reservoir — and the blessing follows you into every life to come.",
         "Death is not the end of the spray. Walk into the light when you are ready, and try again.",
       ],
-      repeat: ["The water remembers you, child.", "Again you fall — again you rise.", "Spend what you have earned; the street still thirsts.", "Pressure builds in the faithful. Return to the light."],
+      repeat: ["The water remembers you, child.", "Again you fall — again you rise.", "Spend what you have earned; the street still thirsts.", "Pressure builds in the faithful. Return to the light.", "Hose before Hoes, child."],
     },
     // Walkable scene layout (logical px). Jon spawns at spawnX and walks right:
     // Father Jon materializes at fatherX; blessing stations sit along the nave;
@@ -346,9 +453,58 @@
     leapWind: 0.65, leapDur: 0.38, leapDmg: 32, leapRadius: 52, leapPeak: 58,
   };
 
+  // The Slayer — Fire boss (pool cue, charge-dash movement, fireball volley).
+  // After defeat: ally cutscene, elements.fire unlocked, Fire Mirror branch lit.
+  // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
+  JH.SLAYER = {
+    name: "The Slayer", hp: 1900, bodyW: 44, bodyH: 58,
+    touchDmg: 15, contactCd: 0.9, suds: 280, color: "slayerBody",
+    // Movement: charge-up → dash (no walk cycle)
+    chargeDur: 0.75,          // fire-particle build-up before dash
+    dashSpeed: 380,           // px/s during dash
+    dashDist: 220,            // max px per dash
+    dashTell: 0.15,           // hold in dash pose before launching (visual beat)
+    dashPatchSpacing: 40,     // px between FirePatch spawns along trail
+    dashPatchRadius: 18,      // radius of each trail patch
+    dashPatchDur: 1.2,        // extinguish duration for trail patches
+    // Attack: Fireball Volley (rapid-fire pool-cue break)
+    volleyRange: 200,         // px: trigger volley when player within this distance
+    volleyWind: 0.7,          // cue wind-up duration (s) before the first ball
+    volleyCd: 1.9,            // post-volley cooldown
+    ballCount: 4,             // balls per volley (rapid fire)
+    enrageBallCount: 6,       // balls per volley when enraged
+    ballSpawnOffset: 32,      // px in front of Slayer — at the cue tip, so the release connects
+    ballStagger: 0.1,         // seconds between each ball in a volley (rapid)
+    // Attack: Slam
+    slamWind: 0.75, slamDmg: 22, slamRange: 38,
+    // Attack: dash-landing fire ring (radiates from where he lands)
+    dashRingDmg: 16, dashRingBurn: 1, dashRingMaxR: 95, dashRingSpeed: 280,
+    // Behaviour
+    enrageAt: 0.40,
+  };
+  JH.FIREBALL = {
+    speed: 230, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
+    spawnZ: 30,        // launch height — the cue tip on the release sprite
+    droop: 48,         // z px/s the ball sinks; reaches the <24px hit band in ~0.15s
+    igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
+  };
+
+  // FX frame animations, curated from the local itch.io packs (sprites/effects/,
+  // gitignored) into sprites/fx/<key>/1..count.png by tools/curate-fx.mjs.
+  // Re-pick a variant there and rerun it; update count here if it changes.
+  JH.FX = {
+    "fire-small": { count: 8,  fps: 14 },   // FirePatch flames
+    "fire-big":   { count: 8,  fps: 12 },   // douse objective flames
+    "fire-jon":   { count: 8,  fps: 14 },   // burning player
+    "boom-small": { count: 8,  fps: 16 },   // fuse death pop
+    "boom-mid":   { count: 12, fps: 16 },   // smelt bomb impact, furnace vent
+    "boom-big":   { count: 12, fps: 14 },   // boss deaths
+    "portal":     { count: 6,  fps: 8 },    // church return portal
+  };
+
   // Act-start wave indices (bounded by boss clears) — death respawns here.
-  // 0 Act1 · 5 Act2 (after Big Drip) · 8 Act3 (after Switch) · 10 Act4 (after Quake).
-  JH.ACT_STARTS = [0, 5, 8, 10];
+  // 0 Act1 · 5 Act2 (after Big Drip) · 10 Act3 (after Switch) · 16 Act4 (after Quake) · 23 Fire (after GK).
+  JH.ACT_STARTS = [0, 5, 10, 16, 23];
 
   // ---- Level 1 waves --------------------------------------------------
   // Each wave: list of {type, count}. Gate progress until cleared, then
@@ -357,23 +513,39 @@
     waves: [
       { name: "WAVE 1", spawns: [{ type: "mook", count: 3 }] },
       { name: "WAVE 2", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }] },
-      // Gentle intro to the Pyro — mostly familiar mooks plus a single pyro.
       { name: "WAVE 3", spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }] },
       { name: "WAVE 4", spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 2 }] },
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
-      // ---- Act 2: everything from here is ELITE (much tougher) ----
+      // ---- Act 2: ELITE ----
       { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
-        spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] }, // spawn pool while wall stands
-      { name: "THE SWITCH", boss: true, bossType: "switch" }, // act-2 boss: The Switch of Doom
-      // ---- Act 3: the ruined district — broken buildings & debris ----
+        spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] },
+      { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "THE SWITCH", boss: true, bossType: "switch" },
+      // ---- Act 3: the ruined district ----
       { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "HOLD THE LINE", holdout: true, tough: true, holdDur: 22,
+        spawns: [{ type: "mook", count: 2 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
+      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }] },
+      { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }, { type: "charger", count: 1 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
-      // ---- Act 4: the aftermath — Quake Walker turns ally ----
+      // ---- Act 4: the aftermath ----
+      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 3 }] },
+      { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
-      { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },  // true finale
+      { name: "OVERRUN", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }, { type: "pyro", count: 1 }] },
+      { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
+      // ---- Fire World (curated, un-tough) ----
+      { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "EMBER RUSH", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "DOUSE THE FLAMES", douse: true, spawns: [{ type: "smelt", count: 2 }] },
+      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 2 }] },
+      { name: "MELTDOWN", spawns: [{ type: "smelt", count: 1 }, { type: "fuse", count: 3 }] },
+      { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };
 
