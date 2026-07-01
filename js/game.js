@@ -10,7 +10,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920, 5100, 5280, 5440, 5960, 6480, 7000];
+  const WAVE_TRIGGERS = [360, 840, 1320, 1800, 2300, 2820, 3340, 3860, 4380, 4920, 5100, 5280, 5440, 5960, 6480, 7000, 7400, 7700, 8000];
   if (WAVE_TRIGGERS.length !== JH.LEVEL1.waves.length)
     console.warn("WAVE_TRIGGERS length (" + WAVE_TRIGGERS.length + ") !== waves length (" + JH.LEVEL1.waves.length + ") — progression will break");
 
@@ -375,6 +375,18 @@
         return;
       }
 
+      // After The Slayer, play his ally cutscene before continuing.
+      // Dynamic findIndex so this survives wave-list reordering.
+      const slayerIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+      if (slayerIdx >= 0 && this.waveIndex === slayerIdx) {
+        JH.Camera.unlock();
+        this.state = "cutscene";
+        this.cutscene = { phase: 0, nextWave: slayerIdx + 1, who: "slayer" };
+        document.getElementById("hud").classList.add("hidden");
+        document.getElementById("banner").classList.add("hidden");
+        return;
+      }
+
       const clearedWave = JH.LEVEL1.waves[this.waveIndex];
       if (clearedWave) {
         document.getElementById("hud-wave").textContent = clearedWave.name;
@@ -416,6 +428,21 @@
       this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
       this.showScreen("hud");
       this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
+    },
+
+    afterSlayerCutscene(nextWaveIdx) {
+      this.cutscene = null;
+      this.state = "play";
+      const slayerIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+      const clearedWave = JH.LEVEL1.waves[slayerIdx];
+      if (clearedWave) {
+        document.getElementById("hud-wave").textContent = clearedWave.name;
+        document.getElementById("hud-wave-label").classList.remove("hidden");
+      }
+      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
+      this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
+      this.showScreen("hud");
+      this.banner("THE SLAYER JOINS YOUR SIDE!", 2.4);
     },
 
     drawCutscene(ctx) {
@@ -829,7 +856,12 @@
           if (this.input.pressed("confirm") && (cs.timer || 0) > 0.3) {
             cs.phase++;
             cs.timer = 0;
-            if (cs.phase >= 3) this.afterCutscene(cs.nextWave);
+            if (cs.phase >= 3) {
+              if (this.cutscene && this.cutscene.who === "slayer")
+                this.afterSlayerCutscene(this.cutscene.nextWave);
+              else
+                this.afterCutscene(this.cutscene ? this.cutscene.nextWave : 10);
+            }
           }
         }
         return;

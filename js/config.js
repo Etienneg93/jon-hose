@@ -475,7 +475,11 @@
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
-      { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },  // true finale
+      { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
+      // ---- Fire World (placeholder position — move with wave-flow pacing spec) ----
+      { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 2 }] },
+      { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };
 
