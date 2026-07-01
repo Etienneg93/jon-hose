@@ -2938,9 +2938,76 @@
   }
 
   // ---- Smelt: slow, arena-control, half-effective spray ----
-  // Approaches slowly; on a cooldown wind-up, smashes the ground to create a
-  // FirePatch. waterMult:0.5 means spray does half damage — stay on it or it
-  // tiles the arena. Extends Enemy, overrides think().
+  // ---- SmeltBomb: Smelt's lobbed fire bomb ----
+  // Arcing projectile (parabolic z). Spawns FirePatch + burst on landing.
+  // Pushed into game.embers; update() returns false when dead.
+  class SmeltBomb {
+    constructor(x, y, tx, ty, d) {
+      this.x = x; this.y = y; this.z = 10;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      const flightT = Math.max(0.45, dist / d.lobBombSpeed);
+      this.vx = (tx - x) / flightT;
+      this.vy = (ty - y) / flightT;
+      // vz so that z returns to 0 at flightT: vz = 0.5*g*flightT - z0/flightT
+      this.vz = 0.5 * d.lobGravity * flightT - this.z / flightT;
+      this.def = d;
+      this.t = 0;
+      this.dead = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      this.vz -= this.def.lobGravity * dt;
+      this.z += this.vz * dt;
+      if (Math.random() < 0.5)
+        game.particles.push(new Particle({
+          x: this.x, y: this.y, z: this.z + 4,
+          vx: (Math.random() - 0.5) * 35, vy: (Math.random() - 0.5) * 20, vz: 18,
+          life: 0.2 + Math.random() * 0.1,
+          color: Math.random() > 0.4 ? JH.PAL.smeltGlow : JH.PAL.firePatch,
+          size: 3, grav: 140,
+        }));
+      if (this.z <= 0) {
+        const d = this.def;
+        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.lobBombRadius, d.lobBombDur));
+        burst(game, this.x, this.y, 4, JH.PAL.smeltGlow, 14, { speed: 115, life: 0.5, up: 60, size: 3 });
+        burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
+        game.shake(3);
+        const pl = game.player;
+        if (pl.alive && Math.hypot(pl.x - this.x, pl.y - this.y) < d.lobBombRadius)
+          pl.applyBurn(1);
+        this.dead = true;
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      const groundSy = Geo.feetScreenY(this.y, 0);
+      const sy = Geo.feetScreenY(this.y, this.z);
+      const flick = Math.floor(this.t * 12) & 1;
+      ctx.save();
+      // Ground shadow — grows as bomb descends
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#220800";
+      ctx.beginPath();
+      const shadowR = Math.max(2, 8 - this.z * 0.18);
+      ctx.ellipse(Math.round(sx), Math.round(groundSy), shadowR, shadowR * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Bomb
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = JH.PAL.smeltGlow;
+      ctx.shadowBlur = 7;
+      ctx.fillStyle = flick ? JH.PAL.smeltGlow : JH.PAL.firePatchHi;
+      ctx.beginPath();
+      ctx.arc(Math.round(sx), Math.round(sy), 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Stands back; lobs arcing SmeltBombs at the player on a cooldown.
+  // waterMult:0.5 means sustained spray does half damage.
   class Smelt extends Enemy {
     think(dt, game) {
       const pl = game.player, d = this.def;
@@ -2951,25 +3018,30 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.smashPatchRadius, d.smashPatchDur));
-          burst(game, this.x, this.y, 2, JH.PAL.smeltGlow, 10, { speed: 90, life: 0.45, up: 40 });
-          this.cdTimer = d.smashCd;
+          game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
+          this.cdTimer = d.lobCd;
         }
         return;
       }
-      if (this.cdTimer > 0) { this.cdTimer -= dt; }
+      if (this.cdTimer > 0) this.cdTimer -= dt;
+      if (this.spawnGrace > 0) { this.state = "idle"; return; }
 
-      if (dist < this.bodyW + 14 && this.cdTimer <= 0 && this.spawnGrace <= 0) {
-        this.windTimer = d.smashWind; this.state = "wind";
-        return;
-      }
-      if (dist > 18 && this.spawnGrace <= 0) {
+      // Maintain standoff range
+      if (dist < d.preferRange - 20) {
+        this.x -= (dx / (dist || 1)) * d.speed * dt;
+        this.y -= (dy / (dist || 1)) * d.speed * dt * 0.7;
+        this.state = "walk";
+      } else if (dist > d.preferRange + 30) {
         this.x += (dx / (dist || 1)) * d.speed * dt;
         this.y += (dy / (dist || 1)) * d.speed * dt * 0.7;
         this.state = "walk";
       } else {
         this.state = "idle";
       }
+
+      // Lob when in range and cooldown ready
+      if (dist < 200 && this.cdTimer <= 0)
+        { this.windTimer = d.lobWindup; this.state = "wind"; }
     }
   }
   // ---- SlayerBoss: Fire boss ----
@@ -3228,15 +3300,17 @@
       if (this.heatT >= 0) {
         this.heatT -= dt;
         if (this.heatT <= 0) {
-          // Vent fires.
+          // Vent fires — always show the visual, only apply effects in range.
           const pl = game.player;
           const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
+          burst(game, this.x, this.y, 10, "#d0e8ff",        18, { speed: 150, life: 0.45, up: 70, size: 3 });
+          burst(game, this.x, this.y, 4,  JH.PAL.firePatchHi, 10, { speed: 85, life: 0.4, up: 18, size: 2 });
+          game.shake(3);
           if (dist < this.bodyW * 4) {
             const dir = pl.x >= this.x ? 1 : -1;
             pl.applyKnockback(dir, d.ventKnock);
             pl.applyBurn(d.ventBurnStacks);
-            burst(game, this.x, this.y, 10, "#d0e8ff", 14, { speed: 140, life: 0.4, up: 60 });
-            game.shake(4);
+            game.shake(2);
           }
           this.heatT = -1;
           this.heated = false;
@@ -3285,7 +3359,10 @@
     die(game) {
       const d = this.def;
       game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
-      burst(game, this.x, this.y, 6, JH.PAL.fuse, 12, { speed: 110, life: 0.4, up: 60 });
+      burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
+      burst(game, this.x, this.y, 8, JH.PAL.firePatchHi, 10, { speed: 80,  life: 0.4, up: 30, size: 2 });
+      burst(game, this.x, this.y, 2, "#ff2200",           6,  { speed: 50,  life: 0.3, up: 15, size: 2 });
+      game.shake(3);
       if (Math.hypot(game.player.x - this.x, game.player.y - this.y) < d.deathBurnRange)
         game.player.applyBurn(1);
       super.die(game);

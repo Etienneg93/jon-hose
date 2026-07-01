@@ -180,10 +180,15 @@
     // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
     // is a curated elite (no `tough` flag in its wave entry).
     smelt: {
-      name: "Smelt", hp: 300, speed: 20, touchDmg: 10, contactCd: 1.0,
+      name: "Smelt", hp: 300, speed: 26, touchDmg: 10, contactCd: 1.0,
       waterMult: 0.5,          // water flashes off dense/hot material
-      smashWind: 0.8, smashCd: 2.8,
-      smashPatchRadius: 32, smashPatchDur: 2.0,
+      preferRange: 110,        // standoff distance — backs away if closer, advances if farther
+      lobWindup: 0.55,         // telegraph before throw
+      lobCd: 3.0,              // cooldown between lobs
+      lobBombSpeed: 130,       // horizontal speed of the arcing bomb
+      lobGravity: 300,         // arc gravity
+      lobBombRadius: 34,       // FirePatch radius on landing
+      lobBombDur: 2.2,         // FirePatch duration
       suds: 20, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
     },
     fuse: {
