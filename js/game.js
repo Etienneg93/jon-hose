@@ -1328,11 +1328,25 @@
 
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
+      const count = waves.length + 3;          // +cutscene +range +firewall
       const W = 224, ROW = 11, PAD = 14;
-      const H = PAD + (waves.length + 3) * ROW + PAD;
+      // Fit inside the canvas: cap the visible rows and scroll so the cursor
+      // stays shown. maxRows is how many ROW-tall lines fit between the header
+      // and footer padding; the panel height follows from it.
+      const maxRows = Math.min(count, Math.floor((JH.VIEW_H - 2 * PAD - 16) / ROW));
+      const H = PAD + maxRows * ROW + PAD;
       const PX = Math.round((JH.VIEW_W - W) / 2);
       const PY = Math.round((JH.VIEW_H - H) / 2);
       const MID = PX + W / 2;
+
+      // Scroll window: keep the cursor near the middle, clamped to the ends.
+      let firstVisible = this.devCursor - Math.floor(maxRows / 2);
+      firstVisible = Math.max(0, Math.min(firstVisible, count - maxRows));
+      // Screen-y for a global row index, or null when it's scrolled out of view.
+      const rowY = (gi) => {
+        const vp = gi - firstVisible;
+        return (vp >= 0 && vp < maxRows) ? (PY + PAD + vp * ROW) : null;
+      };
 
       // Background panel
       ctx.fillStyle = "rgba(4,7,14,0.95)";
@@ -1347,9 +1361,10 @@
       ctx.textAlign = "center";
       ctx.fillText("DEV — JUMP TO WAVE", MID, PY + 9);
 
-      // Wave rows
+      // Wave rows (only those inside the scroll window)
       waves.forEach((wave, i) => {
-        const ry = PY + PAD + i * ROW;
+        const ry = rowY(i);
+        if (ry === null) return;
         const sel = i === this.devCursor;
         if (sel) {
           ctx.fillStyle = "rgba(255,210,63,0.18)";
@@ -1367,34 +1382,48 @@
       });
 
       // Extra entry: cutscene test
-      const csRy = PY + PAD + waves.length * ROW;
-      const csSel = this.devCursor === waves.length;
-      if (csSel) { ctx.fillStyle = "rgba(255,120,255,0.18)"; ctx.fillRect(PX + 3, csRy, W - 6, ROW - 1); }
-      ctx.fillStyle = csSel ? "#ff88ff" : "#667788";
-      ctx.font = (csSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("✦  QUAKE CUTSCENE", PX + 8, csRy + ROW - 3);
-      ctx.fillStyle = csSel ? "#ff88ff" : "#445566"; ctx.textAlign = "right";
-      ctx.fillText("CS", PX + W - 6, csRy + ROW - 3);
+      const csRy = rowY(waves.length);
+      if (csRy !== null) {
+        const csSel = this.devCursor === waves.length;
+        if (csSel) { ctx.fillStyle = "rgba(255,120,255,0.18)"; ctx.fillRect(PX + 3, csRy, W - 6, ROW - 1); }
+        ctx.fillStyle = csSel ? "#ff88ff" : "#667788";
+        ctx.font = (csSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("✦  QUAKE CUTSCENE", PX + 8, csRy + ROW - 3);
+        ctx.fillStyle = csSel ? "#ff88ff" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("CS", PX + W - 6, csRy + ROW - 3);
+      }
 
       // Target range entry
-      const rangeRy = PY + PAD + (waves.length + 1) * ROW;
-      const rangeSel = this.devCursor === waves.length + 1;
-      if (rangeSel) { ctx.fillStyle = "rgba(100,220,100,0.18)"; ctx.fillRect(PX + 3, rangeRy, W - 6, ROW - 1); }
-      ctx.fillStyle = rangeSel ? "#80ff80" : "#667788";
-      ctx.font = (rangeSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("⊕  TARGET RANGE", PX + 8, rangeRy + ROW - 3);
-      ctx.fillStyle = rangeSel ? "#80ff80" : "#445566"; ctx.textAlign = "right";
-      ctx.fillText("DEV", PX + W - 6, rangeRy + ROW - 3);
+      const rangeRy = rowY(waves.length + 1);
+      if (rangeRy !== null) {
+        const rangeSel = this.devCursor === waves.length + 1;
+        if (rangeSel) { ctx.fillStyle = "rgba(100,220,100,0.18)"; ctx.fillRect(PX + 3, rangeRy, W - 6, ROW - 1); }
+        ctx.fillStyle = rangeSel ? "#80ff80" : "#667788";
+        ctx.font = (rangeSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("⊕  TARGET RANGE", PX + 8, rangeRy + ROW - 3);
+        ctx.fillStyle = rangeSel ? "#80ff80" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, rangeRy + ROW - 3);
+      }
 
       // Wall boss entry (standalone concept — not in the wave list)
-      const wbRy = PY + PAD + (waves.length + 2) * ROW;
-      const wbSel = this.devCursor === waves.length + 2;
-      if (wbSel) { ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(PX + 3, wbRy, W - 6, ROW - 1); }
-      ctx.fillStyle = wbSel ? "#ff8a4a" : "#667788";
-      ctx.font = (wbSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
-      ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
-      ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
-      ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
+      const wbRy = rowY(waves.length + 2);
+      if (wbRy !== null) {
+        const wbSel = this.devCursor === waves.length + 2;
+        if (wbSel) { ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(PX + 3, wbRy, W - 6, ROW - 1); }
+        ctx.fillStyle = wbSel ? "#ff8a4a" : "#667788";
+        ctx.font = (wbSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
+        ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
+      }
+
+      // Scroll indicators when the list overflows the window (right edge, clear
+      // of the centred header/footer text).
+      ctx.fillStyle = "#ffd23f";
+      ctx.font = "6px monospace";
+      ctx.textAlign = "right";
+      if (firstVisible > 0)                ctx.fillText("▲", PX + W - 8, PY + 9);
+      if (firstVisible + maxRows < count)  ctx.fillText("▼", PX + W - 8, PY + H - 4);
 
       // Footer hint
       ctx.fillStyle = "#445566";
