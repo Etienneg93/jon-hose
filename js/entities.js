@@ -3557,13 +3557,22 @@
       }
       // Slam telegraph zone.
       if (this.state === "slam" && this.strikeFx <= 0) {
+        // Same zone as before (slamRange x ±24 depth) but drawn as a flashing
+        // ground ellipse — the bare fillRect read as a glitch, not a telegraph.
         const d = this.def;
         const flash = Math.floor(this.t * 12) & 1;
+        const gy = Geo.feetScreenY(this.y, 0);
+        const ry = (Geo.feetScreenY(this.y + 24, 0) - Geo.feetScreenY(this.y - 24, 0)) / 2;
         ctx.save();
-        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(gy), d.slamRange, Math.max(6, ry), 0, 0, Math.PI * 2);
         ctx.fillStyle = flash ? "#ff6010" : "#ff3000";
-        ctx.fillRect(Math.round(sx - d.slamRange), Math.round(Geo.feetScreenY(this.y - 24, 0)),
-          d.slamRange * 2, Math.round(Geo.feetScreenY(this.y + 24, 0) - Geo.feetScreenY(this.y - 24, 0)));
+        ctx.globalAlpha = 0.20;
+        ctx.fill();
+        ctx.globalAlpha = flash ? 0.8 : 0.45;
+        ctx.strokeStyle = flash ? "#ffb060" : "#ff5a20";
+        ctx.lineWidth = 1;
+        ctx.stroke();
         ctx.restore();
       }
     }
