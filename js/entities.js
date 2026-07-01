@@ -2842,8 +2842,6 @@
       }
     }
   }
-  JH.Smelt = Smelt;
-
   // ---- Furnace: rhythm-based curated elite ----
   // Sustained spray causes it to heat up (reduced damage, visual glow), then
   // vent steam (knockback + burn). Burst-spray rhythm is the counter. No elite-
@@ -2930,6 +2928,8 @@
       ctx.fillStyle = "#ff5a5a"; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 3);
     }
   };
+
+  JH.Smelt = Smelt;
 
   // ---- Fuse: fast rusher, fire-patch death burst ----
   // Dies in ~1.5s at full Jon DPS — the mechanic is WHERE it dies. Death
