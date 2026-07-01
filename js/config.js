@@ -457,7 +457,7 @@
   // After defeat: ally cutscene, elements.fire unlocked, Fire Mirror branch lit.
   // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
   JH.SLAYER = {
-    name: "The Slayer", hp: 1100, bodyW: 44, bodyH: 58,
+    name: "The Slayer", hp: 1900, bodyW: 44, bodyH: 58,
     touchDmg: 15, contactCd: 0.9, suds: 280, color: "slayerBody",
     // Movement: charge-up → dash (no walk cycle)
     chargeDur: 0.75,          // fire-particle build-up before dash
