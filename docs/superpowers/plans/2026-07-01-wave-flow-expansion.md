@@ -537,7 +537,7 @@ Expected: PASS (proves the derivation generalizes to 5 acts).
       { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }, { type: "charger", count: 1 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
       // ---- Act 4: the aftermath ----
-      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 3 }] },
       { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
       { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
       { name: "THE GARDEN", garden: true },
