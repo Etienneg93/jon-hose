@@ -402,11 +402,12 @@
     p(-9, 17, 18, 2, "#2a1740");
     p(-4, 19, 9, 8, PAL.skin);
     p(-4, 23, 9, 3, "#3a1f5a");
-    p(2, 20, 2, 2, "#fff");                // angry eye
+    const eyeHot = opt.wind || charging;    // telegraph: eye glows red when about to charge / charging
+    if (eyeHot) p(1, 19, 4, 4, "#7a0000");  // red glow behind the eye
+    p(2, 20, 2, 2, eyeHot ? "#ff3030" : "#111");  // eye: black, glows red on the charge tell
     // Shoulders forward when charging
     p(charging ? 7 : 5, 10, charging ? 8 : 5, 7, PAL.chargerDk);
     if (elite) p(-11, 11, 4, 7, PAL.chargerDk);
-    if (opt.wind) p(-9, 25, 18, 2, "#fff"); // tell flash
   });
 
   // ============================ PYRO ==================================
