@@ -610,15 +610,21 @@
         ctx.shadowColor = "#ff4400";
         ctx.shadowBlur = 5 + 7 * bIntensity + 3 * Math.sin(this.t * 12);
       }
+      // Kibble/Concerta glows yield to the burn glow — being on fire is the
+      // priority read, so its red glow wins when both are active.
       if (this.kibbleTimer > 0) {
         ctx.save();
-        ctx.shadowColor = "#44ee66";
-        ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
+        if (this.burnStacks === 0) {
+          ctx.shadowColor = "#44ee66";
+          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
+        }
       }
       if (this.concertaTimer > 0) {
         ctx.save();
-        ctx.shadowColor = "#cc44ff";
-        ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
+        if (this.burnStacks === 0) {
+          ctx.shadowColor = "#cc44ff";
+          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
+        }
       }
       const spriteSy = Geo.feetScreenY(this.y, this.z);
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
