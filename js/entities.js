@@ -2146,13 +2146,14 @@
 
   // ============================================== ESCAPING BOSS CORE
   // A red core that ejects from a defeated boss, bounces off the floor and
-  // skitters left across the arena before fading. Cosmetic only: rides the
-  // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)), so it never
-  // affects wave-clear or collision. Spawned via ejectBossCore().
+  // skitters right — ahead of the player, deeper into the level — before
+  // fading. Cosmetic only: rides the game.embers pipeline
+  // (update(dt,game)->keep, draw(ctx,cam)), so it never affects wave-clear
+  // or collision. Spawned via ejectBossCore().
   class BossCore {
     constructor(x, y, z) {
       this.x = x; this.y = y; this.z = z != null ? z : 26;
-      this.vx = -70 - Math.random() * 40;        // flee left, past the player
+      this.vx = 70 + Math.random() * 40;         // flee right, up the road ahead
       this.vz = 150 + Math.random() * 40;
       this.t = 0; this.life = 3.0; this.dead = false; this.bounces = 0;
       this.wob = Math.random() * Math.PI * 2;
@@ -2171,7 +2172,7 @@
       if (Math.random() < 0.7)
         burst(game, this.x, this.y, this.z + 4, Math.random() < 0.5 ? JH.PAL.wallbossCore : "#ff8a3c", 1,
           { speed: 36, life: 0.3, up: 16, grav: 120 });
-      if (this.t > this.life || this.x < (game.bounds ? game.bounds.minX - 40 : -40)) this.dead = true;
+      if (this.t > this.life || this.x > (game.bounds ? game.bounds.maxX + 40 : JH.LEVEL_LEN + 40)) this.dead = true;
       return !this.dead;
     }
     draw(ctx, cam) {
