@@ -6,13 +6,14 @@
 (function (root) {
   "use strict";
   const Balance = {
-    // Elite difficulty tier by wave index. -1 = no elites (Act 1).
-    // Act 2 = waves 5-7 (0), Act 3 = 8-9 (1), Act 4 = 10+ (2).
-    actLevelForWave(waveIndex) {
-      if (waveIndex < 5) return -1;
-      if (waveIndex < 8) return 0;
-      if (waveIndex < 10) return 1;
-      return 2;
+    // Elite difficulty tier by wave index, derived from act-start markers.
+    // Returns -1 for Act 1 (no elites), then 0,1,2,… per crossed boundary.
+    actLevelForWave(waveIndex, actStarts) {
+      let level = -1;
+      for (let i = 0; i < actStarts.length; i++) {
+        if (waveIndex >= actStarts[i]) level = i - 1;
+      }
+      return level;
     },
 
     // Elite stat multipliers: ramp by act tier and by player power
