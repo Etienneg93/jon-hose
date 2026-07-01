@@ -1095,14 +1095,16 @@
             const sc = wave.tough
               ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
               : null;
-            const ex = this.bounds.maxX - 10 - Math.random() * 40;
+            // Spawn from either edge so pressure comes from ahead AND behind.
+            const ex = (Math.random() < 0.5)
+              ? this.bounds.minX + 10 + Math.random() * 40
+              : this.bounds.maxX - 10 - Math.random() * 40;
             const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: sc });
             e.spawnGrace = 0.2;
           }
           if (this.holdoutTimer <= 0) {
-            // Survived: remaining enemies retreat (removed WITHOUT suds reward — the
-            // dropBudget already capped income during the hold).
-            for (const e of this.enemies) e.dead = true;
+            // Survived: the wave clears but any enemies still standing are left
+            // alive to keep harassing as the player moves on.
             this.waveCleared_();
           }
         } else if (wave && (wave.garden || wave.douse)) {
