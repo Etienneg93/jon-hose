@@ -516,10 +516,10 @@
   // Real sprite sheets — 4 static PNG states (no walk cycle).
   const SLAYER_H = 58;
   const _slayerImgs = {
-    idle:       JH.Loader.img("sprites/slayer/idle.png"),
-    dash:       JH.Loader.img("sprites/slayer/dash.png"),
-    cueWind:    JH.Loader.img("sprites/slayer/cueWind.png"),
-    cueRelease: JH.Loader.img("sprites/slayer/cueRelease.png"),
+    idle:       JH.Loader.img("sprites/slayer/slayer-idle.png"),
+    dash:       JH.Loader.img("sprites/slayer/slayer-dash.png"),
+    cueWind:    JH.Loader.img("sprites/slayer/slayer-windup.png"),
+    cueRelease: JH.Loader.img("sprites/slayer/slayer-shoot.png"),
   };
   Assets.register("slayer", (p, opt, ctx, x, y, facing) => {
     if (opt.hurt && (Math.floor((opt.t || 0) * 10) & 1)) return;

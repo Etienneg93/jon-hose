@@ -180,21 +180,21 @@
     // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
     // is a curated elite (no `tough` flag in its wave entry).
     smelt: {
-      name: "Smelt", hp: 80, speed: 20, touchDmg: 10, contactCd: 1.0,
+      name: "Smelt", hp: 300, speed: 20, touchDmg: 10, contactCd: 1.0,
       waterMult: 0.5,          // water flashes off dense/hot material
       smashWind: 0.8, smashCd: 2.8,
       smashPatchRadius: 32, smashPatchDur: 2.0,
       suds: 20, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
     },
     fuse: {
-      name: "Fuse", hp: 28, speed: 78, touchDmg: 8, contactCd: 0.6,
+      name: "Fuse", hp: 65, speed: 78, touchDmg: 8, contactCd: 0.6,
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
       suds: 12, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
     },
     furnace: {
-      name: "Furnace", hp: 320, speed: 18, touchDmg: 14, contactCd: 1.0,
+      name: "Furnace", hp: 850, speed: 18, touchDmg: 14, contactCd: 1.0,
       waterMult: 1.0,          // normal phase: full spray damage
       heatedWaterMult: 0.2,    // heated phase: 20% spray damage
       heatThreshold: 1.5,      // continuous spray-seconds before heating triggers
