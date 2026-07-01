@@ -132,18 +132,18 @@
   JH.ENEMIES = {
     mook: {
       name: "Mook", hp: 40, speed: 46, touchDmg: 8, contactCd: 0.8,
-      meleeDmg: 10, meleeRange: 20, meleeWind: 0.45, suds: 8,
+      meleeDmg: 10, meleeRange: 20, meleeWind: 0.45, suds: 5,
       waterMult: 1, dropMult: 1, bodyW: 16, bodyH: 28, color: "mook",
     },
     charger: {
       name: "Charger", hp: 55, speed: 40, touchDmg: 6, contactCd: 0.8,
       chargeSpeed: 200, chargeWind: 0.6, chargeDur: 0.55, chargeCd: 1.8,
-      chargeDmg: 16, suds: 13, waterMult: 1, dropMult: 1.8, bodyW: 18, bodyH: 30, color: "charger",
+      chargeDmg: 16, suds: 8, waterMult: 1, dropMult: 1.8, bodyW: 18, bodyH: 30, color: "charger",
     },
     pyro: {
       name: "Pyro", hp: 36, speed: 38, touchDmg: 10, contactCd: 0.7,
       shootRange: 150, shootCd: 1.6, emberSpeed: 130, emberDmg: 9,
-      suds: 16, waterMult: 1.5, dropMult: 1.8, bodyW: 16, bodyH: 28, color: "pyro",
+      suds: 10, waterMult: 1.5, dropMult: 1.8, bodyW: 16, bodyH: 28, color: "pyro",
     },
     dummy: {
       name: "Target Dummy", hp: 9999, speed: 0, touchDmg: 0, contactCd: 99,
@@ -176,7 +176,7 @@
       retrieveSpeedMult: 1.6, pickupRadius: 16, shieldBodyW: 16,
       // Big slam (à la The Big Drip) when the player is close/inside the dome.
       slamRange: 46, slamWind: 0.65, slamDmg: 22, slamBand: 20,
-      suds: 60, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
+      suds: 48, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
     },
     // Super-elite: fast "blink harasser" — counters back-pedal kiting. Chases
     // fast, then on a cooldown telegraphs and blinks to the player's blind
@@ -185,7 +185,7 @@
       name: "Stalker", hp: 30, speed: 95, touchDmg: 10, contactCd: 0.8,
       blinkCd: 3.2, blinkTell: 0.35, blinkDist: 30,
       strikeWind: 0.3, strikeDmg: 14, strikeRange: 22,
-      suds: 22, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
+      suds: 13, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
     },
     // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
     // is a curated elite (no `tough` flag in its wave entry).
@@ -199,14 +199,14 @@
       lobGravity: 300,         // arc gravity
       lobBombRadius: 34,       // FirePatch radius on landing
       lobBombDur: 2.2,         // FirePatch duration
-      suds: 20, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
+      suds: 12, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
     },
     fuse: {
       name: "Fuse", hp: 65, speed: 78, touchDmg: 8, contactCd: 0.6,
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
-      suds: 12, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
+      suds: 7, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
     },
     furnace: {
       name: "Furnace", hp: 850, speed: 18, touchDmg: 14, contactCd: 1.0,
@@ -220,7 +220,7 @@
       ventCd: 4.0,             // post-vent cooldown before it can heat again
       ventPatchRadius: 26,     // fire-zone patch radius left around it on vent
       ventPatchDur: 2.6,       // how long the vent fire zone burns (s)
-      suds: 55, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",
+      suds: 44, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",
     },
   };
 
