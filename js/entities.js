@@ -709,7 +709,8 @@
       if (this.kibbleTimer > 0 && hpFrac > 0) {
         const fw = Math.round(barW * hpFrac);
         ctx.save();
-        ctx.fillStyle = hpFrac > 0.5 ? "#7bff7b" : hpFrac > 0.25 ? "#ffd45e" : "#ff8a70";
+        // Crest = a fully saturated version of the bar's hue (not a whiter one).
+        ctx.fillStyle = hpFrac > 0.5 ? "#00ff44" : hpFrac > 0.25 ? "#ffb400" : "#ff2a1c";
         for (let i = 0; i < fw; i++) {
           const ph = ((i - this.t * 13) / 20) * Math.PI * 2;
           ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
@@ -732,7 +733,8 @@
       if (this.gushRegenT > 0 && wFrac > 0) {
         const fw = Math.round(barW * wFrac);
         ctx.save();
-        ctx.fillStyle = "#9ed9ff";
+        // Crest = a fully saturated version of the bar's blue (not a whiter one).
+        ctx.fillStyle = "#00c2ff";
         for (let i = 0; i < fw; i++) {
           const ph = ((i - this.t * 13) / 20) * Math.PI * 2;
           ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
