@@ -1383,8 +1383,8 @@
       this.extinguishDur = extinguishDur;
       this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
       this.patchBurnT = 0;     // cooldown between burn-stack applications
-      this.graceT = -1;        // sizzle grace: -1 = never touched; counts down after first contact
-      this.rimFlashT = 0;      // white rim flash while the sizzle warning is live
+      this.sizzled = false;    // first-contact cue fired (once per patch instance)
+      this.rimFlashT = 0;      // white rim flash on first contact
       this.dead = false; this.t = 0;
     }
     // Live footprint (shrinks as spray extinguishes). ONE shape shared by the
@@ -1398,7 +1398,6 @@
     update(dt, game) {
       this.t += dt;
       if (this.patchBurnT > 0) this.patchBurnT -= dt;
-      if (this.graceT > 0) this.graceT -= dt;
       if (this.rimFlashT > 0) this.rimFlashT -= dt;
       const pl = game.player;
       if (pl && pl.alive) {
@@ -1408,14 +1407,15 @@
         const pad = (pl.bodyW || 12) * 0.25;
         const inside = Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
           f.rx + pad, f.ry + pad * JH.GROUND_RY);
-        if (inside && this.graceT === -1) {
-          // First contact on this patch: audible sizzle + rim flash, and a
-          // graceWindow beat to step out before the first burn lands.
-          this.graceT = JH.FIRE.graceWindow;
-          this.rimFlashT = JH.FIRE.graceWindow;
+        if (inside && !this.sizzled) {
+          // First contact on this patch: sizzle + white rim flash. The first
+          // stack lands immediately; SUBSEQUENT stacks are spaced by the
+          // player's burn i-frames (applyBurn) + this patch's tick interval.
+          this.sizzled = true;
+          this.rimFlashT = 0.2;
           if (game.audio) game.audio.play("sizzle");
         }
-        if (inside && this.graceT !== -1 && this.graceT <= 0 && this.patchBurnT <= 0) {
+        if (inside && this.patchBurnT <= 0) {
           pl.applyBurn(1);
           this.patchBurnT = JH.FIRE.patchBurnInterval;
         }
