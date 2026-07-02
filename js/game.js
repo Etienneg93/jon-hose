@@ -1197,9 +1197,10 @@
       // a sliver of overlap at the boundary, so contact damage (checked in
       // Enemy.update, which runs before separate()) still triggers. Charging
       // enemies pass through — body-blocking a charge would stop it short of
-      // its hit arc. Stationary NPC-ish types hold their posts.
+      // its hit arc. Stationary NPC-ish types hold their posts. A dashing Jon
+      // phases through (he has i-frames) instead of plowing enemies aside.
       const pl = this.player;
-      if (pl && pl.alive) {
+      if (pl && pl.alive && pl.dashTimer <= 0) {
         for (const e of a) {
           if (e.isBoss || e.dead || e.dropping || e.state === "charge") continue;
           if (e.type === "dummy" || e.type === "neighbor") continue;

@@ -403,6 +403,21 @@ test("dash press older than the buffer window is dropped", () => {
   assert.strictEqual(p.dashTimer, 0, "stale press must not fire");
 });
 
+// separate() lives on JH.Game but is a pure method over {enemies, player}.
+require("../js/game.js");
+
+test("dashing Jon phases through enemies without pushing them", () => {
+  const p = makePlayer();
+  const e = new JH.Enemy("mook", p.x + 2, p.y);   // overlapping Jon
+  const ex = e.x;
+  p.dashTimer = 0.1;                               // mid-dash
+  JH.Game.separate.call({ enemies: [e], player: p });
+  assert.strictEqual(e.x, ex, "no shove while dashing");
+  p.dashTimer = 0;
+  JH.Game.separate.call({ enemies: [e], player: p });
+  assert.notStrictEqual(e.x, ex, "walking overlap still soft-pushes");
+});
+
 test("neutral dash goes toward facing", () => {
   const sim = makeBufferedInput();
   const p = makePlayer();
