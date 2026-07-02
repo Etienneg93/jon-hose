@@ -45,6 +45,17 @@
       if (Math.abs((target.z || 0) - (src.z || 0)) > 22) return false; // height
       return true;
     },
+
+    // Is world point (px,py) inside the ground ellipse centred at (cx,cy)?
+    // THE ground-hazard footprint test: x is 1:1 world→screen; depth compares
+    // in screen space via feetScreenY, so a hazard affects exactly the ellipse
+    // it draws (the rim is the hitbox). ry defaults to rx * JH.GROUND_RY.
+    inGroundEllipse(px, py, cx, cy, rx, ry) {
+      ry = ry || rx * JH.GROUND_RY;
+      const dx = px - cx;
+      const dyS = Geo.feetScreenY(py, 0) - Geo.feetScreenY(cy, 0);
+      return (dx * dx) / (rx * rx) + (dyS * dyS) / (ry * ry) < 1;
+    },
   };
   JH.Geo = Geo;
 
