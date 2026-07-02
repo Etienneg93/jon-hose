@@ -1396,7 +1396,9 @@
         if (this.shopNpc) actors.push(this.shopNpc);
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
-          if (!e.draw) continue;
+          // Dead entities can linger in the list while a death sequence has
+          // the update loop paused (cull only runs in "play") — never draw them.
+          if (!e.draw || e.dead) continue;
           if (e === this.player && this.state === "playerDeathSeq") {
             // Corpse: collapses (frames 0->7), then stays on the ground for the
             // rest of the sequence while the ghost (drawn in the overlay below)
