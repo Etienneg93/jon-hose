@@ -278,6 +278,31 @@ test("GUSH: non-milestone kills grant nothing", () => {
   assert.ok(!g.player.gushRegenT, "no regen outside milestones");
 });
 
+test("Range stations: E grants kibble pickup / fires a GUSH milestone", () => {
+  const g = killStub(false);
+  g.pickups = [];
+  g.player.x = 180; g.player.y = 40;
+  let pending = true;
+  g.input = { buffered: () => pending, consume() { pending = false; } };
+  g.spawnPickup = function (kind, x, y, v) { this.pickups.push({ kind, x, y, v }); };
+  g.rangeStations = [
+    { kind: "kibble", x: 180, y: 40, near: false },
+    { kind: "gush", x: 230, y: 40, near: false },
+  ];
+  JH.Game.tickRangeStations.call(g);
+  assert.strictEqual(g.pickups.length, 1, "kibble station drops a health pickup");
+  assert.strictEqual(g.pickups[0].kind, "health");
+  // Move to the gush button, press again.
+  g.player.x = 230; pending = true;
+  JH.Game.tickRangeStations.call(g);
+  assert.strictEqual(g.combo, 5, "first press lands the x5 milestone");
+  assert.strictEqual(g.player.gushRegenRate, JH.JUICE.gushRegen5);
+  pending = true;
+  JH.Game.tickRangeStations.call(g);
+  assert.strictEqual(g.combo, 10, "next press scales to x10");
+  assert.strictEqual(g.player.gushRegenRate, JH.JUICE.gushRegen5 * 2);
+});
+
 test("Player: gush regen ticks water up while the window is live", () => {
   JH.Upgrades.reset();
   const p = new JH.Player(60, 40);

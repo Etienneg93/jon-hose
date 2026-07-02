@@ -191,6 +191,11 @@
       this.waveIndex = JH.LEVEL1.waves.length - 1;
       this.waveActive = false;
       this.bounds = { minX: 8, maxX: 900 };
+      // Buff test stations: walk up + press E (see tickRangeStations).
+      this.rangeStations = [
+        { kind: "kibble", x: 180, y: py, near: false },
+        { kind: "gush", x: 230, y: py, near: false },
+      ];
       // Isolated dummy for basic pierce / splash testing
       this.spawnEnemy("dummy", 320, py);
       // Group of three: two in-line (pierce) + one off-depth (split stream)
@@ -291,6 +296,7 @@
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
+      this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.checkpointWave = 0;
@@ -774,6 +780,30 @@
     // beat (big freeze + shake + arena-wide loot vacuum). Bosses bypass this
     // via their own die() overrides. Simultaneous kills take the strongest
     // freeze (hitStop maxes), never a sum.
+    // Target-range buff testers: walk-up stations activated with E.
+    // Only exist in devGotoRange (rangeStations stays null in real runs).
+    tickRangeStations() {
+      if (!this.rangeStations) return;
+      const pl = this.player;
+      for (const st of this.rangeStations) {
+        st.near = Math.abs(pl.x - st.x) < 20 && Math.abs(pl.y - st.y) < 24;
+        if (st.near && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          if (st.kind === "kibble") {
+            // Drop a real health pickup at Jon's feet — exercises the actual
+            // collect path (incl. kibble stacking).
+            this.spawnPickup("health", pl.x, pl.y, 25);
+            this.audio.play("buy");
+          } else if (st.kind === "gush") {
+            // Jump the combo to the next multiple of 5 and run the real
+            // milestone path — repeat presses climb x5 → x10 → x20…
+            this.combo = Math.floor(this.combo / 5) * 5 + 4;
+            this.onEnemyKilled(null);
+          }
+        }
+      }
+    },
+
     killJuice(e) {
       const J = JH.JUICE;
       const heavy = !!e.elite || J.heavyTypes.includes(e.type);
@@ -1144,6 +1174,7 @@
 
       // --- hydrant timers + walk-up shop vendor
       for (const h of this.hydrants) h.t += dt;
+      this.tickRangeStations();
       // Remember the last hydrant visited — death returns Jon here.
       if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
       // Victory portal (post-Slayer): walk in and confirm to finish the run.
@@ -1281,6 +1312,34 @@
       // sole job of this method's player-independent half.
     },
 
+    drawRangeStations(ctx, cam) {
+      for (const st of this.rangeStations) {
+        const sx = Math.round(st.x - cam), sy = Math.round(JH.Geo.feetScreenY(st.y, 0));
+        ctx.save();
+        // pedestal + ground pad
+        ctx.fillStyle = "#0d1420";
+        ctx.beginPath(); ctx.ellipse(sx, sy, 9, 9 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#2a3548";
+        ctx.fillRect(sx - 7, sy - 10, 14, 10);
+        if (st.kind === "kibble") {
+          ctx.fillStyle = "#44ee66";
+          ctx.fillRect(sx - 4, sy - 15, 8, 6);
+        } else {
+          ctx.fillStyle = "#55c8ff";
+          ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillStyle = "#9be8ff";
+        ctx.fillText(st.kind === "kibble" ? "KIBBLE" : "GUSH", sx, sy - 20);
+        if (st.near) {
+          ctx.fillStyle = "#ffd23f"; ctx.font = "bold 7px monospace";
+          ctx.fillText("E", sx, sy - 27 + Math.sin((this.player ? this.player.t : 0) * 6) * 1.5);
+        }
+        ctx.textAlign = "left";
+        ctx.restore();
+      }
+    },
+
     updateHUD() {
       if (!this.player) return;
       const hud = document.getElementById("hud");
@@ -1313,6 +1372,7 @@
 
         // hydrants (static world props, behind actors)
         this.drawHydrants(ctx, cam);
+        if (this.rangeStations) this.drawRangeStations(ctx, cam);
         if (this.victoryPortal) this.drawVictoryPortal(ctx, cam);
 
         // barricade (if a wall encounter is active)
