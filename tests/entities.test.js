@@ -185,3 +185,19 @@ test("FireRing: rim crossing is elliptical, matching the drawn ring", () => {
   ring2.update(0.016, g);
   assert.strictEqual(g.player.hits, 0);
 });
+
+test("Furnace vent: burn/knockback only inside the drawn telegraph ellipse", () => {
+  const f = JH.makeEnemy("furnace", 100, 40);
+  const R = f.bodyW * 4;
+  // Depth 0.6R: inside the old circle, outside the drawn ellipse (ry = 0.4R).
+  let g = stubGame(100, 40 + R * 0.6);
+  f.heatT = 0.001; f.heated = true;
+  f.update(0.016, g);
+  assert.strictEqual(g.player.burns, 0);
+
+  const f2 = JH.makeEnemy("furnace", 100, 40);
+  g = stubGame(100 + R * 0.6, 40);
+  f2.heatT = 0.001; f2.heated = true;
+  f2.update(0.016, g);
+  assert.ok(g.player.burns > 0);
+});

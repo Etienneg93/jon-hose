@@ -3676,7 +3676,6 @@
         if (this.heatT <= 0) {
           // Vent fires — always show the visual, only apply effects in range.
           const pl = game.player;
-          const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
           burst(game, this.x, this.y, 10, "#d0e8ff",        18, { speed: 150, life: 0.45, up: 70, size: 3 });
           burst(game, this.x, this.y, 4,  JH.PAL.firePatchHi, 10, { speed: 85, life: 0.4, up: 18, size: 2 });
           game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.75 }));
@@ -3688,10 +3687,11 @@
             const a = (i / ringN) * Math.PI * 2;
             game.firePatches.push(new JH.FirePatch(
               this.x + Math.cos(a) * ringR,
-              this.y + Math.sin(a) * ringR * 0.5,   // flattened in depth (2.5D)
+              this.y + Math.sin(a) * ringR * JH.GROUND_RY,   // flattened in depth (2.5D)
               d.ventPatchRadius * 0.8, d.ventPatchDur));
           }
-          if (dist < this.bodyW * 4) {
+          // Same ellipse the wind-up telegraph draws (R, R*GROUND_RY).
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.bodyW * 4)) {
             const dir = pl.x >= this.x ? 1 : -1;
             pl.applyKnockback(dir, d.ventKnock);
             pl.applyBurn(d.ventBurnStacks);
@@ -3732,9 +3732,9 @@
       ctx.save();
       ctx.globalAlpha = 0.25 + 0.3 * prog;
       ctx.strokeStyle = flash ? "#fff" : "#ff5a2a"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, R, R * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, R, R * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.10 + 0.20 * prog; ctx.fillStyle = "#ff3000";
-      ctx.beginPath(); ctx.ellipse(sx, sy, R * prog, R * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, R * prog, R * JH.GROUND_RY * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       const hy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
       ctx.fillStyle = flash ? "#ff5a5a" : "#fff";
