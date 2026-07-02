@@ -386,6 +386,28 @@ test("Fireball: still connects with a grounded player at cue height", () => {
   assert.strictEqual(g.player.hits, 1, "flat flight path must still hit Jon");
 });
 
+// ---- stalker point-blank deadzone (no facing strobe on top of Jon) ----
+
+test("Stalker: at point-blank it holds ground and facing (no L/R strobe)", () => {
+  const s = JH.makeEnemy("stalker", 101, 40);   // 1px right of the player
+  s.cdTimer = 5; s.spawnGrace = 0; s.facing = -1;
+  const g = stubGame(100, 40);
+  for (let i = 0; i < 30; i++) s.think(0.016, g);
+  assert.strictEqual(s.facing, -1, "facing must not re-derive from sign(dx) at point-blank");
+  assert.strictEqual(s.x, 101, "no walking into/through the player");
+  assert.strictEqual(s.state, "idle");
+});
+
+test("Stalker: outside the deadzone it still stalks and faces the player", () => {
+  const s = JH.makeEnemy("stalker", 150, 40);
+  s.cdTimer = 5; s.spawnGrace = 0; s.facing = 1;
+  const g = stubGame(100, 40);
+  s.think(0.016, g);
+  assert.strictEqual(s.facing, -1, "faces the player while stalking");
+  assert.ok(s.x < 150, "closes the distance during blink cooldown");
+  assert.strictEqual(s.state, "walk");
+});
+
 // ---- input buffer: dash ----
 // Uses the real JH.Input with a fake clock so Player.update sees genuine
 // buffered() semantics. (node 21+ ships a global navigator; poll()'s

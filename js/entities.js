@@ -1588,10 +1588,17 @@
       }
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
-      this.facing = dx >= 0 ? 1 : -1;
-      this.x += (dx / (dist || 1)) * d.speed * dt;
-      this.y += (dy / (dist || 1)) * d.speed * dt * 0.85;
-      this.state = "walk";
+      // Point-blank deadzone: with no body collision the stalker can sit on
+      // Jon's center, where per-frame sign(dx) facing + full-speed chase
+      // overshoot strobes the sprite left/right. Hold ground and facing there.
+      if (dist > 12) {
+        this.facing = dx >= 0 ? 1 : -1;
+        this.x += (dx / dist) * d.speed * dt;
+        this.y += (dy / dist) * d.speed * dt * 0.85;
+        this.state = "walk";
+      } else {
+        this.state = "idle";
+      }
     }
   }
   JH.Stalker = Stalker;
