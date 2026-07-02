@@ -1015,7 +1015,8 @@
         const cs = this.cutscene;
         if (cs) {
           cs.timer = (cs.timer || 0) + dt;
-          if (this.input.pressed("confirm") && (cs.timer || 0) > 0.3) {
+          if (this.input.buffered("confirm") && (cs.timer || 0) > 0.3) {
+            this.input.consume("confirm");
             cs.phase++;
             cs.timer = 0;
             if (cs.phase >= 3) {
@@ -1069,7 +1070,7 @@
         const vp = this.victoryPortal;
         vp.t += dt;
         vp.near = Math.abs(this.player.x - vp.x) < 22 && Math.abs(this.player.y - vp.y) < 30;
-        if (vp.near && this.input.pressed("confirm")) { this.win(); return; }
+        if (vp.near && this.input.buffered("confirm")) { this.input.consume("confirm"); this.win(); return; }
       }
       if (this.shopNpc) {
         this.shopNpc.update(dt);
@@ -1082,7 +1083,8 @@
           if (sel.length > 0) {
             if (this.input.pressed("up"))   this.shopCursor = (this.shopCursor - 1 + sel.length) % sel.length;
             if (this.input.pressed("down")) this.shopCursor = (this.shopCursor + 1) % sel.length;
-            if (this.input.pressed("confirm")) {
+            if (this.input.buffered("confirm")) {
+              this.input.consume("confirm");
               const e = sel[this.shopCursor];
               let ok = false;
               if (e.kind === "node") { ok = U.buy(e.id, this.player); if (ok) this.upgradeFx(U.byId(e.id)); }
