@@ -57,7 +57,14 @@
       this._lastAt[name] = now;
       const t = this.ctx.currentTime;
       const g = this.ctx.createGain();
-      g.gain.setValueAtTime(def.gain * vol, t);
+      // Optional soft attack (def.attack sec) smooths whoosh-type sounds;
+      // default is the classic instant-on blip.
+      if (def.attack) {
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(def.gain * vol, t + def.attack);
+      } else {
+        g.gain.setValueAtTime(def.gain * vol, t);
+      }
       g.gain.exponentialRampToValueAtTime(0.0001, t + def.dur);
       g.connect(this.ctx.destination);
 
@@ -68,7 +75,12 @@
         const src = this.ctx.createBufferSource();
         src.buffer = buf;
         const bp = this.ctx.createBiquadFilter();
-        bp.type = "bandpass"; bp.frequency.value = 1800;
+        bp.type = "bandpass";
+        // Optional filter sweep (bpFrom → bpTo over the duration) turns the
+        // flat hiss into a whoosh; fixed 1800Hz stays the default.
+        bp.frequency.setValueAtTime(def.bpFrom || 1800, t);
+        if (def.bpTo) bp.frequency.exponentialRampToValueAtTime(def.bpTo, t + def.dur);
+        bp.Q.value = def.q || 1;
         src.connect(bp); bp.connect(g);
         src.start(t); src.stop(t + def.dur);
       } else {

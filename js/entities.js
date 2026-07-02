@@ -267,7 +267,7 @@
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
         this._dashX = (mx || my) ? mx : this.facing;
         this._dashY = my;
-        game.audio.play("jump");
+        game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });

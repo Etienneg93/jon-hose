@@ -608,5 +608,6 @@
     blast:  { type: "saw", freq: 55, dur: 0.35, gain: 0.18 },
     sizzle: { type: "noise", dur: 0.15, gain: 0.10 },
     kill:   { type: "square", freq: 320, dur: 0.08, gain: 0.13 },  // combo-pitched kill blip
+    dash:   { type: "noise", dur: 0.22, gain: 0.15, attack: 0.02, bpFrom: 450, bpTo: 2600, q: 0.7 },  // rising whoosh
   };
 })();
