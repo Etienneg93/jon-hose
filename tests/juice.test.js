@@ -25,7 +25,8 @@ test("JH.JUICE: hit-stop tier table and shake constants exist", () => {
   assert.ok(J, "JH.JUICE missing");
   for (const k of ["kill", "heavyKill", "waveEnd", "playerHit", "domePop", "bossPhase"])
     assert.strictEqual(typeof J.hitstop[k], "number", "hitstop." + k);
-  assert.ok(J.hitstop.waveEnd > J.hitstop.heavyKill && J.hitstop.heavyKill > J.hitstop.kill);
+  assert.ok(J.hitstop.heavyKill > J.hitstop.kill, "heavy kills chunk, regular kills don't");
+  assert.strictEqual(J.hitstop.waveEnd, 0, "wave-ender never freezes (shake + drift only)");
   assert.ok(Array.isArray(J.heavyTypes) && J.heavyTypes.includes("furnace"));
   for (const k of ["traumaDiv", "traumaDecay", "shakeMax", "shakeScale", "vacuumDur",
                    "vacuumPull", "comboPitchCap", "comboWaterRefund", "squashDur",
@@ -118,16 +119,16 @@ test("killJuice: elite kill = heavy tier + boom", () => {
   assert.ok(g.embers.some((m) => m instanceof JH.FxBurst), "boom FxBurst spawned");
 });
 
-test("killJuice: last kill of an active wave = waveEnd tier + loot vacuum", () => {
+test("killJuice: last kill of an active wave = shake + loot drift, NO freeze", () => {
   const g = killStub(true);
   const e1 = new JH.Enemy("mook", 50, 40);
   const e2 = new JH.Enemy("mook", 90, 40);
   g.enemies.push(e1, e2);
   e1.die(g);
-  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.kill, "not last yet");
   assert.strictEqual(g.lootVacuumT, 0);
   e2.die(g);
-  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.waveEnd);
+  assert.strictEqual(g.hitStopTimer, 0, "wave-ender never freezes");
+  assert.ok(g.trauma > 0, "wave-ender shakes");
   assert.strictEqual(g.lootVacuumT, JH.JUICE.vacuumDur);
 });
 
@@ -225,13 +226,13 @@ test("Pickup: arena-wide vacuum while lootVacuumT is live", () => {
   assert.ok(vac.x < 400, "vacuum pulls from across the arena");
 });
 
-test("Player.takeHit: playerHit tier + shake kicked away from impact", () => {
+test("Player.takeHit: no freeze, shake kicked away from impact", () => {
   JH.Upgrades.reset();
   const p = new JH.Player(60, 40);
   const g = killStub(false);
   g.player = p;
   p.takeHit(10, g, 100);      // hit from the right
-  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.playerHit);
+  assert.strictEqual(g.hitStopTimer, 0, "player hits never freeze the sim");
   assert.strictEqual(g.shakeKickX, -1, "kick away from impact (leftward)");
 });
 

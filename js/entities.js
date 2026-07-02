@@ -873,9 +873,9 @@
       // Wetness dries off over time; visibly soaked enemies drip.
       if (this.wetness > 0) {
         this.wetness = Math.max(0, this.wetness - JH.JUICE.wetDryPerSec * dt);
-        if (this.wetness > 0.35 && Math.random() < this.wetness * 3 * dt)
+        if (this.wetness > 0.3 && Math.random() < this.wetness * 5.5 * dt)
           burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.7, this.y,
-            6 + Math.random() * (this.bodyH * 0.6), JH.PAL.water, 1,
+            6 + Math.random() * (this.bodyH * 0.6), "#00b4ff", 1,
             { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
       }
       this.think(dt, game);
