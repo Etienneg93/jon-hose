@@ -349,3 +349,91 @@ test("Slayer slam: hits the drawn ellipse, not the old rect", () => {
   s2.think(0.016, g);
   assert.strictEqual(g.player.hits, 1);
 });
+
+// ---- input buffer: dash ----
+// Uses the real JH.Input with a fake clock so Player.update sees genuine
+// buffered() semantics. (node 21+ ships a global navigator; poll()'s
+// getGamepads guard handles it having none.)
+require("../js/input.js");
+function makeBufferedInput() {
+  global.window.addEventListener = global.window.addEventListener || (() => {});
+  const In = JH.Input;
+  In.init();
+  let now = 0;
+  In._now = () => now;
+  return {
+    In,
+    frame(ms) { now += ms; In.poll(); },
+  };
+}
+function dashStubGame(In) {
+  return {
+    input: In,
+    audio: { play() {} },
+    particles: [], embers: [], enemies: [], shields: [], firePatches: [], pickups: [],
+    bounds: { minX: 0, maxX: 600 },
+    shake() {}, hitStop() {},
+  };
+}
+
+test("dash pressed during cooldown fires when the cooldown expires (buffer)", () => {
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  p.dashCdTimer = 0.05;                    // still cooling down
+  sim.In._keys.right = true;               // direction held
+  sim.In._keys.dash = true; sim.frame(16); // press lands during cooldown
+  p.update(0.016, g);
+  assert.strictEqual(p.dashTimer, 0, "cooldown still active — no dash yet");
+  sim.In._keys.dash = false;
+  for (let i = 0; i < 5; i++) { sim.frame(16); p.update(0.016, g); }  // ~80ms later
+  assert.ok(p.dashTimer > 0, "buffered dash fires once the cooldown expires");
+});
+
+test("dash press older than the buffer window is dropped", () => {
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  p.dashCdTimer = 0.3;                     // long cooldown
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  sim.In._keys.dash = false;
+  for (let i = 0; i < 20; i++) { sim.frame(16); p.update(0.016, g); }  // ~320ms
+  assert.strictEqual(p.dashTimer, 0, "stale press must not fire");
+});
+
+// separate() lives on JH.Game but is a pure method over {enemies, player}.
+require("../js/game.js");
+
+test("player-enemy overlap displaces neither party (contact damage is the deterrent)", () => {
+  const p = makePlayer();
+  const e = new JH.Enemy("mook", p.x + 2, p.y);   // overlapping Jon
+  const ex = e.x, px = p.x;
+  JH.Game.separate.call({ enemies: [e], player: p });        // walking
+  assert.strictEqual(e.x, ex, "enemy never displaced by Jon's body");
+  assert.strictEqual(p.x, px, "Jon never herded by enemy bodies");
+  p.dashTimer = 0.1;
+  JH.Game.separate.call({ enemies: [e], player: p });        // dashing
+  assert.strictEqual(e.x, ex);
+  assert.strictEqual(p.x, px);
+});
+
+test("enemy-enemy separation still anti-stacks", () => {
+  const e1 = new JH.Enemy("mook", 100, 40);
+  const e2 = new JH.Enemy("mook", 102, 40);
+  JH.Game.separate.call({ enemies: [e1, e2], player: null });
+  assert.ok(e2.x - e1.x > 2, "overlapping enemies get pushed apart");
+});
+
+test("neutral dash goes toward facing", () => {
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  p.facing = -1;
+  sim.In._keys.dash = true; sim.frame(16); // no direction held
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "neutral press should still dash");
+  assert.strictEqual(p._dashX, -1, "dashes toward facing");
+  assert.strictEqual(p._dashY, 0);
+});

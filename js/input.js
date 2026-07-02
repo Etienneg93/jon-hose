@@ -21,13 +21,23 @@
     Escape: "pause",
   };
 
+  // Edge-buffered actions: a press stays "pending" for BUFFER_MS and is
+  // consumed by the first frame that can act on it — so hit-stop/arrival
+  // freezes and cooldown edges can't eat the press. Spray is a hold; only
+  // discrete actions buffer.
+  const BUFFERED = ["dash", "confirm"];
+  const BUFFER_MS = 130;
+
   const Input = {
     state: {},   // action -> bool (held this frame)
     _prev: {},   // action -> bool (held last frame)
     _keys: {},   // action -> bool (from keyboard)
+    _bufAt: {},  // action -> _now() timestamp of the latest unconsumed edge
+    _now() { return performance.now(); },
 
     init() {
       ACTIONS.forEach((a) => { this.state[a] = false; this._prev[a] = false; this._keys[a] = false; });
+      BUFFERED.forEach((a) => { this._bufAt[a] = null; });
 
       window.addEventListener("keydown", (e) => {
         const a = KEYMAP[e.code];
@@ -78,12 +88,22 @@
       }
 
       this.state = s;
+
+      // Record press edges for the buffered actions.
+      for (const a of BUFFERED)
+        if (this.state[a] && !this._prev[a]) this._bufAt[a] = this._now();
     },
 
     // Held this frame.
     held(a) { return !!this.state[a]; },
     // True only on the frame the action went from up -> down.
     pressed(a) { return !!this.state[a] && !this._prev[a]; },
+    // Unconsumed press edge within the last BUFFER_MS.
+    buffered(a) {
+      const t = this._bufAt[a];
+      return t != null && this._now() - t <= BUFFER_MS;
+    },
+    consume(a) { this._bufAt[a] = null; },
   };
 
   JH.Input = Input;
