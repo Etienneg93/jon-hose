@@ -587,7 +587,8 @@
     p(1, 19, 2, 2, "#111");
   });
 
-  // Lerp between two #rrggbb colors → "rgb(r,g,b)".
+  // Lerp between two #rrggbb colors → "rgb(r,g,b)". Also exported as
+  // Assets.lerpHex for HUD code.
   function lerpHex(a, b, t) {
     t = Math.max(0, Math.min(1, t));
     const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
@@ -597,6 +598,7 @@
                     Math.round(ag + (bg - ag) * t) + "," +
                     Math.round(ab + (bb - ab) * t) + ")";
   }
+  Assets.lerpHex = lerpHex;
 
   // ============================ FURNACE ================================
   // Procedural placeholder. Bulky golem. `opt.heat` (0..1) = spray build-up so

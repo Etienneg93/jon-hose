@@ -1878,20 +1878,44 @@
     },
 
     // GUSH combo readout — scales + pulses with the chain, fades as it expires.
+    // While the x3 regen window is live it breathes regen-blue with a soft
+    // glow and a subtle letter wave — same #55c8ff / sin(t*6) pulse as Jon's
+    // aura and the water-bar wave, so all three read as one signal.
     // Purely cosmetic: never feeds back into damage or economy.
     drawCombo(ctx) {
       const n = this.combo;
       const frac = JH.COMBO_WINDOW > 0 ? clamp(this.comboTimer / JH.COMBO_WINDOW, 0, 1) : 0;
-      const col = n >= 20 ? "#ff5a5a" : n >= 10 ? JH.PAL.suds : JH.PAL.waterHi;
+      const tierCol = n >= 20 ? "#ff5a5a" : n >= 10 ? JH.PAL.suds : JH.PAL.waterHi;
+      const p = this.player;
+      const regenLive = !!(p && p.alive && p.gushRegenT > 0);
       const pop = 1 + this.comboFlash * 1.6;                 // brief scale punch per kill
       const size = Math.min(22, 9 + n * 0.4) * pop;
       const alpha = Math.min(1, 0.35 + frac * 0.65);
+      const label = "GUSH x" + n;
       ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.textAlign = "right";
-      ctx.fillStyle = col;
       ctx.font = "bold " + size.toFixed(0) + "px monospace";
-      ctx.fillText("GUSH x" + n, JH.VIEW_W - 8, 40);
+      if (regenLive) {
+        const t = p.t;
+        const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+        // Glow inherits the tier color at x10 (gold) / x20 (red); base tier
+        // glows regen-blue. High tiers breathe toward white-hot instead.
+        const glowCol = n >= 10 ? tierCol : "#55c8ff";
+        ctx.fillStyle = JH.Assets.lerpHex(tierCol, n >= 10 ? "#ffffff" : "#55c8ff", 0.35 + 0.5 * pulse);
+        ctx.shadowColor = glowCol;
+        ctx.shadowBlur = 3 + 4 * pulse;
+        // Travelling letter wave, per character (monospace = fixed advance).
+        ctx.textAlign = "left";
+        const adv = ctx.measureText("M").width;
+        const x0 = JH.VIEW_W - 8 - label.length * adv;
+        for (let i = 0; i < label.length; i++)
+          ctx.fillText(label[i], x0 + i * adv, 40 + Math.sin(t * 8 - i * 0.7) * 1.2);
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.textAlign = "right";
+        ctx.fillStyle = tierCol;
+        ctx.fillText(label, JH.VIEW_W - 8, 40);
+      }
       ctx.globalAlpha = alpha * 0.8;                          // thin expiry bar
       ctx.fillRect(JH.VIEW_W - 8 - 46 * frac, 44, 46 * frac, 2);
       ctx.restore();
