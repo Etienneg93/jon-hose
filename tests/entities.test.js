@@ -406,23 +406,24 @@ test("dash press older than the buffer window is dropped", () => {
 // separate() lives on JH.Game but is a pure method over {enemies, player}.
 require("../js/game.js");
 
-test("dashing Jon phases through enemies without pushing them", () => {
+test("player-enemy overlap displaces neither party (contact damage is the deterrent)", () => {
   const p = makePlayer();
   const e = new JH.Enemy("mook", p.x + 2, p.y);   // overlapping Jon
   const ex = e.x, px = p.x;
-  p.dashTimer = 0.1;                               // mid-dash
-  JH.Game.separate.call({ enemies: [e], player: p });
-  assert.strictEqual(e.x, ex, "no shove while dashing");
-  assert.strictEqual(p.x, px, "Jon undisturbed while dashing");
+  JH.Game.separate.call({ enemies: [e], player: p });        // walking
+  assert.strictEqual(e.x, ex, "enemy never displaced by Jon's body");
+  assert.strictEqual(p.x, px, "Jon never herded by enemy bodies");
+  p.dashTimer = 0.1;
+  JH.Game.separate.call({ enemies: [e], player: p });        // dashing
+  assert.strictEqual(e.x, ex);
+  assert.strictEqual(p.x, px);
 });
 
-test("walking overlap resolves by moving Jon — enemies are never displaced", () => {
-  const p = makePlayer();
-  const e = new JH.Enemy("mook", p.x + 2, p.y);
-  const ex = e.x, px = p.x;
-  JH.Game.separate.call({ enemies: [e], player: p });
-  assert.strictEqual(e.x, ex, "enemy holds its ground");
-  assert.ok(p.x < px, "Jon is eased back out of the overlap");
+test("enemy-enemy separation still anti-stacks", () => {
+  const e1 = new JH.Enemy("mook", 100, 40);
+  const e2 = new JH.Enemy("mook", 102, 40);
+  JH.Game.separate.call({ enemies: [e1, e2], player: null });
+  assert.ok(e2.x - e1.x > 2, "overlapping enemies get pushed apart");
 });
 
 test("neutral dash goes toward facing", () => {

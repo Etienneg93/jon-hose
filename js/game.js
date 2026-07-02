@@ -1192,28 +1192,12 @@
           }
         }
       }
-      // Jon can't stand inside enemies either — but enemies are the solid
-      // party: the overlap resolves by easing JON out (his body never
-      // displaces an enemy; the hose is the only thing that moves them).
-      // The half-overlap-per-frame push leaves a sliver of overlap at the
-      // boundary, so contact damage (checked in Enemy.update, which runs
-      // before separate()) still triggers. Charging enemies pass through —
-      // body-blocking a charge would stop it short of its hit arc. A dashing
-      // Jon phases through (he has i-frames) instead of colliding at all.
-      const pl = this.player;
-      if (pl && pl.alive && pl.dashTimer <= 0) {
-        for (const e of a) {
-          if (e.isBoss || e.dead || e.dropping || e.state === "charge") continue;
-          if (e.type === "dummy" || e.type === "neighbor") continue;
-          if (Math.abs(e.z - pl.z) > 20) continue;
-          const dx = e.x - pl.x, dy = e.y - pl.y;
-          const minX = (e.bodyW + pl.bodyW) * 0.5, minY = 10;
-          if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
-            const push = (minX - Math.abs(dx)) * 0.5 + 0.2;
-            pl.x = JH.Geo.clampX(pl.x - (dx >= 0 ? 1 : -1) * push);
-          }
-        }
-      }
+      // Jon and enemies have NO body collision with each other: neither
+      // party is ever positionally displaced by the other (Jon's body can't
+      // bulldoze enemies; a chasing enemy can't herd Jon into a corner).
+      // Overlap is deterred by contact damage (Enemy.update) and enemies are
+      // moved only by the hose. Enemy-vs-enemy anti-stacking above is the
+      // sole job of this method's player-independent half.
     },
 
     updateHUD() {
