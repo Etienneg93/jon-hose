@@ -409,13 +409,20 @@ require("../js/game.js");
 test("dashing Jon phases through enemies without pushing them", () => {
   const p = makePlayer();
   const e = new JH.Enemy("mook", p.x + 2, p.y);   // overlapping Jon
-  const ex = e.x;
+  const ex = e.x, px = p.x;
   p.dashTimer = 0.1;                               // mid-dash
   JH.Game.separate.call({ enemies: [e], player: p });
   assert.strictEqual(e.x, ex, "no shove while dashing");
-  p.dashTimer = 0;
+  assert.strictEqual(p.x, px, "Jon undisturbed while dashing");
+});
+
+test("walking overlap resolves by moving Jon — enemies are never displaced", () => {
+  const p = makePlayer();
+  const e = new JH.Enemy("mook", p.x + 2, p.y);
+  const ex = e.x, px = p.x;
   JH.Game.separate.call({ enemies: [e], player: p });
-  assert.notStrictEqual(e.x, ex, "walking overlap still soft-pushes");
+  assert.strictEqual(e.x, ex, "enemy holds its ground");
+  assert.ok(p.x < px, "Jon is eased back out of the overlap");
 });
 
 test("neutral dash goes toward facing", () => {

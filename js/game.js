@@ -1192,13 +1192,14 @@
           }
         }
       }
-      // Enemies can't stand inside Jon either: soft-push them out (only the
-      // enemy moves — Jon stays solid). The half-overlap-per-frame push leaves
-      // a sliver of overlap at the boundary, so contact damage (checked in
-      // Enemy.update, which runs before separate()) still triggers. Charging
-      // enemies pass through — body-blocking a charge would stop it short of
-      // its hit arc. Stationary NPC-ish types hold their posts. A dashing Jon
-      // phases through (he has i-frames) instead of plowing enemies aside.
+      // Jon can't stand inside enemies either — but enemies are the solid
+      // party: the overlap resolves by easing JON out (his body never
+      // displaces an enemy; the hose is the only thing that moves them).
+      // The half-overlap-per-frame push leaves a sliver of overlap at the
+      // boundary, so contact damage (checked in Enemy.update, which runs
+      // before separate()) still triggers. Charging enemies pass through —
+      // body-blocking a charge would stop it short of its hit arc. A dashing
+      // Jon phases through (he has i-frames) instead of colliding at all.
       const pl = this.player;
       if (pl && pl.alive && pl.dashTimer <= 0) {
         for (const e of a) {
@@ -1209,7 +1210,7 @@
           const minX = (e.bodyW + pl.bodyW) * 0.5, minY = 10;
           if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
             const push = (minX - Math.abs(dx)) * 0.5 + 0.2;
-            e.x += (dx >= 0 ? 1 : -1) * push;
+            pl.x = JH.Geo.clampX(pl.x - (dx >= 0 ? 1 : -1) * push);
           }
         }
       }
