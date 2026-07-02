@@ -296,21 +296,24 @@
       };
 
       // Buff auras: opt.outlines = [[color, alpha], ...] ordered inner →
-      // outer; ring i sits (i+1)px outside the silhouette. Rings render
-      // under the sprite (drawn next), so only clean 1px-per-layer outlines
-      // remain — no shadowBlur, no blur-edge artifacts, and layers ring each
-      // other instead of overwriting.
+      // outer; ring i sits ~0.6px per layer outside the silhouette (a full
+      // logical px is ~4 screen px — too chunky). Sub-pixel offsets with
+      // smoothing enabled blend into a thin, round outline; rings render
+      // under the sprite so layers ring each other instead of overwriting.
       if (opt.outlines && opt.outlines.length) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
         for (let i = opt.outlines.length - 1; i >= 0; i--) {
           const oc = opt.outlines[i][0];
           const oa = Math.max(0, Math.min(1, opt.outlines[i][1]));
           renderSil(oc);
-          const r = i + 1;
+          const r = 0.6 * (i + 1);
+          const dg = r * 0.707;                       // circular corners
           ctx.globalAlpha = oa;
-          for (const d of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [r, -r], [-r, r], [-r, -r]])
+          for (const d of [[r, 0], [-r, 0], [0, r], [0, -r], [dg, dg], [dg, -dg], [-dg, dg], [-dg, -dg]])
             ctx.drawImage(_hurtOC, x - OX + d[0], y - OY + d[1]);
-          ctx.globalAlpha = 1;
         }
+        ctx.restore();
       }
 
       // When hurtAlpha > 0 strip the hurt flag from the main call so painters
