@@ -116,7 +116,7 @@ function stubGame(px, py) {
     player: {
       x: px, y: py, z: 0, alive: true, bodyW: 12, facing: 1,
       burns: 0, hits: 0,
-      applyBurn(n) { this.burns += n; },
+      applyBurn(n) { this.burns += n; return true; },
       takeHit() { this.hits++; },
       applyKnockback() {},
     },
@@ -143,6 +143,26 @@ test("FirePatch: dip in and out → exactly one stack, one sizzle", () => {
   for (let t = 0; t < 0.6; t += 0.016) p.update(0.016, g);
   assert.strictEqual(g.player.burns, 1);
   assert.deepStrictEqual(g.audio.played, ["sizzle"]);
+});
+
+test("Two overlapping patches: one stack on contact, next lands at the 0.6s i-frame boundary", () => {
+  const p = makePlayer();                     // real Player at (60, 40)
+  const g = { player: p, audio: { play() {} } };
+  const a = new JH.FirePatch(60, 40, 24, 3);
+  const b = new JH.FirePatch(60, 40, 24, 3);  // stacked on top of the first
+  const dt = 0.016;
+  a.update(dt, g); b.update(dt, g);
+  assert.strictEqual(p.burnStacks, 1);        // both patches, one stack
+  // Simulate time passing (patch updates + the player's i-frame countdown).
+  let t = 0;
+  while (t < p.stats.invuln - 0.05) {
+    p.burnGraceT -= dt; a.update(dt, g); b.update(dt, g); t += dt;
+  }
+  assert.strictEqual(p.burnStacks, 1);        // still inside the window
+  while (t < p.stats.invuln + 0.1) {
+    p.burnGraceT -= dt; a.update(dt, g); b.update(dt, g); t += dt;
+  }
+  assert.strictEqual(p.burnStacks, 2);        // lands right after 0.6s, not 0.8s
 });
 
 test("FirePatch: staying inside ticks stacks on the burn interval", () => {

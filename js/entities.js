@@ -184,10 +184,12 @@
     applyBurn(n) {
       // Burn stacks have i-frames like hits: one application, then immune to
       // new stacks for the invuln window (overlapping fire can't insta-max).
-      if (this.burnGraceT > 0) return;
+      // Returns whether the stack landed so sources can retry, not skip ahead.
+      if (this.burnGraceT > 0) return false;
       this.burnGraceT = this.stats.invuln;
       this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
       this.burnTimer = JH.FIRE.burnDuration;
+      return true;
     }
 
     update(dt, game) {
@@ -1416,8 +1418,10 @@
           if (game.audio) game.audio.play("sizzle");
         }
         if (inside && this.patchBurnT <= 0) {
-          pl.applyBurn(1);
-          this.patchBurnT = JH.FIRE.patchBurnInterval;
+          // Only consume the tick when the stack actually lands; if the
+          // player's burn i-frames blocked it, retry next frame so the next
+          // stack arrives AT the i-frame boundary, not interval-aligned after.
+          if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
         }
       }
       if (this.sprayProgress >= this.extinguishDur) this.dead = true;
