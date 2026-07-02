@@ -240,10 +240,15 @@
       }
 
       // ---- dash
-      if (In.pressed("dash") && this.dashCdTimer <= 0 && (mx || my)) {
+      // Buffered edge: a press during hit-stop or the last 130ms of cooldown
+      // fires on the first frame that can act. Neutral press dashes toward
+      // facing (a direction is no longer required).
+      if (this.dashCdTimer <= 0 && In.buffered("dash")) {
+        In.consume("dash");
         this.dashTimer = S.dashTime; this.dashCdTimer = S.dashCd;
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
-        this._dashX = mx; this._dashY = my;
+        this._dashX = (mx || my) ? mx : this.facing;
+        this._dashY = my;
         game.audio.play("jump");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash

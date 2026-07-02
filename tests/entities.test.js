@@ -349,3 +349,68 @@ test("Slayer slam: hits the drawn ellipse, not the old rect", () => {
   s2.think(0.016, g);
   assert.strictEqual(g.player.hits, 1);
 });
+
+// ---- input buffer: dash ----
+// Uses the real JH.Input with a fake clock so Player.update sees genuine
+// buffered() semantics. (node 21+ ships a global navigator; poll()'s
+// getGamepads guard handles it having none.)
+require("../js/input.js");
+function makeBufferedInput() {
+  global.window.addEventListener = global.window.addEventListener || (() => {});
+  const In = JH.Input;
+  In.init();
+  let now = 0;
+  In._now = () => now;
+  return {
+    In,
+    frame(ms) { now += ms; In.poll(); },
+  };
+}
+function dashStubGame(In) {
+  return {
+    input: In,
+    audio: { play() {} },
+    particles: [], embers: [], enemies: [], shields: [], firePatches: [], pickups: [],
+    bounds: { minX: 0, maxX: 600 },
+    shake() {}, hitStop() {},
+  };
+}
+
+test("dash pressed during cooldown fires when the cooldown expires (buffer)", () => {
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  p.dashCdTimer = 0.05;                    // still cooling down
+  sim.In._keys.right = true;               // direction held
+  sim.In._keys.dash = true; sim.frame(16); // press lands during cooldown
+  p.update(0.016, g);
+  assert.strictEqual(p.dashTimer, 0, "cooldown still active — no dash yet");
+  sim.In._keys.dash = false;
+  for (let i = 0; i < 5; i++) { sim.frame(16); p.update(0.016, g); }  // ~80ms later
+  assert.ok(p.dashTimer > 0, "buffered dash fires once the cooldown expires");
+});
+
+test("dash press older than the buffer window is dropped", () => {
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  p.dashCdTimer = 0.3;                     // long cooldown
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  sim.In._keys.dash = false;
+  for (let i = 0; i < 20; i++) { sim.frame(16); p.update(0.016, g); }  // ~320ms
+  assert.strictEqual(p.dashTimer, 0, "stale press must not fire");
+});
+
+test("neutral dash goes toward facing", () => {
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  p.facing = -1;
+  sim.In._keys.dash = true; sim.frame(16); // no direction held
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "neutral press should still dash");
+  assert.strictEqual(p._dashX, -1, "dashes toward facing");
+  assert.strictEqual(p._dashY, 0);
+});
