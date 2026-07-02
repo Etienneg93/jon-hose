@@ -895,6 +895,7 @@
       const conCol = document.createElement("div");
       conCol.className = "tree-col";
       conCol.innerHTML = '<div class="tree-head">SUPPLIES</div>';
+      // Pressure Charge is delisted from both shops until the buff works.
       const cons = [
         { key: "medkit", buy: () => {
             const c = JH.CONSUMABLES.medkit;
@@ -905,16 +906,6 @@
           }, label: () => JH.CONSUMABLES.medkit.name,
           desc: () => "Heal " + JH.CONSUMABLES.medkit.heal + " HP now.",
           cost: () => JH.CONSUMABLES.medkit.cost },
-        { key: "pressure", buy: () => {
-            const c = JH.CONSUMABLES.pressure;
-            if (this.player.suds < c.cost) return false;
-            this.player.suds -= c.cost;
-            this.player.pressureBuffT = c.dur;
-            return true;
-          }, label: () => JH.CONSUMABLES.pressure.name,
-          desc: () => "+" + Math.round((JH.CONSUMABLES.pressure.mult - 1) * 100) +
-                      "% spray dmg for " + JH.CONSUMABLES.pressure.dur + "s of the next fight.",
-          cost: () => JH.CONSUMABLES.pressure.cost },
       ];
       cons.forEach((item) => {
         const cost = item.cost();
@@ -1702,7 +1693,10 @@
       U.nodes.forEach((n) => { if (U.isAvailable(n.id)) out.push({ kind: "node", id: n.id }); });
       // OVERCHARGE only unlocks once the whole skill tree is bought.
       if (U.allNodesOwned()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
-      Object.keys(JH.CONSUMABLES).forEach((k) => out.push({ kind: "consumable", id: k }));
+      // "pressure" is delisted until the buff works.
+      Object.keys(JH.CONSUMABLES).forEach((k) => {
+        if (k !== "pressure") out.push({ kind: "consumable", id: k });
+      });
       return out;
     },
     // Buy a between-wave consumable; returns true on success.
@@ -1711,7 +1705,6 @@
       if (!c || this.player.suds < c.cost) return false;
       this.player.suds -= c.cost;
       if (key === "medkit") this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
-      else if (key === "pressure") this.player.pressureBuffT = c.dur;
       return true;
     },
 
@@ -1840,8 +1833,7 @@
         else if (cur.kind === "rep") { const n = U.repById(cur.id); desc = n ? n.desc : ""; }
         else if (cur.kind === "consumable") {
           const c = JH.CONSUMABLES[cur.id];
-          desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now."
-            : cur.id === "pressure" ? "+" + Math.round((c.mult - 1) * 100) + "% spray dmg for " + c.dur + "s next fight." : "";
+          desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now." : "";
         }
       }
       if (desc) {
