@@ -1102,6 +1102,7 @@
       for (const e of this.enemies) e.update(dt, this);
       for (const s of this.shields) s.update(dt);
       for (const fp of this.firePatches) fp.update(dt, this);
+      this.splats = this.splats.filter((s) => { s.t += dt; return s.t < JH.JUICE.splatFade; });
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.particles = this.particles.filter((p) => p.update(dt));
@@ -1290,6 +1291,19 @@
 
         // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
         for (const fp of this.firePatches) fp.draw(ctx, cam);
+
+        // wet kill splats — ground decals under pickups/actors, fading out
+        for (const s of this.splats) {
+          const k = 1 - s.t / JH.JUICE.splatFade;
+          ctx.save();
+          ctx.globalAlpha = 0.25 * k;
+          ctx.fillStyle = JH.PAL.water;
+          ctx.beginPath();
+          ctx.ellipse(Math.round(s.x - cam), Math.round(JH.Geo.feetScreenY(s.y, 0)),
+            s.rx, s.rx * JH.GROUND_RY, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);

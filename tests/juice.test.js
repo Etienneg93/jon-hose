@@ -152,6 +152,17 @@ test("KillPop: expires after ~70ms", () => {
   assert.ok(kp.dead);
 });
 
+test("Pickup: arena-wide vacuum while lootVacuumT is live", () => {
+  const mk = () => { const p = new JH.Pickup("suds", 400, 40, 5); p.grounded = true; p.z = 0; return p; };
+  const base = { player: { x: 60, y: 40 }, lootVacuumT: 0 };
+  const still = mk();
+  still.update(0.016, base);
+  assert.strictEqual(still.x, 400, "no magnet from 340px away normally");
+  const vac = mk();
+  vac.update(0.016, Object.assign({}, base, { lootVacuumT: 1 }));
+  assert.ok(vac.x < 400, "vacuum pulls from across the arena");
+});
+
 test("Player.takeHit: playerHit tier + shake kicked away from impact", () => {
   JH.Upgrades.reset();
   const p = new JH.Player(60, 40);

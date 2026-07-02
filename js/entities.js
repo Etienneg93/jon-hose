@@ -1665,9 +1665,14 @@
         }
       }
       const pl = game.player;
-      // gentle magnet when close
+      // Gentle magnet when close; during the wave-ender beat every pickup on
+      // the field vacuums to Jon (kills the post-wave coin walk).
+      const vac = game.lootVacuumT > 0;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
-      if (dist < 30) { this.x += dx * 4 * dt; this.y += dy * 4 * dt; }
+      if (vac || dist < 30) {
+        const pull = vac ? 12 : 4;
+        this.x += dx * pull * dt; this.y += dy * pull * dt;
+      }
       if (dist < 12) { this.collect(game); return false; }
       // Holy Essence crosses never expire — everything else blinks out.
       if (this.kind !== "cross" && this.t > this.life) {
