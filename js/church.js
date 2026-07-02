@@ -152,14 +152,22 @@
 
     serialize() { return JSON.stringify(this.state); },
 
-    // No save system yet — every run starts Church meta-progression fresh.
-    // save() still writes localStorage so this can be re-wired once a real
-    // save system lands; load() just doesn't read it back yet.
+    // Reads the save back through sanitize(), which handles partial, corrupt
+    // and legacy shapes (incl. the blessings->mirror migration). Any failure
+    // — no storage, bad JSON — starts fresh.
     load() {
-      this.state = defaults();
+      let raw = null;
+      try { raw = JSON.parse(root.localStorage.getItem(KEY)); } catch (e) { /* fresh */ }
+      this.state = sanitize(raw);
     },
     save() {
       try { root.localStorage.setItem(KEY, this.serialize()); } catch (e) { /* ignore */ }
+    },
+    // Wipe the save and the live state ("Rededicate"). Dev-menu hook for now;
+    // a player-facing station in the nave belongs to the meta spec.
+    reset() {
+      this.state = defaults();
+      try { root.localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
     },
 
     addEssence(n) { this.state.essence += n; this.save(); },

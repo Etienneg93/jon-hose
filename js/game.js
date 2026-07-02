@@ -126,7 +126,7 @@
           return;
         }
         if (!this.devMenu) return;
-        const count = JH.LEVEL1.waves.length + 3;  // +1 cutscene, +1 target range, +1 wall boss
+        const count = JH.LEVEL1.waves.length + 4;  // +1 cutscene, +1 target range, +1 wall boss, +1 church reset
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
         if (e.code === "Enter" || e.code === "NumpadEnter") {
@@ -134,6 +134,10 @@
           if (this.devCursor === JH.LEVEL1.waves.length) this.devTriggerCutscene();
           else if (this.devCursor === JH.LEVEL1.waves.length + 1) this.devGotoRange();
           else if (this.devCursor === JH.LEVEL1.waves.length + 2) this.devGotoWallBoss();
+          else if (this.devCursor === JH.LEVEL1.waves.length + 3) {
+            if (JH.Church) { JH.Church.reset(); this.banner("CHURCH SAVE RESET", 1.2); }
+            this.devMenu = false;
+          }
           else this.devGotoWave(this.devCursor);
         }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
@@ -1383,7 +1387,7 @@
 
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
-      const count = waves.length + 3;          // +cutscene +range +firewall
+      const count = waves.length + 4;          // +cutscene +range +firewall +church reset
       const W = 224, ROW = 11, PAD = 14;
       // Fit inside the canvas: cap the visible rows and scroll so the cursor
       // stays shown. maxRows is how many ROW-tall lines fit between the header
@@ -1470,6 +1474,18 @@
         ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
         ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
         ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
+      }
+
+      // Church save reset ("Rededicate") — wipes persisted meta-progression
+      const crRy = rowY(waves.length + 3);
+      if (crRy !== null) {
+        const crSel = this.devCursor === waves.length + 3;
+        if (crSel) { ctx.fillStyle = "rgba(120,180,255,0.18)"; ctx.fillRect(PX + 3, crRy, W - 6, ROW - 1); }
+        ctx.fillStyle = crSel ? "#7ab4ff" : "#667788";
+        ctx.font = (crSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("✝  RESET CHURCH SAVE", PX + 8, crRy + ROW - 3);
+        ctx.fillStyle = crSel ? "#7ab4ff" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, crRy + ROW - 3);
       }
 
       // Scroll indicators when the list overflows the window (right edge, clear

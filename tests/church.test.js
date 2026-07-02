@@ -73,7 +73,7 @@ test("serialize() round-trips through sanitize()", () => {
   assert.strictEqual(round.blessings.bless_hp, 1);
 });
 
-test("save() writes to localStorage, but load() always resets to defaults (no save system yet)", () => {
+test("save() writes localStorage and load() reads it back (persistence wired)", () => {
   const store = {};
   globalThis.localStorage = {
     getItem: (k) => (k in store ? store[k] : null),
@@ -82,8 +82,10 @@ test("save() writes to localStorage, but load() always resets to defaults (no sa
   Church.state = Church.sanitize({ essence: 7, blessings: { bless_dps: 3 }, elements: { earth: true } });
   Church.save();
   assert.ok(store[Church.KEY]);                // save() did write something
-  Church.load();                                // but load() ignores it
-  assert.deepStrictEqual(Church.state, Church.defaults());
+  Church.state = Church.defaults();
+  Church.load();                                // and load() restores it
+  assert.strictEqual(Church.state.essence, 7);
+  assert.strictEqual(Church.state.elements.earth, true);
   delete globalThis.localStorage;
 });
 
@@ -154,4 +156,67 @@ test("deathScreenFadeAlpha stays 0 until fadeStart, then ramps to 1 over screenF
   assert.strictEqual(Church.deathScreenFadeAlpha(2.4, DS), 0);  // fadeStart = 2.1+0.3
   approx(Church.deathScreenFadeAlpha(2.75, DS), 0.5);
   assert.strictEqual(Church.deathScreenFadeAlpha(3.5, DS), 1);  // clamped
+});
+
+// ---- persistence: load() reads the save back (was: discarded every boot) ----
+
+function stubStorage(initial) {
+  const store = Object.assign({}, initial);
+  const ls = {
+    getItem(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+    setItem(k, v) { store[k] = String(v); },
+    removeItem(k) { delete store[k]; },
+  };
+  Object.defineProperty(globalThis, "localStorage", { value: ls, configurable: true, writable: true });
+  return ls;
+}
+
+test("load() restores a saved state through sanitize()", () => {
+  stubStorage({ [Church.KEY]: JSON.stringify({
+    essence: 7,
+    elements: { earth: true, fire: false, air: false, water: false },
+    mirror: { water_vigor: { side: "b", rank: 2 } },
+    churchVisited: true,
+  }) });
+  Church.load();
+  assert.strictEqual(Church.state.essence, 7);
+  assert.strictEqual(Church.state.elements.earth, true);
+  assert.strictEqual(Church.state.elements.water, true, "water always unlocked (sanitize)");
+  assert.deepStrictEqual(Church.state.mirror.water_vigor, { side: "b", rank: 2 });
+  assert.strictEqual(Church.state.churchVisited, true);
+});
+
+test("load() falls back to defaults on a missing or corrupt save", () => {
+  stubStorage({});
+  Church.load();
+  assert.deepStrictEqual(Church.state, Church.defaults());
+  stubStorage({ [Church.KEY]: "{not json" });
+  Church.load();
+  assert.deepStrictEqual(Church.state, Church.defaults());
+});
+
+test("load() is safe when localStorage doesn't exist at all", () => {
+  Object.defineProperty(globalThis, "localStorage", { value: undefined, configurable: true, writable: true });
+  Church.load();
+  assert.deepStrictEqual(Church.state, Church.defaults());
+});
+
+test("save() -> load() roundtrip survives a reboot", () => {
+  stubStorage({});
+  Church.load();
+  Church.addEssence(3);               // addEssence saves internally
+  Church.state = Church.defaults();   // simulate a reboot wiping memory
+  Church.load();
+  assert.strictEqual(Church.state.essence, 3);
+});
+
+test("reset() wipes both the live state and the stored save", () => {
+  const ls = stubStorage({});
+  Church.load();
+  Church.addEssence(5);
+  Church.reset();
+  assert.deepStrictEqual(Church.state, Church.defaults());
+  assert.strictEqual(ls.getItem(Church.KEY), null);
+  Church.load();
+  assert.strictEqual(Church.state.essence, 0, "nothing left to load after reset");
 });
