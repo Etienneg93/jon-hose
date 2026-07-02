@@ -34,7 +34,7 @@
       catch (e) { this.enabled = false; }
     },
     resume() { if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); },
-    play(name) {
+    play(name, opt) {
       if (!this.enabled) return;
       this.init();
       if (!this.ctx) return;
