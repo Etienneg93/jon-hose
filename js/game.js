@@ -38,6 +38,7 @@
     dyingBoss: null, deathSeqT: 0,
     checkpointWave: 0,
     diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0,
+    victoryPortal: null,   // post-Slayer exit portal {x, y, t, near}
 
     // ------------------------------------------------------------- setup
     init() {
@@ -277,7 +278,7 @@
       this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
-      this.cutscene = null;
+      this.cutscene = null; this.victoryPortal = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.checkpointWave = 0;
@@ -438,6 +439,12 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
+      // Mix-up set-pieces award Holy Essence like boss kills do — the Church
+      // currency flows from every non-standard encounter, not bosses alone.
+      if (clearedWave && (clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+        if (JH.Church) JH.Church.addEssence(1);
+        this.banner("+1 HOLY ESSENCE", 1.6);
+      }
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
       // The LAST wave (final boss) wins; a mid-boss just continues.
@@ -486,8 +493,14 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
-      this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
+      // No wave beyond the Slayer (WAVE_TRIGGERS[nextWaveIdx] doesn't exist) —
+      // open the victory portal ahead of Jon instead of a shop corridor.
+      // Placeholder exit to the next world: walk in and confirm to win.
+      this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
+      this.victoryPortal = {
+        x: Math.min(JH.LEVEL_LEN - 60, this.player.x + 150),
+        y: JH.DEPTH_MAX * 0.5, t: 0, near: false,
+      };
       this.showScreen("hud");
       this.banner("THE SLAYER JOINS YOUR SIDE!", 2.4);
     },
@@ -1052,6 +1065,13 @@
       for (const h of this.hydrants) h.t += dt;
       // Remember the last hydrant visited — death returns Jon here.
       if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
+      // Victory portal (post-Slayer): walk in and confirm to finish the run.
+      if (this.victoryPortal) {
+        const vp = this.victoryPortal;
+        vp.t += dt;
+        vp.near = Math.abs(this.player.x - vp.x) < 22 && Math.abs(this.player.y - vp.y) < 30;
+        if (vp.near && this.input.pressed("confirm")) { this.win(); return; }
+      }
       if (this.shopNpc) {
         this.shopNpc.update(dt);
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
@@ -1226,6 +1246,7 @@
 
         // hydrants (static world props, behind actors)
         this.drawHydrants(ctx, cam);
+        if (this.victoryPortal) this.drawVictoryPortal(ctx, cam);
 
         // barricade (if a wall encounter is active)
         if (this.wall) this.wall.draw(ctx, cam);
@@ -1478,6 +1499,26 @@
       ctx.textAlign = "center";
       ctx.fillText("↑↓  navigate    Enter  warp    `  close", MID, PY + H - 4);
       ctx.textAlign = "left";
+    },
+
+    // Post-Slayer exit portal — same animated art as the church return portal,
+    // drawn bigger. Confirm inside it to reach the win screen.
+    drawVictoryPortal(ctx, cam) {
+      const vp = this.victoryPortal;
+      const sx = vp.x - cam, sy = JH.Geo.feetScreenY(vp.y, 0);
+      if (sx < -50 || sx > JH.VIEW_W + 50) return;
+      JH.Assets.drawFx(ctx, "portal", sx, sy, vp.t, { scale: 2 });
+      ctx.save();
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center";
+      const bob = Math.sin(vp.t * 3) * 2;
+      ctx.fillStyle = "#062033"; ctx.fillText("NEXT WORLD", sx + 1, sy - 72 + bob + 1);
+      ctx.fillStyle = "#9be8ff"; ctx.fillText("NEXT WORLD", sx, sy - 72 + bob);
+      if (vp.near) {
+        ctx.fillStyle = "#0a2a08"; ctx.fillText("PRESS E", sx + 1, sy - 62 + bob + 1);
+        ctx.fillStyle = "#7dff5a"; ctx.fillText("PRESS E", sx, sy - 62 + bob);
+      }
+      ctx.restore();
     },
 
     drawHydrants(ctx, cam) {

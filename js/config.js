@@ -27,41 +27,22 @@
   JH.ZONE3_START = 8950;    // Boiler District (fire world) — GK at 8720, Fire Intro at 9100
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
-  // level). One per wave, 100px BEFORE its trigger (WAVE_TRIGGERS in game.js —
-  // keep in sync if triggers move): past the shop vendor (T-150), short of the
-  // trigger threshold (T-30). Touching one sets the death-respawn checkpoint
-  // (lastHydrantX), so every wave has its checkpoint in the walk-up. Front-row
-  // depths keep them clear of the back-row shop vendor.
+  // level). Deliberately sparse — checkpoints, not crutches: one at the start,
+  // one after each boss, one at each act's midpoint. Each sits 100px before a
+  // wave trigger (WAVE_TRIGGERS in game.js — keep in sync if triggers move),
+  // past the shop vendor (T-150). Touching one sets the death-respawn
+  // checkpoint (lastHydrantX).
   JH.HYDRANTS = [
-    { x: 260,   y: JH.DEPTH_MAX - 12 },
-    { x: 640,   y: JH.DEPTH_MAX - 26 },
-    { x: 1020,  y: JH.DEPTH_MAX - 12 },
-    { x: 1400,  y: JH.DEPTH_MAX - 26 },
-    { x: 1780,  y: JH.DEPTH_MAX - 12 },   // Big Drip
-    { x: 2160,  y: JH.DEPTH_MAX - 26 },
-    { x: 2540,  y: JH.DEPTH_MAX - 12 },
-    { x: 2920,  y: JH.DEPTH_MAX - 26 },
-    { x: 3300,  y: JH.DEPTH_MAX - 12 },
-    { x: 3680,  y: JH.DEPTH_MAX - 26 },   // The Switch
-    { x: 4060,  y: JH.DEPTH_MAX - 12 },   // ruined district
-    { x: 4440,  y: JH.DEPTH_MAX - 26 },
-    { x: 4820,  y: JH.DEPTH_MAX - 12 },
-    { x: 5200,  y: JH.DEPTH_MAX - 26 },
-    { x: 5580,  y: JH.DEPTH_MAX - 12 },
-    { x: 5960,  y: JH.DEPTH_MAX - 26 },   // Quake Walker
-    { x: 6340,  y: JH.DEPTH_MAX - 12 },
-    { x: 6720,  y: JH.DEPTH_MAX - 26 },
-    { x: 7100,  y: JH.DEPTH_MAX - 12 },
-    { x: 7480,  y: JH.DEPTH_MAX - 26 },
-    { x: 7860,  y: JH.DEPTH_MAX - 12 },
-    { x: 8240,  y: JH.DEPTH_MAX - 26 },
-    { x: 8620,  y: JH.DEPTH_MAX - 12 },   // Gateway Krusher
-    { x: 9000,  y: JH.DEPTH_MAX - 26 },   // fire world
-    { x: 9380,  y: JH.DEPTH_MAX - 12 },
-    { x: 9760,  y: JH.DEPTH_MAX - 26 },
-    { x: 10140, y: JH.DEPTH_MAX - 12 },
-    { x: 10520, y: JH.DEPTH_MAX - 26 },
-    { x: 10900, y: JH.DEPTH_MAX - 12 },   // The Slayer
+    { x: 260,   y: JH.DEPTH_MAX - 12 },   // start
+    { x: 1020,  y: JH.DEPTH_MAX - 26 },   // Act 1 midpoint (before WAVE 3)
+    { x: 2160,  y: JH.DEPTH_MAX - 12 },   // after Big Drip
+    { x: 2920,  y: JH.DEPTH_MAX - 26 },   // Act 2 midpoint (before BARRICADE)
+    { x: 4060,  y: JH.DEPTH_MAX - 12 },   // after The Switch
+    { x: 5200,  y: JH.DEPTH_MAX - 26 },   // Act 3 midpoint (before ASH CHARGE)
+    { x: 6340,  y: JH.DEPTH_MAX - 12 },   // after Quake Walker
+    { x: 7480,  y: JH.DEPTH_MAX - 26 },   // Act 4 midpoint (before THE GARDEN)
+    { x: 9000,  y: JH.DEPTH_MAX - 12 },   // after Gateway Krusher
+    { x: 10140, y: JH.DEPTH_MAX - 26 },   // Fire midpoint (before FURNACE TRIAL)
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
 
@@ -340,7 +321,7 @@
     sermon: {
       first: [
         "Rise, child. You stand in the Church of the Holy Hose — where the fallen are made faithful.",
-        "Each nemesis you redeem leaves behind Essence of Friendship. I keep it here, gathered from your trials.",
+        "Each nemesis you redeem — and each trial you weather — leaves behind Holy Essence. I keep it here, gathered from your deeds.",
         "Spend it at the shrines along the nave — Pressure, Vigor, Reservoir — and the blessing follows you into every life to come.",
         "Death is not the end of the spray. Walk into the light when you are ready, and try again.",
       ],

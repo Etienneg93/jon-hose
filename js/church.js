@@ -531,7 +531,7 @@
 
       // Holy Essence readout — always visible so the currency reads.
       ctx.textAlign = "right"; ctx.fillStyle = "#d6f6ff";
-      ctx.fillText("✦ Essence of Friendship: " + this.state.essence, VW - 8, 14);
+      ctx.fillText("✦ Holy Essence: " + this.state.essence, VW - 8, 14);
 
       // Father Jon's dialogue box.
       if (sc.dialogue) {
