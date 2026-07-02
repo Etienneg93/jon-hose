@@ -613,8 +613,8 @@
       const dir = this.x < fromX ? -1 : 1;
       this.applyKnockback(dir, 90);
       game.audio.play("hurt");
-      game.shake(5);
-      game.hitStop(0.06);
+      game.shake(5, dir);                       // kick away from the impact
+      game.hitStop(JH.JUICE.hitstop.playerHit);
       if (this.hp <= 0) { this.hp = 0; this.alive = false; }
     }
 
@@ -797,8 +797,7 @@
     die(game) {
       if (this.dead) return;
       this.dead = true;
-      game.audio.play("die");
-      game.hitStop(0.04);
+      game.killJuice(this);
       burst(game, this.x, this.y, this.z + 12, this.colorOf(), 10, { speed: 100, life: 0.5, up: 80 });
       game.dropLoot(this);   // anti-farm aware (infinite spawns share a budget)
       game.onEnemyKilled(this);
@@ -2288,6 +2287,24 @@
     }
   }
   JH.FxBurst = FxBurst;
+
+  // One-shot kill confirm: the dead enemy's sprite stamped once more through
+  // the hurt-flash compositor — bright white, 1.3x, ~70ms. Rides game.embers.
+  class KillPop {
+    constructor(e) {
+      this.type = e.type; this.x = e.x; this.y = e.y; this.z = e.z || 0;
+      this.facing = e.facing || 1; this.frame = e.frame || 0; this.state = e.state;
+      this.t = 0; this.dead = false;
+    }
+    update(dt) { this.t += dt; if (this.t >= 0.07) this.dead = true; return !this.dead; }
+    draw(ctx, cam) {
+      Assets.draw(ctx, this.type, this.x - cam, Geo.feetScreenY(this.y, this.z), this.facing, {
+        state: this.state, frame: this.frame, t: this.t,
+        hurt: true, hurtAlpha: 1, flashCap: 0.9, scale: 1.3,
+      });
+    }
+  }
+  JH.KillPop = KillPop;
 
   // ================================================ QUAKE WALKER (boss 3)
   class QuakeBoss extends Enemy {

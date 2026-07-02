@@ -70,3 +70,94 @@ test("shake: directional kick biases x away from impact", () => {
   mean /= 400;
   assert.ok(mean < -0.5, "offsets should bias in the kick direction, got " + mean);
 });
+
+// Stub with the real juice methods bound, so Enemy.die exercises them.
+function killStub(waveActive) {
+  const g = {
+    waveActive: !!waveActive, combo: 0, kills: 0,
+    comboTimer: 0, comboFlash: 0,
+    enemies: [], embers: [], splats: [], particles: [], pickups: [],
+    player: { x: 0, y: 0, alive: true, stats: { maxWater: 100 }, water: 50, regenLock: 1 },
+    hitStopTimer: 0, lootVacuumT: 0, trauma: 0, shakeKickX: 0,
+    audio: { played: [], play(k, o) { this.played.push({ k, o }); } },
+    dropLoot() {}, onEnemyKilled(e) { JH.Game.onEnemyKilled.call(this, e); },
+    hitStop(s) { this.hitStopTimer = Math.max(this.hitStopTimer, s); },
+    shake(n, d) { JH.Game.shake.call(this, n, d); },
+    killJuice(e) { JH.Game.killJuice.call(this, e); },
+    addSplat(x, y, w) { JH.Game.addSplat.call(this, x, y, w); },
+  };
+  return g;
+}
+
+test("killJuice: regular kill = kill tier + white KillPop", () => {
+  const g = killStub(false);
+  const e = new JH.Enemy("mook", 50, 40);
+  g.enemies.push(e);
+  e.die(g);
+  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.kill);
+  assert.ok(g.embers.some((m) => m instanceof JH.KillPop), "KillPop spawned");
+  assert.strictEqual(g.splats.length, 0, "no splat for a mook");
+});
+
+test("killJuice: elite kill = heavy tier + boom + wet splat", () => {
+  const g = killStub(false);
+  const e = new JH.Enemy("mook", 50, 40);
+  e.makeElite();
+  g.enemies.push(e);
+  e.die(g);
+  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.heavyKill);
+  assert.ok(g.embers.some((m) => m instanceof JH.FxBurst), "boom FxBurst spawned");
+  assert.strictEqual(g.splats.length, 1);
+});
+
+test("killJuice: last kill of an active wave = waveEnd tier + loot vacuum", () => {
+  const g = killStub(true);
+  const e1 = new JH.Enemy("mook", 50, 40);
+  const e2 = new JH.Enemy("mook", 90, 40);
+  g.enemies.push(e1, e2);
+  e1.die(g);
+  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.kill, "not last yet");
+  assert.strictEqual(g.lootVacuumT, 0);
+  e2.die(g);
+  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.waveEnd);
+  assert.strictEqual(g.lootVacuumT, JH.JUICE.vacuumDur);
+});
+
+test("killJuice: kill sound pitch climbs with the combo and caps", () => {
+  const g = killStub(false);
+  for (let i = 0; i < 15; i++) {
+    const e = new JH.Enemy("mook", 50, 40);
+    g.enemies.push(e);
+    e.die(g);
+  }
+  const dies = g.audio.played.filter((s) => s.k === "die");
+  assert.strictEqual(dies[0].o.pitch, 1, "first kill at base pitch");
+  assert.ok(dies[5].o.pitch > dies[1].o.pitch, "ladder climbs");
+  const cap = Math.pow(2, JH.JUICE.comboPitchCap / 12);
+  assert.ok(Math.abs(dies[14].o.pitch - cap) < 1e-9, "caps at +12 semitones");
+});
+
+test("addSplat: cap culls oldest", () => {
+  const g = killStub(false);
+  for (let i = 0; i < JH.JUICE.splatCap + 5; i++) g.addSplat(i, 40, 16);
+  assert.strictEqual(g.splats.length, JH.JUICE.splatCap);
+  assert.strictEqual(g.splats[0].x, 5, "oldest culled first");
+});
+
+test("KillPop: expires after ~70ms", () => {
+  const kp = new JH.KillPop(new JH.Enemy("mook", 10, 40));
+  for (let i = 0; i < 3; i++) kp.update(0.016);
+  assert.ok(!kp.dead);
+  for (let i = 0; i < 3; i++) kp.update(0.016);
+  assert.ok(kp.dead);
+});
+
+test("Player.takeHit: playerHit tier + shake kicked away from impact", () => {
+  JH.Upgrades.reset();
+  const p = new JH.Player(60, 40);
+  const g = killStub(false);
+  g.player = p;
+  p.takeHit(10, g, 100);      // hit from the right
+  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.playerHit);
+  assert.strictEqual(g.shakeKickX, -1, "kick away from impact (leftward)");
+});

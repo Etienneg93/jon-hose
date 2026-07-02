@@ -730,6 +730,29 @@
     },
 
     hitStop(secs) { this.hitStopTimer = Math.max(this.hitStopTimer, secs); },
+    // Per-kill presentation, one place: tiered hit-stop, pitch-laddered kill
+    // sound, white kill pop, heavy-kill boom + wet splat, and the wave-ender
+    // beat (big freeze + shake + arena-wide loot vacuum). Bosses bypass this
+    // via their own die() overrides. Simultaneous kills take the strongest
+    // freeze (hitStop maxes), never a sum.
+    killJuice(e) {
+      const J = JH.JUICE;
+      const heavy = !!e.elite || J.heavyTypes.includes(e.type);
+      const last = this.waveActive && this.enemies.every((x) => x.dead || x === e);
+      this.audio.play("die", { pitch: Math.pow(2, Math.min(this.combo, J.comboPitchCap) / 12) });
+      this.hitStop(last ? J.hitstop.waveEnd : heavy ? J.hitstop.heavyKill : J.hitstop.kill);
+      if (last) { this.shake(5); this.lootVacuumT = J.vacuumDur; }
+      if (heavy) {
+        this.embers.push(new JH.FxBurst(e.x, e.y, e.bodyW > 18 ? "boom-mid" : "boom-small", { scale: 0.55 }));
+        this.addSplat(e.x, e.y, e.bodyW);
+      }
+      this.embers.push(new JH.KillPop(e));
+    },
+    // Wet ground decal where a heavy kill landed (drawn in render; capped).
+    addSplat(x, y, w) {
+      this.splats.push({ x, y, rx: w * 1.1, t: 0 });
+      if (this.splats.length > JH.JUICE.splatCap) this.splats.shift();
+    },
     defer(delayMs, fn) { this.deferredQueue.push({ rem: delayMs / 1000, fn }); },
     tickDeferred(dt) {
       this.deferredQueue = this.deferredQueue.filter((e) => {

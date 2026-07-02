@@ -259,7 +259,9 @@
         _hurtOC2d.fillRect(0, 0, 220, 300);
         _hurtOC2d.globalCompositeOperation = "source-over";
         // Stamp silhouette onto main canvas.
-        ctx.globalAlpha = Math.min(opt.hurtAlpha, HURT_FLASH_MAX_ALPHA);
+        // flashCap lets one-shot effects (KillPop) exceed the steady-stream
+        // cap without whiting out enemies under continuous spray.
+        ctx.globalAlpha = Math.min(opt.hurtAlpha, opt.flashCap || HURT_FLASH_MAX_ALPHA);
         ctx.drawImage(_hurtOC, x - ox, y - oy);
       }
       ctx.restore();
