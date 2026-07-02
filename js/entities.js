@@ -712,7 +712,7 @@
       const bx = Math.round(sx - barW / 2);
       const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
       const wFrac  = Math.max(0, this.water / this.stats.maxWater);
-      const barTop = Math.round(sy - this.stats.bodyH - 34);
+      const barTop = Math.round(sy - this.stats.bodyH - 30);
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
       // HP
@@ -720,11 +720,17 @@
       ctx.fillRect(bx, barTop, barW, 3);
       ctx.fillStyle = hpFrac > 0.5 ? "#44cc44" : hpFrac > 0.25 ? "#ddaa22" : "#ee3333";
       ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
-      // Kibble regen: a subtle bright band sweeps the HP bar left → right.
+      // Kibble regen: the HP fill breathes — a brighter overlay + soft halo
+      // pulsing in and out, no moving parts.
       if (this.kibbleTimer > 0) {
-        const sweep = (this.t * 2.2) % 1;
-        ctx.fillStyle = "rgba(210,255,220,0.55)";
-        ctx.fillRect(bx + Math.round((barW - 6) * sweep), barTop, 6, 3);
+        const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
+        ctx.save();
+        ctx.shadowColor = "#7dff9f";
+        ctx.shadowBlur = 1.5 + 2.5 * pulse;
+        ctx.globalAlpha = 0.18 + 0.30 * pulse;
+        ctx.fillStyle = "#d9ffe4";
+        ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
+        ctx.restore();
       }
       // H₂O
       ctx.fillStyle = "#1a3344";
@@ -735,11 +741,17 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
-      // GUSH regen: a subtle bright band sweeps the water bar left → right.
+      // GUSH regen: the water fill breathes — a brighter overlay + soft halo
+      // pulsing in and out, no moving parts.
       if (this.gushRegenT > 0) {
-        const sweep = (this.t * 2.2) % 1;
-        ctx.fillStyle = "rgba(220,245,255,0.55)";
-        ctx.fillRect(bx + Math.round((barW - 6) * sweep), barTop + 4, 6, 3);
+        const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
+        ctx.save();
+        ctx.shadowColor = "#9fe0ff";
+        ctx.shadowBlur = 1.5 + 2.5 * pulse;
+        ctx.globalAlpha = 0.18 + 0.30 * pulse;
+        ctx.fillStyle = "#d8f4ff";
+        ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+        ctx.restore();
       }
       // Status indicators above bars — stacked if both active
       let indY = barTop - 2;
