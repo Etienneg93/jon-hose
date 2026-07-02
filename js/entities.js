@@ -720,6 +720,12 @@
       ctx.fillRect(bx, barTop, barW, 3);
       ctx.fillStyle = hpFrac > 0.5 ? "#44cc44" : hpFrac > 0.25 ? "#ddaa22" : "#ee3333";
       ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
+      // Kibble regen: a subtle bright band sweeps the HP bar left → right.
+      if (this.kibbleTimer > 0) {
+        const sweep = (this.t * 2.2) % 1;
+        ctx.fillStyle = "rgba(210,255,220,0.55)";
+        ctx.fillRect(bx + Math.round((barW - 6) * sweep), barTop, 6, 3);
+      }
       // H₂O
       ctx.fillStyle = "#1a3344";
       ctx.fillRect(bx, barTop + 4, barW, 3);
@@ -729,6 +735,12 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // GUSH regen: a subtle bright band sweeps the water bar left → right.
+      if (this.gushRegenT > 0) {
+        const sweep = (this.t * 2.2) % 1;
+        ctx.fillStyle = "rgba(220,245,255,0.55)";
+        ctx.fillRect(bx + Math.round((barW - 6) * sweep), barTop + 4, 6, 3);
+      }
       // Status indicators above bars — stacked if both active
       let indY = barTop - 2;
       if (this.kibbleTimer > 0) {
@@ -748,12 +760,6 @@
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
         ctx.fillText("BURN x" + this.burnStacks, sx, indY);
       }
-      // label
-      ctx.font = "bold 6px monospace";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#9be8ff";
-      ctx.fillText("H₂O", sx, barTop + 13);
-      ctx.textAlign = "left";
 
       // Floating coin count above bars when standing near the vendor
       if (this.nearShop) {
@@ -2345,12 +2351,12 @@
     }
     update(dt) { this.t += dt; if (this.t >= 0.18) this.dead = true; return !this.dead; }
     draw(ctx, cam) {
-      // Grows and fades over the pop so the death is readable, not a blink.
+      // Fades over the pop so the death is readable, not a blink.
       const p = Math.min(1, this.t / 0.18);
       Assets.draw(ctx, this.type, this.x - cam, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: true, hurtAlpha: 1 - p, flashCap: 0.9, flashColor: "#bfe8ff",
-        scale: 1.25 + 0.35 * p,
+        scale: 1.25,
       });
     }
   }

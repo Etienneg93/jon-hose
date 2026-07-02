@@ -22,15 +22,18 @@
           <button class="btn" data-action="start">PRESS START</button>
         </div>
         <div class="audio-ctl">
-          <button class="mute-btn" data-mute aria-label="Mute">🔊</button>
-          <span class="vol-pct">♪</span>
-          <input type="range" class="vol-slider" min="0" max="100" value="50" data-vol aria-label="Music volume" />
-          <span class="vol-pct" data-volpct>50%</span>
-        </div>
-        <div class="audio-ctl">
-          <span class="vol-pct">FX</span>
-          <input type="range" class="vol-slider" min="0" max="100" value="100" data-sfxvol aria-label="Sound effects volume" />
-          <span class="vol-pct" data-sfxpct>100%</span>
+          <div class="audio-row">
+            <button class="mute-btn" data-mute aria-label="Mute music">🔊</button>
+            <span class="vol-label">Music</span>
+            <input type="range" class="vol-slider" min="0" max="100" value="50" data-vol aria-label="Music volume" />
+            <span class="vol-pct" data-volpct>50%</span>
+          </div>
+          <div class="audio-row">
+            <span class="mute-spacer"></span>
+            <span class="vol-label">Sound Effects</span>
+            <input type="range" class="vol-slider" min="0" max="100" value="100" data-sfxvol aria-label="Sound effects volume" />
+            <span class="vol-pct" data-sfxpct>100%</span>
+          </div>
         </div>
         <p class="hint">Move: WASD / Arrows &nbsp;·&nbsp; Spray: J / Space &nbsp;·&nbsp; Dash: Shift / L &nbsp;·&nbsp; Shop: E</p>
       </section>
@@ -72,15 +75,18 @@
         <h2>PAUSED</h2>
         <button class="btn" data-action="resume-pause">RESUME</button>
         <div class="audio-ctl">
-          <button class="mute-btn" data-mute aria-label="Mute">🔊</button>
-          <span class="vol-pct">♪</span>
-          <input type="range" class="vol-slider" min="0" max="100" value="50" data-vol aria-label="Music volume" />
-          <span class="vol-pct" data-volpct>50%</span>
-        </div>
-        <div class="audio-ctl">
-          <span class="vol-pct">FX</span>
-          <input type="range" class="vol-slider" min="0" max="100" value="100" data-sfxvol aria-label="Sound effects volume" />
-          <span class="vol-pct" data-sfxpct>100%</span>
+          <div class="audio-row">
+            <button class="mute-btn" data-mute aria-label="Mute music">🔊</button>
+            <span class="vol-label">Music</span>
+            <input type="range" class="vol-slider" min="0" max="100" value="50" data-vol aria-label="Music volume" />
+            <span class="vol-pct" data-volpct>50%</span>
+          </div>
+          <div class="audio-row">
+            <span class="mute-spacer"></span>
+            <span class="vol-label">Sound Effects</span>
+            <input type="range" class="vol-slider" min="0" max="100" value="100" data-sfxvol aria-label="Sound effects volume" />
+            <span class="vol-pct" data-sfxpct>100%</span>
+          </div>
         </div>
       </section>
     </div>

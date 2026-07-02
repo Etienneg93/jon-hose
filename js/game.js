@@ -96,9 +96,9 @@
         const v = Math.round(JH.Music.volume * 100);
         const sv = Math.round(JH.AudioFX.volume * 100);
         document.querySelectorAll("[data-vol]").forEach((s) => { s.value = v; });
-        document.querySelectorAll("[data-volpct]").forEach((s) => { s.textContent = JH.Music.muted ? "MUTE" : v + "%"; });
+        document.querySelectorAll("[data-volpct]").forEach((s) => { s.textContent = (JH.Music.muted ? 0 : v) + "%"; });
         document.querySelectorAll("[data-sfxvol]").forEach((s) => { s.value = sv; });
-        document.querySelectorAll("[data-sfxpct]").forEach((s) => { s.textContent = JH.Music.muted ? "MUTE" : sv + "%"; });
+        document.querySelectorAll("[data-sfxpct]").forEach((s) => { s.textContent = sv + "%"; });
         document.querySelectorAll("[data-mute]").forEach((b) => { b.textContent = (JH.Music.muted || JH.Music.volume === 0) ? "🔇" : "🔊"; });
       };
       document.querySelectorAll("[data-vol]").forEach((sl) => {

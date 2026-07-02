@@ -29,6 +29,7 @@
     enabled: true,
     volume: 1,    // SFX channel level — independent of the music slider
     _files: {},   // cached <audio> elements, keyed by src, for playFile()
+    _lastAt: {},  // per-sound last-trigger time, for the anti-stack throttle
     setVolume(v) {
       this.volume = Math.max(0, Math.min(1, v));
       if (JH.Music) JH.Music.save();   // persists alongside the music settings
@@ -45,11 +46,15 @@
       if (!this.ctx) return;
       const def = JH.SFX[name];
       if (!def) return;
-      // Respect the global mute; loudness comes from the SFX channel, which
-      // is independent of the music slider.
-      const M = JH.Music;
-      if (M && M.muted) return;
+      // SFX are fully independent of the music channel: the mute button and
+      // music slider never silence effects — only the FX slider (0%) does.
       const vol = this.volume;
+      if (vol <= 0) return;
+      // Anti-stack throttle: many identical triggers in one burst (a coin
+      // shower) collapse to one sound instead of a grating chord.
+      const now = performance.now();
+      if (this._lastAt[name] != null && now - this._lastAt[name] < 45) return;
+      this._lastAt[name] = now;
       const t = this.ctx.currentTime;
       const g = this.ctx.createGain();
       g.gain.setValueAtTime(def.gain * vol, t);
@@ -82,9 +87,8 @@
     // One-shot playback of a recorded sound file (as opposed to the synth
     // blips above). Respects the shared mute/volume controls from Music.
     playFile(src, gain) {
-      const M = JH.Music;
-      if (M && M.muted) return;
       const vol = this.volume;
+      if (vol <= 0) return;
       let el = this._files[src];
       if (!el) {
         try { el = new Audio(src); el.preload = "auto"; } catch (e) { return; }

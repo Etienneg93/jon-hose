@@ -105,12 +105,30 @@ html, body {
 /* ---------- Audio controls (title + pause) ---------- */
 .audio-ctl {
   display: flex;
-  align-items: center;
-  gap: 0.8vw;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45em;
   background: rgba(10, 14, 22, 0.6);
   border: 2px solid var(--accent);
   border-radius: 4px;
   padding: 0.5em 0.9em;
+}
+.audio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8vw;
+}
+.vol-label {
+  width: clamp(80px, 14vw, 120px);
+  text-align: right;
+  font-size: clamp(9px, 1.5vw, 12px);
+  color: var(--accent-2);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.mute-spacer {
+  display: inline-block;
+  width: calc(clamp(14px, 2.6vw, 22px) + 0.4em);
 }
 .mute-btn {
   font-family: var(--font);
