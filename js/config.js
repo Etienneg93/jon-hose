@@ -293,6 +293,33 @@
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
   };
 
+  // ---- Juice / game-feel tunables --------------------------------------
+  JH.JUICE = {
+    // Hit-stop tier table — every freeze routes through game.hitStop, which
+    // takes the max of pending freezes (simultaneous kills never sum).
+    hitstop: {
+      kill: 0.05,        // regular enemy death
+      heavyKill: 0.09,   // elite, or heavy-frame type below
+      waveEnd: 0.14,     // last kill of an active wave
+      playerHit: 0.07,
+      domePop: 0.10,     // reserved: dome/wall break
+      bossPhase: 0.20,   // reserved: boss phase transitions
+    },
+    heavyTypes: ["bulwark", "furnace", "smelt"],
+    // Trauma screenshake: shake(n) adds n/traumaDiv trauma (cap 1); the
+    // rendered amplitude is trauma^2 * shakeMax px and trauma decays
+    // traumaDecay/sec — big hits punch, small ones barely register.
+    traumaDiv: 16,
+    traumaDecay: 1.1,
+    shakeMax: 14,
+    shakeScale: 1,        // player-facing intensity multiplier (settings hook)
+    vacuumDur: 1.2,       // wave-ender loot-magnet duration (sec)
+    splatCap: 40,         // wet kill decals kept at once (oldest culled)
+    splatFade: 2.0,       // splat decal lifetime (sec)
+    comboPitchCap: 12,    // kill-sound ladder tops out +12 semitones
+    comboWaterRefund: 10, // GUSH every-5th-kill water crumb
+  };
+
   // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.
   JH.FUSE_DROP = {
     height: 150,      // spawn z (px); gravity (620) lands it in ~0.7s

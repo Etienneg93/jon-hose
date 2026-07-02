@@ -30,7 +30,9 @@
     waveActive: false,
     waveCleared: false,
     elapsed: 0, kills: 0,
-    shakeAmt: 0,
+    trauma: 0, shakeKickX: 0,   // trauma screenshake (see JH.JUICE)
+    lootVacuumT: 0,             // wave-ender loot vacuum time remaining
+    splats: [],                 // wet kill decals {x, y, rx, t}
     bannerTimer: 0,
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
@@ -282,7 +284,8 @@
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.checkpointWave = 0;
-      this.elapsed = 0; this.kills = 0; this.shakeAmt = 0;
+      this.elapsed = 0; this.kills = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.splats = [];
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
@@ -707,7 +710,24 @@
         else if (r < t.water) this.spawnPickup("water_can", e.x - 6, e.y, 40);
       }
     },
-    shake(n) { this.shakeAmt = Math.min(12, this.shakeAmt + n); },
+    // Add n/traumaDiv trauma (legacy 1..14 scale at existing call sites).
+    // Optional dirX kicks the shake away from an impact direction.
+    shake(n, dirX) {
+      this.trauma = Math.min(1, (this.trauma || 0) + n / JH.JUICE.traumaDiv);
+      if (dirX) this.shakeKickX = dirX > 0 ? 1 : -1;
+    },
+    tickShake(dt) {
+      if (this.trauma > 0) this.trauma = Math.max(0, this.trauma - JH.JUICE.traumaDecay * dt);
+      else this.shakeKickX = 0;
+    },
+    shakeOffset() {
+      if (!this.trauma) return { x: 0, y: 0 };
+      const amp = this.trauma * this.trauma * JH.JUICE.shakeMax * JH.JUICE.shakeScale;
+      return {
+        x: ((Math.random() - 0.5) + (this.shakeKickX || 0) * 0.6) * amp,
+        y: (Math.random() - 0.5) * amp,
+      };
+    },
 
     hitStop(secs) { this.hitStopTimer = Math.max(this.hitStopTimer, secs); },
     defer(delayMs, fn) { this.deferredQueue.push({ rem: delayMs / 1000, fn }); },
@@ -846,6 +866,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.splats = [];
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
@@ -985,7 +1006,8 @@
         this.bannerTimer -= dt;
         if (this.bannerTimer <= 0) document.getElementById("banner").classList.add("hidden");
       }
-      if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
+      this.tickShake(dt);
+      if (this.lootVacuumT > 0) this.lootVacuumT -= dt;
       if (this.worldFadeT > 0) this.worldFadeT = Math.max(0, this.worldFadeT - dt);
       if (this.warpInT > 0) this.warpInT = Math.max(0, this.warpInT - dt);
       if (this.state === "play" || this.state === "bossDeathSeq") this.tickDeferred(dt);
@@ -1220,10 +1242,9 @@
       }
       const ctx = this.ctx;
       ctx.save();
-      // screen shake
-      if (this.shakeAmt > 0) {
-        ctx.translate((Math.random() - 0.5) * this.shakeAmt, (Math.random() - 0.5) * this.shakeAmt);
-      }
+      // screen shake (trauma model — see JH.JUICE)
+      const so = this.shakeOffset();
+      if (so.x || so.y) ctx.translate(so.x, so.y);
       ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
 
       JH.Background.draw(ctx);

@@ -63,11 +63,12 @@
       } else {
         const osc = this.ctx.createOscillator();
         osc.type = def.type === "saw" ? "sawtooth" : def.type;
-        osc.frequency.setValueAtTime(def.freq, t);
+        const freq = def.freq * ((opt && opt.pitch) || 1);
+        osc.frequency.setValueAtTime(freq, t);
         if (name === "coin" || name === "win" || name === "buy" || name === "upgrade")
-          osc.frequency.exponentialRampToValueAtTime(def.freq * 1.6, t + def.dur);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.6, t + def.dur);
         if (name === "hurt" || name === "die")
-          osc.frequency.exponentialRampToValueAtTime(def.freq * 0.5, t + def.dur);
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.5, t + def.dur);
         osc.connect(g);
         osc.start(t); osc.stop(t + def.dur);
       }
