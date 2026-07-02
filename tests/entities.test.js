@@ -252,3 +252,37 @@ test("Fuse death burn: elliptical, matching its death patch", () => {
   f2.die(g);
   assert.strictEqual(g.player.burns, 1);
 });
+
+test("Quake stomp: old rect corners no longer hit; drawn ellipse does", () => {
+  const d = JH.QUAKE;
+  // Corner of the old rect (|dx|<36, |dy|<26): dx=32.4, dy=23 → old HIT.
+  const q = JH.makeEnemy("quake", 100, 40);
+  let g = stubGame(100 + d.stompRadius * 0.9, 40 + 23);
+  q.state = "tele"; q.windTimer = 0.001; q.atkDur = 1;
+  q.think(0.016, g);
+  assert.strictEqual(g.player.hits, 0);
+  // Dead ahead at half radius → hit.
+  const q2 = JH.makeEnemy("quake", 100, 40);
+  g = stubGame(100 + d.stompRadius * 0.5, 40);
+  q2.state = "tele"; q2.windTimer = 0.001; q2.atkDur = 1;
+  q2.think(0.016, g);
+  assert.strictEqual(g.player.hits, 1);
+});
+
+test("Quake leap: landing hit matches the crosshair telegraph ellipse", () => {
+  const d = JH.QUAKE;
+  // Depth 0.6·leapRadius: old circle hit (31.2 < 52); ellipse (ry=20.8) must not.
+  const q = JH.makeEnemy("quake", 100, 40);
+  q.state = "leaping"; q.leapTarget = { x: 200, y: 40 };
+  q._leapStartX = 100; q._leapStartY = 40; q._leapProgress = 0.999;
+  let g = stubGame(200, 40 + d.leapRadius * 0.6);
+  q.think(0.016, g);
+  assert.strictEqual(g.player.hits, 0);
+  // x-offset 0.7·leapRadius on the long axis → hit.
+  const q2 = JH.makeEnemy("quake", 100, 40);
+  q2.state = "leaping"; q2.leapTarget = { x: 200, y: 40 };
+  q2._leapStartX = 100; q2._leapStartY = 40; q2._leapProgress = 0.999;
+  g = stubGame(200 + d.leapRadius * 0.7, 40);
+  q2.think(0.016, g);
+  assert.strictEqual(g.player.hits, 1);
+});

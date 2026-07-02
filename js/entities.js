@@ -2283,7 +2283,7 @@
         if (this.windTimer > this.atkDur * 0.4) this.facing = dx >= 0 ? 1 : -1;
         if (this.windTimer <= 0) {
           game.shake(11); game.audio.play("whack");
-          if (Math.abs(pl.x - this.x) < d.stompRadius && Math.abs(dy) < 26)
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.stompRadius))
             pl.takeHit(d.stompDmg, game, this.x);
           const ws = enraged ? d.waveSpeed * 1.3 : d.waveSpeed;
           game.embers.push(new Shockwave(this.x, -1, ws, d));
@@ -2328,8 +2328,8 @@
         if (prog >= 1) {
           this.z = 0;
           game.shake(14); game.audio.play("whack");
-          const ldist = Math.hypot(pl.x - this.x, pl.y - this.y);
-          if (ldist < d.leapRadius) pl.takeHit(d.leapDmg, game, this.x);
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.leapRadius))
+            pl.takeHit(d.leapDmg, game, this.x);
           for (let i = 0; i < 22; i++)
             burst(game, this.x + (Math.random() - 0.5) * 28, this.y + (Math.random() - 0.5) * 22, 0,
               Math.random() < 0.4 ? JH.PAL.rubble : "#d8a860", 1, { speed: 190, life: 0.6, up: 100, grav: 250 });
@@ -2403,10 +2403,10 @@
       ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
       ctx.lineWidth = 1.5;
       ctx.globalAlpha = 0.5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = "#ff5a5a";
-      ctx.beginPath(); ctx.ellipse(sx, sy, r * prog, r * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, r * prog, r * JH.GROUND_RY * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     drawLeapTelegraph(ctx, cam) {
@@ -2420,17 +2420,17 @@
       ctx.lineWidth = 1.5;
       // Outer ring
       ctx.globalAlpha = 0.65;
-      ctx.beginPath(); ctx.ellipse(tx, ty, r, r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(tx, ty, r, r * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       // Crosshair
       ctx.globalAlpha = 0.45;
       ctx.beginPath();
       ctx.moveTo(tx - r - 6, ty); ctx.lineTo(tx + r + 6, ty);
-      ctx.moveTo(tx, ty - r * 0.5 - 6); ctx.lineTo(tx, ty + r * 0.5 + 6);
+      ctx.moveTo(tx, ty - r * JH.GROUND_RY - 6); ctx.lineTo(tx, ty + r * JH.GROUND_RY + 6);
       ctx.stroke();
       // Fill progress
       ctx.globalAlpha = 0.18 + 0.2 * prog;
       ctx.fillStyle = "#ff5a5a";
-      ctx.beginPath(); ctx.ellipse(tx, ty, r * prog, r * 0.45 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(tx, ty, r * prog, r * JH.GROUND_RY * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     die(game) {
