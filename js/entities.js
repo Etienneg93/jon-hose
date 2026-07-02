@@ -645,31 +645,16 @@
         ctx.shadowColor = "#ff4400";
         ctx.shadowBlur = 5 + 7 * bIntensity + 3 * Math.sin(this.t * 12);
       }
-      // Kibble/Concerta glows yield to the burn glow — being on fire is the
-      // priority read, so its red glow wins when both are active.
-      if (this.kibbleTimer > 0) {
-        ctx.save();
-        if (this.burnStacks === 0) {
-          ctx.shadowColor = "#44ee66";
-          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
-        }
-      }
-      if (this.concertaTimer > 0) {
-        ctx.save();
-        if (this.burnStacks === 0) {
-          ctx.shadowColor = "#cc44ff";
-          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
-        }
-      }
       const spriteSy = Geo.feetScreenY(this.y, this.z);
-      // GUSH regen window: soft blue glow (lowest priority — burn/kibble/
-      // concerta glows win).
-      const gushGlow = this.gushRegenT > 0 && this.burnStacks === 0 &&
-        this.kibbleTimer <= 0 && this.concertaTimer <= 0;
-      if (gushGlow) {
-        ctx.save();
-        ctx.shadowColor = "#55c8ff";
-        ctx.shadowBlur = 5 + 2 * Math.sin(this.t * 6);
+      // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
+      // hugs the body, kibble green rings around it, concerta purple outside
+      // that — active buffs stack visually instead of overwriting. Burn's
+      // fire read replaces them all.
+      const outlines = [];
+      if (this.burnStacks === 0) {
+        if (this.gushRegenT > 0)    outlines.push(["#55c8ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
+        if (this.kibbleTimer > 0)   outlines.push(["#44ee66", 0.55 + 0.30 * Math.sin(this.t * 5)]);
+        if (this.concertaTimer > 0) outlines.push(["#cc44ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
       }
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
@@ -678,10 +663,8 @@
         squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
         walking: this.walking,
+        outlines,
       });
-      if (gushGlow) ctx.restore();
-      if (this.concertaTimer > 0) ctx.restore();
-      if (this.kibbleTimer > 0) ctx.restore();
       if (this.burnStacks > 0) {
         ctx.restore();
         // Draw flame tongues rising from feet to show burn stacks

@@ -266,35 +266,57 @@
         ctx.fillStyle = color;
         ctx.fillRect(sx, sy, w, h);
       };
-      // When hurtAlpha > 0 strip the hurt flag from the main call so painters
-      // don't early-return — the silhouette overlay handles the hit visual.
-      const usesilhouette = opt.hurt && opt.hurtAlpha > 0;
-      fn(p, usesilhouette ? Object.assign({}, opt, { hurt: false }) : opt, ctx, x, y, facing);
-
-      // Silhouette stamp: render the entity shape onto the offscreen canvas,
-      // flood-fill `color`, and composite over the sprite at `alpha`.
-      const stamp = (color, alpha) => {
-        const ox = 110, oy = 280;
+      // Silhouette renderer: draws the entity shape onto the offscreen
+      // canvas flood-filled with `color`. stamp() composites it over the
+      // sprite; outline rings blit it at pixel offsets.
+      const OX = 110, OY = 280;
+      const renderSil = (color) => {
         _hurtOC2d.globalAlpha = 1;
         _hurtOC2d.globalCompositeOperation = "source-over";
         _hurtOC2d.clearRect(0, 0, 220, 300);
         const hp = (lx, ly, w, h, c) => {
           w = Math.round(w * scale); h = Math.round(h * scale);
-          const osx = facing === 1 ? ox + Math.round(lx * scale) : ox - Math.round(lx * scale) - w;
-          const osy = oy - Math.round(ly * scale) - h;
+          const osx = facing === 1 ? OX + Math.round(lx * scale) : OX - Math.round(lx * scale) - w;
+          const osy = OY - Math.round(ly * scale) - h;
           _hurtOC2d.fillStyle = c;
           _hurtOC2d.fillRect(osx, osy, w, h);
         };
         _hurtOC2d.save();
-        fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, ox, oy, facing);
+        fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, OX, OY, facing);
         _hurtOC2d.restore();
         _hurtOC2d.globalCompositeOperation = "source-in";
         _hurtOC2d.fillStyle = color;
         _hurtOC2d.fillRect(0, 0, 220, 300);
         _hurtOC2d.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(_hurtOC, x - ox, y - oy);
       };
+      const stamp = (color, alpha) => {
+        renderSil(color);
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(_hurtOC, x - OX, y - OY);
+      };
+
+      // Buff auras: opt.outlines = [[color, alpha], ...] ordered inner →
+      // outer; ring i sits (i+1)px outside the silhouette. Rings render
+      // under the sprite (drawn next), so only clean 1px-per-layer outlines
+      // remain — no shadowBlur, no blur-edge artifacts, and layers ring each
+      // other instead of overwriting.
+      if (opt.outlines && opt.outlines.length) {
+        for (let i = opt.outlines.length - 1; i >= 0; i--) {
+          const oc = opt.outlines[i][0];
+          const oa = Math.max(0, Math.min(1, opt.outlines[i][1]));
+          renderSil(oc);
+          const r = i + 1;
+          ctx.globalAlpha = oa;
+          for (const d of [[r, 0], [-r, 0], [0, r], [0, -r], [r, r], [r, -r], [-r, r], [-r, -r]])
+            ctx.drawImage(_hurtOC, x - OX + d[0], y - OY + d[1]);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // When hurtAlpha > 0 strip the hurt flag from the main call so painters
+      // don't early-return — the silhouette overlay handles the hit visual.
+      const usesilhouette = opt.hurt && opt.hurtAlpha > 0;
+      fn(p, usesilhouette ? Object.assign({}, opt, { hurt: false }) : opt, ctx, x, y, facing);
 
       // Wetness: a steady translucent soak tint (the enemy hurt read) — grows
       // with spray hits toward wetTintMax, no pulsing.
