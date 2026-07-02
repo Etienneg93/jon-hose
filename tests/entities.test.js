@@ -286,3 +286,19 @@ test("Quake leap: landing hit matches the crosshair telegraph ellipse", () => {
   q2.think(0.016, g);
   assert.strictEqual(g.player.hits, 1);
 });
+
+test("Slayer slam: hits the drawn ellipse, not the old rect", () => {
+  const d = JH.SLAYER;
+  // Old rect corner (|dx|<38, |dy|<24): dx=34.2, dy=20 → old HIT; ellipse miss.
+  const s = JH.makeEnemy("slayer", 100, 40);
+  s.state = "slam"; s.windTimer = 0.001;
+  let g = stubGame(100 + d.slamRange * 0.9, 40 + 20);
+  s.think(0.016, g);
+  assert.strictEqual(g.player.hits, 0);
+  // Dead ahead at half range → hit.
+  const s2 = JH.makeEnemy("slayer", 100, 40);
+  s2.state = "slam"; s2.windTimer = 0.001;
+  g = stubGame(100 + d.slamRange * 0.5, 40);
+  s2.think(0.016, g);
+  assert.strictEqual(g.player.hits, 1);
+});

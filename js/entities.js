@@ -3499,7 +3499,7 @@
       if (this.state === "slam") {
         this.windTimer -= dt;
         if (this.windTimer <= 0) {
-          if (Math.abs(dx) < d.slamRange && Math.abs(dy) < 24)
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.slamRange))
             pl.takeHit(d.slamDmg, game, this.x);
           for (let i = 0; i < 10; i++)
             burst(game, this.x + (Math.random() - 0.5) * 24, this.y + (Math.random() - 0.5) * 16, 4,
@@ -3602,12 +3602,11 @@
       }
       // Slam telegraph zone.
       if (this.state === "slam" && this.strikeFx <= 0) {
-        // Same zone as before (slamRange x ±24 depth) but drawn as a flashing
-        // ground ellipse — the bare fillRect read as a glitch, not a telegraph.
+        // The telegraph IS the hit zone: shared ground-footprint ellipse.
         const d = this.def;
         const flash = Math.floor(this.t * 12) & 1;
         const gy = Geo.feetScreenY(this.y, 0);
-        const ry = (Geo.feetScreenY(this.y + 24, 0) - Geo.feetScreenY(this.y - 24, 0)) / 2;
+        const ry = d.slamRange * JH.GROUND_RY;
         ctx.save();
         ctx.beginPath();
         ctx.ellipse(Math.round(sx), Math.round(gy), d.slamRange, Math.max(6, ry), 0, 0, Math.PI * 2);
