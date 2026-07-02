@@ -804,6 +804,20 @@
   registerCoin("suds_gold",   COIN_Y.gold,   PAL.suds);
   registerCoin("suds_silver", COIN_Y.silver, "#a0a8c0");
   registerCoin("suds_bronze", COIN_Y.bronze, "#c87030");
+  // Holy Essence pickup — a small glowing gold cross (never expires).
+  Assets.register("essence_cross", (p, opt, ctx, x, y) => {
+    const t = opt.t || 0;
+    const bob = Math.sin(t * 3) * 2;
+    ctx.save();
+    ctx.shadowColor = "#ffe9a0";
+    ctx.shadowBlur = 6 + 2 * Math.sin(t * 5);
+    ctx.fillStyle = PAL.suds;
+    ctx.fillRect(Math.round(x - 1), Math.round(y - 15 + bob), 3, 12);   // upright
+    ctx.fillRect(Math.round(x - 4), Math.round(y - 12 + bob), 9, 3);    // crossbar
+    ctx.fillStyle = "#fff7c2";
+    ctx.fillRect(Math.round(x), Math.round(y - 14 + bob), 1, 10);       // inner shine
+    ctx.restore();
+  });
   Assets.register("water_can", (p, opt) => {
     const bob = Math.sin((opt.t || 0) * 6) * 1.5;
     p(-4, 2 + bob, 8, 9, PAL.waterDk);

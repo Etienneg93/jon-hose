@@ -439,11 +439,10 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      // Mix-up set-pieces award Holy Essence like boss kills do — the Church
-      // currency flows from every non-standard encounter, not bosses alone.
+      // Mix-up set-pieces award Holy Essence like boss kills do — dropped as
+      // a glowing cross pickup (never expires; awards on collect). No banner.
       if (clearedWave && (clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
-        if (JH.Church) JH.Church.addEssence(1);
-        this.banner("+1 HOLY ESSENCE", 1.6);
+        this.spawnPickup("cross", this.player.x + 34, this.player.y, 1);
       }
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();

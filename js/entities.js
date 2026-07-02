@@ -1609,7 +1609,8 @@
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       if (dist < 30) { this.x += dx * 4 * dt; this.y += dy * 4 * dt; }
       if (dist < 12) { this.collect(game); return false; }
-      if (this.t > this.life) {
+      // Holy Essence crosses never expire — everything else blinks out.
+      if (this.kind !== "cross" && this.t > this.life) {
         if (this.t > this.life + 2) return false;        // blink then vanish
       }
       return true;
@@ -1630,14 +1631,20 @@
         game.audio.play("pill");
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.pill, 14, { speed: 90, life: 0.55, up: 60 });
       }
-      if (this.kind !== "pill" && this.kind !== "health")
+      else if (this.kind === "cross") {
+        if (JH.Church) JH.Church.addEssence(this.value || 1);
+        game.audio.play("upgrade");
+        burst(game, pl.x, pl.y, pl.z + 12, "#fff7c2", 12, { speed: 80, life: 0.5, up: 70 });
+      }
+      if (this.kind !== "pill" && this.kind !== "health" && this.kind !== "cross")
         burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : JH.PAL.water, 6, { speed: 60, life: 0.3 });
     }
     draw(ctx, cam) {
-      if (this.t > this.life && (Math.floor(this.t * 8) & 1)) return; // blink before despawn
+      if (this.kind !== "cross" && this.t > this.life && (Math.floor(this.t * 8) & 1)) return; // blink before despawn
       const key = this.kind === "suds"
         ? (this.value >= 10 ? "suds_gold" : this.value >= 5 ? "suds_silver" : "suds_bronze")
-        : this.kind === "health" ? "health" : this.kind === "pill" ? "pill" : "water_can";
+        : this.kind === "health" ? "health" : this.kind === "pill" ? "pill"
+        : this.kind === "cross" ? "essence_cross" : "water_can";
       Assets.shadow(ctx, this.x - cam, Geo.feetScreenY(this.y, 0), 5);
       Assets.draw(ctx, key, this.x - cam, Geo.feetScreenY(this.y, this.z), 1, { t: this.t });
     }
