@@ -4,6 +4,11 @@ const assert = require("node:assert");
 
 global.window = global.window || {};
 require("../js/config.js");
+// world.js preloads a debris sprite via JH.Loader at script eval; node has no
+// Image, so stub the loader. entities.js captures Geo at eval time, so world
+// must load first (same order as index.html).
+global.window.JH.Loader = { img: () => ({}) };
+require("../js/world.js");
 require("../js/upgrades.js");
 require("../js/entities.js");
 const JH = global.window.JH;
@@ -87,4 +92,80 @@ test("Fireball fired at an off-row player actually hits them", () => {
   for (let i = 0; i < 200 && !fb.dead; i++) fb.update(1 / 60, game);
   assert.ok(game.player.hits >= 1, "aimed ball should connect");
   assert.ok(game.player.burns >= 1, "hit should apply burn stacks");
+});
+
+// ---- ground-hazard footprint contract (rim = hitbox) ----
+
+// Minimal game stub for hazard update/think paths. Extend fields here if an
+// entity path touches something missing — keep one shared stub.
+function stubGame(px, py) {
+  return {
+    player: {
+      x: px, y: py, z: 0, alive: true, bodyW: 12, facing: 1,
+      burns: 0, hits: 0,
+      applyBurn(n) { this.burns += n; },
+      takeHit() { this.hits++; },
+      applyKnockback() {},
+    },
+    particles: [], embers: [], firePatches: [], pickups: [],
+    bounds: { minX: 0, maxX: 600 },
+    shake() {}, onEnemyKilled() {},
+    audio: { played: [], play(k) { this.played.push(k); } },
+  };
+}
+
+test("FirePatch: first contact arms sizzle grace — warning, no instant burn", () => {
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  const g = stubGame(100, 40);
+  p.update(0.016, g);
+  assert.strictEqual(g.player.burns, 0);
+  assert.deepStrictEqual(g.audio.played, ["sizzle"]);
+});
+
+test("FirePatch: still inside after the grace window → burn lands", () => {
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  const g = stubGame(100, 40);
+  for (let t = 0; t < 0.3; t += 0.016) p.update(0.016, g);
+  assert.ok(g.player.burns >= 1);
+});
+
+test("FirePatch: stepping out during grace → no burn ever", () => {
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  const g = stubGame(100, 40);
+  p.update(0.016, g);            // sizzle warning fires
+  g.player.y = 40 + 30;          // step out of the footprint
+  for (let t = 0; t < 0.5; t += 0.016) p.update(0.016, g);
+  assert.strictEqual(g.player.burns, 0);
+});
+
+test("FirePatch: hit footprint is the drawn ellipse — depth miss a circle would hit", () => {
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  // footprint ry = 24*0.85*GROUND_RY ≈ 8.2; a 24-radius circle reaches depth 24
+  const g = stubGame(100, 40 + 15);
+  for (let t = 0; t < 0.5; t += 0.016) p.update(0.016, g);
+  assert.strictEqual(g.player.burns, 0);
+  assert.deepStrictEqual(g.audio.played, []);   // never even warned
+});
+
+test("FirePatch: re-entry after grace burns immediately, no second warning", () => {
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  const g = stubGame(100, 40);
+  for (let t = 0; t < 0.3; t += 0.016) p.update(0.016, g);  // grace + first burn
+  g.player.y = 40 + 30;                                      // step out
+  for (let t = 0; t < 0.5; t += 0.016) p.update(0.016, g);  // burn interval expires
+  const before = g.player.burns;
+  g.player.y = 40;                                           // step back in
+  p.update(0.016, g);
+  assert.strictEqual(g.player.burns, before + 1);
+  assert.strictEqual(g.audio.played.filter((k) => k === "sizzle").length, 1);
+});
+
+test("FirePatch.footprint: shrinks with spray progress, floors at r=6", () => {
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  const f0 = p.footprint();
+  assert.strictEqual(f0.rx, 24 * 0.85);
+  assert.strictEqual(f0.ry, f0.rx * JH.GROUND_RY);
+  p.sprayProgress = 3;                 // fully extinguish-progressed
+  const f1 = p.footprint();
+  assert.ok(f1.r >= 6 && f1.r < f0.r);
 });

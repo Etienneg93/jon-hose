@@ -291,6 +291,7 @@
     burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
+    graceWindow: 0.2,        // first-contact sizzle warning before a patch's first burn
   };
 
   // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.
@@ -566,5 +567,6 @@
     jump:   { type: "square", freq: 480, dur: 0.09, gain: 0.08 },
     pill:   { type: "square", freq: 1400, dur: 0.45, gain: 0.14 },
     blast:  { type: "saw", freq: 55, dur: 0.35, gain: 0.18 },
+    sizzle: { type: "noise", dur: 0.15, gain: 0.10 },
   };
 })();

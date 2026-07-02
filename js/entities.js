@@ -1360,24 +1360,35 @@
       this.extinguishDur = extinguishDur;
       this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
       this.patchBurnT = 0;     // cooldown between burn-stack applications
+      this.graceT = -1;        // sizzle grace: -1 = never touched; counts down after first contact
+      this.rimFlashT = 0;      // white rim flash while the sizzle warning is live
       this.dead = false; this.t = 0;
+    }
+    // Live footprint (shrinks as spray extinguishes). ONE shape shared by the
+    // hit test and the drawn scorch/rim — the rim you see is the hitbox.
+    footprint() {
+      const prog = this.sprayProgress / this.extinguishDur;
+      const r = Math.max(6, this.radius * (1 - prog * 0.55));
+      const rx = r * 0.85;
+      return { r, rx, ry: rx * JH.GROUND_RY };
     }
     update(dt, game) {
       this.t += dt;
       if (this.patchBurnT > 0) this.patchBurnT -= dt;
+      if (this.graceT > 0) this.graceT -= dt;
+      if (this.rimFlashT > 0) this.rimFlashT -= dt;
       const pl = game.player;
       if (pl && pl.alive) {
-        const prog = this.sprayProgress / this.extinguishDur;
-        const r = Math.max(6, this.radius * (1 - prog * 0.55));
-        // Match the DRAWN scorch oval (draw(): ellipse r*0.85 wide, ~r*0.28 tall).
-        // x is 1:1 world->screen; depth compares screen-Y via feetScreenY (cam-
-        // independent). Jon's FEET must be inside the visible flame footprint —
-        // no body padding — so the flame no longer burns from a depth row away.
-        const dx = pl.x - this.x;
-        const dyScreen = Geo.feetScreenY(pl.y, 0) - Geo.feetScreenY(this.y, 0);
-        const rx = r * 0.85, ry = r * 0.30;
-        const inside = (dx * dx) / (rx * rx) + (dyScreen * dyScreen) / (ry * ry) < 1;
-        if (inside && this.patchBurnT <= 0) {
+        const f = this.footprint();
+        const inside = Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx, f.ry);
+        if (inside && this.graceT === -1) {
+          // First contact on this patch: audible sizzle + rim flash, and a
+          // graceWindow beat to step out before the first burn lands.
+          this.graceT = JH.FIRE.graceWindow;
+          this.rimFlashT = JH.FIRE.graceWindow;
+          if (game.audio) game.audio.play("sizzle");
+        }
+        if (inside && this.graceT !== -1 && this.graceT <= 0 && this.patchBurnT <= 0) {
           pl.applyBurn(1);
           this.patchBurnT = JH.FIRE.patchBurnInterval;
         }
@@ -1388,23 +1399,37 @@
       const sx = Math.round(this.x - cam);
       const sy = Math.round(Geo.feetScreenY(this.y, 0));
       const prog = this.sprayProgress / this.extinguishDur;
-      const r = Math.max(3, this.radius * (1 - prog * 0.55));
+      const f = this.footprint();
       const t = this.t;
       ctx.save();
+      // Scorch base decal — the EXACT hit ellipse.
       ctx.globalAlpha = Math.max(0, 0.88 - prog * 0.45);
-      // Scorch base oval
       ctx.beginPath();
-      ctx.ellipse(sx, sy, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2);
       ctx.fillStyle = "#440800";
       ctx.fill();
-      // Animated pack flames, scaled to the patch; wide patches get two extra
-      // offset flames with desynced loop phases. The globalAlpha set above
-      // (fades with extinguish progress) carries into these draws.
-      const fscale = Math.max(0.5, (r * 1.6) / 48);
+      // Bright rim on the same ellipse, pulsing while lit; flashes white during
+      // the first-contact sizzle grace.
+      const flash = this.rimFlashT > 0;
+      ctx.globalAlpha = Math.max(0, (flash ? 0.95 : 0.45 + 0.25 * Math.sin(t * 6)) - prog * 0.35);
+      ctx.strokeStyle = flash ? "#ffffff" : JH.PAL.firePatchHi;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Animated pack flames: free to be tall, never wider than the rim (cap
+      // at 80% of footprint width; fire-small frames are 16px wide native).
+      // Wide patches add two offset flames only where they stay inside the rim
+      // (offset + drawn half-width ≤ rx).
+      ctx.globalAlpha = Math.max(0, 0.88 - prog * 0.45);
+      let fscale = Math.max(0.5, (f.r * 1.6) / 48);
+      fscale = Math.min(fscale, (2 * f.rx * 0.8) / 16);
       Assets.drawFx(ctx, "fire-small", sx, sy + 2, t, { scale: fscale });
-      if (r > 20) {
-        Assets.drawFx(ctx, "fire-small", sx - r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
-        Assets.drawFx(ctx, "fire-small", sx + r * 0.4, sy + 3, t + 0.6, { scale: fscale * 0.75 });
+      if (f.r > 20) {
+        if (f.r * 0.45 + 8 * fscale * 0.7 <= f.rx)
+          Assets.drawFx(ctx, "fire-small", sx - f.r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
+        if (f.r * 0.4 + 8 * fscale * 0.75 <= f.rx)
+          Assets.drawFx(ctx, "fire-small", sx + f.r * 0.4, sy + 3, t + 0.6, { scale: fscale * 0.75 });
       }
       ctx.restore();
     }
