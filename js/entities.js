@@ -1076,8 +1076,15 @@
     }
     update(dt, game) {
       this.t += dt;
-      this.x += this.vx * dt; this.y += this.vy * dt; this.z -= 8 * dt;
-      this.y = clamp(this.y, JH.DEPTH_MIN, JH.DEPTH_MAX);
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.z = Math.max(0, this.z - 8 * dt);
+      // Past the walkable band it can't hit anyone (hit needs |dy| < 12) —
+      // cull rather than clamp: clamping froze depth motion mid-air and the
+      // ember visibly bounced off an invisible line at the band edge.
+      if (this.y < JH.DEPTH_MIN - 12 || this.y > JH.DEPTH_MAX + 12) {
+        this.dead = true;
+        return false;
+      }
       const pl = game.player;
       if (pl.alive && Math.abs(pl.x - this.x) < 12 && Math.abs(pl.y - this.y) < 12) {
         pl.takeHit(this.dmg, game, this.x); this.dead = true;
@@ -1128,6 +1135,7 @@
       this.igniteT = d.igniteDelay;  // counts down to 0; burn only activates after this
       this.life = d.lifespan;
       this.t = 0;
+      this.landed = false; this.vz = 0;
       this.dead = false;
     }
     update(dt, game) {
@@ -1135,7 +1143,18 @@
       if (this.igniteT > 0) this.igniteT -= dt;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
-      this.z = Math.max(0, this.z - JH.FIREBALL.droop * dt);  // sink off the cue line
+      if (!this.landed) {
+        this.z -= JH.FIREBALL.droop * dt;   // sink off the cue line
+        if (this.z <= 0) {
+          // Landing beat: dust + a tiny settle hop, so the on-screen kink
+          // when the sink stops reads as "hit the street", not steering.
+          this.z = 0; this.landed = true; this.vz = 40;
+          burst(game, this.x, this.y, 0, "#caa470", 6, { speed: 40, life: 0.3, up: 30 });
+        }
+      } else if (this.vz > 0 || this.z > 0) {
+        this.z += this.vz * dt; this.vz -= 380 * dt;
+        if (this.z <= 0) { this.z = 0; this.vz = 0; }
+      }
       this.life -= dt;
       if (this.life <= 0) { this.dead = true; return !this.dead; }
       // Emit trailing fire particles once ignited.

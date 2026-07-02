@@ -351,6 +351,37 @@ test("Slayer slam: hits the drawn ellipse, not the old rect", () => {
   assert.strictEqual(g.player.hits, 1);
 });
 
+// ---- projectile depth motion (no mid-flight direction kinks) ----
+
+test("Ember: leaving the walkable band culls it instead of clamping", () => {
+  // Up-screen shot: with the old per-frame clamp, y froze at DEPTH_MIN and
+  // the ember visibly bounced off the back edge and drifted back down.
+  const e = new JH.Ember(100, JH.DEPTH_MIN + 5, 10, 0, -60, 5);
+  const g = stubGame(999, 999);
+  for (let i = 0; i < 40 && !e.dead; i++) e.update(0.016, g);
+  assert.ok(e.dead, "culled once it leaves the band");
+  assert.ok(e.y < JH.DEPTH_MIN, "depth motion never froze at the band edge");
+});
+
+test("Ember: z floors at the ground plane", () => {
+  const e = new JH.Ember(100, 40, 0.01, 0, 0, 5);
+  const g = stubGame(999, 999);
+  for (let i = 0; i < 10; i++) e.update(0.016, g);
+  assert.strictEqual(e.z, 0, "constant sink must not push z below the floor");
+});
+
+test("Fireball: reaching z=0 reads as a landing — dust puff + settle hop", () => {
+  const g = stubGame(999, 999);   // player far away → no hit
+  const fb = new JH.Fireball(100, 40, 1, g);
+  let guard = 0;
+  while (fb.z > 0 && guard++ < 300) { g.particles.length = 0; fb.update(0.016, g); }
+  assert.ok(fb.landed, "ball lands");
+  assert.ok(g.particles.length >= 6, "landing frame puffs dust (trail alone is 1/frame)");
+  assert.ok(fb.vz > 0, "settle hop lifts off the floor");
+  for (let i = 0; i < 60; i++) fb.update(0.016, g);
+  assert.strictEqual(fb.z, 0, "hop settles back onto the ground");
+});
+
 // ---- input buffer: dash ----
 // Uses the real JH.Input with a fake clock so Player.update sees genuine
 // buffered() semantics. (node 21+ ships a global navigator; poll()'s
