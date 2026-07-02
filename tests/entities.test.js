@@ -109,7 +109,7 @@ function stubGame(px, py) {
     },
     particles: [], embers: [], firePatches: [], pickups: [],
     bounds: { minX: 0, maxX: 600 },
-    shake() {}, onEnemyKilled() {},
+    shake() {}, hitStop() {}, onEnemyKilled() {}, dropLoot() {},
     audio: { played: [], play(k) { this.played.push(k); } },
   };
 }
@@ -200,4 +200,55 @@ test("Furnace vent: burn/knockback only inside the drawn telegraph ellipse", () 
   f2.heatT = 0.001; f2.heated = true;
   f2.update(0.016, g);
   assert.ok(g.player.burns > 0);
+});
+
+test("SmeltBomb landing burn matches the spawned FirePatch footprint", () => {
+  // lobBombRadius 34 → patch footprint rx = 34*0.85 = 28.9, ry ≈ 11.6.
+  // Depth 20: the old world circle (r=34) burned; the patch ellipse must not.
+  const s = JH.makeEnemy("smelt", 100, 40);
+  let g = stubGame(100, 40 + 20);
+  s.windTimer = 0.001;
+  s.think(0.016, g);
+  const bomb = g.embers.find((e) => e.vz !== undefined);
+  assert.ok(bomb, "smelt should have lobbed a bomb");
+  bomb.x = 100; bomb.y = 40; bomb.z = 0.0001; bomb.vz = -1;
+  bomb.update(0.016, g);
+  assert.strictEqual(g.player.burns, 0);
+
+  const s2 = JH.makeEnemy("smelt", 100, 40);
+  g = stubGame(120, 40);   // x-offset 20 < rx 28.9 → burn
+  s2.windTimer = 0.001;
+  s2.think(0.016, g);
+  const bomb2 = g.embers.find((e) => e.vz !== undefined);
+  bomb2.x = 100; bomb2.y = 40; bomb2.z = 0.0001; bomb2.vz = -1;
+  bomb2.update(0.016, g);
+  assert.strictEqual(g.player.burns, 1);
+});
+
+test("Fuse drop slam: hit zone matches the landing ring ellipse", () => {
+  // slamRadius 20 → ry 8. Depth 14: old circle hit; ellipse must not.
+  const f = JH.makeEnemy("fuse", 100, 40);
+  let g = stubGame(100, 40 + 14);
+  f.dropping = true; f.dropWait = 0; f.z = 0.0001; f.vz = -1;
+  f.update(0.016, g);
+  assert.strictEqual(g.player.hits, 0);
+
+  const f2 = JH.makeEnemy("fuse", 100, 40);
+  g = stubGame(112, 40);   // x-offset 12 < 20 → hit
+  f2.dropping = true; f2.dropWait = 0; f2.z = 0.0001; f2.vz = -1;
+  f2.update(0.016, g);
+  assert.strictEqual(g.player.hits, 1);
+});
+
+test("Fuse death burn: elliptical, matching its death patch", () => {
+  // deathBurnRange 30 → ry 12. Depth 20: old circle burned; ellipse must not.
+  const f = JH.makeEnemy("fuse", 100, 40);
+  let g = stubGame(100, 40 + 20);
+  f.die(g);
+  assert.strictEqual(g.player.burns, 0);
+
+  const f2 = JH.makeEnemy("fuse", 100, 40);
+  g = stubGame(120, 40);   // x-offset 20 < 30 → burn
+  f2.die(g);
+  assert.strictEqual(g.player.burns, 1);
 });

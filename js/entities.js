@@ -3316,7 +3316,9 @@
         burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
         game.shake(3);
         const pl = game.player;
-        if (pl.alive && Math.hypot(pl.x - this.x, pl.y - this.y) < d.lobBombRadius)
+        // First-frame burn uses the SAME footprint as the FirePatch it just
+        // spawned (rx = 0.85·radius), so frame 0 agrees with every later frame.
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.lobBombRadius * 0.85))
           pl.applyBurn(1);
         this.dead = true;
       }
@@ -3333,7 +3335,7 @@
       ctx.fillStyle = "#220800";
       ctx.beginPath();
       const shadowR = Math.max(2, 8 - this.z * 0.18);
-      ctx.ellipse(Math.round(sx), Math.round(groundSy), shadowR, shadowR * 0.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(Math.round(sx), Math.round(groundSy), shadowR, shadowR * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.fill();
       // Bomb
       ctx.globalAlpha = 1;
@@ -3793,7 +3795,7 @@
           const pl = game.player;
           burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });
           game.shake(2);
-          if (Math.hypot(pl.x - this.x, pl.y - this.y) < JH.FUSE_DROP.slamRadius && pl.z < 20)
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, JH.FUSE_DROP.slamRadius) && pl.z < 20)
             pl.takeHit(JH.FUSE_DROP.slamDmg, game, this.x);
         }
         return;
@@ -3810,7 +3812,7 @@
       game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
       burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
       game.shake(3);
-      if (Math.hypot(game.player.x - this.x, game.player.y - this.y) < d.deathBurnRange)
+      if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))
         game.player.applyBurn(1);
       super.die(game);
     }
@@ -3830,7 +3832,7 @@
       ctx.strokeStyle = flash ? "#ff8030" : "rgba(255,110,40,0.5)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.ellipse(sx, sy, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy, r, r * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
       ctx.restore();
       Assets.shadow(ctx, sx, sy, this.bodyW * 0.5 * (1 - frac * 0.5));
