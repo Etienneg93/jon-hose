@@ -95,6 +95,9 @@ function killStub(waveActive) {
     hitStopTimer: 0, lootVacuumT: 0, trauma: 0, shakeKickX: 0,
     audio: { played: [], play(k, o) { this.played.push({ k, o }); } },
     dropLoot() {}, onEnemyKilled(e) { JH.Game.onEnemyKilled.call(this, e); },
+    deferredQueue: [],
+    defer(ms, fn) { JH.Game.defer.call(this, ms, fn); },
+    tickDeferred(dt) { JH.Game.tickDeferred.call(this, dt); },
     hitStop(s) { this.hitStopTimer = Math.max(this.hitStopTimer, s); },
     shake(n, d) { JH.Game.shake.call(this, n, d); },
     killJuice(e) { JH.Game.killJuice.call(this, e); },
@@ -167,12 +170,25 @@ test("wetness: spray hits soak, time dries", () => {
   assert.ok(e.wetness < before, "dries over time");
 });
 
-test("KillPop: readable ~180ms death confirm", () => {
-  const kp = new JH.KillPop(new JH.Enemy("mook", 10, 40));
-  for (let i = 0; i < 8; i++) kp.update(0.016);   // 128ms — still showing
+test("KillPop: ~150ms collapse that carries the enemy's wetness", () => {
+  const e = new JH.Enemy("mook", 10, 40);
+  e.wetness = 0.6;
+  const kp = new JH.KillPop(e);
+  assert.strictEqual(kp.wet, 0.6, "soak tint survives into the collapse");
+  for (let i = 0; i < 8; i++) kp.update(0.016);   // 128ms — still collapsing
   assert.ok(!kp.dead);
-  for (let i = 0; i < 4; i++) kp.update(0.016);   // 192ms — done
+  for (let i = 0; i < 2; i++) kp.update(0.016);   // 160ms — done
   assert.ok(kp.dead);
+});
+
+test("Enemy.die: death burst waits for the collapse, not instant", () => {
+  const g = killStub(false);
+  const e = new JH.Enemy("mook", 50, 40);
+  g.enemies.push(e);
+  e.die(g);
+  assert.strictEqual(g.particles.length, 0, "no particles at the moment of death");
+  g.tickDeferred(0.15);
+  assert.ok(g.particles.length > 0, "burst fires as the body finishes flattening");
 });
 
 test("AudioFX: independent SFX volume channel", () => {

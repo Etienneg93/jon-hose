@@ -123,6 +123,7 @@ function stubGame(px, py) {
     particles: [], embers: [], firePatches: [], pickups: [],
     bounds: { minX: 0, maxX: 600 },
     shake() {}, hitStop() {}, onEnemyKilled() {}, dropLoot() {}, killJuice() {},
+    defer(ms, fn) { fn(); },   // stub runs deferred work immediately
     audio: { played: [], play(k) { this.played.push(k); } },
   };
 }

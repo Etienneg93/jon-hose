@@ -838,7 +838,9 @@
       if (this.dead) return;
       this.dead = true;
       game.killJuice(this);
-      burst(game, this.x, this.y, this.z + 12, this.colorOf(), 10, { speed: 100, life: 0.5, up: 80 });
+      // Burst waits for the KillPop collapse to finish flattening (~150ms).
+      const bx = this.x, by = this.y, bz = this.z, col = this.colorOf();
+      game.defer(120, () => burst(game, bx, by, bz + 12, col, 10, { speed: 100, life: 0.5, up: 80 }));
       game.dropLoot(this);   // anti-farm aware (infinite spawns share a budget)
       game.onEnemyKilled(this);
     }
@@ -2342,23 +2344,32 @@
   }
   JH.FxBurst = FxBurst;
 
-  // One-shot kill confirm: the dead enemy's sprite stamped once more through
-  // the hurt-flash compositor — bright white, 1.3x, ~70ms. Rides game.embers.
+  // Kill confirm: the dead enemy's sprite collapses to the ground over ~150ms
+  // (flattens toward the feet, spreads slightly), keeping its soak tint. The
+  // death particle burst is deferred to land as this finishes. Rides game.embers.
   class KillPop {
     constructor(e) {
       this.type = e.type; this.x = e.x; this.y = e.y; this.z = e.z || 0;
       this.facing = e.facing || 1; this.frame = e.frame || 0; this.state = e.state;
+      this.wet = e.wetness || 0;
       this.t = 0; this.dead = false;
     }
-    update(dt) { this.t += dt; if (this.t >= 0.18) this.dead = true; return !this.dead; }
+    update(dt) { this.t += dt; if (this.t >= 0.15) this.dead = true; return !this.dead; }
     draw(ctx, cam) {
-      // Fades over the pop so the death is readable, not a blink.
-      const p = Math.min(1, this.t / 0.18);
-      Assets.draw(ctx, this.type, this.x - cam, Geo.feetScreenY(this.y, this.z), this.facing, {
-        state: this.state, frame: this.frame, t: this.t,
-        hurt: true, hurtAlpha: 1 - p, flashCap: 0.9, flashColor: "#bfe8ff",
-        scale: 1.25,
+      const p = Math.min(1, this.t / 0.15);
+      const k = p * p;   // accelerating drop
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      ctx.save();
+      // Collapse transform anchored at the feet baseline (Assets.draw's own
+      // squash hook is capped at the subtle hurt amp, so scale here instead).
+      ctx.translate(sx, sy);
+      ctx.scale(1 + 0.3 * k, Math.max(0.05, 1 - 0.95 * k));
+      ctx.translate(-sx, -sy);
+      ctx.globalAlpha = 1 - 0.4 * k;
+      Assets.draw(ctx, this.type, sx, sy, this.facing, {
+        state: this.state, frame: this.frame, t: this.t, wet: this.wet,
       });
+      ctx.restore();
     }
   }
   JH.KillPop = KillPop;

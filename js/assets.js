@@ -329,7 +329,7 @@
       if (usesilhouette) {
         // Quadratic falloff: bright the instant a pulse arms, gone fast — an
         // impact pop, not a lingering frost. flashCap lets one-shot effects
-        // (KillPop) push brighter; flashColor retints them.
+        // push brighter than the stream cap; flashColor retints them.
         const ha = Math.min(1, opt.hurtAlpha);
         stamp(opt.flashColor || "#ffffff", ha * ha * (opt.flashCap || HURT_FLASH_MAX_ALPHA));
       }
