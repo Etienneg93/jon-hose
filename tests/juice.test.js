@@ -213,6 +213,13 @@ test("Kibble stacks by extending the window, never overwriting", () => {
   assert.strictEqual(p.kibbleTimer, 9.5, "second kibble extends, not resets");
 });
 
+test("hurt(flashOnly) arms the flash but never the squash (burn DoT path)", () => {
+  const e = new JH.Enemy("mook", 0, 0);
+  e.hurt(true);
+  assert.strictEqual(e.flashTimer, 0.18);
+  assert.strictEqual(e.squashT, 0, "DoT ticks must not deform the sprite");
+});
+
 test("hurt() arms both the flash and the squash", () => {
   const e = new JH.Enemy("mook", 0, 0);
   e.hurt();

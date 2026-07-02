@@ -148,9 +148,10 @@
     }
     // Hurt pulses complete before re-arming: under a continuous spray this
     // beats at the tick rate instead of freezing at a constant tint/deform.
-    hurt() {
+    // flashOnly = damage without impact (DoT ticks) — flash, never squash.
+    hurt(flashOnly) {
       if (this.flashTimer <= 0) this.flashTimer = 0.18;
-      if (this.squashT <= 0) this.squashT = JH.JUICE.squashDur;
+      if (!flashOnly && this.squashT <= 0) this.squashT = JH.JUICE.squashDur;
     }
   }
   JH.Entity = Entity;
@@ -214,7 +215,7 @@
       if (this.burnTimer > 0) {
         this.burnTimer -= dt;
         this.hp = Math.max(0, this.hp - this.burnStacks * JH.FIRE.burnDpsPerStack * dt);
-        this.hurt();   // reuses the existing white hurt-flash to signal burn damage
+        this.hurt(true);   // flash signals the DoT; no squash — burn isn't an impact
         if (this.burnTimer <= 0) { this.burnTimer = 0; this.burnStacks = 0; }
         if (this.hp <= 0) this.alive = false;
       }
