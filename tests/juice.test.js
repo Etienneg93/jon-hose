@@ -25,8 +25,10 @@ test("JH.JUICE: hit-stop tier table and shake constants exist", () => {
   assert.ok(J, "JH.JUICE missing");
   for (const k of ["kill", "heavyKill", "waveEnd", "playerHit", "domePop", "bossPhase"])
     assert.strictEqual(typeof J.hitstop[k], "number", "hitstop." + k);
-  assert.ok(J.hitstop.heavyKill > J.hitstop.kill, "heavy kills chunk, regular kills don't");
-  assert.strictEqual(J.hitstop.waveEnd, 0, "wave-ender never freezes (shake + drift only)");
+  // Design rule: no kill or hit ever freezes the sim — freezes are reserved
+  // for boss-scale beats (domePop / bossPhase).
+  for (const k of ["kill", "heavyKill", "waveEnd", "playerHit"])
+    assert.strictEqual(J.hitstop[k], 0, "hitstop." + k + " must stay 0");
   assert.ok(Array.isArray(J.heavyTypes) && J.heavyTypes.includes("furnace"));
   for (const k of ["traumaDiv", "traumaDecay", "shakeMax", "shakeScale", "vacuumDur",
                    "vacuumPull", "comboPitchCap", "comboWaterRefund", "squashDur",
@@ -109,13 +111,13 @@ test("killJuice: regular kill = NO freeze + KillPop confirm", () => {
   assert.ok(g.embers.some((m) => m instanceof JH.KillPop), "KillPop spawned");
 });
 
-test("killJuice: elite kill = heavy tier + boom", () => {
+test("killJuice: elite kill = boom, still no freeze", () => {
   const g = killStub(false);
   const e = new JH.Enemy("mook", 50, 40);
   e.makeElite();
   g.enemies.push(e);
   e.die(g);
-  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.heavyKill);
+  assert.strictEqual(g.hitStopTimer, 0, "elite kills never freeze");
   assert.ok(g.embers.some((m) => m instanceof JH.FxBurst), "boom FxBurst spawned");
 });
 

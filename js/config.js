@@ -297,14 +297,15 @@
   JH.JUICE = {
     // Hit-stop tier table — every freeze routes through game.hitStop, which
     // takes the max of pending freezes (simultaneous kills never sum).
+    // DESIGN RULE: moment-to-moment play NEVER freezes (it reads as clunk at
+    // this game's pace); freezes are reserved for boss-scale beats only.
     hitstop: {
-      kill: 0,           // regular kills NEVER freeze — at hose kill density a
-                         // per-kill freeze reads as lag, not punch
-      heavyKill: 0.06,   // elite, or heavy-frame type below
-      waveEnd: 0,        // wave-ender beat is shake + loot drift only, no freeze
-      playerHit: 0,      // getting hit kicks the screen but never freezes the sim
-      domePop: 0.10,     // reserved: dome/wall break
-      bossPhase: 0.20,   // reserved: boss phase transitions
+      kill: 0,           // regular kills never freeze
+      heavyKill: 0,      // elite/heavy kills never freeze either
+      waveEnd: 0,        // wave-ender beat is shake + loot drift only
+      playerHit: 0,      // getting hit kicks the screen, never freezes the sim
+      domePop: 0.10,     // reserved: dome/wall break (boss-scale set-pieces)
+      bossPhase: 0.20,   // reserved: boss phase transitions / kill sequence
     },
     heavyTypes: ["bulwark", "furnace", "smelt"],
     // Trauma screenshake: shake(n) adds n/traumaDiv trauma (cap 1); the
