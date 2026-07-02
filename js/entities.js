@@ -721,14 +721,15 @@
       ctx.fillStyle = hpFrac > 0.5 ? "#44cc44" : hpFrac > 0.25 ? "#ddaa22" : "#ee3333";
       ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
       // Kibble regen: a brightness wave travels left → right through the
-      // FILLED portion only — reads as healing flowing in.
+      // FILLED portion only — a brighter shade of the bar's own color, kept
+      // strictly inside the fill (no halo).
       if (this.kibbleTimer > 0 && hpFrac > 0) {
         const fw = Math.round(barW * hpFrac);
         ctx.save();
-        ctx.fillStyle = "#d9ffe4";
+        ctx.fillStyle = hpFrac > 0.5 ? "#7bff7b" : hpFrac > 0.25 ? "#ffd45e" : "#ff8a70";
         for (let i = 0; i < fw; i++) {
           const ph = ((i - this.t * 26) / 14) * Math.PI * 2;
-          ctx.globalAlpha = 0.08 + 0.34 * (0.5 + 0.5 * Math.sin(ph));
+          ctx.globalAlpha = 0.55 * (0.5 + 0.5 * Math.sin(ph));
           ctx.fillRect(bx + i, barTop, 1, 3);
         }
         ctx.restore();
@@ -743,14 +744,15 @@
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
       // GUSH regen: a brightness wave travels left → right through the
-      // FILLED portion only — reads as water flowing in.
+      // FILLED portion only — a brighter shade of the bar's own blue, kept
+      // strictly inside the fill (no halo).
       if (this.gushRegenT > 0 && wFrac > 0) {
         const fw = Math.round(barW * wFrac);
         ctx.save();
-        ctx.fillStyle = "#d8f4ff";
+        ctx.fillStyle = "#9ed9ff";
         for (let i = 0; i < fw; i++) {
           const ph = ((i - this.t * 26) / 14) * Math.PI * 2;
-          ctx.globalAlpha = 0.08 + 0.34 * (0.5 + 0.5 * Math.sin(ph));
+          ctx.globalAlpha = 0.55 * (0.5 + 0.5 * Math.sin(ph));
           ctx.fillRect(bx + i, barTop + 4, 1, 3);
         }
         ctx.restore();
