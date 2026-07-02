@@ -1112,9 +1112,10 @@
   // Spawns as a plain pool ball at cue height, ignites after igniteDelay
   // (visual + burn on hit). Aimed at the player's position at fire time —
   // same convention as the Pyro's Ember (depth velocity scaled 0.6 for 2.5D)
-  // — so staggered volley balls fan out tracking the player's dodge. Sinks
-  // from spawnZ into the hittable z-band as it flies. Leaves a FirePatch on
-  // player hit. Pushed into game.embers for the shared update/draw pipeline.
+  // — so staggered volley balls fan out tracking the player's dodge. Flies
+  // dead straight at spawnZ (cue height) until it expires. Leaves a
+  // FirePatch on player hit. Pushed into game.embers for the shared
+  // update/draw pipeline.
   class Fireball {
     constructor(x, y, dir, game) {
       const d = JH.FIREBALL;
@@ -1135,7 +1136,6 @@
       this.igniteT = d.igniteDelay;  // counts down to 0; burn only activates after this
       this.life = d.lifespan;
       this.t = 0;
-      this.landed = false; this.vz = 0;
       this.dead = false;
     }
     update(dt, game) {
@@ -1143,18 +1143,9 @@
       if (this.igniteT > 0) this.igniteT -= dt;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
-      if (!this.landed) {
-        this.z -= JH.FIREBALL.droop * dt;   // sink off the cue line
-        if (this.z <= 0) {
-          // Landing beat: dust + a tiny settle hop, so the on-screen kink
-          // when the sink stops reads as "hit the street", not steering.
-          this.z = 0; this.landed = true; this.vz = 40;
-          burst(game, this.x, this.y, 0, "#caa470", 6, { speed: 40, life: 0.3, up: 30 });
-        }
-      } else if (this.vz > 0 || this.z > 0) {
-        this.z += this.vz * dt; this.vz -= 380 * dt;
-        if (this.z <= 0) { this.z = 0; this.vz = 0; }
-      }
+      // z stays at spawnZ: the ball flies dead straight off the cue (any
+      // mid-flight z change kinks the visible trajectory on the summed
+      // depth+height screen axis and reads as the ball steering).
       this.life -= dt;
       if (this.life <= 0) { this.dead = true; return !this.dead; }
       // Emit trailing fire particles once ignited.
@@ -1173,8 +1164,9 @@
       const pl = game.player;
       if (pl.alive && this.igniteT <= 0) {
         const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
-        const zDiff = Math.abs((pl.z || 0) - this.z);
-        if (dist < this.radius + pl.bodyW * 0.5 && zDiff < 24) {
+        // No z gate: the ball flies flat at cue height (~chest on Jon) and
+        // the player is always grounded (jump is cut), so x/depth is enough.
+        if (dist < this.radius + pl.bodyW * 0.5) {
           pl.takeHit(this.dmg, game, this.x);
           pl.applyBurn(this.burnStacks);
           game.firePatches.push(new JH.FirePatch(this.x, this.y, 28, 1.4));

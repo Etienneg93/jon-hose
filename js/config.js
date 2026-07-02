@@ -528,8 +528,7 @@
   };
   JH.FIREBALL = {
     speed: 230, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
-    spawnZ: 30,        // launch height — the cue tip on the release sprite
-    droop: 48,         // z px/s the ball sinks; reaches the <24px hit band in ~0.15s
+    spawnZ: 30,        // flight height for the whole flight — the cue tip on the release sprite
     igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
   };
 

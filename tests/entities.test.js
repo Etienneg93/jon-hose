@@ -91,12 +91,12 @@ test("Fireball aims at the player's position, depth included", () => {
   assert.ok(fb.vy > 0, "vy should converge on the player's depth row");
 });
 
-test("Fireball spawns at cue height and droops into the hittable z-band", () => {
+test("Fireball spawns at cue height and stays there", () => {
   const game = makeBallGame(300, 40);
   const fb = new JH.Fireball(100, 40, 1, game);
   assert.strictEqual(fb.z, JH.FIREBALL.spawnZ);   // cue tip, not feet
   for (let i = 0; i < 30; i++) fb.update(1 / 60, game);  // 0.5s of flight
-  assert.ok(fb.z < 24, "z should droop below the 24px hit band within ~0.5s");
+  assert.strictEqual(fb.z, JH.FIREBALL.spawnZ, "flies flat off the cue");
 });
 
 test("Fireball fired at an off-row player actually hits them", () => {
@@ -370,16 +370,20 @@ test("Ember: z floors at the ground plane", () => {
   assert.strictEqual(e.z, 0, "constant sink must not push z below the floor");
 });
 
-test("Fireball: reaching z=0 reads as a landing — dust puff + settle hop", () => {
+test("Fireball: flies dead straight — height never changes mid-flight", () => {
   const g = stubGame(999, 999);   // player far away → no hit
   const fb = new JH.Fireball(100, 40, 1, g);
+  const z0 = fb.z;
+  for (let i = 0; i < 90; i++) fb.update(0.016, g);
+  assert.strictEqual(fb.z, z0, "no droop, no landing kink");
+});
+
+test("Fireball: still connects with a grounded player at cue height", () => {
+  const g = stubGame(140, 40);
+  const fb = new JH.Fireball(100, 40, 1, g);
   let guard = 0;
-  while (fb.z > 0 && guard++ < 300) { g.particles.length = 0; fb.update(0.016, g); }
-  assert.ok(fb.landed, "ball lands");
-  assert.ok(g.particles.length >= 6, "landing frame puffs dust (trail alone is 1/frame)");
-  assert.ok(fb.vz > 0, "settle hop lifts off the floor");
-  for (let i = 0; i < 60; i++) fb.update(0.016, g);
-  assert.strictEqual(fb.z, 0, "hop settles back onto the ground");
+  while (!fb.dead && guard++ < 120) fb.update(0.016, g);
+  assert.strictEqual(g.player.hits, 1, "flat flight path must still hit Jon");
 });
 
 // ---- input buffer: dash ----
