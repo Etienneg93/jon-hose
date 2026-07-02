@@ -711,8 +711,8 @@
         ctx.save();
         ctx.fillStyle = hpFrac > 0.5 ? "#7bff7b" : hpFrac > 0.25 ? "#ffd45e" : "#ff8a70";
         for (let i = 0; i < fw; i++) {
-          const ph = ((i - this.t * 26) / 14) * Math.PI * 2;
-          ctx.globalAlpha = 0.55 * (0.5 + 0.5 * Math.sin(ph));
+          const ph = ((i - this.t * 13) / 20) * Math.PI * 2;
+          ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
           ctx.fillRect(bx + i, barTop, 1, 3);
         }
         ctx.restore();
@@ -734,8 +734,8 @@
         ctx.save();
         ctx.fillStyle = "#9ed9ff";
         for (let i = 0; i < fw; i++) {
-          const ph = ((i - this.t * 26) / 14) * Math.PI * 2;
-          ctx.globalAlpha = 0.55 * (0.5 + 0.5 * Math.sin(ph));
+          const ph = ((i - this.t * 13) / 20) * Math.PI * 2;
+          ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
           ctx.fillRect(bx + i, barTop + 4, 1, 3);
         }
         ctx.restore();
