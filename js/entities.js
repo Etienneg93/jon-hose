@@ -111,7 +111,7 @@
     constructor(x, y) {
       this.x = x; this.y = y; this.z = 0; this.vz = 0;
       this.facing = -1; this.dead = false;
-      this.hurtTimer = 0; this.flashTimer = 0;
+      this.hurtTimer = 0; this.flashTimer = 0; this.squashT = 0;
       this.knockVX = 0; this.knockVY = 0;
       this.frame = 0; this.animTimer = 0; this.state = "idle";
       this.t = 0;
@@ -135,6 +135,7 @@
       this.x = Geo.clampX(this.x);
       if (this.hurtTimer > 0) this.hurtTimer -= dt;
       if (this.flashTimer > 0) this.flashTimer -= dt;
+      if (this.squashT > 0) this.squashT -= dt;
     }
     animate(dt, moving) {
       this.animTimer += dt;
@@ -145,7 +146,7 @@
       this.knockVX += dirX * force;
       if (dirY != null) this.knockVY += dirY * force * 0.4;
     }
-    hurt() { this.flashTimer = 0.18; }
+    hurt() { this.flashTimer = 0.18; this.squashT = 0.09; }
   }
   JH.Entity = Entity;
 
@@ -647,6 +648,8 @@
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
+        hurtAlpha: this.flashTimer / 0.18,
+        squash: this.squashT > 0 ? Math.min(1, this.squashT / 0.09) : 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
         walking: this.walking,
       });
@@ -884,6 +887,7 @@
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.flashTimer > 0,
         hurtAlpha: this.flashTimer / 0.18,
+        squash: this.squashT > 0 ? Math.min(1, this.squashT / 0.09) : 0,
         wind: this.state === "wind", elite: this.elite,
         scale: this.elite ? 1.08 : 1,
       });
@@ -3850,6 +3854,7 @@
         this.z += this.vz * dt;
         if (this.z <= 0) {
           this.z = 0; this.vz = 0; this.dropping = false;
+          this.squashT = 0.12;   // landing squash
           this.spawnGrace = 0.25;
           const pl = game.player;
           burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });

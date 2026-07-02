@@ -223,6 +223,15 @@
       facing = facing < 0 ? -1 : 1;
       x = Math.round(x); y = Math.round(y);
       ctx.save();
+      // Squash-stretch anchored at the feet baseline: wider + shorter while
+      // opt.squash (0..1, timer-driven) decays. Applies to the silhouette
+      // stamp too since it shares this transform.
+      const squash = Math.min(1, opt.squash || 0);
+      if (squash > 0) {
+        ctx.translate(x, y);
+        ctx.scale(1 + 0.15 * squash, 1 - 0.15 * squash);
+        ctx.translate(-x, -y);
+      }
       // Local-space pixel helper. Floors to integers for crisp pixels and
       // mirrors horizontally when facing left.
       const scale = opt.scale || 1;
@@ -383,7 +392,6 @@
     }
 
     const f = (opt.frame | 0) % 5;
-    if (opt.hurt && (f & 1)) return;
 
     const imgName = state === "fire" ? "fire" : state === "walk" ? `walk${f}` : "idle";
     const img = _jonImgs[imgName];
@@ -404,7 +412,6 @@
   Assets.register("mook", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.mookDk);
     p(1 - ls, 0, 5, 8, PAL.mookDk);
@@ -425,7 +432,6 @@
     const f = opt.frame | 0;
     const charging = opt.state === "charge";
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.chargerDk);
     p(1 - ls, 0, 5, 8, PAL.chargerDk);
@@ -446,7 +452,6 @@
   Assets.register("pyro", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.pyroDk);
     p(1 - ls, 0, 5, 8, PAL.pyroDk);
@@ -473,7 +478,6 @@
   Assets.register("bulwark", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk" || opt.state === "retrieve") ? legStep(f) * 0.6 : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
     p(1 - ls, 0, 6, 10, PAL.bulwarkDk);
     p(-10, 10, 20, 16, PAL.bulwark);
@@ -498,7 +502,6 @@
   Assets.register("smelt", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.4 : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-8 + ls, 0, 7, 12, PAL.smeltDk);
     p(1 - ls, 0, 7, 12, PAL.smeltDk);
     p(-11, 12, 22, 16, PAL.smelt);
@@ -516,7 +519,6 @@
   Assets.register("fuse", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-4 + ls, 0, 4, 8, PAL.fuseDk);
     p(0 - ls, 0, 4, 8, PAL.fuseDk);
     p(-5, 8, 10, 12, PAL.fuse);
@@ -542,7 +544,6 @@
   Assets.register("furnace", (p, opt, ctx) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
-    if (opt.hurt && (f & 1)) return;
     const heat = Math.max(0, Math.min(1, opt.heat || 0));
     const hot = !!opt.heated;
     const level = hot ? 1 : heat;                 // 0 cold → 1 about to vent
@@ -612,7 +613,6 @@
     cueRelease: JH.Loader.img("sprites/slayer/slayer-shoot.png"),
   };
   Assets.register("slayer", (p, opt, ctx, x, y, facing) => {
-    if (opt.hurt && (Math.floor((opt.t || 0) * 10) & 1)) return;
     const key = _slayerImgs[opt.state] ? opt.state : "idle";
     const img = _slayerImgs[key];
     if (!img || !img.complete || !img.naturalWidth) {
@@ -637,7 +637,6 @@
   Assets.register("stalker", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-4 + ls, 0, 4, 9, PAL.stalkerDk);
     p(0 - ls, 0, 4, 9, PAL.stalkerDk);
     p(-6, 9, 12, 12, PAL.stalker);
@@ -653,7 +652,6 @@
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 1.5 : 0;
     const slam = opt.state === "tele" || opt.state === "strike";  // raised arms = winding up
-    if (opt.hurt && (f & 1)) return;
     // Legs
     p(-13 + ls, 0, 10, 14, PAL.bossDk);
     p(3 - ls, 0, 10, 14, PAL.bossDk);
@@ -708,7 +706,6 @@
     const stomp = opt.state === "tele" || opt.state === "strike"
               || opt.state === "leapWind" || opt.state === "leaping" || opt.state === "leapLand";
     const ls = walking ? legStep(f) * 1.6 : 0;
-    if (opt.hurt && (f & 1)) return;
     const C = PAL.quakeBody, D = PAL.quakeDk, HI = PAL.quakeHi;
     const lift = stomp ? 9 : 0;
     p(-15 + ls, 0, 12, 20, D);
@@ -872,7 +869,6 @@
   // A big STANDING switch chassis with an angry middle-aged face embedded.
   Assets.register("gatewaykrusher", (p, opt) => {
     const t = opt.t || 0;
-    if (opt.hurt && (Math.floor(t * 8) & 1)) return;
     const C = PAL.gkBody, D = PAL.gkDk;
     // Outer chassis
     p(-22, 0, 44, 60, D);
@@ -996,7 +992,6 @@
     return F.idle;
   }
   Assets.register("neighbor", (p, opt, ctx, x, y, facing) => {
-    if (opt.hurt && (Math.floor((opt.t || 0) * 8) & 1)) return;
     const img = neighborImg();
     if (img && img._ready) {
       const fr = neighborFrame(opt.state);
@@ -1114,7 +1109,6 @@
   // Hydrant prop (level decoration / water source marker)
   // ========================= TARGET DUMMY ============================
   Assets.register("dummy", (p, opt) => {
-    if (opt.hurt && ((opt.frame | 0) & 1)) return;
     p(-4, 0, 8, 3, "#4a2e12");            // base block
     p(-2, 3, 4, 13, "#7a5028");           // wooden post
     p(-8, 14, 16, 2, "#7a5028");          // crossbar arms

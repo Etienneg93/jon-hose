@@ -152,6 +152,13 @@ test("KillPop: expires after ~70ms", () => {
   assert.ok(kp.dead);
 });
 
+test("hurt() arms both the flash and the squash", () => {
+  const e = new JH.Enemy("mook", 0, 0);
+  e.hurt();
+  assert.strictEqual(e.flashTimer, 0.18);
+  assert.ok(e.squashT > 0 && e.squashT <= 0.12);
+});
+
 test("Pickup: arena-wide vacuum while lootVacuumT is live", () => {
   const mk = () => { const p = new JH.Pickup("suds", 400, 40, 5); p.grounded = true; p.z = 0; return p; };
   const base = { player: { x: 60, y: 40 }, lootVacuumT: 0 };
