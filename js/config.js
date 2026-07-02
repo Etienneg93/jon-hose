@@ -291,7 +291,7 @@
     burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
-    graceWindow: 0.2,        // first-contact sizzle warning before a patch's first burn
+    graceWindow: JH.PLAYER.invuln,  // first-contact sizzle warning = same beat as hit i-frames
   };
 
   // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.

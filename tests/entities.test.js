@@ -45,7 +45,8 @@ test("Player.applyBurn: adds stacks and resets timer", () => {
 test("Player.applyBurn: caps stacks at maxBurnStacks", () => {
   const p = makePlayer();
   p.applyBurn(2);
-  p.applyBurn(2);  // would be 4, capped at 3
+  p.burnGraceT = 0;   // burn i-frames elapsed
+  p.applyBurn(2);     // would be 4, capped at 3
   assert.strictEqual(p.burnStacks, JH.FIRE.maxBurnStacks);
 });
 
@@ -53,8 +54,20 @@ test("Player.applyBurn: refreshes timer even when already burning", () => {
   const p = makePlayer();
   p.applyBurn(1);
   p.burnTimer = 0.5;  // simulate partial drain
+  p.burnGraceT = 0;   // burn i-frames elapsed
   p.applyBurn(1);
   assert.strictEqual(p.burnTimer, JH.FIRE.burnDuration);  // reset, not extended
+});
+
+test("Player.applyBurn: burn stacks have i-frames like hits", () => {
+  const p = makePlayer();
+  p.applyBurn(1);
+  assert.ok(p.burnGraceT > 0);
+  p.applyBurn(1);     // inside the burn-grace window → ignored
+  assert.strictEqual(p.burnStacks, 1);
+  p.burnGraceT = 0;
+  p.applyBurn(1);
+  assert.strictEqual(p.burnStacks, 2);
 });
 
 // Minimal game stub for Fireball flight tests — just what update() touches.
@@ -125,8 +138,24 @@ test("FirePatch: first contact arms sizzle grace — warning, no instant burn", 
 test("FirePatch: still inside after the grace window → burn lands", () => {
   const p = new JH.FirePatch(100, 40, 24, 3);
   const g = stubGame(100, 40);
-  for (let t = 0; t < 0.3; t += 0.016) p.update(0.016, g);
+  for (let t = 0; t < JH.FIRE.graceWindow + 0.15; t += 0.016) p.update(0.016, g);
   assert.ok(g.player.burns >= 1);
+});
+
+test("FirePatch: grace window matches Jon's hit i-frames", () => {
+  assert.strictEqual(JH.FIRE.graceWindow, JH.PLAYER.invuln);
+});
+
+test("FirePatch: foot-width overlap counts as contact (padded rim)", () => {
+  // radius 24 → rx 20.4; pad = bodyW 20 * 0.25 = 5 → contact out to 25.4.
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  const g = stubGame(100 + 23, 40);   // center 2.6px past the rim, foot well in
+  p.update(0.016, g);
+  assert.deepStrictEqual(g.audio.played, ["sizzle"]);   // contact registered
+  const p2 = new JH.FirePatch(100, 40, 24, 3);
+  const g2 = stubGame(100 + 27, 40);  // beyond rim + pad → no contact
+  p2.update(0.016, g2);
+  assert.deepStrictEqual(g2.audio.played, []);
 });
 
 test("FirePatch: stepping out during grace → no burn ever", () => {
@@ -150,8 +179,8 @@ test("FirePatch: hit footprint is the drawn ellipse — depth miss a circle woul
 test("FirePatch: re-entry after grace burns immediately, no second warning", () => {
   const p = new JH.FirePatch(100, 40, 24, 3);
   const g = stubGame(100, 40);
-  for (let t = 0; t < 0.3; t += 0.016) p.update(0.016, g);  // grace + first burn
-  g.player.y = 40 + 30;                                      // step out
+  for (let t = 0; t < JH.FIRE.graceWindow + 0.15; t += 0.016) p.update(0.016, g);  // grace + first burn
+  g.player.y = 40 + 40;                                      // step out (clear of pad)
   for (let t = 0; t < 0.5; t += 0.016) p.update(0.016, g);  // burn interval expires
   const before = g.player.burns;
   g.player.y = 40;                                           // step back in

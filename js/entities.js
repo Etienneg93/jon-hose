@@ -162,6 +162,7 @@
       this.dashTimer = 0; this.dashCdTimer = 0; this.dashBoostTimer = 0;
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
+      this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
       this.regenLock = 0;
       this.spraying = false;
       this.sprayDry = false;
@@ -181,6 +182,10 @@
     applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
 
     applyBurn(n) {
+      // Burn stacks have i-frames like hits: one application, then immune to
+      // new stacks for the invuln window (overlapping fire can't insta-max).
+      if (this.burnGraceT > 0) return;
+      this.burnGraceT = this.stats.invuln;
       this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
       this.burnTimer = JH.FIRE.burnDuration;
     }
@@ -189,6 +194,7 @@
       const In = game.input, S = this.stats;
       this.basePhysics(dt);
       if (this.invulnTimer > 0) this.invulnTimer -= dt;
+      if (this.burnGraceT > 0) this.burnGraceT -= dt;
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
@@ -1331,10 +1337,15 @@
       const fade = this.domeT < 1.2 ? Math.max(0.15, this.domeT / 1.2) : 1;
       const flick = 0.85 + 0.15 * Math.sin(this.t * 9);
       ctx.save();
-      // Bubble body
+      // Bubble body: top dome arc closed along the FRONT half of the ground
+      // ellipse (one path), so the sheltered ground disc shades evenly — a
+      // straight bottom edge left the disc's front half one wash lighter.
       ctx.fillStyle = col; ctx.globalAlpha = 0.14 * fade * flick;
-      ctx.beginPath(); ctx.ellipse(sx, sy, r, domeH, 0, Math.PI, Math.PI * 2); ctx.fill();
-      // Ground contact disc (front lip)
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r, domeH, 0, Math.PI, Math.PI * 2);
+      ctx.ellipse(sx, sy, r, r * DOME_RY, 0, 0, Math.PI);
+      ctx.fill();
+      // Ground contact disc (uniform wash over the whole footprint)
       ctx.globalAlpha = 0.10 * fade;
       ctx.beginPath(); ctx.ellipse(sx, sy, r, r * DOME_RY, 0, 0, Math.PI * 2); ctx.fill();
       // Rims
@@ -1392,7 +1403,11 @@
       const pl = game.player;
       if (pl && pl.alive) {
         const f = this.footprint();
-        const inside = Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx, f.ry);
+        // Jon's feet aren't a point: pad the footprint by a quarter of his
+        // body width so a visible foot/shadow overlap counts as contact.
+        const pad = (pl.bodyW || 12) * 0.25;
+        const inside = Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
+          f.rx + pad, f.ry + pad * JH.GROUND_RY);
         if (inside && this.graceT === -1) {
           // First contact on this patch: audible sizzle + rim flash, and a
           // graceWindow beat to step out before the first burn lands.
@@ -3329,8 +3344,10 @@
         game.shake(3);
         const pl = game.player;
         // First-frame burn uses the SAME footprint as the FirePatch it just
-        // spawned (rx = 0.85·radius), so frame 0 agrees with every later frame.
-        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.lobBombRadius * 0.85))
+        // spawned (rx = 0.85·radius + foot pad), so frame 0 agrees with every
+        // later frame.
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
+            d.lobBombRadius * 0.85 + (pl.bodyW || 12) * 0.25))
           pl.applyBurn(1);
         this.dead = true;
       }
