@@ -32,7 +32,6 @@
     elapsed: 0, kills: 0,
     trauma: 0, shakeKickX: 0,   // trauma screenshake (see JH.JUICE)
     lootVacuumT: 0,             // wave-ender loot vacuum time remaining
-    splats: [],                 // wet kill decals {x, y, rx, t}
     bannerTimer: 0,
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
@@ -285,7 +284,7 @@
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.checkpointWave = 0;
       this.elapsed = 0; this.kills = 0;
-      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.splats = [];
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
@@ -678,20 +677,27 @@
     },
     onEnemyKilled(e) {
       this.kills++;
-      // GUSH combo: chained kills within a window. Feedback + a capped water
-      // crumb at milestones — never affects damage or suds.
+      // GUSH combo: chained kills within a window. Feedback + capped water
+      // crumbs at milestones — never affects damage or suds.
       this.combo++;
       this.comboTimer = JH.COMBO_WINDOW;
       this.comboFlash = 0.18;
-      // Milestone every 5th chained kill: pop + water refund + one skipped
-      // regen delay.
-      if (this.combo >= 3 && this.combo % 5 === 0) {
-        this.shake(3);
-        const p = this.player;
-        if (p && p.alive) {
-          p.water = Math.min(p.stats.maxWater, p.water + JH.JUICE.comboWaterRefund);
+      // Tiers: x3 arms a minor water-regen window (blue glow on Jon while
+      // live); every 5th kill bumps the regen + refunds a splash of water.
+      const p = this.player;
+      if (p && p.alive) {
+        const J = JH.JUICE;
+        if (this.combo === 3) {
+          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenRate = J.gushRegen3;
+          this.audio.play("upgrade");
+        } else if (this.combo >= 5 && this.combo % 5 === 0) {
+          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenRate = J.gushRegen5;
+          p.water = Math.min(p.stats.maxWater, p.water + J.comboWaterRefund);
           p.regenLock = 0;
-          this.audio.play("coin", { pitch: 1.5 });
+          this.shake(3);
+          this.audio.play("upgrade", { pitch: 1.3 });
         }
       }
       if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
@@ -749,19 +755,16 @@
       const J = JH.JUICE;
       const heavy = !!e.elite || J.heavyTypes.includes(e.type);
       const last = this.waveActive && this.enemies.every((x) => x.dead || x === e);
-      this.audio.play("die", { pitch: Math.pow(2, Math.min(this.combo, J.comboPitchCap) / 12) });
-      this.hitStop(last ? J.hitstop.waveEnd : heavy ? J.hitstop.heavyKill : J.hitstop.kill);
+      this.audio.play("die");
+      // Dedicated bright kill blip carries the combo pitch ladder (the low
+      // "die" thud can't — semitones are inaudible at 70Hz).
+      this.audio.play("kill", { pitch: Math.pow(2, Math.min(this.combo, J.comboPitchCap) / 12) });
+      const hs = last ? J.hitstop.waveEnd : heavy ? J.hitstop.heavyKill : J.hitstop.kill;
+      if (hs > 0) this.hitStop(hs);
       if (last) { this.shake(5); this.lootVacuumT = J.vacuumDur; }
-      if (heavy) {
+      if (heavy)
         this.embers.push(new JH.FxBurst(e.x, e.y, e.bodyW > 18 ? "boom-mid" : "boom-small", { scale: 0.55 }));
-        this.addSplat(e.x, e.y, e.bodyW);
-      }
       this.embers.push(new JH.KillPop(e));
-    },
-    // Wet ground decal where a heavy kill landed (drawn in render; capped).
-    addSplat(x, y, w) {
-      this.splats.push({ x, y, rx: w * 1.1, t: 0 });
-      if (this.splats.length > JH.JUICE.splatCap) this.splats.shift();
     },
     defer(delayMs, fn) { this.deferredQueue.push({ rem: delayMs / 1000, fn }); },
     tickDeferred(dt) {
@@ -899,7 +902,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
-      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.splats = [];
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
@@ -1112,7 +1115,6 @@
       for (const e of this.enemies) e.update(dt, this);
       for (const s of this.shields) s.update(dt);
       for (const fp of this.firePatches) fp.update(dt, this);
-      this.splats = this.splats.filter((s) => { s.t += dt; return s.t < JH.JUICE.splatFade; });
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.particles = this.particles.filter((p) => p.update(dt));
@@ -1301,19 +1303,6 @@
 
         // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
         for (const fp of this.firePatches) fp.draw(ctx, cam);
-
-        // wet kill splats — ground decals under pickups/actors, fading out
-        for (const s of this.splats) {
-          const k = 1 - s.t / JH.JUICE.splatFade;
-          ctx.save();
-          ctx.globalAlpha = 0.25 * k;
-          ctx.fillStyle = JH.PAL.water;
-          ctx.beginPath();
-          ctx.ellipse(Math.round(s.x - cam), Math.round(JH.Geo.feetScreenY(s.y, 0)),
-            s.rx, s.rx * JH.GROUND_RY, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);

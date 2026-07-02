@@ -179,6 +179,8 @@
       this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
+      this.gushRegenT = 0;         // GUSH milestone: water regen window (sec)
+      this.gushRegenRate = 0;      // water/s while the window is live
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
       this.bodyW = this.stats.bodyW;
@@ -236,6 +238,11 @@
       if (this.kibbleTimer > 0) {
         this.kibbleTimer -= dt;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
+      }
+      // GUSH milestone water regen — independent of the regular regen delay.
+      if (this.gushRegenT > 0) {
+        this.gushRegenT -= dt;
+        this.water = Math.min(S.maxWater, this.water + this.gushRegenRate * dt);
       }
 
       if (this.dashBoostTimer > 0) {
@@ -650,6 +657,15 @@
         }
       }
       const spriteSy = Geo.feetScreenY(this.y, this.z);
+      // GUSH regen window: soft blue glow (lowest priority — burn/kibble/
+      // concerta glows win).
+      const gushGlow = this.gushRegenT > 0 && this.burnStacks === 0 &&
+        this.kibbleTimer <= 0 && this.concertaTimer <= 0;
+      if (gushGlow) {
+        ctx.save();
+        ctx.shadowColor = "#55c8ff";
+        ctx.shadowBlur = 5 + 2 * Math.sin(this.t * 6);
+      }
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
@@ -658,6 +674,7 @@
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
         walking: this.walking,
       });
+      if (gushGlow) ctx.restore();
       if (this.concertaTimer > 0) ctx.restore();
       if (this.kibbleTimer > 0) ctx.restore();
       if (this.burnStacks > 0) {
@@ -786,12 +803,15 @@
       this.windTimer = 0; this.attackTimer = 0; this.cdTimer = 0;
       this.state = "walk";
       this.spawnGrace = 0.2;
+      this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
     }
 
     takeDamage(dmg, game, dirX, knock) {
       if (this.dead) return;
       this.hp -= dmg;
       this.hurt();
+      // The hose soaks: each hit builds wetness; it dries in update().
+      this.wetness = Math.min(1, this.wetness + JH.JUICE.wetPerHit);
       if (knock) this.applyKnockback(dirX, knock);
       if (this.hp <= 0) this.die(game);
     }
@@ -838,6 +858,14 @@
       this.basePhysics(dt);
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
+      // Wetness dries off over time; visibly soaked enemies drip.
+      if (this.wetness > 0) {
+        this.wetness = Math.max(0, this.wetness - JH.JUICE.wetDryPerSec * dt);
+        if (this.wetness > 0.35 && Math.random() < this.wetness * 3 * dt)
+          burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.7, this.y,
+            6 + Math.random() * (this.bodyH * 0.6), JH.PAL.water, 1,
+            { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
+      }
       this.think(dt, game);
       resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
       // Arena containment: hose knockback (and charge overshoot) can't shove
@@ -890,9 +918,7 @@
       Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
       Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
-        hurt: this.flashTimer > 0,
-        hurtAlpha: this.flashTimer / 0.18,
-        squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
+        wet: this.wetness,   // soak tint IS the enemy hurt read (no flash/squash)
         wind: this.state === "wind", elite: this.elite,
         scale: this.elite ? 1.08 : 1,
       });
@@ -1679,7 +1705,7 @@
       const vac = game.lootVacuumT > 0;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       if (vac || dist < 30) {
-        const pull = vac ? 12 : 4;
+        const pull = vac ? JH.JUICE.vacuumPull : 4;
         this.x += dx * pull * dt; this.y += dy * pull * dt;
       }
       if (dist < 12) { this.collect(game); return false; }
@@ -2314,7 +2340,7 @@
     draw(ctx, cam) {
       Assets.draw(ctx, this.type, this.x - cam, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
-        hurt: true, hurtAlpha: 1, flashCap: 0.9, scale: 1.3,
+        hurt: true, hurtAlpha: 1, flashCap: 0.9, flashColor: "#bfe8ff", scale: 1.3,
       });
     }
   }
@@ -3859,7 +3885,6 @@
         this.z += this.vz * dt;
         if (this.z <= 0) {
           this.z = 0; this.vz = 0; this.dropping = false;
-          this.squashT = JH.JUICE.squashDur;   // landing squash
           this.spawnGrace = 0.25;
           const pl = game.player;
           burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });

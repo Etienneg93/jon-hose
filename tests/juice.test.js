@@ -20,8 +20,11 @@ test("JH.JUICE: hit-stop tier table and shake constants exist", () => {
   assert.ok(J.hitstop.waveEnd > J.hitstop.heavyKill && J.hitstop.heavyKill > J.hitstop.kill);
   assert.ok(Array.isArray(J.heavyTypes) && J.heavyTypes.includes("furnace"));
   for (const k of ["traumaDiv", "traumaDecay", "shakeMax", "shakeScale", "vacuumDur",
-                   "splatCap", "splatFade", "comboPitchCap", "comboWaterRefund"])
+                   "vacuumPull", "comboPitchCap", "comboWaterRefund", "squashDur",
+                   "squashAmp", "wetTintMax", "wetPerHit", "wetDryPerSec",
+                   "gushRegenDur", "gushRegen3", "gushRegen5"])
     assert.strictEqual(typeof J[k], "number", k);
+  assert.strictEqual(J.hitstop.kill, 0, "regular kills must not freeze the sim");
 });
 
 function shakeStub() { return { trauma: 0, shakeKickX: 0 }; }
@@ -76,7 +79,7 @@ function killStub(waveActive) {
   const g = {
     waveActive: !!waveActive, combo: 0, kills: 0,
     comboTimer: 0, comboFlash: 0,
-    enemies: [], embers: [], splats: [], particles: [], pickups: [],
+    enemies: [], embers: [], particles: [], pickups: [],
     player: { x: 0, y: 0, alive: true, stats: { maxWater: 100 }, water: 50, regenLock: 1 },
     hitStopTimer: 0, lootVacuumT: 0, trauma: 0, shakeKickX: 0,
     audio: { played: [], play(k, o) { this.played.push({ k, o }); } },
@@ -84,22 +87,20 @@ function killStub(waveActive) {
     hitStop(s) { this.hitStopTimer = Math.max(this.hitStopTimer, s); },
     shake(n, d) { JH.Game.shake.call(this, n, d); },
     killJuice(e) { JH.Game.killJuice.call(this, e); },
-    addSplat(x, y, w) { JH.Game.addSplat.call(this, x, y, w); },
   };
   return g;
 }
 
-test("killJuice: regular kill = kill tier + white KillPop", () => {
+test("killJuice: regular kill = NO freeze + KillPop confirm", () => {
   const g = killStub(false);
   const e = new JH.Enemy("mook", 50, 40);
   g.enemies.push(e);
   e.die(g);
-  assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.kill);
+  assert.strictEqual(g.hitStopTimer, 0, "regular kills never freeze the sim");
   assert.ok(g.embers.some((m) => m instanceof JH.KillPop), "KillPop spawned");
-  assert.strictEqual(g.splats.length, 0, "no splat for a mook");
 });
 
-test("killJuice: elite kill = heavy tier + boom + wet splat", () => {
+test("killJuice: elite kill = heavy tier + boom", () => {
   const g = killStub(false);
   const e = new JH.Enemy("mook", 50, 40);
   e.makeElite();
@@ -107,7 +108,6 @@ test("killJuice: elite kill = heavy tier + boom + wet splat", () => {
   e.die(g);
   assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.heavyKill);
   assert.ok(g.embers.some((m) => m instanceof JH.FxBurst), "boom FxBurst spawned");
-  assert.strictEqual(g.splats.length, 1);
 });
 
 test("killJuice: last kill of an active wave = waveEnd tier + loot vacuum", () => {
@@ -123,25 +123,37 @@ test("killJuice: last kill of an active wave = waveEnd tier + loot vacuum", () =
   assert.strictEqual(g.lootVacuumT, JH.JUICE.vacuumDur);
 });
 
-test("killJuice: kill sound pitch climbs with the combo and caps", () => {
+test("killJuice: dedicated kill blip pitch climbs with the combo and caps", () => {
   const g = killStub(false);
   for (let i = 0; i < 15; i++) {
     const e = new JH.Enemy("mook", 50, 40);
     g.enemies.push(e);
     e.die(g);
   }
-  const dies = g.audio.played.filter((s) => s.k === "die");
-  assert.strictEqual(dies[0].o.pitch, 1, "first kill at base pitch");
-  assert.ok(dies[5].o.pitch > dies[1].o.pitch, "ladder climbs");
+  const kills = g.audio.played.filter((s) => s.k === "kill");
+  assert.strictEqual(kills.length, 15, "audible kill blip on every kill");
+  assert.strictEqual(kills[0].o.pitch, 1, "first kill at base pitch");
+  assert.ok(kills[5].o.pitch > kills[1].o.pitch, "ladder climbs");
   const cap = Math.pow(2, JH.JUICE.comboPitchCap / 12);
-  assert.ok(Math.abs(dies[14].o.pitch - cap) < 1e-9, "caps at +12 semitones");
+  assert.ok(Math.abs(kills[14].o.pitch - cap) < 1e-9, "caps at +12 semitones");
+  assert.ok(JH.SFX.kill, "kill blip has an SFX definition");
 });
 
-test("addSplat: cap culls oldest", () => {
+test("wetness: spray hits soak, time dries", () => {
   const g = killStub(false);
-  for (let i = 0; i < JH.JUICE.splatCap + 5; i++) g.addSplat(i, 40, 16);
-  assert.strictEqual(g.splats.length, JH.JUICE.splatCap);
-  assert.strictEqual(g.splats[0].x, 5, "oldest culled first");
+  const e = new JH.Enemy("mook", 50, 40);
+  assert.strictEqual(e.wetness, 0);
+  e.takeDamage(1, g, 1);
+  const w1 = e.wetness;
+  assert.ok(w1 > 0, "a hit soaks");
+  for (let i = 0; i < 50; i++) e.takeDamage(1, g, 1);
+  assert.strictEqual(e.wetness, 1, "caps at 1");
+  // drying happens in Enemy.update; simulate the decay directly
+  const before = e.wetness;
+  e.update(0.5, { player: { x: 999, y: 999, z: 0, alive: true, bodyW: 12 },
+                  bounds: { minX: 0, maxX: 600 }, particles: [],
+                  audio: { play() {} } });
+  assert.ok(e.wetness < before, "dries over time");
 });
 
 test("KillPop: expires after ~70ms", () => {
@@ -193,21 +205,49 @@ test("Player.takeHit: playerHit tier + shake kicked away from impact", () => {
   assert.strictEqual(g.shakeKickX, -1, "kick away from impact (leftward)");
 });
 
-test("GUSH x5 milestone refunds water and skips the regen delay", () => {
+test("GUSH x3 arms the minor water-regen window", () => {
+  const g = killStub(false);
+  g.combo = 2;
+  JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.combo, 3);
+  assert.strictEqual(g.player.gushRegenT, JH.JUICE.gushRegenDur);
+  assert.strictEqual(g.player.gushRegenRate, JH.JUICE.gushRegen3);
+  assert.strictEqual(g.player.water, 50, "x3 grants regen, not a refund");
+});
+
+test("GUSH x5 bumps the regen tier and refunds water", () => {
   const g = killStub(false);
   g.combo = 4;
   g.player.water = 40; g.player.regenLock = 0.8;
   JH.Game.onEnemyKilled.call(g, null);
   assert.strictEqual(g.combo, 5);
+  assert.strictEqual(g.player.gushRegenRate, JH.JUICE.gushRegen5);
+  assert.strictEqual(g.player.gushRegenT, JH.JUICE.gushRegenDur);
   assert.strictEqual(g.player.water, 40 + JH.JUICE.comboWaterRefund);
   assert.strictEqual(g.player.regenLock, 0);
-  assert.ok(g.audio.played.some((s) => s.k === "coin"), "milestone blip");
+  assert.ok(g.audio.played.some((s) => s.k === "upgrade"), "audible milestone");
 });
 
 test("GUSH: non-milestone kills grant nothing", () => {
   const g = killStub(false);
-  g.combo = 2;
+  g.combo = 1;
   g.player.water = 40;
   JH.Game.onEnemyKilled.call(g, null);
   assert.strictEqual(g.player.water, 40);
+  assert.ok(!g.player.gushRegenT, "no regen outside milestones");
+});
+
+test("Player: gush regen ticks water up while the window is live", () => {
+  JH.Upgrades.reset();
+  const p = new JH.Player(60, 40);
+  const noIn = { held: () => false, pressed: () => false, buffered: () => false, consume() {} };
+  const g = { input: noIn, audio: { play() {} }, particles: [], embers: [],
+              enemies: [], shields: [], firePatches: [], pickups: [],
+              bounds: { minX: 0, maxX: 600 }, shake() {}, hitStop() {} };
+  p.water = 50;
+  p.gushRegenT = 2; p.gushRegenRate = JH.JUICE.gushRegen3;
+  p.regenLock = 99;              // regular regen locked out — gush still ticks
+  p.update(0.5, g);
+  assert.ok(p.water > 50 + JH.JUICE.gushRegen3 * 0.5 * 0.9, "water regenerated");
+  assert.ok(p.gushRegenT < 2, "window counts down");
 });

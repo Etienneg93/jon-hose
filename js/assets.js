@@ -249,33 +249,42 @@
       const usesilhouette = opt.hurt && opt.hurtAlpha > 0;
       fn(p, usesilhouette ? Object.assign({}, opt, { hurt: false }) : opt, ctx, x, y, facing);
 
-      if (usesilhouette) {
-        // Render entity shape onto the offscreen canvas, then flood-fill white.
+      // Silhouette stamp: render the entity shape onto the offscreen canvas,
+      // flood-fill `color`, and composite over the sprite at `alpha`.
+      const stamp = (color, alpha) => {
         const ox = 110, oy = 280;
         _hurtOC2d.globalAlpha = 1;
         _hurtOC2d.globalCompositeOperation = "source-over";
         _hurtOC2d.clearRect(0, 0, 220, 300);
-        const hp = (lx, ly, w, h, color) => {
+        const hp = (lx, ly, w, h, c) => {
           w = Math.round(w * scale); h = Math.round(h * scale);
           const osx = facing === 1 ? ox + Math.round(lx * scale) : ox - Math.round(lx * scale) - w;
           const osy = oy - Math.round(ly * scale) - h;
-          _hurtOC2d.fillStyle = color;
+          _hurtOC2d.fillStyle = c;
           _hurtOC2d.fillRect(osx, osy, w, h);
         };
         _hurtOC2d.save();
         fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, ox, oy, facing);
         _hurtOC2d.restore();
         _hurtOC2d.globalCompositeOperation = "source-in";
-        _hurtOC2d.fillStyle = "#ffffff";
+        _hurtOC2d.fillStyle = color;
         _hurtOC2d.fillRect(0, 0, 220, 300);
         _hurtOC2d.globalCompositeOperation = "source-over";
-        // Stamp silhouette onto main canvas.
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(_hurtOC, x - ox, y - oy);
+      };
+
+      // Wetness: a steady translucent soak tint (the enemy hurt read) — grows
+      // with spray hits toward wetTintMax, no pulsing.
+      if (opt.wet > 0)
+        stamp("#4db8ff", Math.min(1, opt.wet) * JH.JUICE.wetTintMax);
+
+      if (usesilhouette) {
         // Quadratic falloff: bright the instant a pulse arms, gone fast — an
         // impact pop, not a lingering frost. flashCap lets one-shot effects
-        // (KillPop) push brighter still.
+        // (KillPop) push brighter; flashColor retints them.
         const ha = Math.min(1, opt.hurtAlpha);
-        ctx.globalAlpha = ha * ha * (opt.flashCap || HURT_FLASH_MAX_ALPHA);
-        ctx.drawImage(_hurtOC, x - ox, y - oy);
+        stamp(opt.flashColor || "#ffffff", ha * ha * (opt.flashCap || HURT_FLASH_MAX_ALPHA));
       }
       ctx.restore();
     },
