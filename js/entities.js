@@ -1267,8 +1267,8 @@
 
   // Dome ground-ellipse depth ratio — the DRAWN ground disc and the COLLISION
   // footprint (insideDome) share this so the barrier only affects you where the
-  // visible circle is (depth is compared in screen space via feetScreenY).
-  const DOME_RY = 0.45;
+  // visible circle is. Uses the game-wide ground-footprint ratio.
+  const DOME_RY = JH.GROUND_RY;
 
   // ---- DeployedShield: a Bulwark's planted shield ----
   // Stationary, indestructible (no takeDamage path — the player can never
