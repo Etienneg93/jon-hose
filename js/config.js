@@ -27,23 +27,41 @@
   JH.ZONE3_START = 8950;    // Boiler District (fire world) — GK at 8720, Fire Intro at 9100
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
-  // level). Spread along the street so you're never far from a top-up.
+  // level). One per wave, 100px BEFORE its trigger (WAVE_TRIGGERS in game.js —
+  // keep in sync if triggers move): past the shop vendor (T-150), short of the
+  // trigger threshold (T-30). Touching one sets the death-respawn checkpoint
+  // (lastHydrantX), so every wave has its checkpoint in the walk-up. Front-row
+  // depths keep them clear of the back-row shop vendor.
   JH.HYDRANTS = [
-    { x: 300,  y: JH.DEPTH_MAX - 10 },
-    { x: 1100, y: JH.DEPTH_MIN + 12 },
-    { x: 1900, y: JH.DEPTH_MAX - 14 },
-    { x: 2700, y: JH.DEPTH_MIN + 10 },
-    { x: 3500, y: JH.DEPTH_MAX - 12 },
-    { x: 4350, y: JH.DEPTH_MAX - 12 },   // ruined district
-    { x: 4820, y: JH.DEPTH_MIN + 12 },
-    { x: 5300, y: JH.DEPTH_MAX - 12 },
-    { x: 5900, y: JH.DEPTH_MIN + 10 },
-    { x: 6700, y: JH.DEPTH_MAX - 14 },
-    { x: 7500, y: JH.DEPTH_MIN + 12 },
-    { x: 8300, y: JH.DEPTH_MAX - 12 },
-    { x: 9100, y: JH.DEPTH_MIN + 12 },   // fire world
-    { x: 9900, y: JH.DEPTH_MAX - 12 },
-    { x: 10700, y: JH.DEPTH_MIN + 12 },
+    { x: 260,   y: JH.DEPTH_MAX - 12 },
+    { x: 640,   y: JH.DEPTH_MAX - 26 },
+    { x: 1020,  y: JH.DEPTH_MAX - 12 },
+    { x: 1400,  y: JH.DEPTH_MAX - 26 },
+    { x: 1780,  y: JH.DEPTH_MAX - 12 },   // Big Drip
+    { x: 2160,  y: JH.DEPTH_MAX - 26 },
+    { x: 2540,  y: JH.DEPTH_MAX - 12 },
+    { x: 2920,  y: JH.DEPTH_MAX - 26 },
+    { x: 3300,  y: JH.DEPTH_MAX - 12 },
+    { x: 3680,  y: JH.DEPTH_MAX - 26 },   // The Switch
+    { x: 4060,  y: JH.DEPTH_MAX - 12 },   // ruined district
+    { x: 4440,  y: JH.DEPTH_MAX - 26 },
+    { x: 4820,  y: JH.DEPTH_MAX - 12 },
+    { x: 5200,  y: JH.DEPTH_MAX - 26 },
+    { x: 5580,  y: JH.DEPTH_MAX - 12 },
+    { x: 5960,  y: JH.DEPTH_MAX - 26 },   // Quake Walker
+    { x: 6340,  y: JH.DEPTH_MAX - 12 },
+    { x: 6720,  y: JH.DEPTH_MAX - 26 },
+    { x: 7100,  y: JH.DEPTH_MAX - 12 },
+    { x: 7480,  y: JH.DEPTH_MAX - 26 },
+    { x: 7860,  y: JH.DEPTH_MAX - 12 },
+    { x: 8240,  y: JH.DEPTH_MAX - 26 },
+    { x: 8620,  y: JH.DEPTH_MAX - 12 },   // Gateway Krusher
+    { x: 9000,  y: JH.DEPTH_MAX - 26 },   // fire world
+    { x: 9380,  y: JH.DEPTH_MAX - 12 },
+    { x: 9760,  y: JH.DEPTH_MAX - 26 },
+    { x: 10140, y: JH.DEPTH_MAX - 12 },
+    { x: 10520, y: JH.DEPTH_MAX - 26 },
+    { x: 10900, y: JH.DEPTH_MAX - 12 },   // The Slayer
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
 
