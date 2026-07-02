@@ -291,6 +291,7 @@
     burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
+    burnTickInterval: 0.5,   // seconds between DoT damage beats (flash + ember puff)
   };
 
   // ---- Juice / game-feel tunables --------------------------------------

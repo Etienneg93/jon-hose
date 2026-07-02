@@ -170,6 +170,7 @@
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
       this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
+      this.burnTickT = 0;          // time accrued toward the next burn damage beat
       this.regenLock = 0;
       this.spraying = false;
       this.sprayDry = false;
@@ -201,6 +202,26 @@
       return true;
     }
 
+    // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
+    // the accrued damage, pulses the flash (no squash — no impact), and puffs
+    // embers off Jon. Expiry flushes the partial tick, so the total always
+    // equals stacks * dps * duration.
+    tickBurn(dt, game) {
+      if (this.burnTimer <= 0) return;
+      const F = JH.FIRE;
+      this.burnTickT += Math.min(dt, this.burnTimer);  // don't bill past expiry
+      this.burnTimer -= dt;
+      const expired = this.burnTimer <= 0;
+      if (this.burnTickT >= F.burnTickInterval || expired) {
+        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT);
+        this.burnTickT = 0;
+        this.hurt(true);
+        burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
+        if (this.hp <= 0) this.alive = false;
+      }
+      if (expired) { this.burnTimer = 0; this.burnStacks = 0; this.burnTickT = 0; }
+    }
+
     update(dt, game) {
       const In = game.input, S = this.stats;
       this.basePhysics(dt);
@@ -211,14 +232,7 @@
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
 
-      // Burn DoT: tick while burnTimer > 0; clears stacks on expiry.
-      if (this.burnTimer > 0) {
-        this.burnTimer -= dt;
-        this.hp = Math.max(0, this.hp - this.burnStacks * JH.FIRE.burnDpsPerStack * dt);
-        this.hurt(true);   // flash signals the DoT; no squash — burn isn't an impact
-        if (this.burnTimer <= 0) { this.burnTimer = 0; this.burnStacks = 0; }
-        if (this.hp <= 0) this.alive = false;
-      }
+      this.tickBurn(dt, game);
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;

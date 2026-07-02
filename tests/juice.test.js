@@ -213,6 +213,33 @@ test("Kibble stacks by extending the window, never overwriting", () => {
   assert.strictEqual(p.kibbleTimer, 9.5, "second kibble extends, not resets");
 });
 
+test("burn damage lands in discrete ticks with a flash beat + ember puff", () => {
+  JH.Upgrades.reset();
+  const p = new JH.Player(60, 40);
+  p.applyBurn(2);
+  const g = { particles: [], audio: { play() {} } };
+  const hp0 = p.hp;
+  p.tickBurn(0.3, g);
+  assert.strictEqual(p.hp, hp0, "no damage before a tick lands");
+  assert.strictEqual(p.flashTimer, 0, "no flash between ticks");
+  p.tickBurn(0.3, g);   // 0.6s elapsed → first tick fires
+  assert.ok(p.hp < hp0, "tick chunks the damage");
+  assert.ok(p.flashTimer > 0, "tick pulses the flash");
+  assert.strictEqual(p.squashT, 0, "still no squash from burn");
+  assert.ok(g.particles.length > 0, "tick puffs embers off Jon");
+});
+
+test("burn ticks drain the same total as the old continuous DoT", () => {
+  JH.Upgrades.reset();
+  const p = new JH.Player(60, 40);
+  p.applyBurn(3);   // 3 stacks x 4 hp/s x 2s = 24 hp
+  const g = { particles: [], audio: { play() {} } };
+  const hp0 = p.hp;
+  for (let t = 0; t < 2.2; t += 0.016) p.tickBurn(0.016, g);
+  assert.ok(Math.abs((hp0 - p.hp) - 24) < 1.5, "total ~24, got " + (hp0 - p.hp));
+  assert.strictEqual(p.burnStacks, 0, "stacks clear on expiry");
+});
+
 test("hurt(flashOnly) arms the flash but never the squash (burn DoT path)", () => {
   const e = new JH.Enemy("mook", 0, 0);
   e.hurt(true);
