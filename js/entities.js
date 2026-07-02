@@ -1107,6 +1107,18 @@
     }
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      // Ground shadow at the ball's (x,y) anchors its depth row while airborne
+      // (same convention as SmeltBomb's landing shadow) — height vs depth is
+      // otherwise ambiguous for a sinking 2.5D projectile.
+      const gy = Geo.feetScreenY(this.y, 0);
+      const shR = Math.max(2.5, 7 - this.z * 0.15);
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#220800";
+      ctx.beginPath();
+      ctx.ellipse(Math.round(sx), Math.round(gy), shR, shR * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       Assets.draw(ctx, "fireball", sx, sy, 1, { ignited: this.igniteT <= 0, t: this.t, dir: this.dir });
     }
   }
