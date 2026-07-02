@@ -156,7 +156,20 @@ test("hurt() arms both the flash and the squash", () => {
   const e = new JH.Enemy("mook", 0, 0);
   e.hurt();
   assert.strictEqual(e.flashTimer, 0.18);
-  assert.ok(e.squashT > 0 && e.squashT <= 0.12);
+  assert.ok(e.squashT > 0 && e.squashT <= 0.15);
+});
+
+test("hurt() pulses complete before re-arming (continuous spray reads as beats)", () => {
+  const e = new JH.Enemy("mook", 0, 0);
+  e.hurt();
+  e.flashTimer = 0.05; e.squashT = 0.03;   // mid-pulse
+  e.hurt();                                 // spray tick lands again
+  assert.strictEqual(e.flashTimer, 0.05, "flash pulse not extended mid-flight");
+  assert.strictEqual(e.squashT, 0.03, "squash pulse not extended mid-flight");
+  e.flashTimer = 0; e.squashT = 0;
+  e.hurt();                                 // expired → re-arm
+  assert.strictEqual(e.flashTimer, 0.18);
+  assert.ok(e.squashT > 0);
 });
 
 test("Pickup: arena-wide vacuum while lootVacuumT is live", () => {

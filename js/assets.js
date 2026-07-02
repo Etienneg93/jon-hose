@@ -206,9 +206,10 @@
   // Reusable offscreen canvas for the hit-flash white-silhouette effect.
   // Sized to fit the largest entity (WallBoss: ~142 × 178 px). The anchor
   // point (ox, oy) matches the feet-baseline convention used by every painter.
-  // Capped below 1 so a continuous hose stream (which re-arms the flash every
-  // frame) tints rather than fully whites out the sprite.
-  const HURT_FLASH_MAX_ALPHA = 0.45;
+  // Peak flash brightness. The flash is a discrete pulse (hurt() re-arms only
+  // after the previous pulse finishes), so it can run brighter than the old
+  // steady-tint cap without whiting out enemies under continuous spray.
+  const HURT_FLASH_MAX_ALPHA = 0.6;
   const _hurtOC = document.createElement("canvas");
   _hurtOC.width = 220; _hurtOC.height = 300;
   const _hurtOC2d = _hurtOC.getContext("2d");
@@ -223,13 +224,14 @@
       facing = facing < 0 ? -1 : 1;
       x = Math.round(x); y = Math.round(y);
       ctx.save();
-      // Squash-stretch anchored at the feet baseline: wider + shorter while
-      // opt.squash (0..1, timer-driven) decays. Applies to the silhouette
-      // stamp too since it shares this transform.
+      // Squash-stretch anchored at the feet baseline: full deform the frame
+      // the pulse arms (opt.squash 1 → 0), easing back out — wider + shorter.
+      // Applies to the silhouette stamp too since it shares this transform.
       const squash = Math.min(1, opt.squash || 0);
       if (squash > 0) {
+        const s = Math.sin(squash * Math.PI * 0.5) * JH.JUICE.squashAmp;
         ctx.translate(x, y);
-        ctx.scale(1 + 0.15 * squash, 1 - 0.15 * squash);
+        ctx.scale(1 + s, 1 - s);
         ctx.translate(-x, -y);
       }
       // Local-space pixel helper. Floors to integers for crisp pixels and
@@ -268,9 +270,11 @@
         _hurtOC2d.fillRect(0, 0, 220, 300);
         _hurtOC2d.globalCompositeOperation = "source-over";
         // Stamp silhouette onto main canvas.
-        // flashCap lets one-shot effects (KillPop) exceed the steady-stream
-        // cap without whiting out enemies under continuous spray.
-        ctx.globalAlpha = Math.min(opt.hurtAlpha, opt.flashCap || HURT_FLASH_MAX_ALPHA);
+        // Quadratic falloff: bright the instant a pulse arms, gone fast — an
+        // impact pop, not a lingering frost. flashCap lets one-shot effects
+        // (KillPop) push brighter still.
+        const ha = Math.min(1, opt.hurtAlpha);
+        ctx.globalAlpha = ha * ha * (opt.flashCap || HURT_FLASH_MAX_ALPHA);
         ctx.drawImage(_hurtOC, x - ox, y - oy);
       }
       ctx.restore();

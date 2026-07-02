@@ -318,6 +318,8 @@
     splatFade: 2.0,       // splat decal lifetime (sec)
     comboPitchCap: 12,    // kill-sound ladder tops out +12 semitones
     comboWaterRefund: 10, // GUSH every-5th-kill water crumb
+    squashDur: 0.12,      // hit squash-stretch pulse length (sec)
+    squashAmp: 0.24,      // peak squash deform (scaleX 1+a / scaleY 1-a)
   };
 
   // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.
