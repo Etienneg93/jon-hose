@@ -720,16 +720,17 @@
       ctx.fillRect(bx, barTop, barW, 3);
       ctx.fillStyle = hpFrac > 0.5 ? "#44cc44" : hpFrac > 0.25 ? "#ddaa22" : "#ee3333";
       ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
-      // Kibble regen: the HP fill breathes — a brighter overlay + soft halo
-      // pulsing in and out, no moving parts.
-      if (this.kibbleTimer > 0) {
-        const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
+      // Kibble regen: a brightness wave travels left → right through the
+      // FILLED portion only — reads as healing flowing in.
+      if (this.kibbleTimer > 0 && hpFrac > 0) {
+        const fw = Math.round(barW * hpFrac);
         ctx.save();
-        ctx.shadowColor = "#7dff9f";
-        ctx.shadowBlur = 1.5 + 2.5 * pulse;
-        ctx.globalAlpha = 0.18 + 0.30 * pulse;
         ctx.fillStyle = "#d9ffe4";
-        ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
+        for (let i = 0; i < fw; i++) {
+          const ph = ((i - this.t * 26) / 14) * Math.PI * 2;
+          ctx.globalAlpha = 0.08 + 0.34 * (0.5 + 0.5 * Math.sin(ph));
+          ctx.fillRect(bx + i, barTop, 1, 3);
+        }
         ctx.restore();
       }
       // H₂O
@@ -741,16 +742,17 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
-      // GUSH regen: the water fill breathes — a brighter overlay + soft halo
-      // pulsing in and out, no moving parts.
-      if (this.gushRegenT > 0) {
-        const pulse = 0.5 + 0.5 * Math.sin(this.t * 5);
+      // GUSH regen: a brightness wave travels left → right through the
+      // FILLED portion only — reads as water flowing in.
+      if (this.gushRegenT > 0 && wFrac > 0) {
+        const fw = Math.round(barW * wFrac);
         ctx.save();
-        ctx.shadowColor = "#9fe0ff";
-        ctx.shadowBlur = 1.5 + 2.5 * pulse;
-        ctx.globalAlpha = 0.18 + 0.30 * pulse;
         ctx.fillStyle = "#d8f4ff";
-        ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+        for (let i = 0; i < fw; i++) {
+          const ph = ((i - this.t * 26) / 14) * Math.PI * 2;
+          ctx.globalAlpha = 0.08 + 0.34 * (0.5 + 0.5 * Math.sin(ph));
+          ctx.fillRect(bx + i, barTop + 4, 1, 3);
+        }
         ctx.restore();
       }
       // Status indicators above bars — stacked if both active
