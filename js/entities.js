@@ -1798,7 +1798,12 @@
   // enemy — purely a world prop you stand next to to open the shop.
   class ShopNPC {
     constructor(x, y) { this.x = x; this.y = y; this.z = 0; this.facing = -1; this.t = 0; this.bodyW = 18; }
-    update(dt) { this.t += dt; }
+    update(dt, player) {
+      this.t += dt;
+      // Watch Jon walk past: facing picks the head-turned frame set (the
+      // stall composition itself never flips).
+      if (player && player.alive) this.facing = (player.x > this.x) ? 1 : -1;
+    }
     draw(ctx, cam) {
       const sx = this.x - cam;
       Assets.draw(ctx, "shopkeeper", sx, Geo.feetScreenY(this.y, 0), this.facing, { t: this.t });

@@ -1185,7 +1185,7 @@
         if (vp.near && this.input.buffered("confirm")) { this.input.consume("confirm"); this.win(); return; }
       }
       if (this.shopNpc) {
-        this.shopNpc.update(dt);
+        this.shopNpc.update(dt, this.player);
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
         this.player.nearShop = this.nearShop;

@@ -906,8 +906,12 @@
   // bobs smoothly with a one-frame hold on the rest pose at the seam.
   const KEEPER_H = 50;   // target display height in logical pixels
   const KEEPER_FPS = 6;
-  const _keeperFrames = [];
-  for (let i = 1; i <= 5; i++) _keeperFrames.push(JH.Loader.img(`sprites/shopkeeper/shopkeeper${i}.png`));
+  const _keeperFrames = [];   // head facing left (default, toward arrivals)
+  const _keeperFramesR = [];  // head turned right — same body, only the head
+  for (let i = 1; i <= 5; i++) {
+    _keeperFrames.push(JH.Loader.img(`sprites/shopkeeper/shopkeeper${i}.png`));
+    _keeperFramesR.push(JH.Loader.img(`sprites/shopkeeper/shopkeeper-right${i}.png`));
+  }
   // Stall props baked at 4x logical scale by tools/shop-props.mjs.
   const _stall = {
     counter:    JH.Loader.img("sprites/shopkeeper/counter.png"),
@@ -953,7 +957,10 @@
   }
   Assets.register("shopkeeper", (p, opt, ctx, x, y, facing) => {
     const fi = Math.floor((opt.t || 0) * KEEPER_FPS) % _keeperFrames.length;
-    const img = _keeperFrames[fi];
+    // facing only turns his head (dedicated right-facing frames); the stall
+    // composition never mirrors. Fall back to the left set while loading.
+    const right = facing > 0 && _keeperFramesR[fi] && _keeperFramesR[fi]._ready;
+    const img = right ? _keeperFramesR[fi] : _keeperFrames[fi];
     if (!img || !img._ready) {
       // Placeholder slab while frames load.
       p(-9, 0, 18, KEEPER_H - 12, "#3f7a4f");
@@ -962,7 +969,6 @@
     }
     ctx.save();
     ctx.translate(x, y);
-    if (facing > 0) ctx.scale(-1, 1);  // source art faces the approaching player (left)
     ctx.imageSmoothingEnabled = false;
     // Stall, back to front. Counter body is 26 logical tall with its right
     // edge 6 in from the PNG edge; placed so the keeper's leaning arm lands
@@ -977,11 +983,10 @@
     stallProp(ctx, _stall.norefunds, 18, 2);
     ctx.restore();
 
-    // --- signage text layer (unflipped so it never mirrors) --------------
-    // Local x offsets flip with facing; y offsets are from the feet line.
-    // Anchors derive from the prop geometry in tools/shop-props.mjs.
-    const m = facing > 0 ? -1 : 1;
-    const lx = (dx) => x + m * dx;
+    // --- signage text layer ----------------------------------------------
+    // Fixed offsets from the feet line; anchors derive from the prop
+    // geometry in tools/shop-props.mjs.
+    const lx = (dx) => x + dx;
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
