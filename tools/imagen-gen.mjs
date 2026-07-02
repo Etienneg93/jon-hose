@@ -194,6 +194,39 @@ Heavy blocky build — the biggest grunt. Flat, dark, dormant — NO glowing eye
     states: { idle: `Standing dormant idle, heavy and blocky, arms at sides. Full body, feet visible. Facing right.` },
   },
 
+  // Street shop stall — static props composed around the shopkeeper sprite
+  // (character drawn separately; his arm rests on the counter's top-right
+  // corner, so that corner must stay clear).
+  shop: {
+    refImage: "",
+    refDescription: "",
+    base: `2D pixel-art game prop for a night-time street market stall. Single solid object, flat even lighting, no baked drop shadows, no ground, no background scenery.
+NO glow, NO light rays, NO particles — just the plain solid object.
+Must read clearly at very small display sizes (the game canvas is 480×270, nearest-neighbour upscaled).
+Single object centered with clear empty margin for easy cutout.`,
+    states: {
+      counter: `A chunky wooden sales counter for a street shop stall, front view.
+Dark brown wood #5a3b22 with lighter #7a5230 trim planks.
+On its front face: a dark plaque panel with engraved gold #ffd23f capital letters "THE SHOPKEEPER", and below it a second narrower plank with painted gold text "BUSINESS IS DIVINE".
+On the countertop, toward the LEFT side: a small grey cash-register terminal with a glowing screen (yellow + pale cyan rectangles), and directly above the register a short red-and-white striped awning strip #c83030 / #ffffff.
+The RIGHT third of the countertop is EMPTY flat wood — a character's arm will rest on the top-right corner.
+Counter slightly wider than tall.`,
+
+      chalkboard: `A standing street chalkboard menu sign mounted on a short dark wooden post.
+Dark wood frame #5a3b22, near-black slate board #101418.
+Chalk hand-writing on the board: top line in white "TODAY'S SPECIAL:", middle lines in pale green #6cff9a "DISCOUNTED HOLY HOSE FUEL", lower lines in pale cyan #6cd3ff "50% OFF FOR CHURCH MEMBERS", and a small pale cyan Christian cross symbol at the bottom center of the board.
+Board roughly square, sitting on the post; whole object taller than wide.`,
+
+      fuelcan: `A squat metal aerosol canister of hose fuel standing upright.
+Dark green body #1f6f3f with a darker green label band, pale stencil text "HOSE FUEL" in two stacked lines on the label, dark grey cap and small nozzle on top.
+Simple cylinder, taller than wide.`,
+
+      norefunds: `A small hand-made cardboard sign standing upright.
+Brown cardboard #b08a5a with darker worn edges, hand-painted near-black text in two stacked lines: "NO REFUNDS." and "JUST HOSE.", with a small black Christian cross painted below the text.
+Roughly square, slightly taller than wide.`,
+    },
+  },
+
   // Church of the Holy Hose — static prop assets.
   // IMPORTANT: bake only the flat solid object. NO emitted glow, halo, rim-
   // light, aura, light rays, sparkles, particles, water jets, shimmer, or

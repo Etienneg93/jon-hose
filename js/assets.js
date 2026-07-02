@@ -899,30 +899,115 @@
     p(-3, 5 + bob, 6, 2, PAL.hpPk);
   });
 
-  // Shop vendor — "Old Spigot", a soggy merchant with a parts cart.
-  Assets.register("shopkeeper", (p, opt) => {
-    const bob = Math.sin((opt.t || 0) * 3) * 0.6;
-    // Cart / stall behind him
-    p(6, 0, 16, 14, "#5a3b22");
-    p(6, 12, 16, 3, "#7a5230");
-    p(7, 1, 2, 2, "#2a1c10"); p(19, 1, 2, 2, "#2a1c10"); // wheels
-    p(9, 15, 10, 6, PAL.tank);       // water-jug wares on the cart
-    p(10, 16, 3, 4, PAL.waterHi);
-    p(14, 16, 3, 4, PAL.suds);
-    // Striped awning
-    p(4, 22, 22, 3, "#c83030");
-    p(4, 22, 22, 1, "#fff");
-    // Vendor body
-    p(-9, 0 + bob, 5, 8, PAL.pantsDk);
-    p(-3 - 1, 0 + bob, 5, 8, PAL.pantsDk);
-    p(-10, 8 + bob, 12, 11, "#3f7a4f");   // green apron
-    p(-10, 8 + bob, 12, 2, "#2c5a39");
-    p(-7, 12 + bob, 6, 4, "#caa015");     // coin pouch
-    p(-8, 19 + bob, 9, 8, PAL.skin);      // head
-    p(-8, 25 + bob, 9, 4, "#7a5230");     // wide hat brim
-    p(-6, 28 + bob, 6, 3, "#5a3b22");     // hat top
-    p(-3, 21 + bob, 2, 2, "#111");        // eye (faces right toward player)
-    p(-9, 22 + bob, 2, 3, "#dddddd");     // bushy beard
+  // Shop vendor — real sprite frames. 5-frame idle bob exported as an
+  // unrolled ping-pong (1=5 rest, 2=4 mid, 3 peak), so a straight loop
+  // bobs smoothly with a one-frame hold on the rest pose at the seam.
+  const KEEPER_H = 50;   // target display height in logical pixels
+  const KEEPER_FPS = 6;
+  const _keeperFrames = [];
+  for (let i = 1; i <= 5; i++) _keeperFrames.push(JH.Loader.img(`sprites/shopkeeper/shopkeeper${i}.png`));
+  // Stall props baked at 4x logical scale by tools/shop-props.mjs.
+  const _stall = {
+    counter:    JH.Loader.img("sprites/shopkeeper/counter.png"),
+    chalkboard: JH.Loader.img("sprites/shopkeeper/chalkboard.png"),
+    fuelcan:    JH.Loader.img("sprites/shopkeeper/fuelcan.png"),
+    norefunds:  JH.Loader.img("sprites/shopkeeper/norefunds.png"),
+  };
+  // Blit a stall prop at 1/4 natural size, centered at local cx with its
+  // bottom on local y=by (call inside the keeper's translated ctx).
+  function stallProp(ctx, img, cx, by) {
+    if (!img || !img._ready) return;
+    const w = img.naturalWidth / 4, h = img.naturalHeight / 4;
+    ctx.drawImage(img, Math.round(cx - w / 2), Math.round(by - h), w, h);
+  }
+  // Signage copy is layered as real canvas text (props are baked blank by
+  // tools/shop-props.mjs). The chalkboard reads this mutable config so
+  // mechanics can rewrite the special at runtime.
+  JH.SHOP_SIGN = {
+    title: "TODAY'S SPECIAL:",
+    lines: [
+      { text: "DISCOUNTED", color: "#6cff9a" },
+      { text: "HOLY HOSE FUEL", color: "#6cff9a" },
+      { text: "50% OFF", color: "#6cd3ff" },
+      { text: "FOR CHURCH", color: "#6cd3ff" },
+      { text: "MEMBERS", color: "#6cd3ff" },
+    ],
+  };
+  // Centered text that squeezes horizontally to fit maxW (never overflows
+  // its plaque). Assumes textAlign=center, textBaseline=top.
+  function fitText(ctx, str, cx, topY, maxW, px, color, bold) {
+    ctx.font = (bold ? "bold " : "") + px + "px monospace";
+    ctx.fillStyle = color;
+    const w = ctx.measureText(str).width;
+    if (w > maxW) {
+      ctx.save();
+      ctx.translate(cx, topY);
+      ctx.scale(maxW / w, 1);
+      ctx.fillText(str, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.fillText(str, cx, topY);
+    }
+  }
+  Assets.register("shopkeeper", (p, opt, ctx, x, y, facing) => {
+    const fi = Math.floor((opt.t || 0) * KEEPER_FPS) % _keeperFrames.length;
+    const img = _keeperFrames[fi];
+    if (!img || !img._ready) {
+      // Placeholder slab while frames load.
+      p(-9, 0, 18, KEEPER_H - 12, "#3f7a4f");
+      p(-5, KEEPER_H - 12, 10, 12, PAL.skin);
+      return;
+    }
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing > 0) ctx.scale(-1, 1);  // source art faces the approaching player (left)
+    ctx.imageSmoothingEnabled = false;
+    // Stall, back to front. Counter body is 26 logical tall with its right
+    // edge 6 in from the PNG edge; placed so the keeper's leaning arm lands
+    // on the counter's top-right corner. No drop shadows — those are a
+    // depth cue reserved for Jon and enemies.
+    stallProp(ctx, _stall.chalkboard, -83, -2);
+    stallProp(ctx, _stall.counter, -31, 0);
+    const scale = KEEPER_H / img.naturalHeight;
+    const dw = Math.round(img.naturalWidth * scale);
+    ctx.drawImage(img, -Math.round(dw / 2), -KEEPER_H, dw, KEEPER_H);
+    stallProp(ctx, _stall.fuelcan, -64, 3);
+    stallProp(ctx, _stall.norefunds, 18, 2);
+    ctx.restore();
+
+    // --- signage text layer (unflipped so it never mirrors) --------------
+    // Local x offsets flip with facing; y offsets are from the feet line.
+    // Anchors derive from the prop geometry in tools/shop-props.mjs.
+    const m = facing > 0 ? -1 : 1;
+    const lx = (dx) => x + m * dx;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    // Counter plaques (counter top edge at y-48)
+    fitText(ctx, "THE SHOPKEEPER", lx(-32), y - 20, 36, 4, PAL.suds, true);
+    fitText(ctx, "BUSINESS IS DIVINE", lx(-32), y - 10.5, 39, 3.5, "#caa015", false);
+    // Chalkboard (slate inner: x -99..-67, y -50..-22)
+    const sign = JH.SHOP_SIGN;
+    let ty = y - 49;
+    fitText(ctx, sign.title, lx(-83), ty, 30, 4, "#e8ecf0", true);
+    ty += 5;
+    for (const line of sign.lines) {
+      fitText(ctx, line.text, lx(-83), ty, 30, 3.5, line.color, false);
+      ty += 4;
+    }
+    // Chalk cross under the last line
+    ctx.fillStyle = "#d6f6ff";
+    ctx.fillRect(lx(-83) - 0.5, ty + 1, 1, 5);
+    ctx.fillRect(lx(-83) - 2, ty + 2.5, 4, 1);
+    // Fuel can label (band: y -11..-4)
+    fitText(ctx, "HOSE", lx(-64), y - 11, 11, 3, "#cfe8d8", true);
+    fitText(ctx, "FUEL", lx(-64), y - 7.5, 11, 3, "#cfe8d8", true);
+    // Cardboard sign (card top at y-22)
+    fitText(ctx, "NO", lx(18), y - 21, 15, 3.5, "#241a10", true);
+    fitText(ctx, "REFUNDS.", lx(18), y - 17.5, 15, 3.5, "#241a10", true);
+    fitText(ctx, "JUST", lx(18), y - 14, 15, 3.5, "#241a10", true);
+    fitText(ctx, "HOSE.", lx(18), y - 10.5, 15, 3.5, "#241a10", true);
+    ctx.restore();
   });
 
   // ====================== GATEWAY KRUSHER 9000 (final boss) ===================

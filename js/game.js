@@ -1433,7 +1433,6 @@
         for (const p of this.particles) p.draw(ctx, cam);
 
         // interact prompt over the vendor
-        if (this.shopNpc && this.state === "play") this.drawShopPrompt(ctx, cam);
 
         // "GO!" prompt when free to advance
         if (this.state === "play" && !this.waveActive && this.waveIndex + 1 < JH.LEVEL1.waves.length && !this.nearShop) {
@@ -1680,18 +1679,6 @@
           ctx.textAlign = "left";
         }
       }
-    },
-
-    drawShopPrompt(ctx, cam) {
-      const n = this.shopNpc;
-      const sx = n.x - cam;
-      if (sx < -30 || sx > JH.VIEW_W + 30) return;
-      const baseY = JH.Geo.feetScreenY(n.y, 0) - 40;
-      ctx.textAlign = "center";
-      ctx.font = "bold 7px monospace";
-      ctx.fillStyle = "#ffd23f";
-      ctx.fillText("SHOP", sx + 6, baseY - 8);
-      ctx.textAlign = "left";
     },
 
     drawGoArrow(ctx) {

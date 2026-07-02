@@ -1801,7 +1801,6 @@
     update(dt) { this.t += dt; }
     draw(ctx, cam) {
       const sx = this.x - cam;
-      Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 14);
       Assets.draw(ctx, "shopkeeper", sx, Geo.feetScreenY(this.y, 0), this.facing, { t: this.t });
     }
   }
