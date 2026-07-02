@@ -20,6 +20,10 @@
   JH.FLOOR_TOP = 168;       // screen-y of the back edge of the floor
   JH.DEPTH_MIN = 0;
   JH.DEPTH_MAX = 86;        // floor depth span in px
+  // Ground-ellipse depth ratio: every ground-plane footprint (hazard zones,
+  // domes, telegraphs) draws AND hits an ellipse (rx, rx * GROUND_RY) — the
+  // hit test lives in Geo.inGroundEllipse (world.js).
+  JH.GROUND_RY = 0.40;
   JH.LEVEL_LEN = 11200;     // world length of level 1 (logical px)
   // Zone boundaries sit in the free-walk corridor after each act's boss so the
   // 500px tint ramp (world.js) never bleeds into the locked boss arena behind it.
@@ -562,5 +566,6 @@
     jump:   { type: "square", freq: 480, dur: 0.09, gain: 0.08 },
     pill:   { type: "square", freq: 1400, dur: 0.45, gain: 0.14 },
     blast:  { type: "saw", freq: 55, dur: 0.35, gain: 0.18 },
+    sizzle: { type: "noise", dur: 0.15, gain: 0.10 },
   };
 })();

@@ -162,6 +162,7 @@
       this.dashTimer = 0; this.dashCdTimer = 0; this.dashBoostTimer = 0;
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
+      this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
       this.regenLock = 0;
       this.spraying = false;
       this.sprayDry = false;
@@ -181,14 +182,21 @@
     applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
 
     applyBurn(n) {
+      // Burn stacks have i-frames like hits: one application, then immune to
+      // new stacks for the invuln window (overlapping fire can't insta-max).
+      // Returns whether the stack landed so sources can retry, not skip ahead.
+      if (this.burnGraceT > 0) return false;
+      this.burnGraceT = this.stats.invuln;
       this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
       this.burnTimer = JH.FIRE.burnDuration;
+      return true;
     }
 
     update(dt, game) {
       const In = game.input, S = this.stats;
       this.basePhysics(dt);
       if (this.invulnTimer > 0) this.invulnTimer -= dt;
+      if (this.burnGraceT > 0) this.burnGraceT -= dt;
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
@@ -1107,6 +1115,18 @@
     }
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      // Ground shadow at the ball's (x,y) anchors its depth row while airborne
+      // (same convention as SmeltBomb's landing shadow) — height vs depth is
+      // otherwise ambiguous for a sinking 2.5D projectile.
+      const gy = Geo.feetScreenY(this.y, 0);
+      const shR = Math.max(2.5, 7 - this.z * 0.15);
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#220800";
+      ctx.beginPath();
+      ctx.ellipse(Math.round(sx), Math.round(gy), shR, shR * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       Assets.draw(ctx, "fireball", sx, sy, 1, { ignited: this.igniteT <= 0, t: this.t, dir: this.dir });
     }
   }
@@ -1267,8 +1287,8 @@
 
   // Dome ground-ellipse depth ratio — the DRAWN ground disc and the COLLISION
   // footprint (insideDome) share this so the barrier only affects you where the
-  // visible circle is (depth is compared in screen space via feetScreenY).
-  const DOME_RY = 0.45;
+  // visible circle is. Uses the game-wide ground-footprint ratio.
+  const DOME_RY = JH.GROUND_RY;
 
   // ---- DeployedShield: a Bulwark's planted shield ----
   // Stationary, indestructible (no takeDamage path — the player can never
@@ -1319,10 +1339,15 @@
       const fade = this.domeT < 1.2 ? Math.max(0.15, this.domeT / 1.2) : 1;
       const flick = 0.85 + 0.15 * Math.sin(this.t * 9);
       ctx.save();
-      // Bubble body
+      // Bubble body: top dome arc closed along the FRONT half of the ground
+      // ellipse (one path), so the sheltered ground disc shades evenly — a
+      // straight bottom edge left the disc's front half one wash lighter.
       ctx.fillStyle = col; ctx.globalAlpha = 0.14 * fade * flick;
-      ctx.beginPath(); ctx.ellipse(sx, sy, r, domeH, 0, Math.PI, Math.PI * 2); ctx.fill();
-      // Ground contact disc (front lip)
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r, domeH, 0, Math.PI, Math.PI * 2);
+      ctx.ellipse(sx, sy, r, r * DOME_RY, 0, 0, Math.PI);
+      ctx.fill();
+      // Ground contact disc (uniform wash over the whole footprint)
       ctx.globalAlpha = 0.10 * fade;
       ctx.beginPath(); ctx.ellipse(sx, sy, r, r * DOME_RY, 0, 0, Math.PI * 2); ctx.fill();
       // Rims
@@ -1360,26 +1385,43 @@
       this.extinguishDur = extinguishDur;
       this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
       this.patchBurnT = 0;     // cooldown between burn-stack applications
+      this.sizzled = false;    // first-contact cue fired (once per patch instance)
+      this.rimFlashT = 0;      // white rim flash on first contact
       this.dead = false; this.t = 0;
+    }
+    // Live footprint (shrinks as spray extinguishes). ONE shape shared by the
+    // hit test and the drawn scorch/rim — the rim you see is the hitbox.
+    footprint() {
+      const prog = this.sprayProgress / this.extinguishDur;
+      const r = Math.max(6, this.radius * (1 - prog * 0.55));
+      const rx = r * 0.85;
+      return { r, rx, ry: rx * JH.GROUND_RY };
     }
     update(dt, game) {
       this.t += dt;
       if (this.patchBurnT > 0) this.patchBurnT -= dt;
+      if (this.rimFlashT > 0) this.rimFlashT -= dt;
       const pl = game.player;
       if (pl && pl.alive) {
-        const prog = this.sprayProgress / this.extinguishDur;
-        const r = Math.max(6, this.radius * (1 - prog * 0.55));
-        // Match the DRAWN scorch oval (draw(): ellipse r*0.85 wide, ~r*0.28 tall).
-        // x is 1:1 world->screen; depth compares screen-Y via feetScreenY (cam-
-        // independent). Jon's FEET must be inside the visible flame footprint —
-        // no body padding — so the flame no longer burns from a depth row away.
-        const dx = pl.x - this.x;
-        const dyScreen = Geo.feetScreenY(pl.y, 0) - Geo.feetScreenY(this.y, 0);
-        const rx = r * 0.85, ry = r * 0.30;
-        const inside = (dx * dx) / (rx * rx) + (dyScreen * dyScreen) / (ry * ry) < 1;
+        const f = this.footprint();
+        // Jon's feet aren't a point: pad the footprint by a quarter of his
+        // body width so a visible foot/shadow overlap counts as contact.
+        const pad = (pl.bodyW || 12) * 0.25;
+        const inside = Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
+          f.rx + pad, f.ry + pad * JH.GROUND_RY);
+        if (inside && !this.sizzled) {
+          // First contact on this patch: sizzle + white rim flash. The first
+          // stack lands immediately; SUBSEQUENT stacks are spaced by the
+          // player's burn i-frames (applyBurn) + this patch's tick interval.
+          this.sizzled = true;
+          this.rimFlashT = 0.2;
+          if (game.audio) game.audio.play("sizzle");
+        }
         if (inside && this.patchBurnT <= 0) {
-          pl.applyBurn(1);
-          this.patchBurnT = JH.FIRE.patchBurnInterval;
+          // Only consume the tick when the stack actually lands; if the
+          // player's burn i-frames blocked it, retry next frame so the next
+          // stack arrives AT the i-frame boundary, not interval-aligned after.
+          if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
         }
       }
       if (this.sprayProgress >= this.extinguishDur) this.dead = true;
@@ -1388,23 +1430,37 @@
       const sx = Math.round(this.x - cam);
       const sy = Math.round(Geo.feetScreenY(this.y, 0));
       const prog = this.sprayProgress / this.extinguishDur;
-      const r = Math.max(3, this.radius * (1 - prog * 0.55));
+      const f = this.footprint();
       const t = this.t;
       ctx.save();
+      // Scorch base decal — the EXACT hit ellipse.
       ctx.globalAlpha = Math.max(0, 0.88 - prog * 0.45);
-      // Scorch base oval
       ctx.beginPath();
-      ctx.ellipse(sx, sy, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2);
       ctx.fillStyle = "#440800";
       ctx.fill();
-      // Animated pack flames, scaled to the patch; wide patches get two extra
-      // offset flames with desynced loop phases. The globalAlpha set above
-      // (fades with extinguish progress) carries into these draws.
-      const fscale = Math.max(0.5, (r * 1.6) / 48);
+      // Bright rim on the same ellipse, pulsing while lit; flashes white during
+      // the first-contact sizzle grace.
+      const flash = this.rimFlashT > 0;
+      ctx.globalAlpha = Math.max(0, (flash ? 0.95 : 0.45 + 0.25 * Math.sin(t * 6)) - prog * 0.35);
+      ctx.strokeStyle = flash ? "#ffffff" : JH.PAL.firePatchHi;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Animated pack flames: free to be tall, never wider than the rim (cap
+      // at 80% of footprint width; fire-small frames are 16px wide native).
+      // Wide patches add two offset flames only where they stay inside the rim
+      // (offset + drawn half-width ≤ rx).
+      ctx.globalAlpha = Math.max(0, 0.88 - prog * 0.45);
+      let fscale = Math.max(0.5, (f.r * 1.6) / 48);
+      fscale = Math.min(fscale, (2 * f.rx * 0.8) / 16);
       Assets.drawFx(ctx, "fire-small", sx, sy + 2, t, { scale: fscale });
-      if (r > 20) {
-        Assets.drawFx(ctx, "fire-small", sx - r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
-        Assets.drawFx(ctx, "fire-small", sx + r * 0.4, sy + 3, t + 0.6, { scale: fscale * 0.75 });
+      if (f.r > 20) {
+        if (f.r * 0.45 + 8 * fscale * 0.7 <= f.rx)
+          Assets.drawFx(ctx, "fire-small", sx - f.r * 0.45, sy + 3, t + 0.35, { scale: fscale * 0.7 });
+        if (f.r * 0.4 + 8 * fscale * 0.75 <= f.rx)
+          Assets.drawFx(ctx, "fire-small", sx + f.r * 0.4, sy + 3, t + 0.6, { scale: fscale * 0.75 });
       }
       ctx.restore();
     }
@@ -2039,7 +2095,12 @@
       this.r += this.speed * dt;
       const pl = game.player;
       if (!this.hit && pl && pl.alive) {
-        const pd = Math.hypot(pl.x - this.x, pl.y - this.y);
+        // Rim-space distance: depth scaled up by GROUND_RY so the drawn
+        // elliptical rim (rx = r, ry = r*GROUND_RY) becomes a circle of
+        // radius r — the expanding edge hits exactly where it's drawn.
+        const dx = pl.x - this.x;
+        const dyS = Geo.feetScreenY(pl.y, 0) - Geo.feetScreenY(this.y, 0);
+        const pd = Math.hypot(dx, dyS / JH.GROUND_RY);
         if (Math.abs(pd - this.r) < 14) {
           pl.takeHit(this.dmg, game, this.x);
           if (this.burn) pl.applyBurn(this.burn);
@@ -2048,7 +2109,7 @@
       }
       if (Math.random() < 0.9) {
         const a = Math.random() * Math.PI * 2;
-        burst(game, this.x + Math.cos(a) * this.r, this.y + Math.sin(a) * this.r * 0.5, 3,
+        burst(game, this.x + Math.cos(a) * this.r, this.y + Math.sin(a) * this.r * JH.GROUND_RY, 3,
           Math.random() < 0.5 ? JH.PAL.firePatch : JH.PAL.firePatchHi, 1, { speed: 30, life: 0.28, up: 22 });
       }
       if (this.r >= this.maxR) this.dead = true;
@@ -2060,9 +2121,9 @@
       ctx.save();
       ctx.globalAlpha = 0.35 + 0.5 * fade;
       ctx.strokeStyle = JH.PAL.firePatchHi; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, this.r, this.r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, this.r, this.r * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.25 * fade; ctx.strokeStyle = JH.PAL.firePatch; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, this.r * 0.92, this.r * 0.41, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, this.r * 0.92, this.r * 0.92 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
   }
@@ -2253,7 +2314,7 @@
         if (this.windTimer > this.atkDur * 0.4) this.facing = dx >= 0 ? 1 : -1;
         if (this.windTimer <= 0) {
           game.shake(11); game.audio.play("whack");
-          if (Math.abs(pl.x - this.x) < d.stompRadius && Math.abs(dy) < 26)
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.stompRadius))
             pl.takeHit(d.stompDmg, game, this.x);
           const ws = enraged ? d.waveSpeed * 1.3 : d.waveSpeed;
           game.embers.push(new Shockwave(this.x, -1, ws, d));
@@ -2298,8 +2359,8 @@
         if (prog >= 1) {
           this.z = 0;
           game.shake(14); game.audio.play("whack");
-          const ldist = Math.hypot(pl.x - this.x, pl.y - this.y);
-          if (ldist < d.leapRadius) pl.takeHit(d.leapDmg, game, this.x);
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.leapRadius))
+            pl.takeHit(d.leapDmg, game, this.x);
           for (let i = 0; i < 22; i++)
             burst(game, this.x + (Math.random() - 0.5) * 28, this.y + (Math.random() - 0.5) * 22, 0,
               Math.random() < 0.4 ? JH.PAL.rubble : "#d8a860", 1, { speed: 190, life: 0.6, up: 100, grav: 250 });
@@ -2373,10 +2434,10 @@
       ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
       ctx.lineWidth = 1.5;
       ctx.globalAlpha = 0.5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, r, r * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = "#ff5a5a";
-      ctx.beginPath(); ctx.ellipse(sx, sy, r * prog, r * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, r * prog, r * JH.GROUND_RY * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     drawLeapTelegraph(ctx, cam) {
@@ -2390,17 +2451,17 @@
       ctx.lineWidth = 1.5;
       // Outer ring
       ctx.globalAlpha = 0.65;
-      ctx.beginPath(); ctx.ellipse(tx, ty, r, r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(tx, ty, r, r * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       // Crosshair
       ctx.globalAlpha = 0.45;
       ctx.beginPath();
       ctx.moveTo(tx - r - 6, ty); ctx.lineTo(tx + r + 6, ty);
-      ctx.moveTo(tx, ty - r * 0.5 - 6); ctx.lineTo(tx, ty + r * 0.5 + 6);
+      ctx.moveTo(tx, ty - r * JH.GROUND_RY - 6); ctx.lineTo(tx, ty + r * JH.GROUND_RY + 6);
       ctx.stroke();
       // Fill progress
       ctx.globalAlpha = 0.18 + 0.2 * prog;
       ctx.fillStyle = "#ff5a5a";
-      ctx.beginPath(); ctx.ellipse(tx, ty, r * prog, r * 0.45 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(tx, ty, r * prog, r * JH.GROUND_RY * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
     die(game) {
@@ -3286,7 +3347,11 @@
         burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
         game.shake(3);
         const pl = game.player;
-        if (pl.alive && Math.hypot(pl.x - this.x, pl.y - this.y) < d.lobBombRadius)
+        // First-frame burn uses the SAME footprint as the FirePatch it just
+        // spawned (rx = 0.85·radius + foot pad), so frame 0 agrees with every
+        // later frame.
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
+            d.lobBombRadius * 0.85 + (pl.bodyW || 12) * 0.25))
           pl.applyBurn(1);
         this.dead = true;
       }
@@ -3303,7 +3368,7 @@
       ctx.fillStyle = "#220800";
       ctx.beginPath();
       const shadowR = Math.max(2, 8 - this.z * 0.18);
-      ctx.ellipse(Math.round(sx), Math.round(groundSy), shadowR, shadowR * 0.4, 0, 0, Math.PI * 2);
+      ctx.ellipse(Math.round(sx), Math.round(groundSy), shadowR, shadowR * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.fill();
       // Bomb
       ctx.globalAlpha = 1;
@@ -3467,7 +3532,7 @@
       if (this.state === "slam") {
         this.windTimer -= dt;
         if (this.windTimer <= 0) {
-          if (Math.abs(dx) < d.slamRange && Math.abs(dy) < 24)
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.slamRange))
             pl.takeHit(d.slamDmg, game, this.x);
           for (let i = 0; i < 10; i++)
             burst(game, this.x + (Math.random() - 0.5) * 24, this.y + (Math.random() - 0.5) * 16, 4,
@@ -3570,12 +3635,11 @@
       }
       // Slam telegraph zone.
       if (this.state === "slam" && this.strikeFx <= 0) {
-        // Same zone as before (slamRange x ±24 depth) but drawn as a flashing
-        // ground ellipse — the bare fillRect read as a glitch, not a telegraph.
+        // The telegraph IS the hit zone: shared ground-footprint ellipse.
         const d = this.def;
         const flash = Math.floor(this.t * 12) & 1;
         const gy = Geo.feetScreenY(this.y, 0);
-        const ry = (Geo.feetScreenY(this.y + 24, 0) - Geo.feetScreenY(this.y - 24, 0)) / 2;
+        const ry = d.slamRange * JH.GROUND_RY;
         ctx.save();
         ctx.beginPath();
         ctx.ellipse(Math.round(sx), Math.round(gy), d.slamRange, Math.max(6, ry), 0, 0, Math.PI * 2);
@@ -3646,7 +3710,6 @@
         if (this.heatT <= 0) {
           // Vent fires — always show the visual, only apply effects in range.
           const pl = game.player;
-          const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
           burst(game, this.x, this.y, 10, "#d0e8ff",        18, { speed: 150, life: 0.45, up: 70, size: 3 });
           burst(game, this.x, this.y, 4,  JH.PAL.firePatchHi, 10, { speed: 85, life: 0.4, up: 18, size: 2 });
           game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.75 }));
@@ -3658,10 +3721,11 @@
             const a = (i / ringN) * Math.PI * 2;
             game.firePatches.push(new JH.FirePatch(
               this.x + Math.cos(a) * ringR,
-              this.y + Math.sin(a) * ringR * 0.5,   // flattened in depth (2.5D)
+              this.y + Math.sin(a) * ringR * JH.GROUND_RY,   // flattened in depth (2.5D)
               d.ventPatchRadius * 0.8, d.ventPatchDur));
           }
-          if (dist < this.bodyW * 4) {
+          // Same ellipse the wind-up telegraph draws (R, R*GROUND_RY).
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.bodyW * 4)) {
             const dir = pl.x >= this.x ? 1 : -1;
             pl.applyKnockback(dir, d.ventKnock);
             pl.applyBurn(d.ventBurnStacks);
@@ -3702,9 +3766,9 @@
       ctx.save();
       ctx.globalAlpha = 0.25 + 0.3 * prog;
       ctx.strokeStyle = flash ? "#fff" : "#ff5a2a"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, R, R * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, R, R * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.10 + 0.20 * prog; ctx.fillStyle = "#ff3000";
-      ctx.beginPath(); ctx.ellipse(sx, sy, R * prog, R * 0.4 * prog, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx, sy, R * prog, R * JH.GROUND_RY * prog, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       const hy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
       ctx.fillStyle = flash ? "#ff5a5a" : "#fff";
@@ -3763,7 +3827,7 @@
           const pl = game.player;
           burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });
           game.shake(2);
-          if (Math.hypot(pl.x - this.x, pl.y - this.y) < JH.FUSE_DROP.slamRadius && pl.z < 20)
+          if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, JH.FUSE_DROP.slamRadius) && pl.z < 20)
             pl.takeHit(JH.FUSE_DROP.slamDmg, game, this.x);
         }
         return;
@@ -3780,7 +3844,7 @@
       game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
       burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
       game.shake(3);
-      if (Math.hypot(game.player.x - this.x, game.player.y - this.y) < d.deathBurnRange)
+      if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))
         game.player.applyBurn(1);
       super.die(game);
     }
@@ -3800,7 +3864,7 @@
       ctx.strokeStyle = flash ? "#ff8030" : "rgba(255,110,40,0.5)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.ellipse(sx, sy, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy, r, r * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
       ctx.restore();
       Assets.shadow(ctx, sx, sy, this.bodyW * 0.5 * (1 - frac * 0.5));
