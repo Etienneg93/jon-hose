@@ -111,7 +111,7 @@
     constructor(x, y) {
       this.x = x; this.y = y; this.z = 0; this.vz = 0;
       this.facing = -1; this.dead = false;
-      this.hurtTimer = 0; this.flashTimer = 0;
+      this.hurtTimer = 0; this.flashTimer = 0; this.squashT = 0;
       this.knockVX = 0; this.knockVY = 0;
       this.frame = 0; this.animTimer = 0; this.state = "idle";
       this.t = 0;
@@ -135,6 +135,7 @@
       this.x = Geo.clampX(this.x);
       if (this.hurtTimer > 0) this.hurtTimer -= dt;
       if (this.flashTimer > 0) this.flashTimer -= dt;
+      if (this.squashT > 0) this.squashT -= dt;
     }
     animate(dt, moving) {
       this.animTimer += dt;
@@ -145,7 +146,13 @@
       this.knockVX += dirX * force;
       if (dirY != null) this.knockVY += dirY * force * 0.4;
     }
-    hurt() { this.flashTimer = 0.18; }
+    // Hurt pulses complete before re-arming: under a continuous spray this
+    // beats at the tick rate instead of freezing at a constant tint/deform.
+    // flashOnly = damage without impact (DoT ticks) — flash, never squash.
+    hurt(flashOnly) {
+      if (this.flashTimer <= 0) this.flashTimer = 0.18;
+      if (!flashOnly && this.squashT <= 0) this.squashT = JH.JUICE.squashDur;
+    }
   }
   JH.Entity = Entity;
 
@@ -163,6 +170,7 @@
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
       this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
+      this.burnTickT = 0;          // time accrued toward the next burn damage beat
       this.regenLock = 0;
       this.spraying = false;
       this.sprayDry = false;
@@ -173,6 +181,8 @@
       this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
+      this.gushRegenT = 0;         // GUSH milestone: water regen window (sec)
+      this.gushRegenRate = 0;      // water/s while the window is live
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
       this.bodyW = this.stats.bodyW;
@@ -192,6 +202,26 @@
       return true;
     }
 
+    // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
+    // the accrued damage, pulses the flash (no squash — no impact), and puffs
+    // embers off Jon. Expiry flushes the partial tick, so the total always
+    // equals stacks * dps * duration.
+    tickBurn(dt, game) {
+      if (this.burnTimer <= 0) return;
+      const F = JH.FIRE;
+      this.burnTickT += Math.min(dt, this.burnTimer);  // don't bill past expiry
+      this.burnTimer -= dt;
+      const expired = this.burnTimer <= 0;
+      if (this.burnTickT >= F.burnTickInterval || expired) {
+        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT);
+        this.burnTickT = 0;
+        this.hurt(true);
+        burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
+        if (this.hp <= 0) this.alive = false;
+      }
+      if (expired) { this.burnTimer = 0; this.burnStacks = 0; this.burnTickT = 0; }
+    }
+
     update(dt, game) {
       const In = game.input, S = this.stats;
       this.basePhysics(dt);
@@ -202,14 +232,7 @@
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
 
-      // Burn DoT: tick while burnTimer > 0; clears stacks on expiry.
-      if (this.burnTimer > 0) {
-        this.burnTimer -= dt;
-        this.hp = Math.max(0, this.hp - this.burnStacks * JH.FIRE.burnDpsPerStack * dt);
-        this.hurt();   // reuses the existing white hurt-flash to signal burn damage
-        if (this.burnTimer <= 0) { this.burnTimer = 0; this.burnStacks = 0; }
-        if (this.hp <= 0) this.alive = false;
-      }
+      this.tickBurn(dt, game);
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
@@ -231,6 +254,16 @@
         this.kibbleTimer -= dt;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
       }
+      // GUSH milestone water regen — independent of the regular regen delay.
+      if (this.gushRegenT > 0) {
+        this.gushRegenT -= dt;
+        this.water = Math.min(S.maxWater, this.water + this.gushRegenRate * dt);
+        // Rising water motes: visible even when kibble/concerta own the glow,
+        // so stacked buffs never hide each other.
+        if (Math.random() < 8 * dt)
+          burst(game, this.x + (Math.random() - 0.5) * 10, this.y, 8 + Math.random() * 20,
+            JH.PAL.water, 1, { speed: 10, life: 0.5, up: 35, size: 1 });
+      }
 
       if (this.dashBoostTimer > 0) {
         this.dashBoostTimer -= dt;
@@ -249,7 +282,7 @@
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
         this._dashX = (mx || my) ? mx : this.facing;
         this._dashY = my;
-        game.audio.play("jump");
+        game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
@@ -613,8 +646,8 @@
       const dir = this.x < fromX ? -1 : 1;
       this.applyKnockback(dir, 90);
       game.audio.play("hurt");
-      game.shake(5);
-      game.hitStop(0.06);
+      game.shake(5, dir);                       // kick away from the impact
+      game.hitStop(JH.JUICE.hitstop.playerHit);
       if (this.hp <= 0) { this.hp = 0; this.alive = false; }
     }
 
@@ -627,31 +660,26 @@
         ctx.shadowColor = "#ff4400";
         ctx.shadowBlur = 5 + 7 * bIntensity + 3 * Math.sin(this.t * 12);
       }
-      // Kibble/Concerta glows yield to the burn glow — being on fire is the
-      // priority read, so its red glow wins when both are active.
-      if (this.kibbleTimer > 0) {
-        ctx.save();
-        if (this.burnStacks === 0) {
-          ctx.shadowColor = "#44ee66";
-          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 5);
-        }
-      }
-      if (this.concertaTimer > 0) {
-        ctx.save();
-        if (this.burnStacks === 0) {
-          ctx.shadowColor = "#cc44ff";
-          ctx.shadowBlur = 6 + 3 * Math.sin(this.t * 6);
-        }
-      }
       const spriteSy = Geo.feetScreenY(this.y, this.z);
+      // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
+      // hugs the body, kibble green rings around it, concerta purple outside
+      // that — active buffs stack visually instead of overwriting. Burn's
+      // fire read replaces them all.
+      const outlines = [];
+      if (this.burnStacks === 0) {
+        if (this.gushRegenT > 0)    outlines.push(["#55c8ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
+        if (this.kibbleTimer > 0)   outlines.push(["#44ee66", 0.55 + 0.30 * Math.sin(this.t * 5)]);
+        if (this.concertaTimer > 0) outlines.push(["#cc44ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
+      }
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         hurt: this.invulnTimer > 0 && this.flashTimer > 0,
+        hurtAlpha: this.flashTimer / 0.18,
+        squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
         waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
         walking: this.walking,
+        outlines,
       });
-      if (this.concertaTimer > 0) ctx.restore();
-      if (this.kibbleTimer > 0) ctx.restore();
       if (this.burnStacks > 0) {
         ctx.restore();
         // Draw flame tongues rising from feet to show burn stacks
@@ -682,7 +710,7 @@
       const bx = Math.round(sx - barW / 2);
       const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
       const wFrac  = Math.max(0, this.water / this.stats.maxWater);
-      const barTop = Math.round(sy - this.stats.bodyH - 34);
+      const barTop = Math.round(sy - this.stats.bodyH - 30);
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
       // HP
@@ -690,6 +718,21 @@
       ctx.fillRect(bx, barTop, barW, 3);
       ctx.fillStyle = hpFrac > 0.5 ? "#44cc44" : hpFrac > 0.25 ? "#ddaa22" : "#ee3333";
       ctx.fillRect(bx, barTop, Math.round(barW * hpFrac), 3);
+      // Kibble regen: a brightness wave travels left → right through the
+      // FILLED portion only — a brighter shade of the bar's own color, kept
+      // strictly inside the fill (no halo).
+      if (this.kibbleTimer > 0 && hpFrac > 0) {
+        const fw = Math.round(barW * hpFrac);
+        ctx.save();
+        // Crest = a fully saturated version of the bar's hue (not a whiter one).
+        ctx.fillStyle = hpFrac > 0.5 ? "#00ff44" : hpFrac > 0.25 ? "#ffb400" : "#ff2a1c";
+        for (let i = 0; i < fw; i++) {
+          const ph = ((i - this.t * 13) / 20) * Math.PI * 2;
+          ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
+          ctx.fillRect(bx + i, barTop, 1, 3);
+        }
+        ctx.restore();
+      }
       // H₂O
       ctx.fillStyle = "#1a3344";
       ctx.fillRect(bx, barTop + 4, barW, 3);
@@ -699,6 +742,21 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // GUSH regen: a brightness wave travels left → right through the
+      // FILLED portion only — a brighter shade of the bar's own blue, kept
+      // strictly inside the fill (no halo).
+      if (this.gushRegenT > 0 && wFrac > 0) {
+        const fw = Math.round(barW * wFrac);
+        ctx.save();
+        // Crest = a fully saturated version of the bar's blue (not a whiter one).
+        ctx.fillStyle = "#00c2ff";
+        for (let i = 0; i < fw; i++) {
+          const ph = ((i - this.t * 13) / 20) * Math.PI * 2;
+          ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
+          ctx.fillRect(bx + i, barTop + 4, 1, 3);
+        }
+        ctx.restore();
+      }
       // Status indicators above bars — stacked if both active
       let indY = barTop - 2;
       if (this.kibbleTimer > 0) {
@@ -718,12 +776,6 @@
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
         ctx.fillText("BURN x" + this.burnStacks, sx, indY);
       }
-      // label
-      ctx.font = "bold 6px monospace";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#9be8ff";
-      ctx.fillText("H₂O", sx, barTop + 13);
-      ctx.textAlign = "left";
 
       // Floating coin count above bars when standing near the vendor
       if (this.nearShop) {
@@ -778,12 +830,15 @@
       this.windTimer = 0; this.attackTimer = 0; this.cdTimer = 0;
       this.state = "walk";
       this.spawnGrace = 0.2;
+      this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
     }
 
     takeDamage(dmg, game, dirX, knock) {
       if (this.dead) return;
       this.hp -= dmg;
       this.hurt();
+      // The hose soaks: each hit builds wetness; it dries in update().
+      this.wetness = Math.min(1, this.wetness + JH.JUICE.wetPerHit);
       if (knock) this.applyKnockback(dirX, knock);
       if (this.hp <= 0) this.die(game);
     }
@@ -797,9 +852,10 @@
     die(game) {
       if (this.dead) return;
       this.dead = true;
-      game.audio.play("die");
-      game.hitStop(0.04);
-      burst(game, this.x, this.y, this.z + 12, this.colorOf(), 10, { speed: 100, life: 0.5, up: 80 });
+      game.killJuice(this);
+      // Burst waits for the KillPop collapse to finish flattening (~150ms).
+      const bx = this.x, by = this.y, bz = this.z, col = this.colorOf();
+      game.defer(120, () => burst(game, bx, by, bz + 12, col, 10, { speed: 100, life: 0.5, up: 80 }));
       game.dropLoot(this);   // anti-farm aware (infinite spawns share a budget)
       game.onEnemyKilled(this);
     }
@@ -831,6 +887,14 @@
       this.basePhysics(dt);
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
+      // Wetness dries off over time; visibly soaked enemies drip.
+      if (this.wetness > 0) {
+        this.wetness = Math.max(0, this.wetness - JH.JUICE.wetDryPerSec * dt);
+        if (this.wetness > 0.3 && Math.random() < this.wetness * 5.5 * dt)
+          burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.7, this.y,
+            6 + Math.random() * (this.bodyH * 0.6), "#00b4ff", 1,
+            { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
+      }
       this.think(dt, game);
       resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
       // Arena containment: hose knockback (and charge overshoot) can't shove
@@ -883,8 +947,7 @@
       Assets.shadow(ctx, sx, sy, this.bodyW * 0.7);
       Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
-        hurt: this.flashTimer > 0,
-        hurtAlpha: this.flashTimer / 0.18,
+        wet: this.wetness,   // soak tint IS the enemy hurt read (no flash/squash)
         wind: this.state === "wind", elite: this.elite,
         scale: this.elite ? 1.08 : 1,
       });
@@ -1028,8 +1091,15 @@
     }
     update(dt, game) {
       this.t += dt;
-      this.x += this.vx * dt; this.y += this.vy * dt; this.z -= 8 * dt;
-      this.y = clamp(this.y, JH.DEPTH_MIN, JH.DEPTH_MAX);
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.z = Math.max(0, this.z - 8 * dt);
+      // Past the walkable band it can't hit anyone (hit needs |dy| < 12) —
+      // cull rather than clamp: clamping froze depth motion mid-air and the
+      // ember visibly bounced off an invisible line at the band edge.
+      if (this.y < JH.DEPTH_MIN - 12 || this.y > JH.DEPTH_MAX + 12) {
+        this.dead = true;
+        return false;
+      }
       const pl = game.player;
       if (pl.alive && Math.abs(pl.x - this.x) < 12 && Math.abs(pl.y - this.y) < 12) {
         pl.takeHit(this.dmg, game, this.x); this.dead = true;
@@ -1057,9 +1127,10 @@
   // Spawns as a plain pool ball at cue height, ignites after igniteDelay
   // (visual + burn on hit). Aimed at the player's position at fire time —
   // same convention as the Pyro's Ember (depth velocity scaled 0.6 for 2.5D)
-  // — so staggered volley balls fan out tracking the player's dodge. Sinks
-  // from spawnZ into the hittable z-band as it flies. Leaves a FirePatch on
-  // player hit. Pushed into game.embers for the shared update/draw pipeline.
+  // — so staggered volley balls fan out tracking the player's dodge. Flies
+  // dead straight at spawnZ (cue height) until it expires. Leaves a
+  // FirePatch on player hit. Pushed into game.embers for the shared
+  // update/draw pipeline.
   class Fireball {
     constructor(x, y, dir, game) {
       const d = JH.FIREBALL;
@@ -1087,7 +1158,9 @@
       if (this.igniteT > 0) this.igniteT -= dt;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
-      this.z = Math.max(0, this.z - JH.FIREBALL.droop * dt);  // sink off the cue line
+      // z stays at spawnZ: the ball flies dead straight off the cue (any
+      // mid-flight z change kinks the visible trajectory on the summed
+      // depth+height screen axis and reads as the ball steering).
       this.life -= dt;
       if (this.life <= 0) { this.dead = true; return !this.dead; }
       // Emit trailing fire particles once ignited.
@@ -1106,8 +1179,9 @@
       const pl = game.player;
       if (pl.alive && this.igniteT <= 0) {
         const dist = Math.hypot(pl.x - this.x, pl.y - this.y);
-        const zDiff = Math.abs((pl.z || 0) - this.z);
-        if (dist < this.radius + pl.bodyW * 0.5 && zDiff < 24) {
+        // No z gate: the ball flies flat at cue height (~chest on Jon) and
+        // the player is always grounded (jump is cut), so x/depth is enough.
+        if (dist < this.radius + pl.bodyW * 0.5) {
           pl.takeHit(this.dmg, game, this.x);
           pl.applyBurn(this.burnStacks);
           game.firePatches.push(new JH.FirePatch(this.x, this.y, 28, 1.4));
@@ -1666,9 +1740,14 @@
         }
       }
       const pl = game.player;
-      // gentle magnet when close
+      // Gentle magnet when close; during the wave-ender beat every pickup on
+      // the field vacuums to Jon (kills the post-wave coin walk).
+      const vac = game.lootVacuumT > 0;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
-      if (dist < 30) { this.x += dx * 4 * dt; this.y += dy * 4 * dt; }
+      if (vac || dist < 30) {
+        const pull = vac ? JH.JUICE.vacuumPull : 4;
+        this.x += dx * pull * dt; this.y += dy * pull * dt;
+      }
       if (dist < 12) { this.collect(game); return false; }
       // Holy Essence crosses never expire — everything else blinks out.
       if (this.kind !== "cross" && this.t > this.life) {
@@ -1681,7 +1760,9 @@
       const pl = game.player;
       if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
       else if (this.kind === "health") {
-        pl.kibbleTimer = 6.0;
+        // Stacking kibble EXTENDS the regen window (never resets it — two
+        // kibbles heal for twice as long).
+        pl.kibbleTimer += 6.0;
         pl.kibbleRegen = this.value / 6.0;
         game.audio.play("buy");
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
@@ -2288,6 +2369,36 @@
     }
   }
   JH.FxBurst = FxBurst;
+
+  // Kill confirm: the dead enemy's sprite collapses to the ground over ~150ms
+  // (flattens toward the feet, spreads slightly), keeping its soak tint. The
+  // death particle burst is deferred to land as this finishes. Rides game.embers.
+  class KillPop {
+    constructor(e) {
+      this.type = e.type; this.x = e.x; this.y = e.y; this.z = e.z || 0;
+      this.facing = e.facing || 1; this.frame = e.frame || 0; this.state = e.state;
+      this.wet = e.wetness || 0;
+      this.t = 0; this.dead = false;
+    }
+    update(dt) { this.t += dt; if (this.t >= 0.15) this.dead = true; return !this.dead; }
+    draw(ctx, cam) {
+      const p = Math.min(1, this.t / 0.15);
+      const k = p * p;   // accelerating drop
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      ctx.save();
+      // Collapse transform anchored at the feet baseline (Assets.draw's own
+      // squash hook is capped at the subtle hurt amp, so scale here instead).
+      ctx.translate(sx, sy);
+      ctx.scale(1 + 0.3 * k, Math.max(0.05, 1 - 0.95 * k));
+      ctx.translate(-sx, -sy);
+      ctx.globalAlpha = 1 - 0.4 * k;
+      Assets.draw(ctx, this.type, sx, sy, this.facing, {
+        state: this.state, frame: this.frame, t: this.t, wet: this.wet,
+      });
+      ctx.restore();
+    }
+  }
+  JH.KillPop = KillPop;
 
   // ================================================ QUAKE WALKER (boss 3)
   class QuakeBoss extends Enemy {

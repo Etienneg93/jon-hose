@@ -27,26 +27,44 @@
   const AudioFX = {
     ctx: null,
     enabled: true,
+    volume: 1,    // SFX channel level — independent of the music slider
     _files: {},   // cached <audio> elements, keyed by src, for playFile()
+    _lastAt: {},  // per-sound last-trigger time, for the anti-stack throttle
+    setVolume(v) {
+      this.volume = Math.max(0, Math.min(1, v));
+      if (JH.Music) JH.Music.save();   // persists alongside the music settings
+    },
     init() {
       if (this.ctx) return;
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
       catch (e) { this.enabled = false; }
     },
     resume() { if (this.ctx && this.ctx.state === "suspended") this.ctx.resume(); },
-    play(name) {
+    play(name, opt) {
       if (!this.enabled) return;
       this.init();
       if (!this.ctx) return;
       const def = JH.SFX[name];
       if (!def) return;
-      // Respect the global mute + master volume (shared with music).
-      const M = JH.Music;
-      if (M && M.muted) return;
-      const vol = M ? M.volume : 1;
+      // SFX are fully independent of the music channel: the mute button and
+      // music slider never silence effects — only the FX slider (0%) does.
+      const vol = this.volume;
+      if (vol <= 0) return;
+      // Anti-stack throttle: many identical triggers in one burst (a coin
+      // shower) collapse to one sound instead of a grating chord.
+      const now = performance.now();
+      if (this._lastAt[name] != null && now - this._lastAt[name] < 45) return;
+      this._lastAt[name] = now;
       const t = this.ctx.currentTime;
       const g = this.ctx.createGain();
-      g.gain.setValueAtTime(def.gain * vol, t);
+      // Optional soft attack (def.attack sec) smooths whoosh-type sounds;
+      // default is the classic instant-on blip.
+      if (def.attack) {
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(def.gain * vol, t + def.attack);
+      } else {
+        g.gain.setValueAtTime(def.gain * vol, t);
+      }
       g.gain.exponentialRampToValueAtTime(0.0001, t + def.dur);
       g.connect(this.ctx.destination);
 
@@ -57,17 +75,23 @@
         const src = this.ctx.createBufferSource();
         src.buffer = buf;
         const bp = this.ctx.createBiquadFilter();
-        bp.type = "bandpass"; bp.frequency.value = 1800;
+        bp.type = "bandpass";
+        // Optional filter sweep (bpFrom → bpTo over the duration) turns the
+        // flat hiss into a whoosh; fixed 1800Hz stays the default.
+        bp.frequency.setValueAtTime(def.bpFrom || 1800, t);
+        if (def.bpTo) bp.frequency.exponentialRampToValueAtTime(def.bpTo, t + def.dur);
+        bp.Q.value = def.q || 1;
         src.connect(bp); bp.connect(g);
         src.start(t); src.stop(t + def.dur);
       } else {
         const osc = this.ctx.createOscillator();
         osc.type = def.type === "saw" ? "sawtooth" : def.type;
-        osc.frequency.setValueAtTime(def.freq, t);
+        const freq = def.freq * ((opt && opt.pitch) || 1);
+        osc.frequency.setValueAtTime(freq, t);
         if (name === "coin" || name === "win" || name === "buy" || name === "upgrade")
-          osc.frequency.exponentialRampToValueAtTime(def.freq * 1.6, t + def.dur);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.6, t + def.dur);
         if (name === "hurt" || name === "die")
-          osc.frequency.exponentialRampToValueAtTime(def.freq * 0.5, t + def.dur);
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.5, t + def.dur);
         osc.connect(g);
         osc.start(t); osc.stop(t + def.dur);
       }
@@ -75,9 +99,8 @@
     // One-shot playback of a recorded sound file (as opposed to the synth
     // blips above). Respects the shared mute/volume controls from Music.
     playFile(src, gain) {
-      const M = JH.Music;
-      if (M && M.muted) return;
-      const vol = M ? M.volume : 1;
+      const vol = this.volume;
+      if (vol <= 0) return;
       let el = this._files[src];
       if (!el) {
         try { el = new Audio(src); el.preload = "auto"; } catch (e) { return; }
@@ -194,8 +217,8 @@
       if (!this.muted && this.started) this.start();
       this.save();
     },
-    save() { try { localStorage.setItem("jh_audio", JSON.stringify({ v: this.volume, m: this.muted })); } catch (e) {} },
-    load() { try { const s = JSON.parse(localStorage.getItem("jh_audio")); if (s) { if (typeof s.v === "number") this.volume = s.v; this.muted = !!s.m; } } catch (e) {} },
+    save() { try { localStorage.setItem("jh_audio", JSON.stringify({ v: this.volume, m: this.muted, s: JH.AudioFX.volume })); } catch (e) {} },
+    load() { try { const s = JSON.parse(localStorage.getItem("jh_audio")); if (s) { if (typeof s.v === "number") this.volume = s.v; this.muted = !!s.m; if (typeof s.s === "number") JH.AudioFX.volume = s.s; } } catch (e) {} },
   };
   JH.Music = Music;
 
@@ -205,9 +228,10 @@
   // Reusable offscreen canvas for the hit-flash white-silhouette effect.
   // Sized to fit the largest entity (WallBoss: ~142 × 178 px). The anchor
   // point (ox, oy) matches the feet-baseline convention used by every painter.
-  // Capped below 1 so a continuous hose stream (which re-arms the flash every
-  // frame) tints rather than fully whites out the sprite.
-  const HURT_FLASH_MAX_ALPHA = 0.45;
+  // Peak flash brightness. The flash is a discrete pulse (hurt() re-arms only
+  // after the previous pulse finishes), so it can run brighter than the old
+  // steady-tint cap without whiting out enemies under continuous spray.
+  const HURT_FLASH_MAX_ALPHA = 0.6;
   const _hurtOC = document.createElement("canvas");
   _hurtOC.width = 220; _hurtOC.height = 300;
   const _hurtOC2d = _hurtOC.getContext("2d");
@@ -222,6 +246,16 @@
       facing = facing < 0 ? -1 : 1;
       x = Math.round(x); y = Math.round(y);
       ctx.save();
+      // Squash-stretch anchored at the feet baseline: full deform the frame
+      // the pulse arms (opt.squash 1 → 0), easing back out — wider + shorter.
+      // Applies to the silhouette stamp too since it shares this transform.
+      const squash = Math.min(1, opt.squash || 0);
+      if (squash > 0) {
+        const s = Math.sin(squash * Math.PI * 0.5) * JH.JUICE.squashAmp;
+        ctx.translate(x, y);
+        ctx.scale(1 + s, 1 - s);
+        ctx.translate(-x, -y);
+      }
       // Local-space pixel helper. Floors to integers for crisp pixels and
       // mirrors horizontally when facing left.
       const scale = opt.scale || 1;
@@ -232,34 +266,72 @@
         ctx.fillStyle = color;
         ctx.fillRect(sx, sy, w, h);
       };
+      // Silhouette renderer: draws the entity shape onto the offscreen
+      // canvas flood-filled with `color`. stamp() composites it over the
+      // sprite; outline rings blit it at pixel offsets.
+      const OX = 110, OY = 280;
+      const renderSil = (color) => {
+        _hurtOC2d.globalAlpha = 1;
+        _hurtOC2d.globalCompositeOperation = "source-over";
+        _hurtOC2d.clearRect(0, 0, 220, 300);
+        const hp = (lx, ly, w, h, c) => {
+          w = Math.round(w * scale); h = Math.round(h * scale);
+          const osx = facing === 1 ? OX + Math.round(lx * scale) : OX - Math.round(lx * scale) - w;
+          const osy = OY - Math.round(ly * scale) - h;
+          _hurtOC2d.fillStyle = c;
+          _hurtOC2d.fillRect(osx, osy, w, h);
+        };
+        _hurtOC2d.save();
+        fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, OX, OY, facing);
+        _hurtOC2d.restore();
+        _hurtOC2d.globalCompositeOperation = "source-in";
+        _hurtOC2d.fillStyle = color;
+        _hurtOC2d.fillRect(0, 0, 220, 300);
+        _hurtOC2d.globalCompositeOperation = "source-over";
+      };
+      const stamp = (color, alpha) => {
+        renderSil(color);
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(_hurtOC, x - OX, y - OY);
+      };
+
+      // Buff auras: opt.outlines = [[color, alpha], ...] ordered inner →
+      // outer; ring i sits ~0.6px per layer outside the silhouette (a full
+      // logical px is ~4 screen px — too chunky). Sub-pixel offsets with
+      // smoothing enabled blend into a thin, round outline; rings render
+      // under the sprite so layers ring each other instead of overwriting.
+      if (opt.outlines && opt.outlines.length) {
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        for (let i = opt.outlines.length - 1; i >= 0; i--) {
+          const oc = opt.outlines[i][0];
+          const oa = Math.max(0, Math.min(1, opt.outlines[i][1]));
+          renderSil(oc);
+          const r = 0.6 * (i + 1);
+          const dg = r * 0.707;                       // circular corners
+          ctx.globalAlpha = oa;
+          for (const d of [[r, 0], [-r, 0], [0, r], [0, -r], [dg, dg], [dg, -dg], [-dg, dg], [-dg, -dg]])
+            ctx.drawImage(_hurtOC, x - OX + d[0], y - OY + d[1]);
+        }
+        ctx.restore();
+      }
+
       // When hurtAlpha > 0 strip the hurt flag from the main call so painters
       // don't early-return — the silhouette overlay handles the hit visual.
       const usesilhouette = opt.hurt && opt.hurtAlpha > 0;
       fn(p, usesilhouette ? Object.assign({}, opt, { hurt: false }) : opt, ctx, x, y, facing);
 
+      // Wetness: a steady translucent soak tint (the enemy hurt read) — grows
+      // with spray hits toward wetTintMax, no pulsing.
+      if (opt.wet > 0)
+        stamp("#4db8ff", Math.min(1, opt.wet) * JH.JUICE.wetTintMax);
+
       if (usesilhouette) {
-        // Render entity shape onto the offscreen canvas, then flood-fill white.
-        const ox = 110, oy = 280;
-        _hurtOC2d.globalAlpha = 1;
-        _hurtOC2d.globalCompositeOperation = "source-over";
-        _hurtOC2d.clearRect(0, 0, 220, 300);
-        const hp = (lx, ly, w, h, color) => {
-          w = Math.round(w * scale); h = Math.round(h * scale);
-          const osx = facing === 1 ? ox + Math.round(lx * scale) : ox - Math.round(lx * scale) - w;
-          const osy = oy - Math.round(ly * scale) - h;
-          _hurtOC2d.fillStyle = color;
-          _hurtOC2d.fillRect(osx, osy, w, h);
-        };
-        _hurtOC2d.save();
-        fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, ox, oy, facing);
-        _hurtOC2d.restore();
-        _hurtOC2d.globalCompositeOperation = "source-in";
-        _hurtOC2d.fillStyle = "#ffffff";
-        _hurtOC2d.fillRect(0, 0, 220, 300);
-        _hurtOC2d.globalCompositeOperation = "source-over";
-        // Stamp silhouette onto main canvas.
-        ctx.globalAlpha = Math.min(opt.hurtAlpha, HURT_FLASH_MAX_ALPHA);
-        ctx.drawImage(_hurtOC, x - ox, y - oy);
+        // Quadratic falloff: bright the instant a pulse arms, gone fast — an
+        // impact pop, not a lingering frost. flashCap lets one-shot effects
+        // push brighter than the stream cap; flashColor retints them.
+        const ha = Math.min(1, opt.hurtAlpha);
+        stamp(opt.flashColor || "#ffffff", ha * ha * (opt.flashCap || HURT_FLASH_MAX_ALPHA));
       }
       ctx.restore();
     },
@@ -380,7 +452,6 @@
     }
 
     const f = (opt.frame | 0) % 5;
-    if (opt.hurt && (f & 1)) return;
 
     const imgName = state === "fire" ? "fire" : state === "walk" ? `walk${f}` : "idle";
     const img = _jonImgs[imgName];
@@ -401,7 +472,6 @@
   Assets.register("mook", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.mookDk);
     p(1 - ls, 0, 5, 8, PAL.mookDk);
@@ -422,7 +492,6 @@
     const f = opt.frame | 0;
     const charging = opt.state === "charge";
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.chargerDk);
     p(1 - ls, 0, 5, 8, PAL.chargerDk);
@@ -443,7 +512,6 @@
   Assets.register("pyro", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.pyroDk);
     p(1 - ls, 0, 5, 8, PAL.pyroDk);
@@ -470,7 +538,6 @@
   Assets.register("bulwark", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk" || opt.state === "retrieve") ? legStep(f) * 0.6 : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
     p(1 - ls, 0, 6, 10, PAL.bulwarkDk);
     p(-10, 10, 20, 16, PAL.bulwark);
@@ -495,7 +562,6 @@
   Assets.register("smelt", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.4 : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-8 + ls, 0, 7, 12, PAL.smeltDk);
     p(1 - ls, 0, 7, 12, PAL.smeltDk);
     p(-11, 12, 22, 16, PAL.smelt);
@@ -513,7 +579,6 @@
   Assets.register("fuse", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-4 + ls, 0, 4, 8, PAL.fuseDk);
     p(0 - ls, 0, 4, 8, PAL.fuseDk);
     p(-5, 8, 10, 12, PAL.fuse);
@@ -539,7 +604,6 @@
   Assets.register("furnace", (p, opt, ctx) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
-    if (opt.hurt && (f & 1)) return;
     const heat = Math.max(0, Math.min(1, opt.heat || 0));
     const hot = !!opt.heated;
     const level = hot ? 1 : heat;                 // 0 cold → 1 about to vent
@@ -609,7 +673,6 @@
     cueRelease: JH.Loader.img("sprites/slayer/slayer-shoot.png"),
   };
   Assets.register("slayer", (p, opt, ctx, x, y, facing) => {
-    if (opt.hurt && (Math.floor((opt.t || 0) * 10) & 1)) return;
     const key = _slayerImgs[opt.state] ? opt.state : "idle";
     const img = _slayerImgs[key];
     if (!img || !img.complete || !img.naturalWidth) {
@@ -634,7 +697,6 @@
   Assets.register("stalker", (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
-    if (opt.hurt && (f & 1)) return;
     p(-4 + ls, 0, 4, 9, PAL.stalkerDk);
     p(0 - ls, 0, 4, 9, PAL.stalkerDk);
     p(-6, 9, 12, 12, PAL.stalker);
@@ -650,7 +712,6 @@
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 1.5 : 0;
     const slam = opt.state === "tele" || opt.state === "strike";  // raised arms = winding up
-    if (opt.hurt && (f & 1)) return;
     // Legs
     p(-13 + ls, 0, 10, 14, PAL.bossDk);
     p(3 - ls, 0, 10, 14, PAL.bossDk);
@@ -705,7 +766,6 @@
     const stomp = opt.state === "tele" || opt.state === "strike"
               || opt.state === "leapWind" || opt.state === "leaping" || opt.state === "leapLand";
     const ls = walking ? legStep(f) * 1.6 : 0;
-    if (opt.hurt && (f & 1)) return;
     const C = PAL.quakeBody, D = PAL.quakeDk, HI = PAL.quakeHi;
     const lift = stomp ? 9 : 0;
     p(-15 + ls, 0, 12, 20, D);
@@ -869,7 +929,6 @@
   // A big STANDING switch chassis with an angry middle-aged face embedded.
   Assets.register("gatewaykrusher", (p, opt) => {
     const t = opt.t || 0;
-    if (opt.hurt && (Math.floor(t * 8) & 1)) return;
     const C = PAL.gkBody, D = PAL.gkDk;
     // Outer chassis
     p(-22, 0, 44, 60, D);
@@ -993,7 +1052,6 @@
     return F.idle;
   }
   Assets.register("neighbor", (p, opt, ctx, x, y, facing) => {
-    if (opt.hurt && (Math.floor((opt.t || 0) * 8) & 1)) return;
     const img = neighborImg();
     if (img && img._ready) {
       const fr = neighborFrame(opt.state);
@@ -1111,7 +1169,6 @@
   // Hydrant prop (level decoration / water source marker)
   // ========================= TARGET DUMMY ============================
   Assets.register("dummy", (p, opt) => {
-    if (opt.hurt && ((opt.frame | 0) & 1)) return;
     p(-4, 0, 8, 3, "#4a2e12");            // base block
     p(-2, 3, 4, 13, "#7a5028");           // wooden post
     p(-8, 14, 16, 2, "#7a5028");          // crossbar arms

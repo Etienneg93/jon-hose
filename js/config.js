@@ -291,6 +291,48 @@
     burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
+    burnTickInterval: 0.5,   // seconds between DoT damage beats (flash + ember puff)
+  };
+
+  // ---- Juice / game-feel tunables --------------------------------------
+  JH.JUICE = {
+    // Hit-stop tier table — every freeze routes through game.hitStop, which
+    // takes the max of pending freezes (simultaneous kills never sum).
+    // DESIGN RULE: moment-to-moment play NEVER freezes (it reads as clunk at
+    // this game's pace); freezes are reserved for boss-scale beats only.
+    hitstop: {
+      kill: 0,           // regular kills never freeze
+      heavyKill: 0,      // elite/heavy kills never freeze either
+      waveEnd: 0,        // wave-ender beat is shake + loot drift only
+      playerHit: 0,      // getting hit kicks the screen, never freezes the sim
+      domePop: 0.10,     // reserved: dome/wall break (boss-scale set-pieces)
+      bossPhase: 0.20,   // reserved: boss phase transitions / kill sequence
+    },
+    heavyTypes: ["bulwark", "furnace", "smelt"],
+    // Trauma screenshake: shake(n) adds n/traumaDiv trauma (cap 1); the
+    // rendered amplitude is trauma^2 * shakeMax px and trauma decays
+    // traumaDecay/sec — big hits punch, small ones barely register.
+    traumaDiv: 16,
+    traumaDecay: 1.1,
+    shakeMax: 14,
+    shakeScale: 1,        // player-facing intensity multiplier (settings hook)
+    vacuumDur: 3.0,       // wave-ender loot-drift duration (sec)
+    vacuumPull: 2.5,      // drift strength (fraction of distance closed per sec)
+    comboPitchCap: 12,    // kill-blip ladder tops out +12 semitones
+    comboWaterRefund: 10, // GUSH x5 water refund
+    squashDur: 0.12,      // Jon's hit squash pulse length (sec)
+    squashAmp: 0.10,      // Jon's peak squash deform (scaleX 1+a / scaleY 1-a)
+    // Wetness: spray hits soak enemies — a blue tint that builds toward
+    // wetTintMax opacity and dries off, with drip particles while soaked.
+    // This (not flash/squash) is the enemy hurt read.
+    wetTintMax: 0.30,
+    wetPerHit: 0.08,      // wetness added per spray hit (caps at 1)
+    wetDryPerSec: 0.35,   // wetness lost per second
+    // GUSH combo tiers: x3 arms a minor water-regen window; every 5th kill
+    // bumps it + refunds comboWaterRefund.
+    gushRegenDur: 4,      // regen window (sec)
+    gushRegen3: 4,        // water/sec at the x3 tier
+    gushRegen5: 8,        // water/sec at x5+ milestones
   };
 
   // Fuse aerial drop-in: telegraph ring + gravity fall + light landing slam.
@@ -487,8 +529,7 @@
   };
   JH.FIREBALL = {
     speed: 230, dmg: 14, burnStacks: 2, radius: 14, lifespan: 2.6,
-    spawnZ: 30,        // launch height — the cue tip on the release sprite
-    droop: 48,         // z px/s the ball sinks; reaches the <24px hit band in ~0.15s
+    spawnZ: 30,        // flight height for the whole flight — the cue tip on the release sprite
     igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
   };
 
@@ -567,5 +608,7 @@
     pill:   { type: "square", freq: 1400, dur: 0.45, gain: 0.14 },
     blast:  { type: "saw", freq: 55, dur: 0.35, gain: 0.18 },
     sizzle: { type: "noise", dur: 0.15, gain: 0.10 },
+    kill:   { type: "square", freq: 320, dur: 0.08, gain: 0.13 },  // combo-pitched kill blip
+    dash:   { type: "noise", dur: 0.22, gain: 0.15, attack: 0.02, bpFrom: 450, bpTo: 2600, q: 0.7 },  // rising whoosh
   };
 })();

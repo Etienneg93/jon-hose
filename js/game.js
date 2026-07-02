@@ -30,7 +30,8 @@
     waveActive: false,
     waveCleared: false,
     elapsed: 0, kills: 0,
-    shakeAmt: 0,
+    trauma: 0, shakeKickX: 0,   // trauma screenshake (see JH.JUICE)
+    lootVacuumT: 0,             // wave-ender loot vacuum time remaining
     bannerTimer: 0,
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
@@ -89,16 +90,27 @@
         JH.Loader.onProgress(updateGate);
       }
 
-      // Audio controls (master volume + mute) on the title & pause menus.
+      // Audio controls (music + SFX volume + mute) on the title & pause menus.
       // Multiple copies stay in sync since we query them all.
       const sync = () => {
         const v = Math.round(JH.Music.volume * 100);
+        const sv = Math.round(JH.AudioFX.volume * 100);
         document.querySelectorAll("[data-vol]").forEach((s) => { s.value = v; });
-        document.querySelectorAll("[data-volpct]").forEach((s) => { s.textContent = JH.Music.muted ? "MUTE" : v + "%"; });
+        document.querySelectorAll("[data-volpct]").forEach((s) => { s.textContent = (JH.Music.muted ? 0 : v) + "%"; });
+        document.querySelectorAll("[data-sfxvol]").forEach((s) => { s.value = sv; });
+        document.querySelectorAll("[data-sfxpct]").forEach((s) => { s.textContent = sv + "%"; });
         document.querySelectorAll("[data-mute]").forEach((b) => { b.textContent = (JH.Music.muted || JH.Music.volume === 0) ? "🔇" : "🔊"; });
       };
       document.querySelectorAll("[data-vol]").forEach((sl) => {
         sl.addEventListener("input", () => { startAudio(); JH.Music.setVolume(sl.value / 100); sync(); });
+      });
+      document.querySelectorAll("[data-sfxvol]").forEach((sl) => {
+        sl.addEventListener("input", () => {
+          startAudio();
+          JH.AudioFX.setVolume(sl.value / 100);
+          sync();
+          JH.AudioFX.play("kill");   // test blip so the level is audible while sliding
+        });
       });
       document.querySelectorAll("[data-mute]").forEach((btn) => {
         btn.addEventListener("click", () => { startAudio(); JH.Music.toggleMute(); sync(); });
@@ -179,6 +191,11 @@
       this.waveIndex = JH.LEVEL1.waves.length - 1;
       this.waveActive = false;
       this.bounds = { minX: 8, maxX: 900 };
+      // Buff test stations: walk up + press E (see tickRangeStations).
+      this.rangeStations = [
+        { kind: "kibble", x: 180, y: py, near: false },
+        { kind: "gush", x: 230, y: py, near: false },
+      ];
       // Isolated dummy for basic pierce / splash testing
       this.spawnEnemy("dummy", 320, py);
       // Group of three: two in-line (pierce) + one off-depth (split stream)
@@ -279,10 +296,12 @@
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
+      this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.checkpointWave = 0;
-      this.elapsed = 0; this.kills = 0; this.shakeAmt = 0;
+      this.elapsed = 0; this.kills = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
@@ -675,12 +694,41 @@
     },
     onEnemyKilled(e) {
       this.kills++;
-      // GUSH combo: chained kills within a window. Self-contained feedback only
-      // (display + a milestone shake) — never affects damage/economy.
+      // GUSH combo: chained kills within a window. Feedback + capped water
+      // crumbs at milestones — never affects damage or suds.
       this.combo++;
       this.comboTimer = JH.COMBO_WINDOW;
       this.comboFlash = 0.18;
-      if (this.combo >= 3 && this.combo % 5 === 0) this.shake(3);  // milestone pop
+      // Tiers: x3 arms a minor water-regen window (blue glow on Jon while
+      // live); every 5th kill bumps the regen + refunds a splash of water.
+      const p = this.player;
+      if (p && p.alive) {
+        const J = JH.JUICE;
+        if (this.combo === 3) {
+          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenRate = J.gushRegen3;
+          this.audio.play("upgrade");
+        } else if (this.combo >= 5 && this.combo % 5 === 0) {
+          // Regen scales with the milestone, uncapped — x5 pays 8/s, x10 16/s,
+          // x20 32/s: absurd chains deserve absurd water.
+          const tier = this.combo / 5;
+          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenRate = J.gushRegen5 * tier;
+          p.water = Math.min(p.stats.maxWater, p.water + J.comboWaterRefund);
+          p.regenLock = 0;
+          this.shake(Math.min(4 + tier, 8));
+          this.audio.play("upgrade", { pitch: 1 + 0.25 * tier });
+          this.audio.play("coin", { pitch: 1.5 });
+          // Geyser burst around Jon — the milestone should feel like an event.
+          for (let i = 0; i < 10 + 4 * Math.min(tier, 4); i++)
+            this.particles.push(new JH.Particle({
+              x: p.x + (Math.random() - 0.5) * 18, y: p.y, z: 10 + Math.random() * 25,
+              vx: (Math.random() - 0.5) * 90, vy: (Math.random() - 0.5) * 30,
+              vz: 60 + Math.random() * 60,
+              life: 0.5 + Math.random() * 0.3, color: JH.PAL.water, size: 2, grav: 220,
+            }));
+        }
+      }
       if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
     },
 
@@ -707,9 +755,70 @@
         else if (r < t.water) this.spawnPickup("water_can", e.x - 6, e.y, 40);
       }
     },
-    shake(n) { this.shakeAmt = Math.min(12, this.shakeAmt + n); },
+    // Add n/traumaDiv trauma (legacy 1..14 scale at existing call sites).
+    // Optional dirX kicks the shake away from an impact direction.
+    shake(n, dirX) {
+      this.trauma = Math.min(1, (this.trauma || 0) + n / JH.JUICE.traumaDiv);
+      if (dirX) this.shakeKickX = dirX > 0 ? 1 : -1;
+    },
+    tickShake(dt) {
+      if (this.trauma > 0) this.trauma = Math.max(0, this.trauma - JH.JUICE.traumaDecay * dt);
+      else this.shakeKickX = 0;
+    },
+    shakeOffset() {
+      if (!this.trauma) return { x: 0, y: 0 };
+      const amp = this.trauma * this.trauma * JH.JUICE.shakeMax * JH.JUICE.shakeScale;
+      return {
+        x: ((Math.random() - 0.5) + (this.shakeKickX || 0) * 0.6) * amp,
+        y: (Math.random() - 0.5) * amp,
+      };
+    },
 
     hitStop(secs) { this.hitStopTimer = Math.max(this.hitStopTimer, secs); },
+    // Per-kill presentation, one place: tiered hit-stop, pitch-laddered kill
+    // sound, white kill pop, heavy-kill boom + wet splat, and the wave-ender
+    // beat (big freeze + shake + arena-wide loot vacuum). Bosses bypass this
+    // via their own die() overrides. Simultaneous kills take the strongest
+    // freeze (hitStop maxes), never a sum.
+    // Target-range buff testers: walk-up stations activated with E.
+    // Only exist in devGotoRange (rangeStations stays null in real runs).
+    tickRangeStations() {
+      if (!this.rangeStations) return;
+      const pl = this.player;
+      for (const st of this.rangeStations) {
+        st.near = Math.abs(pl.x - st.x) < 20 && Math.abs(pl.y - st.y) < 24;
+        if (st.near && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          if (st.kind === "kibble") {
+            // Drop a real health pickup at Jon's feet — exercises the actual
+            // collect path (incl. kibble stacking).
+            this.spawnPickup("health", pl.x, pl.y, 25);
+            this.audio.play("buy");
+          } else if (st.kind === "gush") {
+            // Jump the combo to the next multiple of 5 and run the real
+            // milestone path — repeat presses climb x5 → x10 → x20…
+            this.combo = Math.floor(this.combo / 5) * 5 + 4;
+            this.onEnemyKilled(null);
+          }
+        }
+      }
+    },
+
+    killJuice(e) {
+      const J = JH.JUICE;
+      const heavy = !!e.elite || J.heavyTypes.includes(e.type);
+      const last = this.waveActive && this.enemies.every((x) => x.dead || x === e);
+      this.audio.play("die");
+      // Dedicated bright kill blip carries the combo pitch ladder (the low
+      // "die" thud can't — semitones are inaudible at 70Hz).
+      this.audio.play("kill", { pitch: Math.pow(2, Math.min(this.combo, J.comboPitchCap) / 12) });
+      const hs = last ? J.hitstop.waveEnd : heavy ? J.hitstop.heavyKill : J.hitstop.kill;
+      if (hs > 0) this.hitStop(hs);
+      if (last) { this.shake(5); this.lootVacuumT = J.vacuumDur; }
+      if (heavy)
+        this.embers.push(new JH.FxBurst(e.x, e.y, e.bodyW > 18 ? "boom-mid" : "boom-small", { scale: 0.55 }));
+      this.embers.push(new JH.KillPop(e));
+    },
     defer(delayMs, fn) { this.deferredQueue.push({ rem: delayMs / 1000, fn }); },
     tickDeferred(dt) {
       this.deferredQueue = this.deferredQueue.filter((e) => {
@@ -846,6 +955,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
@@ -985,7 +1095,8 @@
         this.bannerTimer -= dt;
         if (this.bannerTimer <= 0) document.getElementById("banner").classList.add("hidden");
       }
-      if (this.shakeAmt > 0) this.shakeAmt = Math.max(0, this.shakeAmt - 24 * dt);
+      this.tickShake(dt);
+      if (this.lootVacuumT > 0) this.lootVacuumT -= dt;
       if (this.worldFadeT > 0) this.worldFadeT = Math.max(0, this.worldFadeT - dt);
       if (this.warpInT > 0) this.warpInT = Math.max(0, this.warpInT - dt);
       if (this.state === "play" || this.state === "bossDeathSeq") this.tickDeferred(dt);
@@ -1063,6 +1174,7 @@
 
       // --- hydrant timers + walk-up shop vendor
       for (const h of this.hydrants) h.t += dt;
+      this.tickRangeStations();
       // Remember the last hydrant visited — death returns Jon here.
       if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
       // Victory portal (post-Slayer): walk in and confirm to finish the run.
@@ -1200,6 +1312,34 @@
       // sole job of this method's player-independent half.
     },
 
+    drawRangeStations(ctx, cam) {
+      for (const st of this.rangeStations) {
+        const sx = Math.round(st.x - cam), sy = Math.round(JH.Geo.feetScreenY(st.y, 0));
+        ctx.save();
+        // pedestal + ground pad
+        ctx.fillStyle = "#0d1420";
+        ctx.beginPath(); ctx.ellipse(sx, sy, 9, 9 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#2a3548";
+        ctx.fillRect(sx - 7, sy - 10, 14, 10);
+        if (st.kind === "kibble") {
+          ctx.fillStyle = "#44ee66";
+          ctx.fillRect(sx - 4, sy - 15, 8, 6);
+        } else {
+          ctx.fillStyle = "#55c8ff";
+          ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillStyle = "#9be8ff";
+        ctx.fillText(st.kind === "kibble" ? "KIBBLE" : "GUSH", sx, sy - 20);
+        if (st.near) {
+          ctx.fillStyle = "#ffd23f"; ctx.font = "bold 7px monospace";
+          ctx.fillText("E", sx, sy - 27 + Math.sin((this.player ? this.player.t : 0) * 6) * 1.5);
+        }
+        ctx.textAlign = "left";
+        ctx.restore();
+      }
+    },
+
     updateHUD() {
       if (!this.player) return;
       const hud = document.getElementById("hud");
@@ -1220,10 +1360,9 @@
       }
       const ctx = this.ctx;
       ctx.save();
-      // screen shake
-      if (this.shakeAmt > 0) {
-        ctx.translate((Math.random() - 0.5) * this.shakeAmt, (Math.random() - 0.5) * this.shakeAmt);
-      }
+      // screen shake (trauma model — see JH.JUICE)
+      const so = this.shakeOffset();
+      if (so.x || so.y) ctx.translate(so.x, so.y);
       ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
 
       JH.Background.draw(ctx);
@@ -1233,6 +1372,7 @@
 
         // hydrants (static world props, behind actors)
         this.drawHydrants(ctx, cam);
+        if (this.rangeStations) this.drawRangeStations(ctx, cam);
         if (this.victoryPortal) this.drawVictoryPortal(ctx, cam);
 
         // barricade (if a wall encounter is active)
@@ -1256,7 +1396,9 @@
         if (this.shopNpc) actors.push(this.shopNpc);
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
-          if (!e.draw) continue;
+          // Dead entities can linger in the list while a death sequence has
+          // the update loop paused (cull only runs in "play") — never draw them.
+          if (!e.draw || e.dead) continue;
           if (e === this.player && this.state === "playerDeathSeq") {
             // Corpse: collapses (frames 0->7), then stays on the ground for the
             // rest of the sequence while the ghost (drawn in the overlay below)

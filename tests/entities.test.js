@@ -91,12 +91,12 @@ test("Fireball aims at the player's position, depth included", () => {
   assert.ok(fb.vy > 0, "vy should converge on the player's depth row");
 });
 
-test("Fireball spawns at cue height and droops into the hittable z-band", () => {
+test("Fireball spawns at cue height and stays there", () => {
   const game = makeBallGame(300, 40);
   const fb = new JH.Fireball(100, 40, 1, game);
   assert.strictEqual(fb.z, JH.FIREBALL.spawnZ);   // cue tip, not feet
   for (let i = 0; i < 30; i++) fb.update(1 / 60, game);  // 0.5s of flight
-  assert.ok(fb.z < 24, "z should droop below the 24px hit band within ~0.5s");
+  assert.strictEqual(fb.z, JH.FIREBALL.spawnZ, "flies flat off the cue");
 });
 
 test("Fireball fired at an off-row player actually hits them", () => {
@@ -122,7 +122,8 @@ function stubGame(px, py) {
     },
     particles: [], embers: [], firePatches: [], pickups: [],
     bounds: { minX: 0, maxX: 600 },
-    shake() {}, hitStop() {}, onEnemyKilled() {}, dropLoot() {},
+    shake() {}, hitStop() {}, onEnemyKilled() {}, dropLoot() {}, killJuice() {},
+    defer(ms, fn) { fn(); },   // stub runs deferred work immediately
     audio: { played: [], play(k) { this.played.push(k); } },
   };
 }
@@ -348,6 +349,41 @@ test("Slayer slam: hits the drawn ellipse, not the old rect", () => {
   g = stubGame(100 + d.slamRange * 0.5, 40);
   s2.think(0.016, g);
   assert.strictEqual(g.player.hits, 1);
+});
+
+// ---- projectile depth motion (no mid-flight direction kinks) ----
+
+test("Ember: leaving the walkable band culls it instead of clamping", () => {
+  // Up-screen shot: with the old per-frame clamp, y froze at DEPTH_MIN and
+  // the ember visibly bounced off the back edge and drifted back down.
+  const e = new JH.Ember(100, JH.DEPTH_MIN + 5, 10, 0, -60, 5);
+  const g = stubGame(999, 999);
+  for (let i = 0; i < 40 && !e.dead; i++) e.update(0.016, g);
+  assert.ok(e.dead, "culled once it leaves the band");
+  assert.ok(e.y < JH.DEPTH_MIN, "depth motion never froze at the band edge");
+});
+
+test("Ember: z floors at the ground plane", () => {
+  const e = new JH.Ember(100, 40, 0.01, 0, 0, 5);
+  const g = stubGame(999, 999);
+  for (let i = 0; i < 10; i++) e.update(0.016, g);
+  assert.strictEqual(e.z, 0, "constant sink must not push z below the floor");
+});
+
+test("Fireball: flies dead straight — height never changes mid-flight", () => {
+  const g = stubGame(999, 999);   // player far away → no hit
+  const fb = new JH.Fireball(100, 40, 1, g);
+  const z0 = fb.z;
+  for (let i = 0; i < 90; i++) fb.update(0.016, g);
+  assert.strictEqual(fb.z, z0, "no droop, no landing kink");
+});
+
+test("Fireball: still connects with a grounded player at cue height", () => {
+  const g = stubGame(140, 40);
+  const fb = new JH.Fireball(100, 40, 1, g);
+  let guard = 0;
+  while (!fb.dead && guard++ < 120) fb.update(0.016, g);
+  assert.strictEqual(g.player.hits, 1, "flat flight path must still hit Jon");
 });
 
 // ---- input buffer: dash ----
