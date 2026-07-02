@@ -2064,7 +2064,12 @@
       this.r += this.speed * dt;
       const pl = game.player;
       if (!this.hit && pl && pl.alive) {
-        const pd = Math.hypot(pl.x - this.x, pl.y - this.y);
+        // Rim-space distance: depth scaled up by GROUND_RY so the drawn
+        // elliptical rim (rx = r, ry = r*GROUND_RY) becomes a circle of
+        // radius r — the expanding edge hits exactly where it's drawn.
+        const dx = pl.x - this.x;
+        const dyS = Geo.feetScreenY(pl.y, 0) - Geo.feetScreenY(this.y, 0);
+        const pd = Math.hypot(dx, dyS / JH.GROUND_RY);
         if (Math.abs(pd - this.r) < 14) {
           pl.takeHit(this.dmg, game, this.x);
           if (this.burn) pl.applyBurn(this.burn);
@@ -2073,7 +2078,7 @@
       }
       if (Math.random() < 0.9) {
         const a = Math.random() * Math.PI * 2;
-        burst(game, this.x + Math.cos(a) * this.r, this.y + Math.sin(a) * this.r * 0.5, 3,
+        burst(game, this.x + Math.cos(a) * this.r, this.y + Math.sin(a) * this.r * JH.GROUND_RY, 3,
           Math.random() < 0.5 ? JH.PAL.firePatch : JH.PAL.firePatchHi, 1, { speed: 30, life: 0.28, up: 22 });
       }
       if (this.r >= this.maxR) this.dead = true;
@@ -2085,9 +2090,9 @@
       ctx.save();
       ctx.globalAlpha = 0.35 + 0.5 * fade;
       ctx.strokeStyle = JH.PAL.firePatchHi; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, this.r, this.r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, this.r, this.r * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 0.25 * fade; ctx.strokeStyle = JH.PAL.firePatch; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.ellipse(sx, sy, this.r * 0.92, this.r * 0.41, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(sx, sy, this.r * 0.92, this.r * 0.92 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
   }

@@ -169,3 +169,19 @@ test("FirePatch.footprint: shrinks with spray progress, floors at r=6", () => {
   const f1 = p.footprint();
   assert.ok(f1.r >= 6 && f1.r < f0.r);
 });
+
+test("FireRing: rim crossing is elliptical, matching the drawn ring", () => {
+  // Ring at r=30 draws an ellipse (30, 30*GROUND_RY=12).
+  // Depth 10 → rim-space 10/0.4 = 25, |25-30| < 14 → HIT (old circle missed).
+  const ring = new JH.FireRing(100, 40, { maxR: 80, speed: 0, dmg: 10, burn: 1 });
+  ring.r = 30;
+  let g = stubGame(100, 40 + 10);
+  ring.update(0.016, g);
+  assert.strictEqual(g.player.hits, 1);
+  // Depth 25 → rim-space 62.5 → MISS (old circle logic hit here: |25-30| < 14).
+  const ring2 = new JH.FireRing(100, 40, { maxR: 80, speed: 0, dmg: 10, burn: 1 });
+  ring2.r = 30;
+  g = stubGame(100, 40 + 25);
+  ring2.update(0.016, g);
+  assert.strictEqual(g.player.hits, 0);
+});
