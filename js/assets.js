@@ -27,7 +27,12 @@
   const AudioFX = {
     ctx: null,
     enabled: true,
+    volume: 1,    // SFX channel level — independent of the music slider
     _files: {},   // cached <audio> elements, keyed by src, for playFile()
+    setVolume(v) {
+      this.volume = Math.max(0, Math.min(1, v));
+      if (JH.Music) JH.Music.save();   // persists alongside the music settings
+    },
     init() {
       if (this.ctx) return;
       try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
@@ -40,10 +45,11 @@
       if (!this.ctx) return;
       const def = JH.SFX[name];
       if (!def) return;
-      // Respect the global mute + master volume (shared with music).
+      // Respect the global mute; loudness comes from the SFX channel, which
+      // is independent of the music slider.
       const M = JH.Music;
       if (M && M.muted) return;
-      const vol = M ? M.volume : 1;
+      const vol = this.volume;
       const t = this.ctx.currentTime;
       const g = this.ctx.createGain();
       g.gain.setValueAtTime(def.gain * vol, t);
@@ -78,7 +84,7 @@
     playFile(src, gain) {
       const M = JH.Music;
       if (M && M.muted) return;
-      const vol = M ? M.volume : 1;
+      const vol = this.volume;
       let el = this._files[src];
       if (!el) {
         try { el = new Audio(src); el.preload = "auto"; } catch (e) { return; }
@@ -195,8 +201,8 @@
       if (!this.muted && this.started) this.start();
       this.save();
     },
-    save() { try { localStorage.setItem("jh_audio", JSON.stringify({ v: this.volume, m: this.muted })); } catch (e) {} },
-    load() { try { const s = JSON.parse(localStorage.getItem("jh_audio")); if (s) { if (typeof s.v === "number") this.volume = s.v; this.muted = !!s.m; } } catch (e) {} },
+    save() { try { localStorage.setItem("jh_audio", JSON.stringify({ v: this.volume, m: this.muted, s: JH.AudioFX.volume })); } catch (e) {} },
+    load() { try { const s = JSON.parse(localStorage.getItem("jh_audio")); if (s) { if (typeof s.v === "number") this.volume = s.v; this.muted = !!s.m; if (typeof s.s === "number") JH.AudioFX.volume = s.s; } } catch (e) {} },
   };
   JH.Music = Music;
 

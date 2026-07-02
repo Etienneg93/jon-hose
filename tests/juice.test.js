@@ -6,6 +6,14 @@ global.window = global.window || {};
 global.window.addEventListener = global.window.addEventListener || (() => {});
 require("../js/config.js");
 global.window.JH.Loader = { img: () => ({}) };
+// assets.js creates an offscreen canvas at eval time — stub the DOM bits so
+// AudioFX (SFX channel) is loadable in node. AudioContext stays absent, so
+// play() is a no-op; only the volume plumbing is under test.
+const ctx2dStub = { save() {}, restore() {}, clearRect() {}, fillRect() {}, drawImage() {} };
+global.document = global.document || {
+  createElement: () => ({ width: 0, height: 0, getContext: () => ctx2dStub }),
+};
+require("../js/assets.js");
 require("../js/world.js");
 require("../js/upgrades.js");
 require("../js/entities.js");
@@ -156,12 +164,34 @@ test("wetness: spray hits soak, time dries", () => {
   assert.ok(e.wetness < before, "dries over time");
 });
 
-test("KillPop: expires after ~70ms", () => {
+test("KillPop: readable ~180ms death confirm", () => {
   const kp = new JH.KillPop(new JH.Enemy("mook", 10, 40));
-  for (let i = 0; i < 3; i++) kp.update(0.016);
+  for (let i = 0; i < 8; i++) kp.update(0.016);   // 128ms — still showing
   assert.ok(!kp.dead);
-  for (let i = 0; i < 3; i++) kp.update(0.016);
+  for (let i = 0; i < 4; i++) kp.update(0.016);   // 192ms — done
   assert.ok(kp.dead);
+});
+
+test("AudioFX: independent SFX volume channel", () => {
+  assert.strictEqual(typeof JH.AudioFX.volume, "number");
+  JH.AudioFX.setVolume(1.7);
+  assert.strictEqual(JH.AudioFX.volume, 1, "clamps high");
+  JH.AudioFX.setVolume(-0.2);
+  assert.strictEqual(JH.AudioFX.volume, 0, "clamps low");
+  JH.AudioFX.setVolume(0.8);
+  assert.strictEqual(JH.AudioFX.volume, 0.8);
+});
+
+test("Kibble stacks by extending the window, never overwriting", () => {
+  const g = killStub(false);
+  JH.Upgrades.reset();
+  const p = new JH.Player(60, 40);
+  g.player = p;
+  new JH.Pickup("health", p.x, p.y, 25).collect(g);
+  assert.strictEqual(p.kibbleTimer, 6.0);
+  p.kibbleTimer = 3.5;                       // half spent
+  new JH.Pickup("health", p.x, p.y, 25).collect(g);
+  assert.strictEqual(p.kibbleTimer, 9.5, "second kibble extends, not resets");
 });
 
 test("hurt() arms both the flash and the squash", () => {
@@ -226,6 +256,17 @@ test("GUSH x5 bumps the regen tier and refunds water", () => {
   assert.strictEqual(g.player.water, 40 + JH.JUICE.comboWaterRefund);
   assert.strictEqual(g.player.regenLock, 0);
   assert.ok(g.audio.played.some((s) => s.k === "upgrade"), "audible milestone");
+});
+
+test("GUSH regen scales with the milestone — x20 pays 4x the x5 rate, uncapped", () => {
+  const g = killStub(false);
+  g.combo = 9;
+  JH.Game.onEnemyKilled.call(g, null);        // x10
+  assert.strictEqual(g.player.gushRegenRate, JH.JUICE.gushRegen5 * 2);
+  g.combo = 19;
+  JH.Game.onEnemyKilled.call(g, null);        // x20
+  assert.strictEqual(g.player.gushRegenRate, JH.JUICE.gushRegen5 * 4);
+  assert.ok(g.particles.length > 0, "milestone water burst spawned");
 });
 
 test("GUSH: non-milestone kills grant nothing", () => {

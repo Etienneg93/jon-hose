@@ -90,16 +90,27 @@
         JH.Loader.onProgress(updateGate);
       }
 
-      // Audio controls (master volume + mute) on the title & pause menus.
+      // Audio controls (music + SFX volume + mute) on the title & pause menus.
       // Multiple copies stay in sync since we query them all.
       const sync = () => {
         const v = Math.round(JH.Music.volume * 100);
+        const sv = Math.round(JH.AudioFX.volume * 100);
         document.querySelectorAll("[data-vol]").forEach((s) => { s.value = v; });
         document.querySelectorAll("[data-volpct]").forEach((s) => { s.textContent = JH.Music.muted ? "MUTE" : v + "%"; });
+        document.querySelectorAll("[data-sfxvol]").forEach((s) => { s.value = sv; });
+        document.querySelectorAll("[data-sfxpct]").forEach((s) => { s.textContent = JH.Music.muted ? "MUTE" : sv + "%"; });
         document.querySelectorAll("[data-mute]").forEach((b) => { b.textContent = (JH.Music.muted || JH.Music.volume === 0) ? "🔇" : "🔊"; });
       };
       document.querySelectorAll("[data-vol]").forEach((sl) => {
         sl.addEventListener("input", () => { startAudio(); JH.Music.setVolume(sl.value / 100); sync(); });
+      });
+      document.querySelectorAll("[data-sfxvol]").forEach((sl) => {
+        sl.addEventListener("input", () => {
+          startAudio();
+          JH.AudioFX.setVolume(sl.value / 100);
+          sync();
+          JH.AudioFX.play("kill");   // test blip so the level is audible while sliding
+        });
       });
       document.querySelectorAll("[data-mute]").forEach((btn) => {
         btn.addEventListener("click", () => { startAudio(); JH.Music.toggleMute(); sync(); });
@@ -692,12 +703,24 @@
           p.gushRegenRate = J.gushRegen3;
           this.audio.play("upgrade");
         } else if (this.combo >= 5 && this.combo % 5 === 0) {
+          // Regen scales with the milestone, uncapped — x5 pays 8/s, x10 16/s,
+          // x20 32/s: absurd chains deserve absurd water.
+          const tier = this.combo / 5;
           p.gushRegenT = J.gushRegenDur;
-          p.gushRegenRate = J.gushRegen5;
+          p.gushRegenRate = J.gushRegen5 * tier;
           p.water = Math.min(p.stats.maxWater, p.water + J.comboWaterRefund);
           p.regenLock = 0;
-          this.shake(3);
-          this.audio.play("upgrade", { pitch: 1.3 });
+          this.shake(Math.min(4 + tier, 8));
+          this.audio.play("upgrade", { pitch: 1 + 0.25 * tier });
+          this.audio.play("coin", { pitch: 1.5 });
+          // Geyser burst around Jon — the milestone should feel like an event.
+          for (let i = 0; i < 10 + 4 * Math.min(tier, 4); i++)
+            this.particles.push(new JH.Particle({
+              x: p.x + (Math.random() - 0.5) * 18, y: p.y, z: 10 + Math.random() * 25,
+              vx: (Math.random() - 0.5) * 90, vy: (Math.random() - 0.5) * 30,
+              vz: 60 + Math.random() * 60,
+              life: 0.5 + Math.random() * 0.3, color: JH.PAL.water, size: 2, grav: 220,
+            }));
         }
       }
       if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);

@@ -243,6 +243,11 @@
       if (this.gushRegenT > 0) {
         this.gushRegenT -= dt;
         this.water = Math.min(S.maxWater, this.water + this.gushRegenRate * dt);
+        // Rising water motes: visible even when kibble/concerta own the glow,
+        // so stacked buffs never hide each other.
+        if (Math.random() < 8 * dt)
+          burst(game, this.x + (Math.random() - 0.5) * 10, this.y, 8 + Math.random() * 20,
+            JH.PAL.water, 1, { speed: 10, life: 0.5, up: 35, size: 1 });
       }
 
       if (this.dashBoostTimer > 0) {
@@ -1720,7 +1725,9 @@
       const pl = game.player;
       if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
       else if (this.kind === "health") {
-        pl.kibbleTimer = 6.0;
+        // Stacking kibble EXTENDS the regen window (never resets it — two
+        // kibbles heal for twice as long).
+        pl.kibbleTimer += 6.0;
         pl.kibbleRegen = this.value / 6.0;
         game.audio.play("buy");
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
@@ -2336,11 +2343,14 @@
       this.facing = e.facing || 1; this.frame = e.frame || 0; this.state = e.state;
       this.t = 0; this.dead = false;
     }
-    update(dt) { this.t += dt; if (this.t >= 0.07) this.dead = true; return !this.dead; }
+    update(dt) { this.t += dt; if (this.t >= 0.18) this.dead = true; return !this.dead; }
     draw(ctx, cam) {
+      // Grows and fades over the pop so the death is readable, not a blink.
+      const p = Math.min(1, this.t / 0.18);
       Assets.draw(ctx, this.type, this.x - cam, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
-        hurt: true, hurtAlpha: 1, flashCap: 0.9, flashColor: "#bfe8ff", scale: 1.3,
+        hurt: true, hurtAlpha: 1 - p, flashCap: 0.9, flashColor: "#bfe8ff",
+        scale: 1.25 + 0.35 * p,
       });
     }
   }
