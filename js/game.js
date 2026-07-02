@@ -678,12 +678,22 @@
     },
     onEnemyKilled(e) {
       this.kills++;
-      // GUSH combo: chained kills within a window. Self-contained feedback only
-      // (display + a milestone shake) — never affects damage/economy.
+      // GUSH combo: chained kills within a window. Feedback + a capped water
+      // crumb at milestones — never affects damage or suds.
       this.combo++;
       this.comboTimer = JH.COMBO_WINDOW;
       this.comboFlash = 0.18;
-      if (this.combo >= 3 && this.combo % 5 === 0) this.shake(3);  // milestone pop
+      // Milestone every 5th chained kill: pop + water refund + one skipped
+      // regen delay.
+      if (this.combo >= 3 && this.combo % 5 === 0) {
+        this.shake(3);
+        const p = this.player;
+        if (p && p.alive) {
+          p.water = Math.min(p.stats.maxWater, p.water + JH.JUICE.comboWaterRefund);
+          p.regenLock = 0;
+          this.audio.play("coin", { pitch: 1.5 });
+        }
+      }
       if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
     },
 

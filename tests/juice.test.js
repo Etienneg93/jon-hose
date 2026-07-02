@@ -179,3 +179,22 @@ test("Player.takeHit: playerHit tier + shake kicked away from impact", () => {
   assert.strictEqual(g.hitStopTimer, JH.JUICE.hitstop.playerHit);
   assert.strictEqual(g.shakeKickX, -1, "kick away from impact (leftward)");
 });
+
+test("GUSH x5 milestone refunds water and skips the regen delay", () => {
+  const g = killStub(false);
+  g.combo = 4;
+  g.player.water = 40; g.player.regenLock = 0.8;
+  JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.combo, 5);
+  assert.strictEqual(g.player.water, 40 + JH.JUICE.comboWaterRefund);
+  assert.strictEqual(g.player.regenLock, 0);
+  assert.ok(g.audio.played.some((s) => s.k === "coin"), "milestone blip");
+});
+
+test("GUSH: non-milestone kills grant nothing", () => {
+  const g = killStub(false);
+  g.combo = 2;
+  g.player.water = 40;
+  JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.player.water, 40);
+});
