@@ -518,8 +518,33 @@
   });
 
   // ============================ MOOK ==================================
-  Assets.register("mook", (p, opt) => {
+  // Baked pixel-art frames (tools/mook-sprite.mjs, 4x logical). Art canvas is
+  // 24x33 logical with the feet baseline at row 31; drawn 1 art px = 1
+  // logical px. Falls back to the legacy procedural blob while loading.
+  const _mookImgs = {};
+  ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"].forEach((n) => {
+    _mookImgs[n] = JH.Loader.img("sprites/mook/" + n + ".png");
+    _mookImgs["elite_" + n] = JH.Loader.img("sprites/mook/elite_" + n + ".png");
+  });
+  const MOOK_ART = { w: 24, h: 33, feet: 31 };
+  Assets.register("mook", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
+    const pose = (opt.state === "wind" || opt.wind) ? "wind"
+               : (opt.state === "walk") ? "walk" + (f & 3)
+               : "idle" + (f & 1);
+    const img = _mookImgs[(opt.elite ? "elite_" : "") + pose];
+    if (img && img.complete && img.naturalWidth) {
+      const s = opt.scale || 1;
+      ctx.save();
+      ctx.translate(x, y);
+      if (facing < 0) ctx.scale(-1, 1);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, Math.round(-MOOK_ART.w * s / 2), Math.round(-MOOK_ART.feet * s),
+        Math.round(MOOK_ART.w * s), Math.round(MOOK_ART.h * s));
+      ctx.restore();
+      return;
+    }
+    // Legacy procedural fallback (pre-bake shape, shown only while loading).
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.mookDk);
