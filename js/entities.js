@@ -655,20 +655,20 @@
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
       const spriteSy = Geo.feetScreenY(this.y, this.z);
-      if (this.burnStacks > 0) {
-        const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
-        Assets.glow(ctx, sx, spriteSy - 16,
-          16 + 8 * bIntensity + 2 * Math.sin(this.t * 12), "#ff4400", 0.4 + 0.25 * bIntensity);
-      }
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
       // that — active buffs stack visually instead of overwriting. Burn's
-      // fire read replaces them all.
+      // fire read replaces them all: same-color rings fading outward = a
+      // glowing edge (never a radial disc on non-round sprites).
       const outlines = [];
       if (this.burnStacks === 0) {
         if (this.gushRegenT > 0)    outlines.push(["#55c8ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
         if (this.kibbleTimer > 0)   outlines.push(["#44ee66", 0.55 + 0.30 * Math.sin(this.t * 5)]);
         if (this.concertaTimer > 0) outlines.push(["#cc44ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
+      } else {
+        const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
+        const fp = 0.5 + 0.3 * bIntensity + 0.2 * Math.sin(this.t * 12);
+        outlines.push(["#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
@@ -1400,8 +1400,9 @@
         const waver = 1 - frac;                                          // 0 fresh → 1 about to die
         const flick = 1 - waver * (0.45 + 0.45 * Math.sin(this.t * (5 + 26 * waver)));
         const fl = Math.max(0, Math.min(1, flick));
-        Assets.glow(ctx, sx, sy - 9, (14 + 8 * frac) * fl, JH.PAL.bulwarkShield || "#cfe9ff", 0.5 * fl);
-        Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
+        const shCol = JH.PAL.bulwarkShield || "#cfe9ff";
+        Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t,
+          outlines: [[shCol, (0.45 + 0.3 * frac) * fl], [shCol, (0.25 + 0.2 * frac) * fl]] });
       } else {
         Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
       }
@@ -3897,16 +3898,18 @@
       ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
       ctx.fillText("!", sx, hy); ctx.textAlign = "left";
     }
-    // Cooling phase: hot, fast, untouchable — glow signals "stop spraying, kite".
-    if (this.ventCdT > 0)
-      Assets.glow(ctx, sx, Geo.feetScreenY(this.y, this.z) - 18,
-        26 + 4 * Math.sin(this.t * 10), "#ff5a20", 0.55);
+    // Cooling phase: hot, fast, untouchable — red-hot edge glow signals
+    // "stop spraying, kite".
+    const coolFp = 0.55 + 0.25 * Math.sin(this.t * 10);
     Assets.draw(ctx, "furnace", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
       state: this.state, frame: this.frame, t: this.t,
       hurt: this.flashTimer > 0, hurtAlpha: this.flashTimer / 0.18,
       heat: Math.min(1, this.continuousSprayT / d.heatThreshold),
       heated: this.heated,
       scale: 1,
+      outlines: this.ventCdT > 0
+        ? [["#ffb020", coolFp], ["#ff5a20", coolFp * 0.55], ["#ff5a20", coolFp * 0.3]]
+        : undefined,
     });
     if (this.hp < this.maxHp) {
       const w = this.bodyW + 4;

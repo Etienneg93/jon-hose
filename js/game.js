@@ -1650,10 +1650,11 @@
         const fy = JH.Geo.feetScreenY(h.y, 0);
         JH.Assets.shadow(ctx, sx, fy, 7);
         if (isRespawn) {
-          // Golden halo behind the gold hydrant (radial disc — shadowBlur
-          // streaks straight-line artifacts on Chromium).
-          JH.Assets.glow(ctx, sx, fy - 7, 13 + 3 * Math.sin(h.t * 5), "#ffce3a", 0.75);
-          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true });
+          // Golden edge glow: layered silhouette outlines fading outward
+          // (shadowBlur streaks line artifacts; discs read wrong on sprites).
+          const gp = 0.65 + 0.25 * Math.sin(h.t * 5);
+          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true,
+            outlines: [["#ffe680", gp], ["#ffce3a", gp * 0.55], ["#ffce3a", gp * 0.3]] });
         } else {
           JH.Assets.draw(ctx, "hydrant", sx, fy, 1, {});
         }
