@@ -660,7 +660,7 @@
   // Procedural placeholder (per CLAUDE.md art pipeline — real sprite later).
   // No body-mounted shield anymore — the Bulwark's own body is never a
   // blocker (see the deployed_shield painter below for the planted prop).
-  Assets.register("bulwark", (p, opt) => {
+  const bulwarkFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk" || opt.state === "retrieve") ? legStep(f) * 0.6 : 0;
     p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
@@ -670,7 +670,17 @@
     p(-5, 26, 10, 9, PAL.skin);
     p(-5, 30, 10, 3, PAL.bulwarkDk);
     p(1, 28, 2, 2, "#111");
-  });
+  };
+  registerBaked("bulwark",
+    { w: 30, h: 39, feet: 37,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3",
+              "sh_idle0", "sh_idle1", "sh_walk0", "sh_walk1", "sh_walk2", "sh_walk3"] },
+    (opt) => {
+      const base = (opt.state === "walk" || opt.state === "retrieve")
+        ? "walk" + ((opt.frame | 0) & 3) : idlePose(opt);
+      return (opt.hasShield !== false ? "sh_" : "") + base;   // carries by default
+    },
+    bulwarkFallback);
 
   // ====================== DEPLOYED SHIELD (Bulwark prop) ===============
   // Procedural placeholder — the Bulwark's planted shield. Stationary and
@@ -770,30 +780,43 @@
   // ============================ FURNACE ================================
   // Procedural placeholder. Bulky golem. `opt.heat` (0..1) = spray build-up so
   // you can gauge the vent; `opt.heated` = the full vent wind-up.
-  Assets.register("furnace", (p, opt, ctx, x, y, facing) => {
+  const furnaceFallback = (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
     const heat = Math.max(0, Math.min(1, opt.heat || 0));
     const hot = !!opt.heated;
-    const level = hot ? 1 : heat;                 // 0 cold → 1 about to vent
-    // Body ramps from cold to hot as it's hosed.
+    const level = hot ? 1 : heat;
     const body = hot ? PAL.furnaceHot : lerpHex(PAL.furnaceBody, PAL.furnaceHot, heat * 0.85);
     p(-8 + ls, 0, 7, 12, PAL.furnaceDk);
     p(1 - ls, 0, 7, 12, PAL.furnaceDk);
     p(-11, 12, 22, 18, body);
     p(-11, 12, 22, 3, PAL.furnaceDk);
-    // Vent slats glow warmer with heat.
     p(-11, 24, 22, 4, hot ? PAL.furnaceHot : lerpHex(PAL.furnaceDk, PAL.smeltGlow, level));
     p(-5, 30, 10, 9, PAL.skin);
     p(-5, 34, 10, 3, PAL.furnaceDk);
-    // Eye: dark when cold, glowing hot as it heats.
+  };
+  // Eye stays a runtime overlay: dark when cold, glowing as it heats (the
+  // baked head leaves a dark socket at ly 32..34 for it).
+  const furnaceEye = (p, opt, ctx, x, y, facing) => {
+    const heat = Math.max(0, Math.min(1, opt.heat || 0));
+    const level = opt.heated ? 1 : heat;
     if (level > 0.05 && ctx) {
       Assets.glow(ctx, facing === 1 ? x + 2 : x - 4, y - 33, 3 + 5 * level, "#ffb020", 0.35 + 0.5 * level);
       p(1, 32, 2, 2, lerpHex("#5a2a08", "#ffe070", level));
     } else {
       p(1, 32, 2, 2, "#111");
     }
-  });
+  };
+  registerBaked("furnace",
+    { w: 30, h: 44, feet: 41,
+      poses: [0, 1, 2, 3].flatMap((s) =>
+        ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3"].map((n) => "h" + s + "_" + n)) },
+    (opt) => {
+      const level = opt.heated ? 1 : Math.max(0, Math.min(1, opt.heat || 0));
+      return "h" + Math.min(3, Math.floor(level * 3.999)) + "_" + walkOrIdle(opt);
+    },
+    (p, opt, ctx, x, y, facing) => { furnaceFallback(p, opt, ctx, x, y, facing); furnaceEye(p, opt, ctx, x, y, facing); },
+    furnaceEye);
 
   // ============================ FIREBALL ===============================
   // Slayer's pool ball — the 8-ball sprite rolling in flight; once ignited a

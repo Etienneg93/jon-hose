@@ -957,6 +957,7 @@
         state: this.state, frame: this.frame, t: this.t,
         wet: this.wetness,   // soak tint IS the enemy hurt read (no flash/squash)
         wind: this.state === "wind", elite: this.elite,
+        hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
@@ -3448,7 +3449,9 @@
   // Pushed into game.embers; update() returns false when dead.
   class SmeltBomb {
     constructor(x, y, tx, ty, d) {
-      this.x = x; this.y = y; this.z = 10;
+      // Leaves the hands of the overhead hoist (matches the wind-pose art,
+      // where the bomb sits ~32 logical px above the feet).
+      this.x = x; this.y = y; this.z = 32;
       const dist = Math.max(1, Math.hypot(tx - x, ty - y));
       const flightT = Math.max(0.45, dist / d.lobBombSpeed);
       this.vx = (tx - x) / flightT;

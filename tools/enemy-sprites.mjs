@@ -289,6 +289,115 @@ function smelt(g, o, elite) {
   l(cx + 2, hy + 4, 3, 1, o.wind ? P.glowHot : P.glow);  // visor slit glows
 }
 
+// ============================================================= BULWARK
+// Shield trooper (bodyW 22). Art 30x39 logical, feet 37. Two sprite variants:
+// carrying the shield (o.shield — big slab on the lead arm) vs. hands free
+// (deployed/retrieving). Painter picks via opt.hasShield.
+function bulwark(g, o, elite) {
+  const l = L(g);
+  const P = {
+    body:   elite ? "#6e8296" : "#5a6b7a",
+    bodyHi: elite ? "#8899ac" : "#77899a",
+    bodyDk: "#33404c",
+    strap: "#26303a",
+    shield: "#cfe9ff", shieldDk: "#8fb4d8", shieldHi: "#f2fbff",
+  };
+  const bob = o.bob || 0;
+  const cx = 13, FEET = 37;
+  const hipY = 26 + bob;
+  const rl = o.legR || 0, ll = o.legL || 0;
+  l(cx - 5, hipY, 10, 2, P.strap);                       // hip plate
+  l(cx - 5 + ll, hipY + 2, 4, FEET - hipY - 4, P.bodyDk);
+  l(cx - 5 + ll, FEET - 2, 5, 2, "#1a222a");
+  l(cx + 1 + rl, hipY + 2, 4, FEET - hipY - 4, P.body);
+  l(cx + 1 + rl, FEET - 2, 5, 2, "#1a222a");
+  // armored torso
+  const ty = 12 + bob;
+  l(cx - 8, ty, 16, 14, P.body);
+  l(cx - 8, ty, 3, 14, P.bodyDk);
+  l(cx + 5, ty, 3, 13, P.bodyHi);
+  l(cx - 8, ty, 16, 2, P.bodyDk);                        // pauldron slab
+  l(cx - 8, ty + 7, 16, 1, P.strap);                     // chest strap
+  l(cx - 3, ty + 3, 2, 2, P.strap); l(cx + 2, ty + 3, 2, 2, P.strap); // bolts
+  if (elite) { l(cx - 9, ty - 1, 3, 5, P.bodyDk); l(cx + 6, ty - 1, 3, 5, P.bodyDk); }
+  // back arm always hangs
+  l(cx - 9, ty + 3, 2, 8, P.bodyDk);
+  l(cx - 9, ty + 11, 2, 2, SKIND);
+  // lead arm: carries the shield slab, or hangs free
+  if (o.shield) {
+    l(cx + 6, ty + 3, 2, 5, P.bodyDk);                   // arm behind the slab
+    l(cx + 8, ty - 4, 4, 22, P.shield);                  // the shield: tall slab
+    l(cx + 8, ty - 4, 1, 22, P.shieldDk);
+    l(cx + 11, ty - 3, 1, 20, P.shieldHi);
+    l(cx + 9, ty + 2, 2, 2, P.shieldDk);                 // boss stud
+    l(cx + 9, ty + 12, 2, 2, P.shieldDk);
+  } else {
+    l(cx + 6, ty + 3, 2, 8, P.bodyDk);
+    l(cx + 6, ty + 11, 2, 2, SKIN);
+  }
+  // helmeted head
+  const hy = 5 + bob;
+  l(cx - 3, hy + 2, 8, 6, SKIN);
+  l(cx - 3, hy + 2, 1, 6, SKIND);
+  l(cx + 2, hy + 4, 2, 1, "#111");                       // eye
+  l(cx - 4, hy, 9, 3, P.bodyDk);                         // helmet
+  l(cx - 4, hy + 2, 9, 1, P.body);                       // helmet rim
+}
+
+// ============================================================= FURNACE
+// Heavy golem whose body color ramps with hosed heat — baked at 4 heat
+// steps (o.heat 0..1); the glowing eye stays a runtime overlay. Art 30x44
+// logical, feet 41 (eye socket at ly 32..34 for the overlay to land on).
+function lerpHex(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const c = (sh) => Math.round(((pa >> sh) & 255) + (((pb >> sh) & 255) - ((pa >> sh) & 255)) * t);
+  return "#" + [16, 8, 0].map((sh) => c(sh).toString(16).padStart(2, "0")).join("");
+}
+function furnace(g, o, elite) {
+  const heat = o.heat || 0;
+  const BODY0 = elite ? "#5a3a28" : "#4a3020", HOT = "#ff6820";
+  const P = {
+    body: lerpHex(BODY0, HOT, heat * 0.85),
+    bodyHi: lerpHex(elite ? "#75503a" : "#63432e", HOT, heat * 0.85),
+    bodyDk: "#2a1808",
+    slat: lerpHex("#2a1808", "#ff8030", heat),
+    slatHot: lerpHex("#3a2410", "#ffd040", heat),
+    plate: "#3a2a1a",
+  };
+  const l = L(g);
+  const bob = o.bob || 0;
+  const cx = 14, FEET = 41;
+  const hipY = 29 + bob;
+  const rl = o.legR || 0, ll = o.legL || 0;
+  l(cx - 7 + ll, hipY, 6, FEET - hipY - 2, P.bodyDk);    // pillar legs
+  l(cx - 7 + ll, FEET - 2, 7, 2, "#180e04");
+  l(cx + 1 + rl, hipY, 6, FEET - hipY - 2, P.body);
+  l(cx + 1 + rl, FEET - 2, 7, 2, "#180e04");
+  // massive torso
+  const ty = 11 + bob;
+  l(cx - 11, ty, 22, 18, P.body);
+  l(cx - 11, ty, 3, 18, P.bodyDk);
+  l(cx + 8, ty, 3, 17, P.bodyHi);
+  l(cx - 11, ty, 22, 3, P.bodyDk);                       // shoulder slab
+  // vent slat band — glows with heat
+  l(cx - 9, ty + 11, 18, 4, P.slat);
+  for (let i = 0; i < 4; i++) l(cx - 8 + i * 5, ty + 11, 2, 4, P.slatHot);
+  l(cx - 6, ty + 4, 12, 2, P.plate);                     // chest plate seam
+  // heavy arms
+  l(cx - 13, ty + 2, 3, 11, P.bodyDk);
+  l(cx - 13, ty + 13, 3, 3, P.plate);                    // slab fist
+  l(cx + 10, ty + 2, 3, 11, P.bodyDk);
+  l(cx + 10, ty + 13, 3, 3, P.plate);
+  // squat head — eye socket left dark for the runtime glow overlay
+  const hy = 2 + bob;
+  l(cx - 5, hy + 2, 10, 7, P.body);
+  l(cx - 5, hy + 2, 2, 7, P.bodyDk);
+  l(cx - 5, hy + 8, 10, 1, P.bodyDk);
+  l(cx - 5, hy + 2, 10, 2, P.plate);                     // brow slab
+  l(cx + 0, hy + 5, 4, 3, "#1a0e04");                    // eye socket (overlay fills)
+  if (elite) { l(cx - 2, hy - 1, 4, 3, P.plate); }       // chimney stub
+}
+
 // ---------------------------------------------------------------------------
 const WALK = {
   walk0: { legR: 2, legL: -1, armR: -1, armL: 1 },
@@ -316,16 +425,25 @@ const ENEMIES = {
   smelt: { draw: smelt, grid: [56, 84], poses: {
     idle0: {}, idle1: { bob: 1 }, ...WALK, wind: { wind: 1 },
   } },
+  bulwark: { draw: bulwark, grid: [60, 78], poses: {
+    idle0: {}, idle1: { bob: 1 }, ...WALK,
+  }, variants: [{ prefix: "", o: {} }, { prefix: "sh_", o: { shield: 1 } }] },
+  furnace: { draw: furnace, grid: [60, 88], poses: {
+    idle0: {}, idle1: { bob: 1 }, ...WALK,
+  }, variants: [0, 1, 2, 3].map((s) => ({ prefix: "h" + s + "_", o: { heat: s / 3 } })) },
 };
 
 for (const [name, def] of Object.entries(ENEMIES)) {
   console.log(`Baking ${name}:`);
+  const variants = def.variants || [{ prefix: "", o: {} }];
   for (const elite of [false, true]) {
-    for (const [pose, o] of Object.entries(def.poses)) {
-      const g = makeGrid(def.grid[0], def.grid[1]);
-      def.draw(g, o, elite);
-      outline(g);
-      save(g, name, (elite ? "elite_" : "") + pose + ".png");
+    for (const v of variants) {
+      for (const [pose, o] of Object.entries(def.poses)) {
+        const g = makeGrid(def.grid[0], def.grid[1]);
+        def.draw(g, Object.assign({}, o, v.o), elite);
+        outline(g);
+        save(g, name, (elite ? "elite_" : "") + v.prefix + pose + ".png");
+      }
     }
   }
 }
