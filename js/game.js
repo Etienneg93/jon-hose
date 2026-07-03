@@ -207,6 +207,22 @@
       this.hydrants.push({ x: gx - 55, y: gy, t: 0 });
       // Shop NPC visible from spawn
       this.shopNpc = new JH.ShopNPC(220, JH.DEPTH_MIN + 6);
+      // Sprite gallery along the top row: every combat entity as a frozen,
+      // unkillable statue for visual inspection (labels via drawRangeStations).
+      let gx2 = 300;
+      for (const type of ["mook", "charger", "pyro", "stalker", "fuse", "smelt",
+                          "bulwark", "furnace", "boss", "switch",
+                          "quake", "gatewaykrusher", "slayer"]) {
+        const e = JH.makeEnemy(type, 0, JH.DEPTH_MIN + 6);
+        e.x = gx2 + e.bodyW / 2;
+        gx2 += e.bodyW + 30;
+        e.facing = -1;                       // face the approaching player
+        e.update = function (dt) { this.t += dt; };   // statue: no AI/contact/physics
+        e.takeDamage = () => {};                       // display dummy — unkillable
+        e.isGallery = true;
+        this.enemies.push(e);
+      }
+      this.bounds.maxX = Math.max(this.bounds.maxX, gx2 + 80);
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
     },
@@ -1329,6 +1345,17 @@
         ctx.textAlign = "left";
         ctx.restore();
       }
+      // Gallery labels: entity type over each statue on the top row.
+      ctx.save();
+      ctx.font = "bold 5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#7fa0c0";
+      for (const e of this.enemies) {
+        if (!e.isGallery) continue;
+        const sx = Math.round(e.x - cam);
+        if (sx < -30 || sx > JH.VIEW_W + 30) continue;
+        ctx.fillText(e.type.toUpperCase(), sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
+      }
+      ctx.textAlign = "left";
+      ctx.restore();
     },
 
     updateHUD() {
@@ -1430,7 +1457,7 @@
           this.drawGoArrow(ctx);
         }
         // boss health bar (hidden while death sequence plays)
-        const boss = this.enemies.find((e) => e.isBoss && !e.dying);
+        const boss = this.enemies.find((e) => e.isBoss && !e.dying && !e.isGallery);
         if (boss) this.drawBossBar(ctx, boss);
 
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
@@ -1652,9 +1679,9 @@
         if (isRespawn) {
           // Golden edge glow: layered silhouette outlines fading outward
           // (shadowBlur streaks line artifacts; discs read wrong on sprites).
-          const gp = 0.65 + 0.25 * Math.sin(h.t * 5);
+          const gp = 0.45 + 0.18 * Math.sin(h.t * 5);
           JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true,
-            outlines: [["#ffe680", gp], ["#ffce3a", gp * 0.55], ["#ffce3a", gp * 0.3]] });
+            outlines: [["#ffe680", gp], ["#ffce3a", gp * 0.5]] });
         } else {
           JH.Assets.draw(ctx, "hydrant", sx, fy, 1, {});
         }
