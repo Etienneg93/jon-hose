@@ -236,6 +236,37 @@
   _hurtOC.width = 220; _hurtOC.height = 300;
   const _hurtOC2d = _hurtOC.getContext("2d");
 
+  // Silhouette bounds tracking: blitting the full 220x300 canvas per stamp
+  // is ~1M device px of overdraw per wet enemy per frame at 1080p — it
+  // visibly stutters weak GPUs. Instance-level wrappers record the dest rect
+  // of everything a painter draws (fillRect helpers AND raw image blits like
+  // Jon's sprites) while a renderSil is active, so stamps/outlines can blit
+  // just the occupied region.
+  let _silTrack = false, _sx0 = 0, _sy0 = 0, _sx1 = 0, _sy1 = 0;
+  function _silRect(x, y, w, h) {
+    if (!_silTrack) return;
+    // Rects arrive in the painter's CURRENT transform space (e.g. Jon's
+    // sprite draws under a translate) — map all four corners to canvas space.
+    const m = _hurtOC2d.getTransform();
+    for (const c of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+      const px = m.a * c[0] + m.c * c[1] + m.e;
+      const py = m.b * c[0] + m.d * c[1] + m.f;
+      if (px < _sx0) _sx0 = px;
+      if (py < _sy0) _sy0 = py;
+      if (px > _sx1) _sx1 = px;
+      if (py > _sy1) _sy1 = py;
+    }
+  }
+  const _ocFillRect = _hurtOC2d.fillRect.bind(_hurtOC2d);
+  _hurtOC2d.fillRect = function (x, y, w, h) { _silRect(x, y, w, h); _ocFillRect(x, y, w, h); };
+  const _ocDrawImage = _hurtOC2d.drawImage.bind(_hurtOC2d);
+  _hurtOC2d.drawImage = function (...a) {
+    if (a.length >= 9) _silRect(a[5], a[6], a[7], a[8]);
+    else if (a.length >= 5) _silRect(a[1], a[2], a[3], a[4]);
+    else if (a.length === 3) _silRect(a[1], a[2], (a[0] && a[0].width) || 0, (a[0] && a[0].height) || 0);
+    _ocDrawImage(...a);
+  };
+
   const Assets = {
     register(key, fn) { painters[key] = fn; },
     has(key) { return !!painters[key]; },
@@ -270,6 +301,9 @@
       // canvas flood-filled with `color`. stamp() composites it over the
       // sprite; outline rings blit it at pixel offsets.
       const OX = 110, OY = 280;
+      // Occupied region of the last renderSil (padded, canvas-clamped);
+      // bw <= 0 means the painter drew nothing (e.g. sprite not loaded yet).
+      let bx = 0, by = 0, bw = 0, bh = 0;
       const renderSil = (color) => {
         _hurtOC2d.globalAlpha = 1;
         _hurtOC2d.globalCompositeOperation = "source-over";
@@ -281,18 +315,33 @@
           _hurtOC2d.fillStyle = c;
           _hurtOC2d.fillRect(osx, osy, w, h);
         };
+        _silTrack = true; _sx0 = 220; _sy0 = 300; _sx1 = 0; _sy1 = 0;
         _hurtOC2d.save();
         fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, OX, OY, facing);
         _hurtOC2d.restore();
+        _silTrack = false;
+        // Pad for path/arc accents the wrappers can't see, clamp to canvas.
+        bx = Math.max(0, Math.floor(_sx0) - 8);
+        by = Math.max(0, Math.floor(_sy0) - 8);
+        bw = Math.min(220, Math.ceil(_sx1) + 8) - bx;
+        bh = Math.min(300, Math.ceil(_sy1) + 8) - by;
+        if (bw <= 0 || bh <= 0) { bw = bh = 0; return; }
+        // source-in flood only needs to cover the occupied region.
         _hurtOC2d.globalCompositeOperation = "source-in";
         _hurtOC2d.fillStyle = color;
-        _hurtOC2d.fillRect(0, 0, 220, 300);
+        _hurtOC2d.fillRect(bx, by, bw, bh);
         _hurtOC2d.globalCompositeOperation = "source-over";
+      };
+      // Blit only the occupied region — full-canvas blits were megapixels of
+      // per-entity overdraw at device scale.
+      const blitSil = (dx, dy) => {
+        if (bw <= 0) return;
+        ctx.drawImage(_hurtOC, bx, by, bw, bh, x - OX + bx + dx, y - OY + by + dy, bw, bh);
       };
       const stamp = (color, alpha) => {
         renderSil(color);
         ctx.globalAlpha = alpha;
-        ctx.drawImage(_hurtOC, x - OX, y - OY);
+        blitSil(0, 0);
       };
 
       // Buff auras: opt.outlines = [[color, alpha], ...] ordered inner →
@@ -311,7 +360,7 @@
           const dg = r * 0.707;                       // circular corners
           ctx.globalAlpha = oa;
           for (const d of [[r, 0], [-r, 0], [0, r], [0, -r], [dg, dg], [dg, -dg], [-dg, dg], [-dg, -dg]])
-            ctx.drawImage(_hurtOC, x - OX + d[0], y - OY + d[1]);
+            blitSil(d[0], d[1]);
         }
         ctx.restore();
       }
