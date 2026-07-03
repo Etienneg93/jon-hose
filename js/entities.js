@@ -920,7 +920,10 @@
       const pl = game.player;
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
-      this.facing = dx >= 0 ? 1 : -1;
+      // Point-blank deadzone: with no body collision, chasers with no melee
+      // stop (fuse) can sit on Jon's center — per-frame sign(dx) facing +
+      // overshoot strobes the sprite left/right. Hold ground and facing.
+      if (dist > 12) this.facing = dx >= 0 ? 1 : -1;
       const d = this.def;
 
       if (this.windTimer > 0) {            // winding up an attack
@@ -936,12 +939,14 @@
 
       if (dist < d.meleeRange && this.spawnGrace <= 0) {
         this.windTimer = d.meleeWind; this.state = "wind";
-      } else {
+      } else if (dist > 12) {
         // approach
         const sp = d.speed;
         this.x += (dx / (dist || 1)) * sp * dt;
         this.y += (dy / (dist || 1)) * sp * dt * 0.8;
         this.state = "walk";
+      } else {
+        this.state = "idle";
       }
     }
 
@@ -3935,7 +3940,11 @@
     beginDrop(delay) {
       this.dropping = true;
       this.dropWait = delay || 0;
-      this.z = 0;               // stays hidden until the fall starts
+      // With no stagger delay the fall must start NOW from height — assigning
+      // z only when the wait crosses 0 made the first fuse of a wave "land"
+      // on its first frame (z stayed 0) instead of dropping in.
+      this.z = this.dropWait > 0 ? 0 : JH.FUSE_DROP.height;
+      this.vz = 0;
     }
     update(dt, game) {
       if (this.dropping) {

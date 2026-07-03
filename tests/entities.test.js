@@ -408,6 +408,26 @@ test("Stalker: outside the deadzone it still stalks and faces the player", () =>
   assert.strictEqual(s.state, "walk");
 });
 
+// ---- fuse: drop-in + point-blank deadzone ----
+
+test("Fuse: beginDrop(0) still falls from height — never lands the same frame", () => {
+  const f = JH.makeEnemy("fuse", 100, 40);
+  f.beginDrop(0);   // the first spawn of a wave gets no stagger delay
+  const g = stubGame(999, 999);
+  f.update(0.016, g);
+  assert.ok(f.dropping, "still airborne after one frame");
+  assert.ok(f.z > 0, "falls from drop height, not from the ground");
+});
+
+test("Fuse: at point-blank it holds ground and facing (melee-less rusher)", () => {
+  const f = JH.makeEnemy("fuse", 101, 40);   // 1px right of the player
+  f.spawnGrace = 0; f.facing = -1;
+  const g = stubGame(100, 40);
+  for (let i = 0; i < 30; i++) f.think(0.016, g);
+  assert.strictEqual(f.facing, -1, "no sign(dx) strobe while overlapping Jon");
+  assert.strictEqual(f.x, 101, "holds ground at point-blank");
+});
+
 // ---- input buffer: dash ----
 // Uses the real JH.Input with a fake clock so Player.update sees genuine
 // buffered() semantics. (node 21+ ships a global navigator; poll()'s
