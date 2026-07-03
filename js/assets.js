@@ -517,6 +517,39 @@
     ctx.restore();
   });
 
+  // ---- baked-sprite registration -------------------------------------
+  // Baked pixel-art frames (tools/*-sprite*.mjs, 4x logical) drawn 1 art px
+  // = 1 logical px, feet-anchored at art.feet, mirrored for facing < 0.
+  // poseFn(opt) picks the frame; `fallback` is the legacy procedural painter
+  // (shown only while images stream in); `overlay` draws runtime-animated
+  // bits (e.g. the pyro flame crown) on top of the blit.
+  function registerBaked(key, art, poseFn, fallback, overlay) {
+    const imgs = {};
+    for (const n of art.poses) {
+      imgs[n] = JH.Loader.img("sprites/" + key + "/" + n + ".png");
+      imgs["elite_" + n] = JH.Loader.img("sprites/" + key + "/elite_" + n + ".png");
+    }
+    Assets.register(key, (p, opt, ctx, x, y, facing) => {
+      const img = imgs[(opt.elite ? "elite_" : "") + poseFn(opt)];
+      if (img && img.complete && img.naturalWidth) {
+        const s = opt.scale || 1;
+        ctx.save();
+        ctx.translate(x, y);
+        if (facing < 0) ctx.scale(-1, 1);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, Math.round(-art.w * s / 2), Math.round(-art.feet * s),
+          Math.round(art.w * s), Math.round(art.h * s));
+        ctx.restore();
+        if (overlay) overlay(p, opt, ctx, x, y, facing);
+        return;
+      }
+      fallback(p, opt, ctx, x, y, facing);
+    });
+  }
+  // Idle breath keys off t (calm ~1Hz, and gallery statues' t still ticks).
+  const idlePose = (opt) => "idle" + (Math.floor((opt.t || 0) * 2) & 1);
+  const walkOrIdle = (opt) => opt.state === "walk" ? "walk" + ((opt.frame | 0) & 3) : idlePose(opt);
+
   // ============================ MOOK ==================================
   // Baked pixel-art frames (tools/mook-sprite.mjs, 4x logical). Art canvas is
   // 24x33 logical with the feet baseline at row 31; drawn 1 art px = 1
@@ -565,7 +598,7 @@
   });
 
   // ========================== CHARGER ================================
-  Assets.register("charger", (p, opt) => {
+  const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;
     const charging = opt.state === "charge";
     const ls = (opt.state === "walk") ? legStep(f) : 0;
@@ -577,16 +610,21 @@
     p(-9, 17, 18, 2, "#2a1740");
     p(-4, 19, 9, 8, PAL.skin);
     p(-4, 23, 9, 3, "#3a1f5a");
-    const eyeHot = opt.wind || charging;    // telegraph: eye glows red when about to charge / charging
-    if (eyeHot) p(1, 19, 4, 4, "#7a0000");  // red glow behind the eye
-    p(2, 20, 2, 2, eyeHot ? "#ff3030" : "#111");  // eye: black, glows red on the charge tell
-    // Shoulders forward when charging
+    const eyeHot = opt.wind || charging;
+    if (eyeHot) p(1, 19, 4, 4, "#7a0000");
+    p(2, 20, 2, 2, eyeHot ? "#ff3030" : "#111");
     p(charging ? 7 : 5, 10, charging ? 8 : 5, 7, PAL.chargerDk);
     if (elite) p(-11, 11, 4, 7, PAL.chargerDk);
-  });
+  };
+  registerBaked("charger",
+    { w: 26, h: 35, feet: 33,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind", "charge"] },
+    (opt) => opt.state === "charge" ? "charge"
+           : (opt.state === "wind" || opt.wind) ? "wind" : walkOrIdle(opt),
+    chargerFallback);
 
   // ============================ PYRO ==================================
-  Assets.register("pyro", (p, opt, ctx, x, y, facing) => {
+  const pyroFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     const elite = !!opt.elite;
@@ -600,13 +638,23 @@
     }
     p(-4, 18, 9, 8, PAL.skin);
     p(2, 19, 2, 2, "#111");
-    // Flickering flame crown (procedural).
+    p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
+  };
+  // Flame crown stays procedural (flickers at runtime) over the baked head
+  // (art head top = 26 logical px above the feet, crown roots at 25).
+  const pyroCrown = (p, opt) => {
+    const elite = !!opt.elite;
     const flick = (Math.sin((opt.t || 0) * 18) + 1) * 0.5;
     p(-4, 25, 4, 3 + flick * (elite ? 4 : 3), PAL.flame);
     p(1, 25, 4, 4 + (1 - flick) * (elite ? 4 : 3), PAL.pyro);
     p(-1, 25, 2, 2 + flick * 2, "#fff");
-    p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
-  });
+  };
+  registerBaked("pyro",
+    { w: 24, h: 33, feet: 31,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"] },
+    (opt) => (opt.state === "wind" || opt.wind) ? "wind" : walkOrIdle(opt),
+    (p, opt, ctx, x, y, facing) => { pyroFallback(p, opt); pyroCrown(p, opt); },
+    pyroCrown);
 
   // ========================== BULWARK =================================
   // Procedural placeholder (per CLAUDE.md art pipeline — real sprite later).
@@ -636,7 +684,7 @@
 
   // ============================ SMELT ==================================
   // Procedural placeholder. Heavy, slow fire-worker. `wind` = smash wind-up.
-  Assets.register("smelt", (p, opt) => {
+  const smeltFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.4 : 0;
     p(-8 + ls, 0, 7, 12, PAL.smeltDk);
@@ -649,11 +697,16 @@
     if (opt.state === "wind") {
       p(-13, 10, 26, 4, PAL.smeltGlow);   // glowing wind-up band
     }
-  });
+  };
+  registerBaked("smelt",
+    { w: 28, h: 42, feet: 38,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"] },
+    (opt) => opt.state === "wind" ? "wind" : walkOrIdle(opt),
+    smeltFallback);
 
   // ============================ FUSE ===================================
   // Procedural placeholder. Fast, low-HP, dangerous in death.
-  Assets.register("fuse", (p, opt) => {
+  const fuseFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     p(-4 + ls, 0, 4, 8, PAL.fuseDk);
@@ -662,7 +715,12 @@
     p(-5, 8, 10, 2, PAL.fuseDk);
     p(-3, 18, 6, 7, PAL.skin);
     p(1, 19, 2, 2, "#111");
-  });
+  };
+  registerBaked("fuse",
+    { w: 20, h: 29, feet: 27,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3"] },
+    walkOrIdle,
+    fuseFallback);
 
   // Lerp between two #rrggbb colors → "rgb(r,g,b)". Also exported as
   // Assets.lerpHex for HUD code.
@@ -802,7 +860,7 @@
   // ========================== STALKER ==================================
   // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
   // post-blink wind-up arm.
-  Assets.register("stalker", (p, opt) => {
+  const stalkerFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     p(-4 + ls, 0, 4, 9, PAL.stalkerDk);
@@ -813,7 +871,13 @@
     p(1, 20, 2, 2, "#fff");
     if (opt.state === "wind") p(-8, 22, 16, 2, "#fff");
     if (opt.state === "strike") p(5, 12, 8, 5, PAL.stalkerDk);
-  });
+  };
+  registerBaked("stalker",
+    { w: 20, h: 31, feet: 29,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind", "strike"] },
+    (opt) => opt.state === "strike" ? "strike"
+           : opt.state === "wind" ? "wind" : walkOrIdle(opt),
+    stalkerFallback);
 
   // ============================ BOSS ==================================
   Assets.register("boss", (p, opt) => {

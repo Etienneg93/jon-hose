@@ -117,13 +117,12 @@ function drawMook(g, o, elite) {
 
   // ---- arms: dark sleeves so they read against the jacket body
   if (o.wind) {
-    // Sideways haymaker tell: fist pulled BACK behind the shoulder (the punch
-    // lands forward along the ground, so the windup cocks horizontally),
-    // lead arm half-raised as a guard.
-    L(cx - 5, ty + 1, 2, 2, P.jacketDk);                 // bent elbow
-    L(cx - 8, ty, 3, 3, P.skin);                         // cocked fist behind, shoulder height
-    L(cx + 4, ty + 2, 2, 4, P.jacketDk);                 // lead arm guard
-    L(cx + 6, ty + 2, 2, 2, P.skin);                     // lead fist forward
+    // Punch telegraph: fist cocked high above the shoulder, clearly detached
+    L(cx + 4, ty, 2, 2, P.jacketDk);                     // shoulder joint
+    L(cx + 5, ty - 3, 2, 3, P.jacketDk);                 // raised forearm
+    L(cx + 5, ty - 6, 3, 3, P.skin);                     // big fist above head line
+    L(cx - 6, ty + 2, 2, 6, P.jacketDk);                 // back arm braced
+    L(cx - 6, ty + 8, 2, 2, P.skinDk);
   } else {
     const ar = o.armR || 0, al = o.armL || 0;
     L(cx + 4 + ar, ty + 1, 2, 6, P.jacketDk);            // front sleeve
