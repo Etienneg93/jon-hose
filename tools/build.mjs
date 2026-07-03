@@ -6,7 +6,9 @@
    stamps a version (the git short-SHA in CI, else a timestamp) onto every
    <script>/<link> URL — e.g. js/game.js?v=ab12cd34 — so a new build always
    forces a fresh download. It also injects <meta name="build"> which the
-   title screen shows as a tiny "build <id>" tag.
+   title screen shows as a tiny "build <id>" tag, and which js/loader.js
+   reads at runtime to stamp the same ?v= onto every IMAGE URL (sprites
+   aren't referenced from index.html, so they can't be rewritten here).
 
    Source files are left untouched, so local dev (open index.html or
    `npm run dev`) keeps working with plain, un-versioned URLs.

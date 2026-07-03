@@ -13,6 +13,13 @@ window.JH = window.JH || {};
   let total = 0, settled = 0;
   const listeners = [];
 
+  // Deployed builds carry <meta name="build"> (injected by tools/build.mjs
+  // into <head>, so it exists before any body script runs). Stamp it onto
+  // every image URL so a new deploy busts browser/CDN caches the same way
+  // the stamped js/css URLs do. Local dev has no meta -> plain URLs.
+  const _buildMeta = document.querySelector('meta[name="build"]');
+  const _vq = _buildMeta ? "?v=" + encodeURIComponent(_buildMeta.content) : "";
+
   function settle() {
     settled++;
     for (const fn of listeners) fn(settled, total);
@@ -26,7 +33,7 @@ window.JH = window.JH || {};
       total++;
       img.addEventListener("load", () => { img._ready = true; settle(); });
       img.addEventListener("error", settle);
-      img.src = src;
+      img.src = src + _vq;
       return img;
     },
     get total() { return total; },
