@@ -1,5 +1,7 @@
 # Input Buffer (130ms) Implementation Plan
 
+> **STATUS: SHIPPED** — merged to main (958a499) 2026-07-02. Rode along: player-enemy body collision removed entirely (enemies cannot corner-pin Jon).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Dash and confirm presses stay "pending" for 130ms and are consumed by the first frame that can act on them, so hit-stop/arrival freezes and cooldown edges stop silently eating inputs; neutral dash goes toward facing.

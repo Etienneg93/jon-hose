@@ -1,5 +1,7 @@
 # Fire & Ground-Hazard Readability Implementation Plan
 
+> **STATUS: SHIPPED** — merged to main (b2c9926) 2026-07-02 after 3-round playtest. Rim-is-hitbox is now a project contract (Geo.inGroundEllipse + JH.GROUND_RY).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every damaging ground zone tests its hit against the exact ellipse it draws (rim = hitbox), all flattened by one shared depth ratio, with a 0.2s sizzle-grace warning on fire patches.

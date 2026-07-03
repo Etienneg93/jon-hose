@@ -1,5 +1,7 @@
 # FX Pack Integration Implementation Plan
 
+> **STATUS: SHIPPED** — merged to main + deployed 2026-07-01.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace procedural fire/explosion placeholders with curated itch.io pack animations across seven surfaces (FirePatch, douse flames, fuse death, smelt impact, furnace vent, boss deaths, Jon's burn) plus the animated blue church portal.

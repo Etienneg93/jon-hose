@@ -1,5 +1,7 @@
 # Juice & Game-Feel Pass Implementation Plan (spec items 1–5)
 
+> **STATUS: SHIPPED (items 1-5)** — merged to main (ba5ba28) 2026-07-02 after playtest. Final design diverged from this plan in places (see commit history): NO combat freezes at all (boss-scale beats only), enemy hurt read = wetness not flash/squash, kill confirm = 150ms collapse. Items 6-8 (spray loop audio, boss presentation beats, low-HP/water readability) still OPEN.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Tiered hit-stop, trauma-based directional screenshake, blink-free hurt reads with squash-stretch, kills that scale (white pop → boom+splat → wave-ender freeze+loot vacuum), and a GUSH combo audio ladder with a capped water crumb.

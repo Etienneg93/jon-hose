@@ -1,5 +1,7 @@
 # Enemy Variety & Behavior Pass Implementation Plan
 
+> **STATUS: SHIPPED** — merged to main + deployed 2026-07-01.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add entry/behavior variety to existing enemies — spawn-pool sprinkles on authored waves, random-edge entries, a telegraphed fuse aerial drop-in, and a fast/invulnerable Furnace cooldown phase.

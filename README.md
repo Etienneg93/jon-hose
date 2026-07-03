@@ -6,13 +6,16 @@ punches, Jon blasts foes with a high-pressure water hose. Water is limited, so y
 tank that drains as you spray and recharges over time — and you spend the cash dropped by
 enemies on upgrades between fights.
 
-> Status: **Playable level.** Three acts, each capped by a boss with its own distinct
-> dodge — **The Big Drip** (step out of ground slams), **The Switch of Doom** (change
-> depth lane vs. line attacks), and **Quake Walker** (dash through stomp shockwaves, in a
-> ruined-district zone). Plus a pyro-introduction wave, an elite-enemy second act, a
-> destructible barricade, the full core loop, a skill-tree shop, HUD, and win/lose flow.
-> The streamlined kit is move + spray + dash (no jump/melee). Built to be extended with
-> more levels, enemies, and real sprite art.
+> Status: **Playable level — 29 waves across five acts** (4-4-5-6-6 escalation curve),
+> each act capped by a boss with its own distinct dodge: **The Big Drip** (step out of
+> ground slams), **The Switch of Doom** (change depth lane vs. line attacks), **Quake
+> Walker** (dash through stomp shockwaves in the ruined district), **Gateway Krusher
+> 9000**, and **The Slayer** (pool-cue fireballs, in the fire-world Boiler District).
+> Set-pieces along the way: destructible barricade, 22s holdout, douse-the-flames,
+> the Garden, and stalker/bulwark ambushes. Death sends you through the **Church of the
+> Holy Hose** — a walkable interlude with Father Jon — before respawning at your last
+> hydrant checkpoint. Full core loop, skill-tree shop, GUSH kill combos, HUD, win/lose
+> flow. The streamlined kit is move + spray + dash (no jump/melee — by design).
 
 ---
 
@@ -38,8 +41,11 @@ iteration loop. (Cloudflare Pages works off the same repo too.)
 | Move              | Arrow keys / `WASD`     | Left stick / D-pad |
 | Spray hose (hold) | `J` or `Space`          | A / right trigger  |
 | Dash (i-frames)   | `L` / `Shift`           | B                  |
-| Talk to vendor    | `E` / `Enter`           | —                  |
+| Talk to vendor / interact | `E` / `Enter`   | —                  |
 | Confirm / Pause   | `Enter` / `Esc`         | Start              |
+
+*(Dev, localhost only: backtick toggles a jump-to-wave menu — includes the target range
+and a church-save reset.)*
 
 The hose is your only weapon
 Spraying costs water, and the beam weakens as the tank drains (sputters when empty), so back
@@ -47,10 +53,11 @@ off to recharge or top up at a **fire hydrant**.
 **Dash** has brief invulnerability — it's
 your dodge.
 
-**Audio:** the title track *Jon Hose Rush* (`audio/jon-hose-rush.mp3`) loops in the
-background. Use the **master volume** slider (it also scales SFX) or **mute** on the title
-and pause screens — your setting is saved between sessions in `localStorage`. Music starts
-on the first key/click (browser autoplay policy).
+**Audio:** three looping tracks — the level theme, *Jon Hose Rush* for boss fights, and a
+church theme for the death interlude — cross-fade automatically. **Music and Sound
+Effects have independent volume sliders** on the title and pause screens (mute button
+stops music only); settings persist in `localStorage`. Music starts on the first
+key/click (browser autoplay policy).
 
 ---
 
@@ -78,17 +85,29 @@ Classic beat 'em up plane: a horizontal axis plus a **depth** axis (move "up/dow
 Attacks connect only when the target is roughly on your depth line, so positioning matters.
 There's no jump — your only defensive move is the **dash**, which carries brief i-frames.
 
-### Enemies (slice)
+### Enemies
 - **Mook** — walks in, swings a punch. Cannon fodder.
 - **Charger** — winds up, then rushes; punish the recovery.
 - **Pyro** — on fire, ranged embers, but takes **bonus** damage from water (theme hook).
-- **Boss: "The Big Drip"** (mid-level) — brute with slam, sweep, and summon attacks. Each strike is **telegraphed**: he rears back and a red danger zone fills in over the exact area he'll hit, so you can read the range and step out (in or out of depth) to dodge. Killing a boss instantly clears any goons he summoned.
-- **Boss 2: "The Switch of Doom"** — an 8-port network switch with Doc-Ock cable tentacles (Jon Hose cinematic universe lore). Instead of a positional zone, it fires **telegraphed full-width LINE attacks** along a depth row: a red lane lights up, then it strikes across the whole screen. Dodge by moving **up or down a lane**. When enraged it fires two lanes at once.
-- **Final boss: "Quake Walker"** (one of Jon's nemeses) — a hulking bruiser in the ruined district who **stomps**: each slam (telegraphed by a raised knee + a red ground ring) sends shockwaves rolling along the floor in both directions. They sweep across *every* lane, so **dash through them** (dash i-frames) to dodge — a third distinct dodge after Big Drip's "step out" and the Switch's "change lane." Below 40% HP he enrages: faster, with a lagging trailing wave to dash a second time.
+- **Bulwark** — plants a shield dome that shelters shooters; crack it to get at them.
+- **Stalker** — blinks behind you and strikes; stalks between blinks.
+- **Smelt / Fuse / Furnace** (fire world) — bomb-lobber, dive-bombing spark that leaves
+  burning ground, and a vent-cycling heavy. Fire hazards damage inside the **exact
+  ellipse they draw** (rim = hitbox), and burns tick in readable half-second beats.
+
+### Bosses (one distinct dodge each)
+- **"The Big Drip"** (Act 1) — telegraphed slams/sweeps with red danger zones: **step out**.
+- **"The Switch of Doom"** (Act 2) — full-width line attacks along a depth row: **change lane**.
+- **"Quake Walker"** (Act 3) — stomp shockwaves sweep every lane: **dash through** (i-frames).
+- **"Gateway Krusher 9000"** (Act 4) — the gate guardian to the Boiler District.
+- **"The Slayer"** (Act 5) — pool-shark pyromancer; cue-launched fireballs that leave
+  fire patches, plus a slam. Killing any boss clears its summoned goons.
 
 ### Encounters
-- **Elite act 2**: every fight after the first boss spawns tougher "elite" enemies (more HP, damage and speed; marked with a red aura ring).
-- **Barricade**: a destructible wall blocks the street while reinforcements keep coming — spray it down, then walk through to the next act.
+- **Elites**: later fights spawn tougher "elite" enemies (more HP, damage and speed; marked with a red aura ring), scaled by act.
+- **Set-pieces**: a destructible **barricade** with reinforcements, a 22-second **holdout**, **douse-the-flames** (spray out burning ground), and **the Garden**.
+- **GUSH combos**: chained kills pitch-ladder the kill sound and pay out — x3 arms a water-regen window, every 5th milestone scales it further (uncapped) plus a water refund.
+- **Death loop**: dying takes Jon through the **Church of the Holy Hose** — a walkable nave interlude — then respawns him at the last touched hydrant. Every boot is a deliberately **fresh run** (no persistent meta-progression yet — that's a design decision, not a gap).
 - **Anti-farm**: infinitely-spawning foes (boss summons, barricade reinforcements) share a per-encounter drop budget, so you're rewarded for fighting but can't idle-farm unlimited Suds/health/water.
 
 ### Upgrades — a branching skill tree
@@ -154,11 +173,16 @@ Frame sizes, anchors (feet-centered), and animation names are documented inline 
 
 ## Roadmap (beyond the slice)
 
+Active planning lives in **`docs/superpowers/plans/`** — executed plans carry STATUS
+banners, and `ideas/INDEX.md` is the prioritized backlog (difficulty curve fixes,
+Bulwark dome-fortress redesign, boss phase language, in-run boons, hose aspects,
+economy/roster passes, settings & accessibility). Longer-term:
+
 - More levels with new backdrops + a level-select / progression map.
 - Co-op (second player), more enemy archetypes, mini-bosses.
-- Charged "pressure-blast" special and a soap/ice ammo system.
-- Real sprite sheets + animation polish, screen shake/juice, music tracks.
-- Save progress (upgrades/score) to `localStorage`.
+- Real sprite sheets for the remaining procedural painters (bosses and Jon first).
+- Permanent meta-progression via the Church — **deliberately parked** until the game
+  is long enough that a fresh-run start stops being the better experience.
 
 ---
 

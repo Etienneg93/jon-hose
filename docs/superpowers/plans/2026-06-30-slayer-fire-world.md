@@ -1,5 +1,7 @@
 # Slayer & Fire World Implementation Plan
 
+> **STATUS: SHIPPED** — merged to main via next-level-pass, deployed 2026-07-01. Deferred: Slayer post-defeat portrait/dialogue/Church-NPC beats (cutscene stub is live, no art/dialogue).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the Burn DoT mechanic, FirePatch world object, three new fire-world enemies (Smelt, Fuse, Furnace), the Slayer boss (pool-cue fireball thrower with charge/dash movement), and the Slayer ally cutscene that unlocks the Fire Mirror branch.
