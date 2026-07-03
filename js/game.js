@@ -1650,13 +1650,10 @@
         const fy = JH.Geo.feetScreenY(h.y, 0);
         JH.Assets.shadow(ctx, sx, fy, 7);
         if (isRespawn) {
-          // Golden glow-outline of the hydrant model, matching Jon's kibble-heal
-          // effect (shadowColor/shadowBlur around the sprite silhouette).
-          ctx.save();
-          ctx.shadowColor = "#ffce3a";
-          ctx.shadowBlur = 6 + 4 * Math.sin(h.t * 5);
+          // Golden halo behind the gold hydrant (radial disc — shadowBlur
+          // streaks straight-line artifacts on Chromium).
+          JH.Assets.glow(ctx, sx, fy - 7, 13 + 3 * Math.sin(h.t * 5), "#ffce3a", 0.75);
           JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true });
-          ctx.restore();
         } else {
           JH.Assets.draw(ctx, "hydrant", sx, fy, 1, {});
         }
@@ -1890,19 +1887,15 @@
       if (regenLive) {
         const t = p.t;
         const pulse = 0.5 + 0.5 * Math.sin(t * 6);
-        // Glow inherits the tier color at x10 (gold) / x20 (red); base tier
-        // glows regen-blue. High tiers breathe toward white-hot instead.
-        const glowCol = n >= 10 ? tierCol : "#55c8ff";
+        // Emphasis comes from the color pulse + letter wave (no shadowBlur —
+        // it streaks straight-line artifacts on Chromium).
         ctx.fillStyle = JH.Assets.lerpHex(tierCol, n >= 10 ? "#ffffff" : "#55c8ff", 0.35 + 0.5 * pulse);
-        ctx.shadowColor = glowCol;
-        ctx.shadowBlur = 3 + 4 * pulse;
         // Travelling letter wave, per character (monospace = fixed advance).
         ctx.textAlign = "left";
         const adv = ctx.measureText("M").width;
         const x0 = JH.VIEW_W - 8 - label.length * adv;
         for (let i = 0; i < label.length; i++)
           ctx.fillText(label[i], x0 + i * adv, 40 + Math.sin(t * 8 - i * 0.7) * 1.2);
-        ctx.shadowBlur = 0;
       } else {
         ctx.textAlign = "right";
         ctx.fillStyle = tierCol;

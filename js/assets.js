@@ -649,10 +649,42 @@
   }
   Assets.lerpHex = lerpHex;
 
+  // Soft radial glow disc, cached per color. This is THE glow primitive —
+  // never use ctx.shadowBlur for glows: Chromium's shadow rasterizer draws
+  // straight-line streak artifacts under the DPR-scaled transform (same bug
+  // that forced Jon's buff auras onto silhouette outlines).
+  const _glowCache = {};
+  function glowSprite(color) {
+    let c = _glowCache[color];
+    if (c) return c;
+    c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const p = parseInt(color.slice(1), 16);
+    const rgb = ((p >> 16) & 255) + "," + ((p >> 8) & 255) + "," + (p & 255);
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(" + rgb + ",0.9)");
+    grad.addColorStop(0.45, "rgba(" + rgb + ",0.35)");
+    grad.addColorStop(1, "rgba(" + rgb + ",0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    _glowCache[color] = c;
+    return c;
+  }
+  // Draw a glow of radius r (logical px) centered on (x, y). Draw it BEFORE
+  // the sprite it haloes so it reads as light behind the object.
+  Assets.glow = function (ctx, x, y, r, color, alpha) {
+    if (ctx === _hurtOC2d) return;   // glows are light, not body — keep them out of silhouettes
+    const prev = ctx.globalAlpha;
+    ctx.globalAlpha = alpha == null ? 1 : Math.max(0, Math.min(1, alpha));
+    ctx.drawImage(glowSprite(color), x - r, y - r, r * 2, r * 2);
+    ctx.globalAlpha = prev;
+  };
+
   // ============================ FURNACE ================================
   // Procedural placeholder. Bulky golem. `opt.heat` (0..1) = spray build-up so
   // you can gauge the vent; `opt.heated` = the full vent wind-up.
-  Assets.register("furnace", (p, opt, ctx) => {
+  Assets.register("furnace", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
     const heat = Math.max(0, Math.min(1, opt.heat || 0));
@@ -670,11 +702,8 @@
     p(-5, 34, 10, 3, PAL.furnaceDk);
     // Eye: dark when cold, glowing hot as it heats.
     if (level > 0.05 && ctx) {
-      ctx.save();
-      ctx.shadowColor = "#ffb020";
-      ctx.shadowBlur = 2 + 6 * level;
+      Assets.glow(ctx, facing === 1 ? x + 2 : x - 4, y - 33, 3 + 5 * level, "#ffb020", 0.35 + 0.5 * level);
       p(1, 32, 2, 2, lerpHex("#5a2a08", "#ffe070", level));
-      ctx.restore();
     } else {
       p(1, 32, 2, 2, "#111");
     }
@@ -709,7 +738,7 @@
     ctx.translate(x, y);
     ctx.rotate((opt.dir || 1) * t * 9);   // rolling spin in the flight direction
     ctx.imageSmoothingEnabled = false;
-    if (ignited) { ctx.shadowColor = PAL.firePatchHi; ctx.shadowBlur = 5 + 3 * flick; }
+    if (ignited) Assets.glow(ctx, 0, 0, BALL_D * 0.9 + 2 * flick, PAL.firePatchHi, 0.7);
     ctx.drawImage(_ballImg, -BALL_D / 2, -BALL_D / 2, BALL_D, BALL_D);
     ctx.restore();
   });
@@ -920,8 +949,7 @@
     const t = opt.t || 0;
     const bob = Math.sin(t * 3) * 2;
     ctx.save();
-    ctx.shadowColor = "#ffe9a0";
-    ctx.shadowBlur = 6 + 2 * Math.sin(t * 5);
+    Assets.glow(ctx, x, y - 9 + bob, 11 + 2 * Math.sin(t * 5), "#ffe9a0", 0.8);
     ctx.fillStyle = PAL.suds;
     ctx.fillRect(Math.round(x - 1), Math.round(y - 15 + bob), 3, 12);   // upright
     ctx.fillRect(Math.round(x - 4), Math.round(y - 12 + bob), 9, 3);    // crossbar
