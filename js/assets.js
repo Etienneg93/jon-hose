@@ -529,9 +529,12 @@
   const MOOK_ART = { w: 24, h: 33, feet: 31 };
   Assets.register("mook", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
+    // Idle breath keys off t (not the frame counter) so it runs at a calm
+    // ~0.5s phase everywhere — including frozen gallery statues, whose t
+    // still ticks.
     const pose = (opt.state === "wind" || opt.wind) ? "wind"
                : (opt.state === "walk") ? "walk" + (f & 3)
-               : "idle" + (f & 1);
+               : "idle" + (Math.floor((opt.t || 0) * 2) & 1);
     const img = _mookImgs[(opt.elite ? "elite_" : "") + pose];
     if (img && img.complete && img.naturalWidth) {
       const s = opt.scale || 1;

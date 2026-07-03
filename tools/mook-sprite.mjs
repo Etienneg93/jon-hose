@@ -99,9 +99,8 @@ function drawMook(g, o, elite) {
   L(cx - 4 + ll, FEET - 2 + (o.backUp ? -1 : 0), 4, 2, P.boot);
   L(cx + 1 + rl, hipY + 2, 3, FEET - hipY - 4, P.denim);     // front leg
   L(cx + 1 + rl, hipY + 2, 1, FEET - hipY - 4, P.denimHi);   // front-leg light edge
-  L(cx + 1 + rl, FEET - 2, 4, 2, P.boot);
-  L(cx + 1 + rl, FEET - 2, 4, 1, P.bootHi);
-  L(cx + 5 + rl, FEET - 1, 1, 1, P.boot);                // front toe cap
+  L(cx + 1 + rl, FEET - 2, 4, 2, P.boot);                // both boots 4 wide,
+  L(cx + 1 + rl, FEET - 2, 4, 1, P.bootHi);              // 1px toe past the shin
 
   // ---- torso (rows 12..22): open jacket over a tee
   const ty = 12 + bob;
@@ -118,12 +117,13 @@ function drawMook(g, o, elite) {
 
   // ---- arms: dark sleeves so they read against the jacket body
   if (o.wind) {
-    // Punch telegraph: fist cocked high above the shoulder, clearly detached
-    L(cx + 4, ty, 2, 2, P.jacketDk);                     // shoulder joint
-    L(cx + 5, ty - 3, 2, 3, P.jacketDk);                 // raised forearm
-    L(cx + 5, ty - 6, 3, 3, P.skin);                     // big fist above head line
-    L(cx - 6, ty + 2, 2, 6, P.jacketDk);                 // back arm braced
-    L(cx - 6, ty + 8, 2, 2, P.skinDk);
+    // Sideways haymaker tell: fist pulled BACK behind the shoulder (the punch
+    // lands forward along the ground, so the windup cocks horizontally),
+    // lead arm half-raised as a guard.
+    L(cx - 5, ty + 1, 2, 2, P.jacketDk);                 // bent elbow
+    L(cx - 8, ty, 3, 3, P.skin);                         // cocked fist behind, shoulder height
+    L(cx + 4, ty + 2, 2, 4, P.jacketDk);                 // lead arm guard
+    L(cx + 6, ty + 2, 2, 2, P.skin);                     // lead fist forward
   } else {
     const ar = o.armR || 0, al = o.armL || 0;
     L(cx + 4 + ar, ty + 1, 2, 6, P.jacketDk);            // front sleeve

@@ -217,6 +217,7 @@
         e.x = gx2 + e.bodyW / 2;
         gx2 += e.bodyW + 30;
         e.facing = -1;                       // face the approaching player
+        e.state = "idle";                    // t keeps ticking → idle anims play
         e.update = function (dt) { this.t += dt; };   // statue: no AI/contact/physics
         e.takeDamage = () => {};                       // display dummy — unkillable
         e.isGallery = true;
