@@ -1,5 +1,7 @@
 # Wave-Flow Expansion Implementation Plan
 
+> **STATUS: SHIPPED** — 29-wave 4-4-5-6-6 curve merged to main + deployed 2026-07-01.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Flesh out the under-filled acts to an escalating 4-4-5-6-6 encounter curve by adding 8 recombined-archetype fights and 2 new set-pieces, while keeping run income ~flat and making the wave list safely editable.

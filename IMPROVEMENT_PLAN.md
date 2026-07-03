@@ -1,5 +1,9 @@
 # Jon Hose — Improvement Plan
 
+> **SUPERSEDED (2026-07-03):** current planning lives in
+> `docs/superpowers/plans/` (executed plans, with STATUS banners) and
+> `docs/superpowers/plans/ideas/INDEX.md` (prioritized backlog). Kept for history.
+
 Generated from the full code review (June 2026). Items ordered by impact/effort.
 ✅ = completed in Milestone 1 (v0.9.4).
 
