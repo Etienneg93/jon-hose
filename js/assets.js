@@ -540,7 +540,9 @@
         ctx.drawImage(img, Math.round(-art.w * s / 2), Math.round(-art.feet * s),
           Math.round(art.w * s), Math.round(art.h * s));
         ctx.restore();
-        if (overlay) overlay(p, opt, ctx, x, y, facing);
+        // Overlays are light/FX, not body — keep them off the silhouette
+        // offscreen (wet/flash stamps shouldn't tint them).
+        if (overlay && ctx !== _hurtOC2d) overlay(p, opt, ctx, x, y, facing);
         return;
       }
       fallback(p, opt, ctx, x, y, facing);
@@ -640,20 +642,18 @@
     p(2, 19, 2, 2, "#111");
     p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
   };
-  // Flame crown stays procedural (flickers at runtime) over the baked head
-  // (art head top = 26 logical px above the feet, crown roots at 25).
-  const pyroCrown = (p, opt) => {
-    const elite = !!opt.elite;
-    const flick = (Math.sin((opt.t || 0) * 18) + 1) * 0.5;
-    p(-4, 25, 4, 3 + flick * (elite ? 4 : 3), PAL.flame);
-    p(1, 25, 4, 4 + (1 - flick) * (elite ? 4 : 3), PAL.pyro);
-    p(-1, 25, 2, 2 + flick * 2, "#fff");
+  // Flame crown = the FX-pack fire animation, bottom-anchored on the head
+  // top (~25 logical above the feet). Elite burns bigger. Runtime overlay so
+  // it animates at the pack's own fps, independent of body poses.
+  const pyroCrown = (p, opt, ctx, x, y) => {
+    if (!ctx) return;
+    Assets.drawFx(ctx, "fire-small", x, y - 25, opt.t || 0, { scale: opt.elite ? 0.62 : 0.48 });
   };
   registerBaked("pyro",
     { w: 24, h: 33, feet: 31,
       poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"] },
     (opt) => (opt.state === "wind" || opt.wind) ? "wind" : walkOrIdle(opt),
-    (p, opt, ctx, x, y, facing) => { pyroFallback(p, opt); pyroCrown(p, opt); },
+    (p, opt, ctx, x, y, facing) => { pyroFallback(p, opt); pyroCrown(p, opt, ctx, x, y); },
     pyroCrown);
 
   // ========================== BULWARK =================================
