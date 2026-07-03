@@ -666,9 +666,14 @@
         if (this.kibbleTimer > 0)   outlines.push(["#44ee66", 0.55 + 0.30 * Math.sin(this.t * 5)]);
         if (this.concertaTimer > 0) outlines.push(["#cc44ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
       } else {
+        // Fire flicker: two incommensurate fast waves + brief random dips so
+        // the ring reads as burning, not as a steady buff aura pulse.
         const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
-        const fp = 0.5 + 0.3 * bIntensity + 0.2 * Math.sin(this.t * 12);
-        outlines.push(["#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
+        const flick = 0.30 + 0.70 * Math.abs(Math.sin(this.t * 23) * Math.sin(this.t * 13.7 + 1.7));
+        const dip = Math.random() < 0.08 ? 0.4 : 1;
+        const fp = (0.5 + 0.35 * bIntensity) * flick * dip;
+        const hot = flick > 0.75;   // color licks toward white-hot on peaks
+        outlines.push([hot ? "#ffe070" : "#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
