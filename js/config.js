@@ -215,6 +215,11 @@
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
+      igniteRange: 70,       // px from Jon at which the head-fuse lights
+      litDrainFrac: 0.20,    // fraction of maxHp burned off per second while lit
+      blastRadius: 40,       // self-destruct AoE (ground ellipse rx)
+      blastDmg: 18,
+      blastPatchRadius: 26, blastPatchDur: 2.0,
       suds: 7, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
     },
     furnace: {

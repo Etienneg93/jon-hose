@@ -661,3 +661,37 @@ test("super stalker feints in FRONT first, then blinks behind and strikes", () =
   assert.ok(s.x < g.player.x, "real blink lands BEHIND");
   assert.strictEqual(s.state, "strike");
 });
+
+// ---- fuse: proximity-lit self-destruct + elite/super death-split ----
+
+test("fuse ignites on proximity and drains its own hp while lit", () => {
+  const g = makeThinkGame(60, 40);
+  const f = JH.makeEnemy("fuse", 100, 40);     // 40px away < igniteRange 70
+  f.spawnGrace = 0; f.dropping = false;
+  f.update(1 / 60, g);
+  assert.strictEqual(f.lit, true);
+  const hp0 = f.hp;
+  f.update(0.5, g);
+  assert.ok(f.hp < hp0, "lit fuse burns its own hp");
+});
+
+test("lit fuse reaching 0 hp self-destructs: blast patch + player damage in range", () => {
+  const g = makeThinkGame(110, 40);
+  const f = JH.makeEnemy("fuse", 100, 40);
+  f.spawnGrace = 0; f.dropping = false; f.lit = true; f.hp = 0.01;
+  const hpBefore = g.player.hp;
+  f.update(0.5, g);
+  assert.strictEqual(f.dead, true);
+  assert.ok(g.firePatches.length >= 1, "blast leaves a fire patch");
+  assert.ok(g.player.hp < hpBefore, "player inside blastRadius takes the hit");
+});
+
+test("elite fuse spawns 1 child on death; super spawns 3", () => {
+  const spawned = [];
+  const g = makeThinkGame(400, 40);
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); spawned.push(c); return c; };
+  const e = JH.makeEnemy("fuse", 100, 40); e.makeElite(); e.die(g);
+  assert.strictEqual(spawned.length, 1);
+  const s = JH.makeEnemy("fuse", 100, 40); s.makeSuper(); s.die(g);
+  assert.strictEqual(spawned.length, 4);
+});

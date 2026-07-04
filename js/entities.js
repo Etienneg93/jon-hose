@@ -4105,6 +4105,21 @@
         }
         return;
       }
+      // Proximity-lit fuse: within igniteRange the wick lights; while lit it
+      // burns the fuse's OWN hp — at 0 (by drain or damage) it self-destructs.
+      const d = this.def, pl = game.player;
+      if (!this.lit && this.spawnGrace <= 0 &&
+          Math.hypot(pl.x - this.x, pl.y - this.y) < d.igniteRange) {
+        this.lit = true;
+        if (game.audio) game.audio.play("sizzle");
+      }
+      if (this.lit && !this.dead) {
+        this.hp -= this.maxHp * d.litDrainFrac * dt;
+        if (Math.random() < 8 * dt)
+          burst(game, this.x, this.y, this.bodyH + 2, JH.PAL.firePatchHi, 1,
+            { speed: 25, life: 0.25, up: 40, size: 1 });
+        if (this.hp <= 0) { this.die(game); return; }
+      }
       super.update(dt, game);
     }
     takeDamage(dmg, game, dirX, knock) {
@@ -4113,12 +4128,33 @@
     }
     die(game) {
       const d = this.def;
-      game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
-      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
-      burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
-      game.shake(3);
-      if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))
-        game.player.applyBurn(1);
+      if (this.lit) {
+        // Self-destruct: real AoE + a bigger, longer patch.
+        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.blastPatchRadius, d.blastPatchDur));
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.55 }));
+        game.shake(5);
+        const pl = game.player;
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.blastRadius)) {
+          pl.takeHit(d.blastDmg, game, this.x);
+          pl.applyBurn(1);
+        }
+      } else {
+        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
+        game.shake(3);
+        if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))
+          game.player.applyBurn(1);
+      }
+      burst(game, this.x, this.y, 5, JH.PAL.firePatch, 16, { speed: 130, life: 0.5, up: 70, size: 3 });
+      // Elite: 1 child fuse lobbed out; super: 3 — however it died.
+      const n = this.superElite ? 3 : this.elite ? 1 : 0;
+      for (let i = 0; i < n; i++) {
+        const ang = (i / Math.max(1, n)) * Math.PI * 2 + Math.random();
+        const cx = clamp(this.x + Math.cos(ang) * 26, game.bounds.minX, game.bounds.maxX);
+        const cy = clamp(this.y + Math.sin(ang) * 14, JH.DEPTH_MIN, JH.DEPTH_MAX);
+        const child = game.spawnEnemy("fuse", cx, cy, { infinite: true });
+        if (child) { child.z = 24; child.vz = 90; child.spawnGrace = 0.5; }
+      }
       super.die(game);
     }
   }
@@ -4146,6 +4182,11 @@
       return;
     }
     JH.Enemy.prototype.draw.call(this, ctx, cam);
+    if (this.lit && !this.dead) {
+      const sx = this.x - cam;
+      Assets.drawFx(ctx, "fire-small", sx + this.facing * 2,
+        Geo.feetScreenY(this.y, this.z) - this.bodyH - 3, this.t, { scale: 0.35 });
+    }
   };
 
   JH.makeEnemy = function (type, x, y) {
