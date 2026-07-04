@@ -1159,11 +1159,16 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          // fire an ember toward player's position
+          // fire toward player's position; super-elites lob a 3-ember fan
+          // whose embers gutter into small fire patches where they expire
           const ang = Math.atan2(dy, dx);
-          game.embers.push(new Ember(this.x + this.facing * 8, this.y, this.z + 14,
-            Math.cos(ang) * d.emberSpeed, Math.sin(ang) * d.emberSpeed * 0.6, d.emberDmg));
-          this.cdTimer = d.shootCd;
+          const spreads = this.superElite ? [-0.35, 0, 0.35] : [0];
+          for (const off of spreads)
+            game.embers.push(new Ember(this.x + this.facing * 8, this.y, this.z + 14,
+              Math.cos(ang + off) * d.emberSpeed, Math.sin(ang + off) * d.emberSpeed * 0.6,
+              d.emberDmg,
+              this.superElite ? { patch: { r: 14, dur: 1.2 } } : undefined));
+          this.cdTimer = d.shootCd * (this.superElite ? 1.4 : 1);
         }
         return;
       }
@@ -1202,8 +1207,10 @@
 
   // ---- Ember projectile (enemy → player) ----
   class Ember {
-    constructor(x, y, z, vx, vy, dmg) {
+    constructor(x, y, z, vx, vy, dmg, opts) {
       Object.assign(this, { x, y, z, vx, vy, dmg, life: 2.2, t: 0, dead: false });
+      // opts.patch = {r, dur}: spawn a FirePatch where the ember expires
+      this.patch = (opts && opts.patch) || null;
     }
     update(dt, game) {
       this.t += dt;
@@ -1220,8 +1227,14 @@
       if (pl.alive && Math.abs(pl.x - this.x) < 12 && Math.abs(pl.y - this.y) < 12) {
         pl.takeHit(this.dmg, game, this.x); this.dead = true;
         burst(game, this.x, this.y, this.z, JH.PAL.flame, 5, { speed: 70, life: 0.3 });
+        return false;   // died on impact — no patch (would land under Jon's feet)
       }
-      if (this.t > this.life) this.dead = true;
+      if (this.t > this.life) {
+        this.dead = true;
+        // life expired mid-air: gutter into a fire patch if this ember carries one
+        if (this.patch) game.firePatches.push(
+          new JH.FirePatch(this.x, this.y, this.patch.r, this.patch.dur));
+      }
       // water particles passing could douse embers — handled in game loop
       return !this.dead;
     }

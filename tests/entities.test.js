@@ -635,3 +635,13 @@ test("super charger ricochets off the arena x-bounds and keeps momentum", () => 
   assert.ok(c.chargeVX < 0, "x velocity reflected");
   assert.strictEqual(c.state, "charge", "still charging after bounce");
 });
+
+test("super pyro fires a 3-ember fan; embers carry a patch spec", () => {
+  const g = makeThinkGame(150, 40);
+  const p = JH.makeEnemy("pyro", 60, 40);
+  p.makeSuper(); p.spawnGrace = 0;
+  p.windTimer = 0.01; p.state = "wind";
+  p.think(0.02, g);
+  assert.strictEqual(g.embers.length, 3);
+  assert.ok(g.embers.every((e) => e.patch && e.patch.r === 14));
+});
