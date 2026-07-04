@@ -17,7 +17,7 @@
     },
 
     // Elite stat multipliers: ramp by act tier and by player power
-    // (owned-upgrade count, capped at 15) so late fights stay tense.
+    // (owned-upgrade count, capped at 24) so late fights stay tense.
     eliteScale(actLevel, ownedCount) {
       const lvl = Math.max(0, actLevel);
       const power = 1 + 0.03 * Math.min(ownedCount || 0, 24);

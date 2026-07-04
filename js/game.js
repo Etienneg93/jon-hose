@@ -402,7 +402,8 @@
       } else {
         this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
         const actLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
-        const ownedCount = Object.keys(JH.Upgrades.owned).length;
+        const ownedCount = JH.Balance.powerCount(
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state);
         const eliteScale = wave.tough
           ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
         const spawnList = JH.Balance.capEnemyType(
@@ -702,6 +703,13 @@
         if (opts.infinite) e.infinite = true;
         if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
         if (opts.dropIn && e.beginDrop) e.beginDrop(opts.dropDelay || 0);
+      }
+      // Boss HP respects player power: a maxed build sees all the phases
+      // instead of deleting them.
+      if (e.isBoss) {
+        const pc = JH.Balance.powerCount(
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state);
+        e.hp = e.maxHp = JH.Balance.bossHpScale(e.maxHp, pc);
       }
       this.enemies.push(e);
       return e;
@@ -1244,7 +1252,8 @@
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
               const sc = wave.tough
-                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
+                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
+                    JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state))
                 : null;
               const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
               e.spawnGrace = 0.2;
@@ -1259,7 +1268,8 @@
             const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
             const sc = wave.tough
-              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
+              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
+                  JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state))
               : null;
             // Spawn from either edge so pressure comes from ahead AND behind.
             const ex = (Math.random() < 0.5)
