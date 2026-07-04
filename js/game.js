@@ -453,8 +453,10 @@
         if (wave.superElite) {
           const ex = (Math.random() < 0.5) ? left + 24 : right - 24;
           const ey = JH.DEPTH_MIN + 10 + Math.random() * (depthSpan - 4);
-          const se = this.spawnEnemy(wave.superElite, ex, ey,
-            { elite: eliteScale, super: true });
+          const se = this.spawnEnemy(wave.superElite, ex, ey, {
+            elite: eliteScale, super: true,
+            superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
+          });
           se.spawnGrace = 0.6;
         }
       }
@@ -718,7 +720,7 @@
       if (opts) {
         if (opts.infinite) e.infinite = true;
         if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
-        if (opts.super && e.makeSuper) e.makeSuper();
+        if (opts.super && e.makeSuper) e.makeSuper(opts.superHpScale);
         if (opts.dropIn && e.beginDrop) e.beginDrop(opts.dropDelay || 0);
       }
       // Boss HP respects player power: a maxed build sees all the phases

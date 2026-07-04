@@ -274,6 +274,10 @@
   // sponge — x3 keeps it a fight, not a chore.
   JH.SUPER_TUNE = {
     smelt: { hp: 3 },
+    // Per-act hp damp applied on top of the type multiplier, indexed
+    // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
+    // their whole wave.
+    hpByAct: [0.55, 0.75, 0.9, 1, 1],
   };
 
   // Wave sprinkle: extra enemies drawn from the already-introduced pool,

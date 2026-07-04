@@ -911,10 +911,14 @@
     // Super-elite: rare apex tier above elites — huge stats + a signature
     // move (subclasses branch on this.superElite). Reuses the elite_ baked
     // frames at 1.8x draw scale.
-    makeSuper() {
+    // `hpScale` (optional, default 1) damps the super hp AFTER the type
+    // multipliers — spawnWave passes the per-act value from SUPER_TUNE.hpByAct
+    // so early-act giants don't outlast the whole wave.
+    makeSuper(hpScale) {
       this.superElite = true;
       this.elite = true;
       this.def = JH.Balance.superEliteDef(this.def, JH.SUPER_TUNE && JH.SUPER_TUNE[this.type]);
+      if (hpScale && hpScale !== 1) this.def.hp = Math.round(this.def.hp * hpScale);
       this.hp = this.maxHp = this.def.hp;
       this.bodyW = this.def.bodyW;
       this.bodyH = this.def.bodyH;
@@ -1028,7 +1032,8 @@
         const w = this.bodyW + 4;
         const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
         if (this.elite) {
-          ctx.fillStyle = "#f0b830";
+          // Frame color is the tier read: gold = elite, red = super-elite.
+          ctx.fillStyle = this.superElite ? "#ff3a3a" : "#f0b830";
           ctx.fillRect(bx - 1, by - 1, w + 2, 5);
         }
         ctx.fillStyle = "rgba(0,0,0,0.6)";
@@ -1038,7 +1043,7 @@
       }
       if (this.superElite) {
         const by = Math.round(sy - this.bodyH - 8);
-        ctx.fillStyle = "#f0b830";
+        ctx.fillStyle = "#ff3a3a";
         ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         ctx.fillText(this.def.name.toUpperCase(), Math.round(sx), by - 4);
         ctx.textAlign = "left";

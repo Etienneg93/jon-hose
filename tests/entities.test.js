@@ -742,3 +742,12 @@ test("super smelt hp uses the SUPER_TUNE override (3x, not 7x)", () => {
   s.makeSuper();
   assert.strictEqual(s.maxHp, JH.ENEMIES.smelt.hp * 3);
 });
+
+test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () => {
+  const m = new JH.Enemy("mook", 0, 0);
+  m.makeSuper(0.55);
+  assert.strictEqual(m.maxHp, Math.round(JH.ENEMIES.mook.hp * 7 * 0.55));   // 154
+  const full = new JH.Enemy("mook", 0, 0);
+  full.makeSuper();                                    // no scale = full 7x
+  assert.strictEqual(full.maxHp, JH.ENEMIES.mook.hp * 7);
+});
