@@ -447,6 +447,14 @@
           }
           slot++;
         });
+        // Rare apex: at most ONE super-elite, spawned by wave data.
+        if (wave.superElite) {
+          const ex = (Math.random() < 0.5) ? left + 24 : right - 24;
+          const ey = JH.DEPTH_MIN + 10 + Math.random() * (depthSpan - 4);
+          const se = this.spawnEnemy(wave.superElite, ex, ey,
+            { elite: eliteScale, super: true });
+          se.spawnGrace = 0.6;
+        }
       }
     },
 
@@ -708,6 +716,7 @@
       if (opts) {
         if (opts.infinite) e.infinite = true;
         if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
+        if (opts.super && e.makeSuper) e.makeSuper();
         if (opts.dropIn && e.beginDrop) e.beginDrop(opts.dropDelay || 0);
       }
       // Boss HP respects player power: a maxed build sees all the phases
@@ -767,6 +776,8 @@
     // spawns (boss summons + wall-zone reinforcements) share a per-encounter
     // budget, so steady killing is rewarded but idle farming dries up.
     dropLoot(e) {
+      // Super-elite kills pay: guaranteed kibble on top of their 4x suds.
+      if (e.superElite) this.spawnPickup("health", e.x + 8, e.y, 25);
       // Concerta pill: 8% chance from elite enemies once the garden unlocks it
       if (e.elite && !e.isBoss && this.concertaUnlocked && Math.random() < 0.08)
         this.spawnPickup("pill", e.x, e.y, 1);

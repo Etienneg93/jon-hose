@@ -588,3 +588,16 @@ test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", ()
   assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
   JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
 });
+
+// makeSuper reads JH.Balance.superEliteDef at call time.
+require("../js/balance.js");
+
+test("makeSuper: 7x hp, superElite + elite flags, def untouched globally", () => {
+  const m = new JH.Enemy("mook", 0, 0);
+  const baseHp = JH.ENEMIES.mook.hp;
+  m.makeSuper();
+  assert.strictEqual(m.superElite, true);
+  assert.strictEqual(m.elite, true);          // reuses elite art/palette
+  assert.strictEqual(m.maxHp, baseHp * 7);
+  assert.strictEqual(JH.ENEMIES.mook.hp, baseHp);  // shared def not mutated
+});

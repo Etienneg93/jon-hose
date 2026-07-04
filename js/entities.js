@@ -894,6 +894,18 @@
       this.bodyH = d.bodyH;
     }
 
+    // Super-elite: rare apex tier above elites — huge stats + a signature
+    // move (subclasses branch on this.superElite). Reuses the elite_ baked
+    // frames at 1.8x draw scale.
+    makeSuper() {
+      this.superElite = true;
+      this.elite = true;
+      this.def = JH.Balance.superEliteDef(this.def);
+      this.hp = this.maxHp = this.def.hp;
+      this.bodyW = this.def.bodyW;
+      this.bodyH = this.def.bodyH;
+    }
+
     // Generic chase toward the player; subclasses override think().
     update(dt, game) {
       this.basePhysics(dt);
@@ -971,7 +983,7 @@
         // 0→1 windup progress for multi-frame windup anims (0 when windDur unset)
         windFrac: this.windDur > 0 ? Math.min(1, Math.max(0, 1 - this.windTimer / this.windDur)) : 0,
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
-        scale: this.elite ? 1.08 : 1,
+        scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
@@ -985,6 +997,13 @@
         ctx.fillRect(bx, by, w, 3);
         ctx.fillStyle = "#ff5a5a";
         ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 3);
+      }
+      if (this.superElite) {
+        const by = Math.round(sy - this.bodyH - 8);
+        ctx.fillStyle = "#f0b830";
+        ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+        ctx.fillText(this.def.name.toUpperCase(), Math.round(sx), by - 4);
+        ctx.textAlign = "left";
       }
     }
   }
