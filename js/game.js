@@ -308,7 +308,7 @@
       JH.Upgrades.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -986,7 +986,7 @@
       p.clearBurn();
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
@@ -1204,6 +1204,8 @@
       for (const e of this.enemies) e.update(dt, this);
       for (const s of this.shields) s.update(dt);
       for (const fp of this.firePatches) fp.update(dt, this);
+      this.player.zoneSlow = 1;
+      for (const z of this.slowZones) z.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.particles = this.particles.filter((p) => p.update(dt));
@@ -1252,6 +1254,7 @@
       this.enemies = this.enemies.filter((e) => !e.dead);
       this.shields = this.shields.filter((s) => !s.dead);
       this.firePatches = this.firePatches.filter((fp) => !fp.dead);
+      this.slowZones = this.slowZones.filter((z) => !z.dead);
 
       // --- camera
       JH.Camera.follow(this.player);
@@ -1446,6 +1449,9 @@
 
         // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
         for (const fp of this.firePatches) fp.draw(ctx, cam);
+
+        // slow zones (super-Bulwark's landed shield)
+        for (const z of this.slowZones) z.draw(ctx, cam);
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);

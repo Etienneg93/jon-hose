@@ -703,3 +703,16 @@ test("elite fuse spawns 1 child on death; super spawns 3", () => {
   const s = JH.makeEnemy("fuse", 100, 40); s.makeSuper(); s.die(g);
   assert.strictEqual(spawned.length, 4);
 });
+
+// ---- super bulwark: shield lob + slow zone ----
+
+test("SlowZone slows the player inside, expires after dur", () => {
+  const g = makeThinkGame(100, 40);
+  const z = new JH.SlowZone(100, 40, 30, 5);
+  z.update(1 / 60, g);
+  assert.strictEqual(g.player.zoneSlow, 0.55);
+  const z2 = new JH.SlowZone(400, 40, 30, 5);   // far away
+  g.player.zoneSlow = 1; z2.update(1 / 60, g);
+  assert.strictEqual(g.player.zoneSlow, 1);
+  z.t = 99; assert.strictEqual(z.update(1 / 60, g), false);
+});

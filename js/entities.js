@@ -188,6 +188,7 @@
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
+      this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
     }
     applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
 
@@ -295,7 +296,7 @@
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
       }
-      let speed = S.moveSpeed;
+      let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
       if (this.dashTimer > 0) {
         this.dashTimer -= dt;
         mx = this._dashX; my = this._dashY; speed = S.dashSpeed;
@@ -1351,12 +1352,13 @@
       super(type, x, y);
       this.hasShield = true;   // true: holding the shield; false: deployed/retrieving
       this.shield = null;      // its DeployedShield while deployed
-      this.phase = "approach"; // approach | plant | shelter | slam | retrieve | cooldown
+      this.phase = "approach"; // approach | plant | shelter | slam | retrieve | cooldown (super: approach | throwWind | brawl | slam)
       this.windTimer = 0;
       this.cdTimer = 0;
       this.strikeFx = 0;
       this.slam = null;        // active slam telegraph {range, band, dmg, dur, t}
       this.state = "idle";     // animation state only ("walk"/"idle")
+      this.thrownZone = null;  // super only: the SlowZone from its lobbed shield, while live
     }
     die(game) {
       if (this.shield) { this.shield.dead = true; this.shield = null; }
@@ -1372,6 +1374,7 @@
       } else this.state = "idle";
     }
     think(dt, game) {
+      if (this.superElite) return this.superThink(dt, game);
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       this.facing = dx >= 0 ? 1 : -1;
@@ -1455,6 +1458,58 @@
       const hasPyros = game.enemies.some((e) => !e.dead && e.type === "pyro");
       if (this.spawnGrace <= 0 && (dist < d.plantRange || hasPyros)) {
         this.windTimer = d.plantWind; this.phase = "plant"; return;
+      }
+      this._chase(dt, dx, dy, dist, 1);
+    }
+
+    // Super: no dome cycle. Lob the shield AT Jon (slow zone), brawl
+    // shieldless while it's down, reclaim it when the zone expires.
+    superThink(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+
+      if (this.phase === "slam") {          // reuse the standard slam resolve
+        this.slam.t -= dt; this.windTimer = this.slam.t; this.state = "wind";
+        if (this.slam.t <= 0) {
+          if (Geo.inHitArc(this, pl, this.facing, this.slam.range, this.slam.band))
+            pl.takeHit(this.slam.dmg, game, this.x);
+          game.shake(9); game.audio.play("whack");
+          this.strikeFx = 0.2; this.cdTimer = 0.9; this.phase = "brawl";
+        }
+        return;
+      }
+      if (this.phase === "throwWind") {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          game.embers.push(new JH.ShieldLob(this.x, this.y, pl.x, pl.y, this));
+          this.hasShield = false;
+          this.phase = "brawl"; this.cdTimer = 0.6;
+        }
+        return;
+      }
+      if (this.phase === "brawl") {
+        if (this.thrownZone && this.thrownZone.dead) {
+          this.thrownZone = null; this.hasShield = true;
+          this.phase = "approach"; this.cdTimer = d.redeployCd;
+          return;
+        }
+        if (this.cdTimer > 0) this.cdTimer -= dt;
+        if (this.cdTimer <= 0 && dist < d.slamRange && this.spawnGrace <= 0) {
+          this.slam = { range: d.slamRange, band: d.slamBand, dmg: d.slamDmg, dur: d.slamWind, t: d.slamWind };
+          this.phase = "slam"; game.audio.play("jump");
+          return;
+        }
+        this._chase(dt, dx, dy, dist, 1.3);
+        return;
+      }
+      // approach: throw when in the lob band and holding the shield
+      if (this.cdTimer > 0) this.cdTimer -= dt;
+      if (this.hasShield && this.cdTimer <= 0 && this.spawnGrace <= 0 &&
+          dist > 50 && dist < 170) {
+        this.windTimer = 0.5; this.phase = "throwWind";
+        return;
       }
       this._chase(dt, dx, dy, dist, 1);
     }
@@ -1673,6 +1728,80 @@
     }
   }
   JH.FirePatch = FirePatch;
+
+  // Ground denial left by a super-Bulwark's thrown shield: slows Jon while
+  // he stands inside. Ellipse footprint like every ground zone.
+  class SlowZone {
+    constructor(x, y, r, dur) {
+      this.x = x; this.y = y; this.r = r; this.dur = dur;
+      this.t = 0; this.dead = false; this.slowMult = 0.55;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.t >= this.dur) { this.dead = true; return false; }
+      const pl = game.player;
+      if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r))
+        pl.zoneSlow = this.slowMult;
+      return true;
+    }
+    draw(ctx, cam) {
+      const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
+      const k = Math.max(0, 1 - this.t / this.dur);
+      ctx.save();
+      ctx.globalAlpha = 0.28 * k + 0.1;
+      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, this.r, this.r * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.6 * k + 0.2;
+      ctx.strokeStyle = JH.PAL.bulwark;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // The grounded shield itself, planted in the middle.
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.fillRect(sx - 5, sy - 16, 10, 16);
+      ctx.strokeStyle = JH.PAL.bulwarkDk;
+      ctx.strokeRect(sx - 5, sy - 16, 10, 16);
+      ctx.restore();
+    }
+  }
+  JH.SlowZone = SlowZone;
+
+  // Super-Bulwark's thrown shield: smelt-style arc; lands as a SlowZone.
+  class ShieldLob {
+    constructor(x, y, tx, ty, owner) {
+      this.x = x; this.y = y; this.z = 26; this.owner = owner;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      const flightT = Math.max(0.45, dist / 150);
+      this.vx = (tx - x) / flightT; this.vy = (ty - y) / flightT;
+      this.vz = 0.5 * 300 * flightT - this.z / flightT;
+      this.t = 0; this.dead = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vz -= 300 * dt; this.z += this.vz * dt;
+      if (this.z <= 0) {
+        const zone = new JH.SlowZone(this.x, this.y, 30, 5);
+        game.slowZones.push(zone);
+        if (this.owner) this.owner.thrownZone = zone;
+        game.shake(3); if (game.audio) game.audio.play("whack");
+        this.dead = true;
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      ctx.save();
+      ctx.translate(sx, sy); ctx.rotate(this.t * 9);
+      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.fillRect(-6, -8, 12, 16);
+      ctx.strokeStyle = JH.PAL.bulwarkDk; ctx.strokeRect(-6, -8, 12, 16);
+      ctx.restore();
+    }
+  }
+  JH.ShieldLob = ShieldLob;
 
   // ---- Stalker: fast "blink harasser" super-elite ----
   // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
