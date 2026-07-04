@@ -861,7 +861,7 @@
 
   // ============================ SLAYER (BOSS) ==========================
   // Real sprite sheets — 4 static PNG states (no walk cycle).
-  const SLAYER_H = 58;
+  const SLAYER_H = 68;
   const _slayerImgs = {
     idle:       JH.Loader.img("sprites/slayer/slayer-idle.png"),
     dash:       JH.Loader.img("sprites/slayer/slayer-dash.png"),
