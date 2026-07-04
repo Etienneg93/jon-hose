@@ -1686,7 +1686,7 @@
       if (this.state === "strike") {
         this.attackTimer -= dt;
         if (this.attackTimer <= 0) {
-          if (Geo.inHitArc(this, pl, this.facing, d.strikeRange, 16))
+          if (Geo.inHitArc(this, pl, this.facing, d.strikeRange, 20))
             pl.takeHit(d.strikeDmg, game, this.x);
           this.state = "idle";
           this.cdTimer = d.blinkCd;
@@ -1697,10 +1697,21 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          const t = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, pl.facing, d.blinkDist, {
-            minX: game.bounds.minX, maxX: game.bounds.maxX,
-            depthMin: JH.DEPTH_MIN, depthMax: JH.DEPTH_MAX,
-          });
+          const bounds = { minX: game.bounds.minX, maxX: game.bounds.maxX,
+                           depthMin: JH.DEPTH_MIN, depthMax: JH.DEPTH_MAX };
+          if (this.superElite && !this.feinted) {
+            // Fakeout: first blink lands IN FRONT (facing side) with no
+            // strike, then immediately re-telegraphs the real one.
+            const f = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, -pl.facing, d.blinkDist, bounds);
+            this.x = f.x; this.y = f.y;
+            this.facing = pl.x >= this.x ? 1 : -1;
+            this.feinted = true;
+            this.windTimer = 0.25;
+            game.audio.play("jump");
+            return;
+          }
+          this.feinted = false;
+          const t = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, pl.facing, d.blinkDist, bounds);
           this.x = t.x; this.y = t.y;
           this.facing = pl.x >= this.x ? 1 : -1;
           this.attackTimer = d.strikeWind;

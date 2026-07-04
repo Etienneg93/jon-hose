@@ -645,3 +645,19 @@ test("super pyro fires a 3-ember fan; embers carry a patch spec", () => {
   assert.strictEqual(g.embers.length, 3);
   assert.ok(g.embers.every((e) => e.patch && e.patch.r === 14));
 });
+
+test("super stalker feints in FRONT first, then blinks behind and strikes", () => {
+  const g = makeThinkGame(240, 40);
+  g.player.facing = 1;
+  const s = JH.makeEnemy("stalker", 100, 40);
+  s.makeSuper(); s.spawnGrace = 0;
+  s.windTimer = 0.01; s.state = "wind";
+  s.think(0.02, g);                              // first blink = feint
+  assert.ok(s.x > g.player.x, "feint lands in FRONT of the player (facing side)");
+  assert.notStrictEqual(s.state, "strike", "no strike off the feint");
+  assert.ok(s.windTimer > 0, "re-telegraphs for the real blink");
+  s.windTimer = 0.01;
+  s.think(0.02, g);                              // second blink = real
+  assert.ok(s.x < g.player.x, "real blink lands BEHIND");
+  assert.strictEqual(s.state, "strike");
+});
