@@ -288,6 +288,14 @@ test("SmeltBomb landing burn matches the spawned FirePatch footprint", () => {
   assert.strictEqual(g.player.burns, 1);
 });
 
+test("SmeltBomb with bounces re-arcs once, leaving a patch at EACH touchdown", () => {
+  const g = makeThinkGame(200, 40);
+  const bomb = new JH.SmeltBomb(100, 40, 140, 40, JH.ENEMIES.smelt, { bounces: 1 });
+  for (let i = 0; i < 400 && !bomb.dead; i++) bomb.update(1 / 60, g);
+  assert.strictEqual(bomb.dead, true);
+  assert.ok(g.firePatches.length >= 2, "patch at first landing AND bounce landing, got " + g.firePatches.length);
+});
+
 test("Fuse drop slam: hit zone matches the landing ring ellipse", () => {
   // slamRadius 20 → ry 8. Depth 14: old circle hit; ellipse must not.
   const f = JH.makeEnemy("fuse", 100, 40);

@@ -3582,7 +3582,7 @@
   // Arcing projectile (parabolic z). Spawns FirePatch + burst on landing.
   // Pushed into game.embers; update() returns false when dead.
   class SmeltBomb {
-    constructor(x, y, tx, ty, d) {
+    constructor(x, y, tx, ty, d, opts) {
       // Leaves the hands of the overhead hoist (matches the wind-pose art,
       // where the bomb sits ~32 logical px above the feet).
       this.x = x; this.y = y; this.z = 32;
@@ -3595,6 +3595,7 @@
       this.def = d;
       this.t = 0;
       this.dead = false;
+      this.bounces = (opts && opts.bounces) || 0;
     }
     update(dt, game) {
       this.t += dt;
@@ -3624,7 +3625,21 @@
         if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
             d.lobBombRadius * 0.85 + (pl.bodyW || 12) * 0.25))
           pl.applyBurn(1);
-        this.dead = true;
+        if (this.bounces > 0) {
+          // Bounce: shorter re-arc toward the player's CURRENT position;
+          // every touchdown has already left its patch above.
+          this.bounces--;
+          const hop = Math.max(30, Math.hypot(pl.x - this.x, pl.y - this.y) * 0.7);
+          const ang2 = Math.atan2(pl.y - this.y, pl.x - this.x);
+          const ty2 = Math.max(JH.DEPTH_MIN, Math.min(JH.DEPTH_MAX, this.y + Math.sin(ang2) * hop));
+          const flightT = Math.max(0.35, hop / d.lobBombSpeed);
+          this.vx = Math.cos(ang2) * hop / flightT;
+          this.vy = (ty2 - this.y) / flightT;
+          this.z = 0.01;
+          this.vz = 0.5 * d.lobGravity * flightT;
+        } else {
+          this.dead = true;
+        }
       }
       return !this.dead;
     }
@@ -3651,6 +3666,7 @@
       ctx.restore();
     }
   }
+  JH.SmeltBomb = SmeltBomb;
 
   // Stands back; lobs arcing SmeltBombs at the player on a cooldown.
   // waterMult:0.5 means sustained spray does half damage.
@@ -3664,7 +3680,12 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
+          if (this.superElite) {
+            game.embers.push(new SmeltBomb(this.x, this.y, pl.x - 24, pl.y, d, { bounces: 1 }));
+            game.embers.push(new SmeltBomb(this.x, this.y, pl.x + 24, pl.y, d, { bounces: 1 }));
+          } else {
+            game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
+          }
           this.cdTimer = d.lobCd;
         }
         return;
