@@ -111,9 +111,9 @@
     isAvailable(id) {
       const n = this.byId(id);
       if (this.owned[id]) return false;
-      // Tier-3 nodes unlock from Act 2 (actLevel >= 1): the build finishes
-      // against the hard content, not before it.
-      if (n.tier >= 3 && this.currentActLevel < 1) return false;
+      // Tier-3 nodes unlock from Act 2 (actLevel >= 0; Act 1 is -1): the
+      // build finishes against the hard content, not before it.
+      if (n.tier >= 3 && this.currentActLevel < 0) return false;
       return n.req.every((r) => this.owned[r]);
     },
     // Locked = prerequisites not yet met, or act-gated (shown greyed in the shop).
