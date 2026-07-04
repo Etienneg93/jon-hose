@@ -32,6 +32,7 @@
     elapsed: 0, kills: 0,
     trauma: 0, shakeKickX: 0,   // trauma screenshake (see JH.JUICE)
     lootVacuumT: 0,             // wave-ender loot vacuum time remaining
+    essenceDim: 0,              // 0..1 world-darken while a Holy Essence cross is uncollected
     bannerTimer: 0,
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
@@ -322,7 +323,7 @@
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
       this.elapsed = 0; this.kills = 0;
-      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
@@ -989,7 +990,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
-      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
@@ -1208,6 +1209,9 @@
       for (const z of this.slowZones) z.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
+      // Essence-cross event: while a cross is uncollected the world dims.
+      const crossOut = this.pickups.some((p) => !p.dead && p.kind === "cross");
+      this.essenceDim += ((crossOut ? 1 : 0) - this.essenceDim) * Math.min(1, 3 * dt);
       this.particles = this.particles.filter((p) => p.update(dt));
 
       // --- hydrant timers + walk-up shop vendor
@@ -1580,6 +1584,21 @@
         }
       }
 
+      // Essence dim: darken the world, then re-draw the cross(es) above the
+      // veil so the beat reads as "something is over there".
+      if (this.essenceDim > 0.02 && this.state === "play") {
+        const cam = JH.Camera.x;
+        ctx.save();
+        ctx.fillStyle = "rgba(8,6,20," + (0.35 * this.essenceDim).toFixed(3) + ")";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        ctx.restore();
+        for (const p of this.pickups) {
+          if (p.dead || p.kind !== "cross") continue;
+          JH.Assets.glow(ctx, p.x - cam, JH.Geo.feetScreenY(p.y, p.z) - 4,
+            18, "#ffd23f", 0.5 * this.essenceDim);
+          p.draw(ctx, cam);
+        }
+      }
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
       // Cutscene overlay (drawn after everything else).

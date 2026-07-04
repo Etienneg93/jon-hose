@@ -2007,7 +2007,11 @@
     }
     update(dt, game) {
       this.t += dt;
-      if (!this.grounded) {
+      if (this.kind === "cross") {
+        // Essence crosses HOVER: no ground physics, a slow bob.
+        this.grounded = true;
+        this.z = 8 + Math.sin(this.t * 2.2) * 3;
+      } else if (!this.grounded) {
         this.vz -= 360 * dt; this.z += this.vz * dt;
         this.x += this.vx * dt;
         this.y = Math.max(JH.DEPTH_MIN, Math.min(JH.DEPTH_MAX, this.y + this.vy * dt));
