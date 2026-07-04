@@ -958,6 +958,7 @@
       p.y = JH.DEPTH_MAX - 24;
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
+      p.clearBurn();
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];

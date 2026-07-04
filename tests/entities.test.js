@@ -70,6 +70,21 @@ test("Player.applyBurn: burn stacks have i-frames like hits", () => {
   assert.strictEqual(p.burnStacks, 2);
 });
 
+test("Player.clearBurn: wipes all burn state (church respawn must not keep DoT)", () => {
+  const p = makePlayer();
+  p.applyBurn(2);
+  p.burnTickT = 0.3;   // mid-beat accrual
+  p.clearBurn();
+  assert.strictEqual(p.burnStacks, 0);
+  assert.strictEqual(p.burnTimer, 0);
+  assert.strictEqual(p.burnTickT, 0);
+  assert.strictEqual(p.burnGraceT, 0);
+  // No damage beat can land afterwards: tickBurn with cleared state is a no-op.
+  const hpBefore = p.hp;
+  p.tickBurn(1.0, { particles: [] });
+  assert.strictEqual(p.hp, hpBefore);
+});
+
 // Minimal game stub for Fireball flight tests — just what update() touches.
 function makeBallGame(px, py) {
   return {

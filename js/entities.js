@@ -202,6 +202,14 @@
       return true;
     }
 
+    // Full burn wipe — used on Church respawn so a death-while-burning
+    // doesn't carry the DoT into the fresh life (timers freeze while player
+    // update is paused, so without this the burn resumes on landing).
+    clearBurn() {
+      this.burnTimer = 0; this.burnStacks = 0;
+      this.burnTickT = 0; this.burnGraceT = 0;
+    }
+
     // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
     // the accrued damage, pulses the flash (no squash — no impact), and puffs
     // embers off Jon. Expiry flushes the partial tick, so the total always
