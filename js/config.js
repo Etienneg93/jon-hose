@@ -257,7 +257,7 @@
   JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
 
   // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
-  JH.WAVECAP = { charger: 2 };
+  JH.WAVECAP = { charger: 3 };
 
   // Attack tickets: max enemies simultaneously in a melee windup/attack,
   // indexed by actLevel+1 (like SPRINKLE.counts). Readability cap, not a
@@ -268,7 +268,7 @@
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
   JH.SPRINKLE = {
-    counts: [0, 1, 2, 2, 2],
+    counts: [1, 2, 3, 3, 4],
     weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
     heavies: ["bulwark", "furnace", "smelt"],
     heavyCap: 1,
@@ -560,40 +560,40 @@
   // open the shop (except before the boss, which is its own finale).
   JH.LEVEL1 = {
     waves: [
-      { name: "WAVE 1", spawns: [{ type: "mook", count: 3 }] },
-      { name: "WAVE 2", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }] },
-      { name: "WAVE 3", spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }] },
-      { name: "WAVE 4", spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 2 }] },
+      { name: "WAVE 1", spawns: [{ type: "mook", count: 4 }] },
+      { name: "WAVE 2", spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
+      { name: "WAVE 3", superElite: "mook", spawns: [{ type: "mook", count: 4 }, { type: "pyro", count: 1 }] },
+      { name: "WAVE 4", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
       // ---- Act 2: ELITE ----
-      { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
-      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
+      { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
-        spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] },
-      { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }] },
+        spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
+      { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }] },
       { name: "THE SWITCH", boss: true, bossType: "switch" },
       // ---- Act 3: the ruined district ----
-      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
-      { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "RUBBLE ROW", tough: true, superElite: "pyro", spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 4 }] },
+      { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 3 }, { type: "mook", count: 4 }] },
       { name: "HOLD THE LINE", holdout: true, tough: true, holdDur: 22,
-        spawns: [{ type: "mook", count: 2 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
-      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }] },
-      { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }, { type: "charger", count: 1 }] },
+        spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 2 }, { type: "charger", count: 1 }] },
+      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }, { type: "charger", count: 2 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
       // ---- Act 4: the aftermath ----
-      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 3 }] },
-      { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
-      { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
+      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 4 }, { type: "mook", count: 2 }] },
+      { name: "STALKER AMBUSH", superElite: "stalker", spawns: [{ type: "stalker", count: 3 }, { type: "charger", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 5 }, { type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
       { name: "THE GARDEN", garden: true },
-      { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
-      { name: "OVERRUN", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }, { type: "pyro", count: 1 }] },
+      { name: "WAVE 7", tough: true, superElite: "bulwark", spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 3 }, { type: "mook", count: 3 }] },
+      { name: "OVERRUN", tough: true, spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
       { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
       // ---- Fire World (curated, un-tough) ----
-      { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
-      { name: "EMBER RUSH", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 4 }, { type: "smelt", count: 1 }] },
+      { name: "EMBER RUSH", superElite: "fuse", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
       { name: "DOUSE THE FLAMES", douse: true, spawns: [{ type: "smelt", count: 2 }] },
-      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 2 }] },
-      { name: "MELTDOWN", spawns: [{ type: "smelt", count: 1 }, { type: "fuse", count: 3 }] },
+      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 3 }] },
+      { name: "MELTDOWN", superElite: "smelt", spawns: [{ type: "smelt", count: 2 }, { type: "fuse", count: 4 }] },
       { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };
