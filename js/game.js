@@ -189,6 +189,9 @@
       JH.Camera.locked = false;
       // Use last wave index so checkWaveTrigger never fires in this range.
       this.waveIndex = JH.LEVEL1.waves.length - 1;
+      // No startWave here, so set the act level directly — keeps tier-3
+      // nodes buyable at the range's shop.
+      JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
       this.waveActive = false;
       this.bounds = { minX: 8, maxX: 900 };
       // Buff test stations: walk up + press E (see tickRangeStations).
