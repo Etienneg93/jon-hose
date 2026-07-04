@@ -613,3 +613,14 @@ test("super mook windup resolves into a forward lunge, not a standing hit", () =
   m.think(0.05, g);                       // lunging
   assert.ok(m.x > x0, "carries forward during the lunge");
 });
+
+test("lunge commits to its aim: no re-facing mid-flight when Jon is behind", () => {
+  const g = makeThinkGame(20, 40);          // player BEHIND the lunge direction
+  const m = new JH.Enemy("mook", 60, 40);
+  m.makeSuper(); m.spawnGrace = 0; m.facing = 1;
+  m.state = "lunge"; m.attackTimer = 0.16; m.lungeHit = false;
+  const x0 = m.x;
+  m.think(0.05, g);
+  assert.strictEqual(m.facing, 1, "facing stays locked during the lunge");
+  assert.ok(m.x > x0, "still advances along the committed direction");
+});

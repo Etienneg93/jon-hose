@@ -944,7 +944,8 @@
       // Point-blank deadzone: with no body collision, chasers with no melee
       // stop (fuse) can sit on Jon's center — per-frame sign(dx) facing +
       // overshoot strobes the sprite left/right. Hold ground and facing.
-      if (dist > 12) this.facing = dx >= 0 ? 1 : -1;
+      // Committed lunge keeps its aim — no re-facing mid-flight.
+      if (dist > 12 && this.state !== "lunge") this.facing = dx >= 0 ? 1 : -1;
       const d = this.def;
 
       // Super mook: haymaker resolves as a forward LUNGE with a ground-shock
