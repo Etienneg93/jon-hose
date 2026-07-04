@@ -838,7 +838,7 @@
       this.hp = this.maxHp = this.def.hp;
       this.bodyW = this.def.bodyW; this.bodyH = this.def.bodyH;
       this.contactTimer = 0;
-      this.windTimer = 0; this.attackTimer = 0; this.cdTimer = 0;
+      this.windTimer = 0; this.windDur = 0; this.attackTimer = 0; this.cdTimer = 0;
       this.state = "walk";
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
@@ -946,7 +946,7 @@
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
       if (dist < d.meleeRange && this.spawnGrace <= 0) {
-        this.windTimer = d.meleeWind; this.state = "wind";
+        this.windTimer = d.meleeWind; this.windDur = d.meleeWind; this.state = "wind";
       } else if (dist > 12) {
         // approach
         const sp = d.speed;
@@ -965,6 +965,8 @@
         state: this.state, frame: this.frame, t: this.t,
         wet: this.wetness,   // soak tint IS the enemy hurt read (no flash/squash)
         wind: this.state === "wind", elite: this.elite,
+        // 0→1 windup progress for multi-frame windup anims (0 when windDur unset)
+        windFrac: this.windDur > 0 ? Math.min(1, Math.max(0, 1 - this.windTimer / this.windDur)) : 0,
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.elite ? 1.08 : 1,
       });

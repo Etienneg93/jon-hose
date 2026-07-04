@@ -557,19 +557,26 @@
   // 24x33 logical with the feet baseline at row 31; drawn 1 art px = 1
   // logical px. Falls back to the legacy procedural blob while loading.
   const _mookImgs = {};
-  ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"].forEach((n) => {
-    _mookImgs[n] = JH.Loader.img("sprites/mook/" + n + ".png");
-    _mookImgs["elite_" + n] = JH.Loader.img("sprites/mook/elite_" + n + ".png");
-  });
+  {
+    const load = (n) => { _mookImgs[n] = JH.Loader.img("sprites/mook/" + n + ".png"); };
+    for (let i = 0; i < 12; i++) { load("idle" + i); load("elite_idle" + i); }
+    ["walk0", "walk1", "walk2", "walk3"].forEach((n) => { load(n); load("elite_" + n); });
+    // Base windup is a 4-frame anim (wind1..wind4); elite still has the single
+    // elite_wind frame.
+    ["wind1", "wind2", "wind3", "wind4"].forEach(load);
+    load("elite_wind");
+  }
   const MOOK_ART = { w: 24, h: 33, feet: 31 };
   Assets.register("mook", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
-    // Idle breath keys off t (not the frame counter) so it runs at a calm
-    // ~0.5s phase everywhere — including frozen gallery statues, whose t
-    // still ticks.
-    const pose = (opt.state === "wind" || opt.wind) ? "wind"
+    // Idle breath keys off t (not the frame counter) so it runs everywhere —
+    // including frozen gallery statues, whose t still ticks. 12 frames at
+    // 8fps = 1.5s loop.
+    // windFrac (0→1 windup progress) steps wind1..wind4 across the haymaker.
+    const pose = (opt.state === "wind" || opt.wind)
+               ? (opt.elite ? "wind" : "wind" + (1 + Math.min(3, Math.floor((opt.windFrac || 0) * 4))))
                : (opt.state === "walk") ? "walk" + (f & 3)
-               : "idle" + (Math.floor((opt.t || 0) * 2) & 1);
+               : "idle" + (Math.floor((opt.t || 0) * 8) % 12);
     const img = _mookImgs[(opt.elite ? "elite_" : "") + pose];
     if (img && img.complete && img.naturalWidth) {
       const s = opt.scale || 1;
