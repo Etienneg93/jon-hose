@@ -187,9 +187,9 @@
       slamRange: 46, slamWind: 0.65, slamDmg: 22, slamBand: 20,
       suds: 48, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
     },
-    // Super-elite: fast "blink harasser" — counters back-pedal kiting. Chases
-    // fast, then on a cooldown telegraphs and blinks to the player's blind
-    // side for a wind-up strike. Only the player's dash i-frames dodge it.
+    // Fast chaser. On cooldown it telegraphs, then blinks behind the player
+    // and strikes in the same beat (0.12s); only dash i-frames dodge it.
+    // Super-elite variant feints in front first, then blinks behind for the real strike.
     stalker: {
       name: "Stalker", hp: 30, speed: 95, touchDmg: 10, contactCd: 0.8,
       blinkCd: 3.2, blinkTell: 0.35, blinkDist: 30,

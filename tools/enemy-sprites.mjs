@@ -436,8 +436,18 @@ const ENEMIES = {
 };
 
 const only = process.argv.slice(2);   // e.g. `node tools/enemy-sprites.mjs furnace`
+const VALID = Object.keys(ENEMIES);
+if (!only.length) {
+  console.log(`Usage: node tools/enemy-sprites.mjs <type...>  (types: ${VALID.join(", ")})`);
+  process.exit(1);
+}
+const unknown = only.filter((n) => !VALID.includes(n));
+if (unknown.length) {
+  console.log(`Unknown type(s): ${unknown.join(", ")}  (valid: ${VALID.join(", ")})`);
+  process.exit(1);
+}
 for (const [name, def] of Object.entries(ENEMIES)) {
-  if (only.length && !only.includes(name)) continue;
+  if (!only.includes(name)) continue;
   console.log(`Baking ${name}:`);
   const variants = def.variants || [{ prefix: "", o: {} }];
   for (const elite of [false, true]) {

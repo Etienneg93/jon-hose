@@ -1816,11 +1816,11 @@
   }
   JH.ShieldLob = ShieldLob;
 
-  // ---- Stalker: fast "blink harasser" super-elite ----
-  // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
-  // blinks behind the player's facing, then winds up a strike (state
-  // "strike") that only the player's dash i-frames negate (Player.takeHit
-  // already no-ops while dashTimer > 0 — nothing new needed there).
+  // ---- Stalker: fast chaser; regular enemy, has a super-elite variant ----
+  // On cooldown: telegraphs (state "wind"), blinks behind the player, then
+  // strikes (state "strike") in the same beat; only dash i-frames negate it
+  // (Player.takeHit already no-ops while dashTimer > 0).
+  // Super-elite: feints in front first, then blinks behind for the real strike.
   class Stalker extends Enemy {
     think(dt, game) {
       const pl = game.player, d = this.def;
