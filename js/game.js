@@ -207,6 +207,23 @@
       this.hydrants.push({ x: gx - 55, y: gy, t: 0 });
       // Shop NPC visible from spawn
       this.shopNpc = new JH.ShopNPC(220, JH.DEPTH_MIN + 6);
+      // Sprite gallery along the top row: every combat entity as a frozen,
+      // unkillable statue for visual inspection (labels via drawRangeStations).
+      let gx2 = 300;
+      for (const type of ["mook", "charger", "pyro", "stalker", "fuse", "smelt",
+                          "bulwark", "furnace", "boss", "switch",
+                          "quake", "gatewaykrusher", "slayer"]) {
+        const e = JH.makeEnemy(type, 0, JH.DEPTH_MIN + 6);
+        e.x = gx2 + e.bodyW / 2;
+        gx2 += e.bodyW + 30;
+        e.facing = -1;                       // face the approaching player
+        e.state = "idle";                    // t keeps ticking → idle anims play
+        e.update = function (dt) { this.t += dt; };   // statue: no AI/contact/physics
+        e.takeDamage = () => {};                       // display dummy — unkillable
+        e.isGallery = true;
+        this.enemies.push(e);
+      }
+      this.bounds.maxX = Math.max(this.bounds.maxX, gx2 + 80);
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
     },
@@ -941,6 +958,7 @@
       p.y = JH.DEPTH_MAX - 24;
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
+      p.clearBurn();
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
@@ -1329,6 +1347,17 @@
         ctx.textAlign = "left";
         ctx.restore();
       }
+      // Gallery labels: entity type over each statue on the top row.
+      ctx.save();
+      ctx.font = "bold 5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#7fa0c0";
+      for (const e of this.enemies) {
+        if (!e.isGallery) continue;
+        const sx = Math.round(e.x - cam);
+        if (sx < -30 || sx > JH.VIEW_W + 30) continue;
+        ctx.fillText(e.type.toUpperCase(), sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
+      }
+      ctx.textAlign = "left";
+      ctx.restore();
     },
 
     updateHUD() {
@@ -1430,7 +1459,7 @@
           this.drawGoArrow(ctx);
         }
         // boss health bar (hidden while death sequence plays)
-        const boss = this.enemies.find((e) => e.isBoss && !e.dying);
+        const boss = this.enemies.find((e) => e.isBoss && !e.dying && !e.isGallery);
         if (boss) this.drawBossBar(ctx, boss);
 
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
@@ -1650,13 +1679,11 @@
         const fy = JH.Geo.feetScreenY(h.y, 0);
         JH.Assets.shadow(ctx, sx, fy, 7);
         if (isRespawn) {
-          // Golden glow-outline of the hydrant model, matching Jon's kibble-heal
-          // effect (shadowColor/shadowBlur around the sprite silhouette).
-          ctx.save();
-          ctx.shadowColor = "#ffce3a";
-          ctx.shadowBlur = 6 + 4 * Math.sin(h.t * 5);
-          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true });
-          ctx.restore();
+          // Golden edge glow: layered silhouette outlines fading outward
+          // (shadowBlur streaks line artifacts; discs read wrong on sprites).
+          const gp = 0.45 + 0.18 * Math.sin(h.t * 5);
+          JH.Assets.draw(ctx, "hydrant", sx, fy, 1, { gold: true,
+            outlines: [["#ffe680", gp], ["#ffce3a", gp * 0.5]] });
         } else {
           JH.Assets.draw(ctx, "hydrant", sx, fy, 1, {});
         }
@@ -1890,19 +1917,15 @@
       if (regenLive) {
         const t = p.t;
         const pulse = 0.5 + 0.5 * Math.sin(t * 6);
-        // Glow inherits the tier color at x10 (gold) / x20 (red); base tier
-        // glows regen-blue. High tiers breathe toward white-hot instead.
-        const glowCol = n >= 10 ? tierCol : "#55c8ff";
+        // Emphasis comes from the color pulse + letter wave (no shadowBlur —
+        // it streaks straight-line artifacts on Chromium).
         ctx.fillStyle = JH.Assets.lerpHex(tierCol, n >= 10 ? "#ffffff" : "#55c8ff", 0.35 + 0.5 * pulse);
-        ctx.shadowColor = glowCol;
-        ctx.shadowBlur = 3 + 4 * pulse;
         // Travelling letter wave, per character (monospace = fixed advance).
         ctx.textAlign = "left";
         const adv = ctx.measureText("M").width;
         const x0 = JH.VIEW_W - 8 - label.length * adv;
         for (let i = 0; i < label.length; i++)
           ctx.fillText(label[i], x0 + i * adv, 40 + Math.sin(t * 8 - i * 0.7) * 1.2);
-        ctx.shadowBlur = 0;
       } else {
         ctx.textAlign = "right";
         ctx.fillStyle = tierCol;

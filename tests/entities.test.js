@@ -70,6 +70,21 @@ test("Player.applyBurn: burn stacks have i-frames like hits", () => {
   assert.strictEqual(p.burnStacks, 2);
 });
 
+test("Player.clearBurn: wipes all burn state (church respawn must not keep DoT)", () => {
+  const p = makePlayer();
+  p.applyBurn(2);
+  p.burnTickT = 0.3;   // mid-beat accrual
+  p.clearBurn();
+  assert.strictEqual(p.burnStacks, 0);
+  assert.strictEqual(p.burnTimer, 0);
+  assert.strictEqual(p.burnTickT, 0);
+  assert.strictEqual(p.burnGraceT, 0);
+  // No damage beat can land afterwards: tickBurn with cleared state is a no-op.
+  const hpBefore = p.hp;
+  p.tickBurn(1.0, { particles: [] });
+  assert.strictEqual(p.hp, hpBefore);
+});
+
 // Minimal game stub for Fireball flight tests — just what update() touches.
 function makeBallGame(px, py) {
   return {
@@ -406,6 +421,26 @@ test("Stalker: outside the deadzone it still stalks and faces the player", () =>
   assert.strictEqual(s.facing, -1, "faces the player while stalking");
   assert.ok(s.x < 150, "closes the distance during blink cooldown");
   assert.strictEqual(s.state, "walk");
+});
+
+// ---- fuse: drop-in + point-blank deadzone ----
+
+test("Fuse: beginDrop(0) still falls from height — never lands the same frame", () => {
+  const f = JH.makeEnemy("fuse", 100, 40);
+  f.beginDrop(0);   // the first spawn of a wave gets no stagger delay
+  const g = stubGame(999, 999);
+  f.update(0.016, g);
+  assert.ok(f.dropping, "still airborne after one frame");
+  assert.ok(f.z > 0, "falls from drop height, not from the ground");
+});
+
+test("Fuse: at point-blank it holds ground and facing (melee-less rusher)", () => {
+  const f = JH.makeEnemy("fuse", 101, 40);   // 1px right of the player
+  f.spawnGrace = 0; f.facing = -1;
+  const g = stubGame(100, 40);
+  for (let i = 0; i < 30; i++) f.think(0.016, g);
+  assert.strictEqual(f.facing, -1, "no sign(dx) strobe while overlapping Jon");
+  assert.strictEqual(f.x, 101, "holds ground at point-blank");
 });
 
 // ---- input buffer: dash ----

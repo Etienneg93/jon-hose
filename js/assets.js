@@ -236,6 +236,37 @@
   _hurtOC.width = 220; _hurtOC.height = 300;
   const _hurtOC2d = _hurtOC.getContext("2d");
 
+  // Silhouette bounds tracking: blitting the full 220x300 canvas per stamp
+  // is ~1M device px of overdraw per wet enemy per frame at 1080p — it
+  // visibly stutters weak GPUs. Instance-level wrappers record the dest rect
+  // of everything a painter draws (fillRect helpers AND raw image blits like
+  // Jon's sprites) while a renderSil is active, so stamps/outlines can blit
+  // just the occupied region.
+  let _silTrack = false, _sx0 = 0, _sy0 = 0, _sx1 = 0, _sy1 = 0;
+  function _silRect(x, y, w, h) {
+    if (!_silTrack) return;
+    // Rects arrive in the painter's CURRENT transform space (e.g. Jon's
+    // sprite draws under a translate) — map all four corners to canvas space.
+    const m = _hurtOC2d.getTransform();
+    for (const c of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+      const px = m.a * c[0] + m.c * c[1] + m.e;
+      const py = m.b * c[0] + m.d * c[1] + m.f;
+      if (px < _sx0) _sx0 = px;
+      if (py < _sy0) _sy0 = py;
+      if (px > _sx1) _sx1 = px;
+      if (py > _sy1) _sy1 = py;
+    }
+  }
+  const _ocFillRect = _hurtOC2d.fillRect.bind(_hurtOC2d);
+  _hurtOC2d.fillRect = function (x, y, w, h) { _silRect(x, y, w, h); _ocFillRect(x, y, w, h); };
+  const _ocDrawImage = _hurtOC2d.drawImage.bind(_hurtOC2d);
+  _hurtOC2d.drawImage = function (...a) {
+    if (a.length >= 9) _silRect(a[5], a[6], a[7], a[8]);
+    else if (a.length >= 5) _silRect(a[1], a[2], a[3], a[4]);
+    else if (a.length === 3) _silRect(a[1], a[2], (a[0] && a[0].width) || 0, (a[0] && a[0].height) || 0);
+    _ocDrawImage(...a);
+  };
+
   const Assets = {
     register(key, fn) { painters[key] = fn; },
     has(key) { return !!painters[key]; },
@@ -270,6 +301,9 @@
       // canvas flood-filled with `color`. stamp() composites it over the
       // sprite; outline rings blit it at pixel offsets.
       const OX = 110, OY = 280;
+      // Occupied region of the last renderSil (padded, canvas-clamped);
+      // bw <= 0 means the painter drew nothing (e.g. sprite not loaded yet).
+      let bx = 0, by = 0, bw = 0, bh = 0;
       const renderSil = (color) => {
         _hurtOC2d.globalAlpha = 1;
         _hurtOC2d.globalCompositeOperation = "source-over";
@@ -281,18 +315,33 @@
           _hurtOC2d.fillStyle = c;
           _hurtOC2d.fillRect(osx, osy, w, h);
         };
+        _silTrack = true; _sx0 = 220; _sy0 = 300; _sx1 = 0; _sy1 = 0;
         _hurtOC2d.save();
         fn(hp, Object.assign({}, opt, { hurt: false }), _hurtOC2d, OX, OY, facing);
         _hurtOC2d.restore();
+        _silTrack = false;
+        // Pad for path/arc accents the wrappers can't see, clamp to canvas.
+        bx = Math.max(0, Math.floor(_sx0) - 8);
+        by = Math.max(0, Math.floor(_sy0) - 8);
+        bw = Math.min(220, Math.ceil(_sx1) + 8) - bx;
+        bh = Math.min(300, Math.ceil(_sy1) + 8) - by;
+        if (bw <= 0 || bh <= 0) { bw = bh = 0; return; }
+        // source-in flood only needs to cover the occupied region.
         _hurtOC2d.globalCompositeOperation = "source-in";
         _hurtOC2d.fillStyle = color;
-        _hurtOC2d.fillRect(0, 0, 220, 300);
+        _hurtOC2d.fillRect(bx, by, bw, bh);
         _hurtOC2d.globalCompositeOperation = "source-over";
+      };
+      // Blit only the occupied region — full-canvas blits were megapixels of
+      // per-entity overdraw at device scale.
+      const blitSil = (dx, dy) => {
+        if (bw <= 0) return;
+        ctx.drawImage(_hurtOC, bx, by, bw, bh, x - OX + bx + dx, y - OY + by + dy, bw, bh);
       };
       const stamp = (color, alpha) => {
         renderSil(color);
         ctx.globalAlpha = alpha;
-        ctx.drawImage(_hurtOC, x - OX, y - OY);
+        blitSil(0, 0);
       };
 
       // Buff auras: opt.outlines = [[color, alpha], ...] ordered inner →
@@ -311,7 +360,7 @@
           const dg = r * 0.707;                       // circular corners
           ctx.globalAlpha = oa;
           for (const d of [[r, 0], [-r, 0], [0, r], [0, -r], [dg, dg], [dg, -dg], [-dg, dg], [-dg, -dg]])
-            ctx.drawImage(_hurtOC, x - OX + d[0], y - OY + d[1]);
+            blitSil(d[0], d[1]);
         }
         ctx.restore();
       }
@@ -468,9 +517,79 @@
     ctx.restore();
   });
 
+  // ---- baked-sprite registration -------------------------------------
+  // Baked pixel-art frames (tools/*-sprite*.mjs, 4x logical) drawn 1 art px
+  // = 1 logical px, feet-anchored at art.feet, mirrored for facing < 0.
+  // poseFn(opt) picks the frame; `fallback` is the legacy procedural painter
+  // (shown only while images stream in); `overlay` draws runtime-animated
+  // bits (e.g. the pyro flame crown) on top of the blit.
+  function registerBaked(key, art, poseFn, fallback, overlay) {
+    const imgs = {};
+    for (const n of art.poses) {
+      imgs[n] = JH.Loader.img("sprites/" + key + "/" + n + ".png");
+      imgs["elite_" + n] = JH.Loader.img("sprites/" + key + "/elite_" + n + ".png");
+    }
+    Assets.register(key, (p, opt, ctx, x, y, facing) => {
+      const img = imgs[(opt.elite ? "elite_" : "") + poseFn(opt)];
+      if (img && img.complete && img.naturalWidth) {
+        const s = opt.scale || 1;
+        ctx.save();
+        ctx.translate(x, y);
+        if (facing < 0) ctx.scale(-1, 1);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, Math.round(-art.w * s / 2), Math.round(-art.feet * s),
+          Math.round(art.w * s), Math.round(art.h * s));
+        ctx.restore();
+        // Overlays are light/FX, not body — keep them off the silhouette
+        // offscreen (wet/flash stamps shouldn't tint them).
+        if (overlay && ctx !== _hurtOC2d) overlay(p, opt, ctx, x, y, facing);
+        return;
+      }
+      fallback(p, opt, ctx, x, y, facing);
+    });
+  }
+  // Idle breath keys off t (calm ~1Hz, and gallery statues' t still ticks).
+  const idlePose = (opt) => "idle" + (Math.floor((opt.t || 0) * 2) & 1);
+  const walkOrIdle = (opt) => opt.state === "walk" ? "walk" + ((opt.frame | 0) & 3) : idlePose(opt);
+
   // ============================ MOOK ==================================
-  Assets.register("mook", (p, opt) => {
+  // Baked pixel-art frames (tools/mook-sprite.mjs, 4x logical). Art canvas is
+  // 24x33 logical with the feet baseline at row 31; drawn 1 art px = 1
+  // logical px. Falls back to the legacy procedural blob while loading.
+  const _mookImgs = {};
+  {
+    const load = (n) => { _mookImgs[n] = JH.Loader.img("sprites/mook/" + n + ".png"); };
+    for (let i = 0; i < 12; i++) { load("idle" + i); load("elite_idle" + i); }
+    ["walk0", "walk1", "walk2", "walk3"].forEach((n) => { load(n); load("elite_" + n); });
+    // Base windup is a 4-frame anim (wind1..wind4); elite still has the single
+    // elite_wind frame.
+    ["wind1", "wind2", "wind3", "wind4"].forEach(load);
+    load("elite_wind");
+  }
+  const MOOK_ART = { w: 24, h: 33, feet: 31 };
+  Assets.register("mook", (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
+    // Idle breath keys off t (not the frame counter) so it runs everywhere —
+    // including frozen gallery statues, whose t still ticks. 12 frames at
+    // 8fps = 1.5s loop.
+    // windFrac (0→1 windup progress) steps wind1..wind4 across the haymaker.
+    const pose = (opt.state === "wind" || opt.wind)
+               ? (opt.elite ? "wind" : "wind" + (1 + Math.min(3, Math.floor((opt.windFrac || 0) * 4))))
+               : (opt.state === "walk") ? "walk" + (f & 3)
+               : "idle" + (Math.floor((opt.t || 0) * 8) % 12);
+    const img = _mookImgs[(opt.elite ? "elite_" : "") + pose];
+    if (img && img.complete && img.naturalWidth) {
+      const s = opt.scale || 1;
+      ctx.save();
+      ctx.translate(x, y);
+      if (facing < 0) ctx.scale(-1, 1);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, Math.round(-MOOK_ART.w * s / 2), Math.round(-MOOK_ART.feet * s),
+        Math.round(MOOK_ART.w * s), Math.round(MOOK_ART.h * s));
+      ctx.restore();
+      return;
+    }
+    // Legacy procedural fallback (pre-bake shape, shown only while loading).
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     const elite = !!opt.elite;
     p(-6 + ls, 0, 5, 8, PAL.mookDk);
@@ -488,7 +607,7 @@
   });
 
   // ========================== CHARGER ================================
-  Assets.register("charger", (p, opt) => {
+  const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;
     const charging = opt.state === "charge";
     const ls = (opt.state === "walk") ? legStep(f) : 0;
@@ -500,16 +619,21 @@
     p(-9, 17, 18, 2, "#2a1740");
     p(-4, 19, 9, 8, PAL.skin);
     p(-4, 23, 9, 3, "#3a1f5a");
-    const eyeHot = opt.wind || charging;    // telegraph: eye glows red when about to charge / charging
-    if (eyeHot) p(1, 19, 4, 4, "#7a0000");  // red glow behind the eye
-    p(2, 20, 2, 2, eyeHot ? "#ff3030" : "#111");  // eye: black, glows red on the charge tell
-    // Shoulders forward when charging
+    const eyeHot = opt.wind || charging;
+    if (eyeHot) p(1, 19, 4, 4, "#7a0000");
+    p(2, 20, 2, 2, eyeHot ? "#ff3030" : "#111");
     p(charging ? 7 : 5, 10, charging ? 8 : 5, 7, PAL.chargerDk);
     if (elite) p(-11, 11, 4, 7, PAL.chargerDk);
-  });
+  };
+  registerBaked("charger",
+    { w: 26, h: 35, feet: 33,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind", "charge"] },
+    (opt) => opt.state === "charge" ? "charge"
+           : (opt.state === "wind" || opt.wind) ? "wind" : walkOrIdle(opt),
+    chargerFallback);
 
   // ============================ PYRO ==================================
-  Assets.register("pyro", (p, opt, ctx, x, y, facing) => {
+  const pyroFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     const elite = !!opt.elite;
@@ -523,19 +647,27 @@
     }
     p(-4, 18, 9, 8, PAL.skin);
     p(2, 19, 2, 2, "#111");
-    // Flickering flame crown (procedural).
-    const flick = (Math.sin((opt.t || 0) * 18) + 1) * 0.5;
-    p(-4, 25, 4, 3 + flick * (elite ? 4 : 3), PAL.flame);
-    p(1, 25, 4, 4 + (1 - flick) * (elite ? 4 : 3), PAL.pyro);
-    p(-1, 25, 2, 2 + flick * 2, "#fff");
     p(opt.wind ? 6 : 4, 9, 6, 5, PAL.pyroDk);  // throwing arm
-  });
+  };
+  // Flame crown = the FX-pack fire animation, bottom-anchored on the head
+  // top (~25 logical above the feet). Elite burns bigger. Runtime overlay so
+  // it animates at the pack's own fps, independent of body poses.
+  const pyroCrown = (p, opt, ctx, x, y) => {
+    if (!ctx) return;
+    Assets.drawFx(ctx, "fire-small", x, y - 25, opt.t || 0, { scale: opt.elite ? 0.62 : 0.48 });
+  };
+  registerBaked("pyro",
+    { w: 24, h: 33, feet: 31,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"] },
+    (opt) => (opt.state === "wind" || opt.wind) ? "wind" : walkOrIdle(opt),
+    (p, opt, ctx, x, y, facing) => { pyroFallback(p, opt); pyroCrown(p, opt, ctx, x, y); },
+    pyroCrown);
 
   // ========================== BULWARK =================================
   // Procedural placeholder (per CLAUDE.md art pipeline — real sprite later).
   // No body-mounted shield anymore — the Bulwark's own body is never a
   // blocker (see the deployed_shield painter below for the planted prop).
-  Assets.register("bulwark", (p, opt) => {
+  const bulwarkFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk" || opt.state === "retrieve") ? legStep(f) * 0.6 : 0;
     p(-7 + ls, 0, 6, 10, PAL.bulwarkDk);
@@ -545,7 +677,17 @@
     p(-5, 26, 10, 9, PAL.skin);
     p(-5, 30, 10, 3, PAL.bulwarkDk);
     p(1, 28, 2, 2, "#111");
-  });
+  };
+  registerBaked("bulwark",
+    { w: 30, h: 39, feet: 37,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3",
+              "sh_idle0", "sh_idle1", "sh_walk0", "sh_walk1", "sh_walk2", "sh_walk3"] },
+    (opt) => {
+      const base = (opt.state === "walk" || opt.state === "retrieve")
+        ? "walk" + ((opt.frame | 0) & 3) : idlePose(opt);
+      return (opt.hasShield !== false ? "sh_" : "") + base;   // carries by default
+    },
+    bulwarkFallback);
 
   // ====================== DEPLOYED SHIELD (Bulwark prop) ===============
   // Procedural placeholder — the Bulwark's planted shield. Stationary and
@@ -559,7 +701,7 @@
 
   // ============================ SMELT ==================================
   // Procedural placeholder. Heavy, slow fire-worker. `wind` = smash wind-up.
-  Assets.register("smelt", (p, opt) => {
+  const smeltFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.4 : 0;
     p(-8 + ls, 0, 7, 12, PAL.smeltDk);
@@ -572,11 +714,16 @@
     if (opt.state === "wind") {
       p(-13, 10, 26, 4, PAL.smeltGlow);   // glowing wind-up band
     }
-  });
+  };
+  registerBaked("smelt",
+    { w: 28, h: 42, feet: 38,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind"] },
+    (opt) => opt.state === "wind" ? "wind" : walkOrIdle(opt),
+    smeltFallback);
 
   // ============================ FUSE ===================================
   // Procedural placeholder. Fast, low-HP, dangerous in death.
-  Assets.register("fuse", (p, opt) => {
+  const fuseFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     p(-4 + ls, 0, 4, 8, PAL.fuseDk);
@@ -585,7 +732,12 @@
     p(-5, 8, 10, 2, PAL.fuseDk);
     p(-3, 18, 6, 7, PAL.skin);
     p(1, 19, 2, 2, "#111");
-  });
+  };
+  registerBaked("fuse",
+    { w: 20, h: 29, feet: 27,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3"] },
+    walkOrIdle,
+    fuseFallback);
 
   // Lerp between two #rrggbb colors → "rgb(r,g,b)". Also exported as
   // Assets.lerpHex for HUD code.
@@ -600,36 +752,78 @@
   }
   Assets.lerpHex = lerpHex;
 
+  // Soft radial glow disc, cached per color. This is THE glow primitive —
+  // never use ctx.shadowBlur for glows: Chromium's shadow rasterizer draws
+  // straight-line streak artifacts under the DPR-scaled transform (same bug
+  // that forced Jon's buff auras onto silhouette outlines).
+  const _glowCache = {};
+  function glowSprite(color) {
+    let c = _glowCache[color];
+    if (c) return c;
+    c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const p = parseInt(color.slice(1), 16);
+    const rgb = ((p >> 16) & 255) + "," + ((p >> 8) & 255) + "," + (p & 255);
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(" + rgb + ",0.9)");
+    grad.addColorStop(0.45, "rgba(" + rgb + ",0.35)");
+    grad.addColorStop(1, "rgba(" + rgb + ",0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    _glowCache[color] = c;
+    return c;
+  }
+  // Draw a glow of radius r (logical px) centered on (x, y). Draw it BEFORE
+  // the sprite it haloes so it reads as light behind the object.
+  Assets.glow = function (ctx, x, y, r, color, alpha) {
+    if (ctx === _hurtOC2d) return;   // glows are light, not body — keep them out of silhouettes
+    const prev = ctx.globalAlpha;
+    ctx.globalAlpha = alpha == null ? 1 : Math.max(0, Math.min(1, alpha));
+    ctx.drawImage(glowSprite(color), x - r, y - r, r * 2, r * 2);
+    ctx.globalAlpha = prev;
+  };
+
   // ============================ FURNACE ================================
   // Procedural placeholder. Bulky golem. `opt.heat` (0..1) = spray build-up so
   // you can gauge the vent; `opt.heated` = the full vent wind-up.
-  Assets.register("furnace", (p, opt, ctx) => {
+  const furnaceFallback = (p, opt, ctx, x, y, facing) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) * 0.5 : 0;
     const heat = Math.max(0, Math.min(1, opt.heat || 0));
     const hot = !!opt.heated;
-    const level = hot ? 1 : heat;                 // 0 cold → 1 about to vent
-    // Body ramps from cold to hot as it's hosed.
+    const level = hot ? 1 : heat;
     const body = hot ? PAL.furnaceHot : lerpHex(PAL.furnaceBody, PAL.furnaceHot, heat * 0.85);
     p(-8 + ls, 0, 7, 12, PAL.furnaceDk);
     p(1 - ls, 0, 7, 12, PAL.furnaceDk);
     p(-11, 12, 22, 18, body);
     p(-11, 12, 22, 3, PAL.furnaceDk);
-    // Vent slats glow warmer with heat.
     p(-11, 24, 22, 4, hot ? PAL.furnaceHot : lerpHex(PAL.furnaceDk, PAL.smeltGlow, level));
     p(-5, 30, 10, 9, PAL.skin);
     p(-5, 34, 10, 3, PAL.furnaceDk);
-    // Eye: dark when cold, glowing hot as it heats.
+  };
+  // Eye stays a runtime overlay: dark when cold, glowing as it heats (the
+  // baked head leaves a dark socket at ly 32..34 for it).
+  const furnaceEye = (p, opt, ctx, x, y, facing) => {
+    const heat = Math.max(0, Math.min(1, opt.heat || 0));
+    const level = opt.heated ? 1 : heat;
     if (level > 0.05 && ctx) {
-      ctx.save();
-      ctx.shadowColor = "#ffb020";
-      ctx.shadowBlur = 2 + 6 * level;
+      Assets.glow(ctx, facing === 1 ? x + 2 : x - 4, y - 33, 3 + 5 * level, "#ffb020", 0.35 + 0.5 * level);
       p(1, 32, 2, 2, lerpHex("#5a2a08", "#ffe070", level));
-      ctx.restore();
     } else {
       p(1, 32, 2, 2, "#111");
     }
-  });
+  };
+  registerBaked("furnace",
+    { w: 30, h: 44, feet: 41,
+      poses: [0, 1, 2, 3].flatMap((s) =>
+        ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3"].map((n) => "h" + s + "_" + n)) },
+    (opt) => {
+      const level = opt.heated ? 1 : Math.max(0, Math.min(1, opt.heat || 0));
+      return "h" + Math.min(3, Math.floor(level * 3.999)) + "_" + walkOrIdle(opt);
+    },
+    (p, opt, ctx, x, y, facing) => { furnaceFallback(p, opt, ctx, x, y, facing); furnaceEye(p, opt, ctx, x, y, facing); },
+    furnaceEye);
 
   // ============================ FIREBALL ===============================
   // Slayer's pool ball — the 8-ball sprite rolling in flight; once ignited a
@@ -660,7 +854,7 @@
     ctx.translate(x, y);
     ctx.rotate((opt.dir || 1) * t * 9);   // rolling spin in the flight direction
     ctx.imageSmoothingEnabled = false;
-    if (ignited) { ctx.shadowColor = PAL.firePatchHi; ctx.shadowBlur = 5 + 3 * flick; }
+    if (ignited) Assets.glow(ctx, 0, 0, BALL_D * 0.9 + 2 * flick, PAL.firePatchHi, 0.7);
     ctx.drawImage(_ballImg, -BALL_D / 2, -BALL_D / 2, BALL_D, BALL_D);
     ctx.restore();
   });
@@ -696,7 +890,7 @@
   // ========================== STALKER ==================================
   // Procedural placeholder. `wind` = pre-blink telegraph flash; `strike` =
   // post-blink wind-up arm.
-  Assets.register("stalker", (p, opt) => {
+  const stalkerFallback = (p, opt) => {
     const f = opt.frame | 0;
     const ls = (opt.state === "walk") ? legStep(f) : 0;
     p(-4 + ls, 0, 4, 9, PAL.stalkerDk);
@@ -707,7 +901,13 @@
     p(1, 20, 2, 2, "#fff");
     if (opt.state === "wind") p(-8, 22, 16, 2, "#fff");
     if (opt.state === "strike") p(5, 12, 8, 5, PAL.stalkerDk);
-  });
+  };
+  registerBaked("stalker",
+    { w: 20, h: 31, feet: 29,
+      poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3", "wind", "strike"] },
+    (opt) => opt.state === "strike" ? "strike"
+           : opt.state === "wind" ? "wind" : walkOrIdle(opt),
+    stalkerFallback);
 
   // ============================ BOSS ==================================
   Assets.register("boss", (p, opt) => {
@@ -871,8 +1071,7 @@
     const t = opt.t || 0;
     const bob = Math.sin(t * 3) * 2;
     ctx.save();
-    ctx.shadowColor = "#ffe9a0";
-    ctx.shadowBlur = 6 + 2 * Math.sin(t * 5);
+    Assets.glow(ctx, x, y - 9 + bob, 11 + 2 * Math.sin(t * 5), "#ffe9a0", 0.8);
     ctx.fillStyle = PAL.suds;
     ctx.fillRect(Math.round(x - 1), Math.round(y - 15 + bob), 3, 12);   // upright
     ctx.fillRect(Math.round(x - 4), Math.round(y - 12 + bob), 9, 3);    // crossbar

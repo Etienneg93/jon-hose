@@ -202,6 +202,14 @@
       return true;
     }
 
+    // Full burn wipe — used on Church respawn so a death-while-burning
+    // doesn't carry the DoT into the fresh life (timers freeze while player
+    // update is paused, so without this the burn resumes on landing).
+    clearBurn() {
+      this.burnTimer = 0; this.burnStacks = 0;
+      this.burnTickT = 0; this.burnGraceT = 0;
+    }
+
     // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
     // the accrued damage, pulses the flash (no squash — no impact), and puffs
     // embers off Jon. Expiry flushes the partial tick, so the total always
@@ -654,22 +662,26 @@
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
-      if (this.burnStacks > 0) {
-        ctx.save();
-        const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
-        ctx.shadowColor = "#ff4400";
-        ctx.shadowBlur = 5 + 7 * bIntensity + 3 * Math.sin(this.t * 12);
-      }
       const spriteSy = Geo.feetScreenY(this.y, this.z);
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
       // that — active buffs stack visually instead of overwriting. Burn's
-      // fire read replaces them all.
+      // fire read replaces them all: same-color rings fading outward = a
+      // glowing edge (never a radial disc on non-round sprites).
       const outlines = [];
       if (this.burnStacks === 0) {
         if (this.gushRegenT > 0)    outlines.push(["#55c8ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
         if (this.kibbleTimer > 0)   outlines.push(["#44ee66", 0.55 + 0.30 * Math.sin(this.t * 5)]);
         if (this.concertaTimer > 0) outlines.push(["#cc44ff", 0.55 + 0.30 * Math.sin(this.t * 6)]);
+      } else {
+        // Fire flicker: two incommensurate fast waves + brief random dips so
+        // the ring reads as burning, not as a steady buff aura pulse.
+        const bIntensity = this.burnStacks / JH.FIRE.maxBurnStacks;
+        const flick = 0.30 + 0.70 * Math.abs(Math.sin(this.t * 23) * Math.sin(this.t * 13.7 + 1.7));
+        const dip = Math.random() < 0.08 ? 0.4 : 1;
+        const fp = (0.5 + 0.35 * bIntensity) * flick * dip;
+        const hot = flick > 0.75;   // color licks toward white-hot on peaks
+        outlines.push([hot ? "#ffe070" : "#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
       Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
         state: this.state, frame: this.frame, t: this.t,
@@ -681,7 +693,6 @@
         outlines,
       });
       if (this.burnStacks > 0) {
-        ctx.restore();
         // Draw flame tongues rising from feet to show burn stacks
         const stacks = this.burnStacks, t = this.t;
         const offsets = stacks >= 3 ? [-6, 0, 6] : stacks >= 2 ? [-4, 4] : [0];
@@ -827,7 +838,7 @@
       this.hp = this.maxHp = this.def.hp;
       this.bodyW = this.def.bodyW; this.bodyH = this.def.bodyH;
       this.contactTimer = 0;
-      this.windTimer = 0; this.attackTimer = 0; this.cdTimer = 0;
+      this.windTimer = 0; this.windDur = 0; this.attackTimer = 0; this.cdTimer = 0;
       this.state = "walk";
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
@@ -917,7 +928,10 @@
       const pl = game.player;
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
-      this.facing = dx >= 0 ? 1 : -1;
+      // Point-blank deadzone: with no body collision, chasers with no melee
+      // stop (fuse) can sit on Jon's center — per-frame sign(dx) facing +
+      // overshoot strobes the sprite left/right. Hold ground and facing.
+      if (dist > 12) this.facing = dx >= 0 ? 1 : -1;
       const d = this.def;
 
       if (this.windTimer > 0) {            // winding up an attack
@@ -932,13 +946,15 @@
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
       if (dist < d.meleeRange && this.spawnGrace <= 0) {
-        this.windTimer = d.meleeWind; this.state = "wind";
-      } else {
+        this.windTimer = d.meleeWind; this.windDur = d.meleeWind; this.state = "wind";
+      } else if (dist > 12) {
         // approach
         const sp = d.speed;
         this.x += (dx / (dist || 1)) * sp * dt;
         this.y += (dy / (dist || 1)) * sp * dt * 0.8;
         this.state = "walk";
+      } else {
+        this.state = "idle";
       }
     }
 
@@ -949,6 +965,9 @@
         state: this.state, frame: this.frame, t: this.t,
         wet: this.wetness,   // soak tint IS the enemy hurt read (no flash/squash)
         wind: this.state === "wind", elite: this.elite,
+        // 0→1 windup progress for multi-frame windup anims (0 when windDur unset)
+        windFrac: this.windDur > 0 ? Math.min(1, Math.max(0, 1 - this.windTimer / this.windDur)) : 0,
+        hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
@@ -1401,11 +1420,10 @@
         const frac = this.domeDur > 0 ? this.domeT / this.domeDur : 0;   // 1 fresh → 0 expiring
         const waver = 1 - frac;                                          // 0 fresh → 1 about to die
         const flick = 1 - waver * (0.45 + 0.45 * Math.sin(this.t * (5 + 26 * waver)));
-        ctx.save();
-        ctx.shadowColor = JH.PAL.bulwarkShield || "#cfe9ff";
-        ctx.shadowBlur = Math.max(0, (3 + 5 * frac) * flick);
-        Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
-        ctx.restore();
+        const fl = Math.max(0, Math.min(1, flick));
+        const shCol = JH.PAL.bulwarkShield || "#cfe9ff";
+        Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t,
+          outlines: [[shCol, (0.45 + 0.3 * frac) * fl], [shCol, (0.25 + 0.2 * frac) * fl]] });
       } else {
         Assets.draw(ctx, "deployed_shield", sx, sy, 1, { t: this.t });
       }
@@ -3441,7 +3459,9 @@
   // Pushed into game.embers; update() returns false when dead.
   class SmeltBomb {
     constructor(x, y, tx, ty, d) {
-      this.x = x; this.y = y; this.z = 10;
+      // Leaves the hands of the overhead hoist (matches the wind-pose art,
+      // where the bomb sits ~32 logical px above the feet).
+      this.x = x; this.y = y; this.z = 32;
       const dist = Math.max(1, Math.hypot(tx - x, ty - y));
       const flightT = Math.max(0.45, dist / d.lobBombSpeed);
       this.vx = (tx - x) / flightT;
@@ -3499,8 +3519,7 @@
       ctx.fill();
       // Bomb
       ctx.globalAlpha = 1;
-      ctx.shadowColor = JH.PAL.smeltGlow;
-      ctx.shadowBlur = 7;
+      Assets.glow(ctx, Math.round(sx), Math.round(sy), 13, JH.PAL.smeltGlow, 0.8);
       ctx.fillStyle = flick ? JH.PAL.smeltGlow : JH.PAL.firePatchHi;
       ctx.beginPath();
       ctx.arc(Math.round(sx), Math.round(sy), 7, 0, Math.PI * 2);
@@ -3902,20 +3921,19 @@
       ctx.font = "bold 12px monospace"; ctx.textAlign = "center";
       ctx.fillText("!", sx, hy); ctx.textAlign = "left";
     }
-    // Cooling phase: hot, fast, untouchable — glow signals "stop spraying, kite".
-    if (this.ventCdT > 0) {
-      ctx.save();
-      ctx.shadowColor = "#ff5a20";
-      ctx.shadowBlur = 8 + 4 * Math.sin(this.t * 10);
-    }
+    // Cooling phase: hot, fast, untouchable — red-hot edge glow signals
+    // "stop spraying, kite".
+    const coolFp = 0.55 + 0.25 * Math.sin(this.t * 10);
     Assets.draw(ctx, "furnace", sx, Geo.feetScreenY(this.y, this.z), this.facing, {
       state: this.state, frame: this.frame, t: this.t,
       hurt: this.flashTimer > 0, hurtAlpha: this.flashTimer / 0.18,
       heat: Math.min(1, this.continuousSprayT / d.heatThreshold),
       heated: this.heated,
       scale: 1,
+      outlines: this.ventCdT > 0
+        ? [["#ffb020", coolFp], ["#ff5a20", coolFp * 0.55], ["#ff5a20", coolFp * 0.3]]
+        : undefined,
     });
-    if (this.ventCdT > 0) ctx.restore();
     if (this.hp < this.maxHp) {
       const w = this.bodyW + 4;
       const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
@@ -3935,7 +3953,11 @@
     beginDrop(delay) {
       this.dropping = true;
       this.dropWait = delay || 0;
-      this.z = 0;               // stays hidden until the fall starts
+      // With no stagger delay the fall must start NOW from height — assigning
+      // z only when the wait crosses 0 made the first fuse of a wave "land"
+      // on its first frame (z stayed 0) instead of dropping in.
+      this.z = this.dropWait > 0 ? 0 : JH.FUSE_DROP.height;
+      this.vz = 0;
     }
     update(dt, game) {
       if (this.dropping) {

@@ -18,6 +18,21 @@ shifts, and then they have to be hunted down and scrubbed.
 - Prefer short comments. When in doubt, describe what the code *does*, not what
   the story *means*.
 
+## Release ritual — every merge to main is a named release
+
+Three parts, all in the same merge (user rule, 2026-07-03):
+1. **Bump `package.json` version** — minor (`0.X.0`) for feature/design
+   merges, patch (`0.X.Y`) for fix-only merges. The build tag shows
+   `v<version> · <sha>` on deploys.
+2. **Add patch notes to `CHANGELOG.md`** — summarize everything in the span
+   since the last release, grouped by area.
+3. **Title the merge commit** `release: v{version} - {Patch Name}` — the name
+   derives from the branch's main addition (e.g. "Juice Pass", "The Fire
+   World", "Church of the Holy Hose"), with the notes summary in the body.
+
+The version sat at 0.20.0 through five milestones once — don't let the
+number drift again. v0.25.0 (2026-07-03, "Juice Pass") was the catch-up.
+
 ## Art pipeline
 
 Boss/character art is **procedural placeholder** scaffolding (the `Assets`

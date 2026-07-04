@@ -18,6 +18,21 @@ Both playtests (06-28, 07-01) report the same inverted curve: **brutal early, tr
 
 Boss HP is static per def, so a maxed Act-4 player deletes Gateway Krusher phases before seeing them — which is half of why bosses read as "one-pattern" (the other half is the boss spec).
 
+## User direction (2026-07-03) — fold into Part 1
+
+- **Attack tickets approved.** Pair the early-wave cap with **larger enemy
+  counts in mid/late waves** — the ticket system keeps big crowds readable, so
+  wave sizes can grow past what was safe before.
+- **Elite rework:** later waves should lean on MORE regular enemies; elites
+  become rare and unmistakable. Early acts: at most ONE elite per wave, but a
+  much bigger threat — significantly more HP and damage than its regular
+  counterpart (not the current modest multipliers). This points toward the
+  super-elite idea: bigger, stronger versions of regular enemies (see roster
+  spec on affixes — visual scale + threat, not quiet stat inflation).
+- **Holy Essence drop presentation:** the cross should HOVER above the ground
+  and dim the world until picked up (or something in that direction) — an
+  event, not a coin.
+
 ## Part 1 — Curve fixes (baseline, no new systems)
 
 1. **Soften the on-ramp, not the game.** Move the first Charger from wave 2 to wave 3 and give waves 1–2 a `spawnGrace` bump; first three waves cap concurrent attackers at 2 (a tiny scheduler: extra enemies hold at approach range until a slot frees — the classic beat-'em-up "attack ticket" pattern, and `separate()` already keeps crowds readable).
