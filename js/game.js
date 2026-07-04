@@ -1592,12 +1592,17 @@
         ctx.fillStyle = "rgba(8,6,20," + (0.35 * this.essenceDim).toFixed(3) + ")";
         ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
         ctx.restore();
+        // Cross redraw uses the same shake offset as the world pass — without
+        // it the overlay copy double-images against the world copy during shake.
+        ctx.save();
+        ctx.translate(so.x, so.y);
         for (const p of this.pickups) {
           if (p.dead || p.kind !== "cross") continue;
           JH.Assets.glow(ctx, p.x - cam, JH.Geo.feetScreenY(p.y, p.z) - 4,
             18, "#ffd23f", 0.5 * this.essenceDim);
           p.draw(ctx, cam);
         }
+        ctx.restore();
       }
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
