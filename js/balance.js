@@ -49,9 +49,10 @@
     // Super-elite def: scaled clone of a regular def. Runtime draw scale
     // (1.8x) is applied at draw time, not here — body box grows less (1.6x)
     // so the hitbox stays a touch inside the sprite.
-    superEliteDef(def) {
+    // `tune` (optional) overrides multipliers per type — {hp} for now.
+    superEliteDef(def, tune) {
       const d = Object.assign({}, def);
-      d.hp = Math.round(d.hp * 7);
+      d.hp = Math.round(d.hp * ((tune && tune.hp) || 7));
       d.touchDmg = Math.round(d.touchDmg * 2);
       if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * 2);
       if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * 2);

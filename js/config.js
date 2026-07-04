@@ -269,6 +269,13 @@
   // mercy rule — ticketless melee enemies hold at approach range instead.
   JH.TICKETS = { budgets: [4, 4, 5, 5, 6] };
 
+  // Per-type super-elite multiplier overrides (default hp x7 in
+  // Balance.superEliteDef). Smelt's 300 base hp + 0.5 waterMult made x7 a
+  // sponge — x3 keeps it a fight, not a chore.
+  JH.SUPER_TUNE = {
+    smelt: { hp: 3 },
+  };
+
   // Wave sprinkle: extra enemies drawn from the already-introduced pool,
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).

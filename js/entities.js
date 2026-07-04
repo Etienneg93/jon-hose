@@ -914,7 +914,7 @@
     makeSuper() {
       this.superElite = true;
       this.elite = true;
-      this.def = JH.Balance.superEliteDef(this.def);
+      this.def = JH.Balance.superEliteDef(this.def, JH.SUPER_TUNE && JH.SUPER_TUNE[this.type]);
       this.hp = this.maxHp = this.def.hp;
       this.bodyW = this.def.bodyW;
       this.bodyH = this.def.bodyH;
@@ -1327,7 +1327,7 @@
         if (dist < this.radius + pl.bodyW * 0.5) {
           pl.takeHit(this.dmg, game, this.x);
           pl.applyBurn(this.burnStacks);
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, 28, 1.4));
+          JH.spawnFirePatch(game, this.x, this.y, 28, 1.4);
           burst(game, this.x, this.y, this.z, JH.PAL.firePatch, 8, { speed: 90, life: 0.35, up: 50 });
           game.shake(3);
           this.dead = true;
@@ -1741,6 +1741,21 @@
     }
   }
   JH.FirePatch = FirePatch;
+
+  // Fire never stacks: if the spawn point is already inside a live patch's
+  // footprint, no new patch is made (returns null). All patch spawns route
+  // through here — deliberate multi-patch patterns (furnace vent ring,
+  // slayer trail) space their centers outside each other's footprints.
+  JH.spawnFirePatch = function (game, x, y, radius, dur) {
+    for (const fp of game.firePatches) {
+      if (fp.dead) continue;
+      const f = fp.footprint();
+      if (Geo.inGroundEllipse(x, y, fp.x, fp.y, f.rx, f.ry)) return null;
+    }
+    const p = new FirePatch(x, y, radius, dur);
+    game.firePatches.push(p);
+    return p;
+  };
 
   // Ground denial left by a super-Bulwark's thrown shield: slows Jon while
   // he stands inside. Ellipse footprint like every ground zone.
@@ -3759,7 +3774,7 @@
         }));
       if (this.z <= 0) {
         const d = this.def;
-        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.lobBombRadius, d.lobBombDur));
+        JH.spawnFirePatch(game, this.x, this.y, d.lobBombRadius, d.lobBombDur);
         game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.6 }));
         burst(game, this.x, this.y, 4, JH.PAL.smeltGlow, 14, { speed: 115, life: 0.5, up: 60, size: 3 });
         burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
@@ -3827,8 +3842,8 @@
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
           if (this.superElite) {
-            game.embers.push(new SmeltBomb(this.x, this.y, pl.x - 24, pl.y, d, { bounces: 1 }));
-            game.embers.push(new SmeltBomb(this.x, this.y, pl.x + 24, pl.y, d, { bounces: 1 }));
+            // ONE bouncing slag — twin lobs read as too much on the field.
+            game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d, { bounces: 1 }));
           } else {
             game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
           }
@@ -3959,7 +3974,7 @@
           burst(game, this.x, this.y, 4, JH.PAL.slayerEmber, 1, { speed: 70, life: 0.15, up: 10 });
         while (this.dashPatchAcc >= d.dashPatchSpacing) {
           this.dashPatchAcc -= d.dashPatchSpacing;
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.dashPatchRadius, d.dashPatchDur));
+          JH.spawnFirePatch(game, this.x, this.y, d.dashPatchRadius, d.dashPatchDur);
         }
         this.facing = tdx >= 0 ? 1 : -1;
         return;
@@ -4152,14 +4167,14 @@
           game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.75 }));
           game.shake(3);
           // Fire zone: venting scorches the ground around it — punishes the trigger.
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.ventPatchRadius, d.ventPatchDur));
+          JH.spawnFirePatch(game, this.x, this.y, d.ventPatchRadius, d.ventPatchDur);
           const ringN = 6, ringR = this.bodyW * 1.4;
           for (let i = 0; i < ringN; i++) {
             const a = (i / ringN) * Math.PI * 2;
-            game.firePatches.push(new JH.FirePatch(
+            JH.spawnFirePatch(game,
               this.x + Math.cos(a) * ringR,
               this.y + Math.sin(a) * ringR * JH.GROUND_RY,   // flattened in depth (2.5D)
-              d.ventPatchRadius * 0.8, d.ventPatchDur));
+              d.ventPatchRadius * 0.8, d.ventPatchDur);
           }
           // Same ellipse the wind-up telegraph draws (R, R*GROUND_RY).
           if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.bodyW * 4)) {
@@ -4306,7 +4321,7 @@
       const d = this.def;
       if (this.lit) {
         // Self-destruct: real AoE + a bigger, longer patch.
-        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.blastPatchRadius, d.blastPatchDur));
+        JH.spawnFirePatch(game, this.x, this.y, d.blastPatchRadius, d.blastPatchDur);
         game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.55 }));
         game.shake(5);
         const pl = game.player;
@@ -4315,7 +4330,7 @@
           pl.applyBurn(1);
         }
       } else {
-        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
+        JH.spawnFirePatch(game, this.x, this.y, d.deathPatchRadius, d.deathPatchDur);
         game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
         game.shake(3);
         if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))

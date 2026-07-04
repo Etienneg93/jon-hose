@@ -238,3 +238,13 @@ test("ticketBudget indexes budgets by actLevel+1 and clamps", () => {
   assert.strictEqual(Balance.ticketBudget(3, B), 6);   // Act 5 (fire)
   assert.strictEqual(Balance.ticketBudget(9, B), 6);   // clamped high
 });
+
+test("superEliteDef honors a per-type hp override; other multipliers unchanged", () => {
+  const base = { hp: 300, speed: 26, touchDmg: 10, suds: 12, bodyW: 22, bodyH: 34 };
+  const d = Balance.superEliteDef(base, { hp: 3 });
+  assert.strictEqual(d.hp, 900);                       // 3x, not the default 7x
+  assert.strictEqual(d.touchDmg, 20);                  // dmg still 2x
+  assert.strictEqual(d.suds, 48);                      // suds still 4x
+  assert.strictEqual(base.hp, 300);                    // clone, not mutation
+  assert.strictEqual(Balance.superEliteDef(base).hp, 2100);  // no tune = 7x
+});

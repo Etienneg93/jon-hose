@@ -716,3 +716,29 @@ test("SlowZone slows the player inside, expires after dur", () => {
   assert.strictEqual(g.player.zoneSlow, 1);
   z.t = 99; assert.strictEqual(z.update(1 / 60, g), false);
 });
+
+test("spawnFirePatch: fire never stacks inside a live patch's footprint", () => {
+  const g = makeThinkGame(400, 40);
+  const first = JH.spawnFirePatch(g, 100, 40, 30, 2);
+  assert.ok(first, "first patch spawns");
+  assert.strictEqual(JH.spawnFirePatch(g, 102, 40, 30, 2), null); // on top -> refused
+  assert.strictEqual(g.firePatches.length, 1);
+  assert.ok(JH.spawnFirePatch(g, 200, 40, 30, 2), "well clear -> spawns");
+  assert.strictEqual(g.firePatches.length, 2);
+});
+
+test("super smelt lobs ONE bouncing slag, not two", () => {
+  const g = makeThinkGame(200, 40);
+  const s = JH.makeEnemy("smelt", 60, 40);
+  s.makeSuper(); s.spawnGrace = 0;
+  s.windTimer = 0.01; s.state = "wind";
+  s.think(0.02, g);
+  assert.strictEqual(g.embers.length, 1);
+  assert.strictEqual(g.embers[0].bounces, 1);
+});
+
+test("super smelt hp uses the SUPER_TUNE override (3x, not 7x)", () => {
+  const s = JH.makeEnemy("smelt", 0, 0);
+  s.makeSuper();
+  assert.strictEqual(s.maxHp, JH.ENEMIES.smelt.hp * 3);
+});
