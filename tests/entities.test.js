@@ -601,3 +601,15 @@ test("makeSuper: 7x hp, superElite + elite flags, def untouched globally", () =>
   assert.strictEqual(m.maxHp, baseHp * 7);
   assert.strictEqual(JH.ENEMIES.mook.hp, baseHp);  // shared def not mutated
 });
+
+test("super mook windup resolves into a forward lunge, not a standing hit", () => {
+  const g = makeThinkGame(120, 40);
+  const m = new JH.Enemy("mook", 60, 40);
+  m.makeSuper(); m.spawnGrace = 0; m.facing = 1;
+  m.windTimer = 0.01; m.state = "wind";
+  const x0 = m.x;
+  m.think(0.02, g);                       // windup expires
+  assert.strictEqual(m.state, "lunge");
+  m.think(0.05, g);                       // lunging
+  assert.ok(m.x > x0, "carries forward during the lunge");
+});

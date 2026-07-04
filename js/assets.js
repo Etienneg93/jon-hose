@@ -575,6 +575,7 @@
     // windFrac (0→1 windup progress) steps wind1..wind4 across the haymaker.
     const pose = (opt.state === "wind" || opt.wind)
                ? (opt.elite ? "wind" : "wind" + (1 + Math.min(3, Math.floor((opt.windFrac || 0) * 4))))
+               : (opt.state === "lunge") ? (opt.elite ? "wind" : "wind4")
                : (opt.state === "walk") ? "walk" + (f & 3)
                : "idle" + (Math.floor((opt.t || 0) * 8) % 12);
     const img = _mookImgs[(opt.elite ? "elite_" : "") + pose];

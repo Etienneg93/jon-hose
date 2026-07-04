@@ -947,9 +947,32 @@
       if (dist > 12) this.facing = dx >= 0 ? 1 : -1;
       const d = this.def;
 
+      // Super mook: haymaker resolves as a forward LUNGE with a ground-shock
+      // band on landing.
+      if (this.state === "lunge") {
+        this.attackTimer -= dt;
+        this.x += this.facing * 380 * dt;
+        if (!this.lungeHit && Geo.inHitArc(this, pl, this.facing, d.meleeRange + 14, 22)) {
+          pl.takeHit(d.meleeDmg, game, this.x);
+          this.lungeHit = true;
+        }
+        if (this.attackTimer <= 0) {
+          game.shake(4); game.audio.play("whack");
+          if (!this.lungeHit && Geo.inHitArc(this, pl, this.facing, d.meleeRange + 26, 26))
+            pl.takeHit(Math.round(d.meleeDmg * 0.6), game, this.x);  // shock band
+          this.state = "idle"; this.cdTimer = 0.9; this.usingTicket = false;
+        }
+        return;
+      }
+
       if (this.windTimer > 0) {            // winding up an attack
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
+          if (this.superElite) {
+            // Ticket stays held through the lunge; released at lunge end above.
+            this.state = "lunge"; this.attackTimer = 0.16; this.lungeHit = false;
+            return;
+          }
           if (Geo.inHitArc(this, pl, this.facing, d.meleeRange + 6, 16))
             pl.takeHit(d.meleeDmg, game, this.x);
           this.cdTimer = 0.6;
