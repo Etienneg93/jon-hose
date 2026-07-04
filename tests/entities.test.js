@@ -624,3 +624,14 @@ test("lunge commits to its aim: no re-facing mid-flight when Jon is behind", () 
   assert.strictEqual(m.facing, 1, "facing stays locked during the lunge");
   assert.ok(m.x > x0, "still advances along the committed direction");
 });
+
+test("super charger ricochets off the arena x-bounds and keeps momentum", () => {
+  const g = makeThinkGame(200, 80);
+  const c = JH.makeEnemy("charger", 470, 40);
+  c.makeSuper(); c.spawnGrace = 0;
+  c.state = "charge"; c.attackTimer = 2;
+  c.chargeVX = 200; c.chargeVY = 30; c.bounces = 3;
+  c.think(0.1, g);                          // crosses maxX=480 → bounce
+  assert.ok(c.chargeVX < 0, "x velocity reflected");
+  assert.strictEqual(c.state, "charge", "still charging after bounce");
+});

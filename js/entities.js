@@ -1042,23 +1042,56 @@
       if (this.state !== "charge") this.facing = dx >= 0 ? 1 : -1;
 
       if (this.state === "charge") {
-        this.attackTimer -= dt; this.x += this.facing * d.chargeSpeed * dt;
-        if (Geo.inHitArc(this, pl, this.facing, 16, 18)) {
-          pl.takeHit(d.chargeDmg, game, this.x); this.attackTimer = 0;
+        this.attackTimer -= dt;
+        if (this.superElite) {
+          // Diagonal charge; ricochets off arena bounds, keeping momentum.
+          this.x += this.chargeVX * dt; this.y += this.chargeVY * dt;
+          this.facing = this.chargeVX >= 0 ? 1 : -1;
+          if ((this.x <= game.bounds.minX + 4 && this.chargeVX < 0) ||
+              (this.x >= game.bounds.maxX - 4 && this.chargeVX > 0)) {
+            if (--this.bounces < 0) this.attackTimer = 0;
+            else { this.chargeVX = -this.chargeVX; game.audio.play("whack"); game.shake(3); }
+          }
+          if ((this.y <= JH.DEPTH_MIN + 2 && this.chargeVY < 0) ||
+              (this.y >= JH.DEPTH_MAX - 2 && this.chargeVY > 0)) this.chargeVY = -this.chargeVY;
+          // Radial contact hit with a per-hit cooldown (the pass-through body IS the hitbox).
+          if (this.chargeHitT > 0) this.chargeHitT -= dt;
+          if ((this.chargeHitT || 0) <= 0 &&
+              Math.hypot(pl.x - this.x, pl.y - this.y) < 18) {
+            pl.takeHit(d.chargeDmg, game, this.x); this.chargeHitT = 0.6;
+          }
+        } else {
+          this.x += this.facing * d.chargeSpeed * dt;
+          if (Geo.inHitArc(this, pl, this.facing, 16, 18)) {
+            pl.takeHit(d.chargeDmg, game, this.x); this.attackTimer = 0;
+          }
         }
         if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.chargeCd; this.usingTicket = false; }
         return;
       }
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
-        if (this.windTimer <= 0) { this.state = "charge"; this.attackTimer = d.chargeDur; game.audio.play("whack"); }
+        this.aimAng = Math.atan2(dy, dx);   // tracked through windup; super telegraph rotates by it
+        if (this.windTimer <= 0) {
+          this.state = "charge";
+          if (this.superElite) {
+            const ang = Math.atan2(pl.y - this.y, pl.x - this.x);
+            this.chargeVX = Math.cos(ang) * d.chargeSpeed;
+            this.chargeVY = Math.sin(ang) * d.chargeSpeed * 0.6;
+            this.bounces = 3; this.chargeHitT = 0;
+            this.attackTimer = d.chargeDur * 2.5;
+          } else this.attackTimer = d.chargeDur;
+          game.audio.play("whack");
+        }
         return;
       }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
-      if (Math.abs(dy) < 14 && dist < 170 && this.spawnGrace <= 0 && game.canAttack()) {
+      // Supers may open the charge from any angle; regulars need depth alignment.
+      if ((this.superElite ? dist < 210 : (Math.abs(dy) < 14 && dist < 170)) && this.spawnGrace <= 0 && game.canAttack()) {
         this.windTimer = d.chargeWind; this.state = "wind";
         this.usingTicket = true;
+        this.aimAng = Math.atan2(dy, dx);
       } else {
         this.x += (dx / (dist || 1)) * d.speed * dt;
         this.y += (dy / (dist || 1)) * d.speed * dt * 0.9;
@@ -1069,7 +1102,24 @@
   JH.Charger = Charger;
   // Add draw override to Charger after class definition
   Charger.prototype.draw = function(ctx, cam) {
-    if (this.state === "wind") {
+    if (this.state === "wind" && this.superElite) {
+      // Super telegraph: same band, rotated along the stored aim, extended-charge length.
+      const d = this.def;
+      const range = d.chargeSpeed * d.chargeDur * 2.5;
+      const band  = 18;
+      const sx = this.x - cam;
+      const sy = Geo.feetScreenY(this.y, 0);
+      const flash = (Math.floor(this.t * 10) & 1);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(this.aimAng || 0);
+      ctx.fillStyle = "rgba(160,80,240,0.10)";
+      ctx.fillRect(this.bodyW * 0.5, -band, range, band * 2);
+      ctx.strokeStyle = flash ? "#c080ff" : "rgba(160,80,240,0.30)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(this.bodyW * 0.5, -band, range, band * 2);
+      ctx.restore();
+    } else if (this.state === "wind") {
       const d = this.def;
       const range = d.chargeSpeed * d.chargeDur;
       const band  = 18;
