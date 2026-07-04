@@ -7,6 +7,40 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.25.1 — Bake Sale (2026-07-04)
+
+Every enemy on the street is now real baked pixel art, and the renderer got
+cheaper while looking better.
+
+### Art — baked enemy pass
+- **Every regular enemy is baked pixel art now**: mook, charger, pyro, stalker,
+  fuse, smelt, bulwark, furnace — elite variants included. The procedural
+  painters remain only as loading fallbacks (Switch + GK still procedural,
+  queued for a chassis/LED hybrid).
+- Mook got a hand-cleaned frame pass: **12-step idle breathing loop** and a
+  **4-frame haymaker windup** that ramps across the anticipation.
+- Pyro's flame crown is the FX-pack fire animation riding the baked sprite.
+- Furnace bakes at 4 heat steps; bulwark has shield-carried sprite variants;
+  smelt bombs now spawn from the overhead hoist.
+
+### Performance & glows
+- Silhouette stamps (wetness, flashes, auras) now blit only their bounding box
+  — a ~96% overdraw cut, pixel-identical output.
+- All `shadowBlur` glows removed (Chromium streak artifacts). Non-round glows
+  hug the sprite outline; radial discs remain only on round things.
+- Burn aura flickers like fire instead of reading as a steady buff ring.
+- Hydrant glow toned down.
+
+### Fixes
+- Dying while burning no longer carries the burn DoT into the Church respawn.
+- Stalkers and fuses hold ground and facing at point-blank instead of strobing
+  left/right over Jon's center.
+- The first fuse of a wave drops from height instead of appearing mid-air.
+
+### Dev
+- Target range now has a **sprite gallery**: every combat entity as a labeled,
+  frozen, unkillable statue for visual inspection.
+
 ## v0.25.0 — Juice Pass (2026-07-03)
 
 The game-feel release: how hits read, how kills land, how the street sounds.
