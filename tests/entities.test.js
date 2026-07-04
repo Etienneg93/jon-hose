@@ -138,6 +138,7 @@ function stubGame(px, py) {
     particles: [], embers: [], firePatches: [], pickups: [],
     bounds: { minX: 0, maxX: 600 },
     shake() {}, hitStop() {}, onEnemyKilled() {}, dropLoot() {}, killJuice() {},
+    canAttack() { return true; },
     defer(ms, fn) { fn(); },   // stub runs deferred work immediately
     audio: { played: [], play(k) { this.played.push(k); } },
   };
@@ -546,6 +547,34 @@ test("Vampiric Hose (vt3) grants 5% lifesteal", () => {
   JH.Upgrades.reset();
   const s = JH.Upgrades.computeStats({ vt1: true, vt2: true, vt3: true });
   assert.ok(Math.abs(s.vampiricRate - 0.05) < 1e-9);
+});
+
+// ---- attack tickets: cap on simultaneous melee windups ----
+
+// Minimal game stub for enemy think() tests.
+function makeThinkGame(px, py) {
+  return {
+    player: Object.assign(makePlayer(), { x: px, y: py }),
+    enemies: [], embers: [], particles: [], firePatches: [], shields: [],
+    bounds: { minX: 0, maxX: 480 },
+    audio: { play() {} }, shake() {}, hitStop() {}, defer() {},
+    killJuice() {}, dropLoot() {}, onEnemyKilled() {}, spawnEnemy() {},
+    canAttack() { return this._tickets !== false; }, _tickets: true,
+  };
+}
+
+test("mook holds its windup when no attack ticket is free", () => {
+  const g = makeThinkGame(60, 40);
+  const m = new JH.Enemy("mook", 62, 40);           // inside meleeRange (20)
+  m.spawnGrace = 0;
+  g._tickets = false;
+  m.think(1 / 60, g);
+  assert.strictEqual(m.windTimer, 0, "no windup without a ticket");
+  assert.notStrictEqual(m.state, "wind");
+  g._tickets = true;
+  m.think(1 / 60, g);
+  assert.ok(m.windTimer > 0, "winds up once a ticket frees");
+  assert.strictEqual(m.usingTicket, true);
 });
 
 test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {

@@ -259,6 +259,11 @@
   // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
   JH.WAVECAP = { charger: 2 };
 
+  // Attack tickets: max enemies simultaneously in a melee windup/attack,
+  // indexed by actLevel+1 (like SPRINKLE.counts). Readability cap, not a
+  // mercy rule — ticketless melee enemies hold at approach range instead.
+  JH.TICKETS = { budgets: [4, 4, 5, 5, 6] };
+
   // Wave sprinkle: extra enemies drawn from the already-introduced pool,
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).

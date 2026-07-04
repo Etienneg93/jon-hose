@@ -839,6 +839,7 @@
       this.bodyW = this.def.bodyW; this.bodyH = this.def.bodyH;
       this.contactTimer = 0;
       this.windTimer = 0; this.windDur = 0; this.attackTimer = 0; this.cdTimer = 0;
+      this.usingTicket = false;  // holds an attack ticket (game.canAttack) during windup/attack
       this.state = "walk";
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
@@ -940,13 +941,15 @@
           if (Geo.inHitArc(this, pl, this.facing, d.meleeRange + 6, 16))
             pl.takeHit(d.meleeDmg, game, this.x);
           this.cdTimer = 0.6;
+          this.usingTicket = false;
         }
         return;
       }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
-      if (dist < d.meleeRange && this.spawnGrace <= 0) {
+      if (dist < d.meleeRange && this.spawnGrace <= 0 && game.canAttack()) {
         this.windTimer = d.meleeWind; this.windDur = d.meleeWind; this.state = "wind";
+        this.usingTicket = true;
       } else if (dist > 12) {
         // approach
         const sp = d.speed;
@@ -1000,7 +1003,7 @@
         if (Geo.inHitArc(this, pl, this.facing, 16, 18)) {
           pl.takeHit(d.chargeDmg, game, this.x); this.attackTimer = 0;
         }
-        if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.chargeCd; }
+        if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.chargeCd; this.usingTicket = false; }
         return;
       }
       if (this.windTimer > 0) {
@@ -1010,8 +1013,9 @@
       }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
-      if (Math.abs(dy) < 14 && dist < 170 && this.spawnGrace <= 0) {
+      if (Math.abs(dy) < 14 && dist < 170 && this.spawnGrace <= 0 && game.canAttack()) {
         this.windTimer = d.chargeWind; this.state = "wind";
+        this.usingTicket = true;
       } else {
         this.x += (dx / (dist || 1)) * d.speed * dt;
         this.y += (dy / (dist || 1)) * d.speed * dt * 0.9;
@@ -1580,6 +1584,7 @@
             pl.takeHit(d.strikeDmg, game, this.x);
           this.state = "idle";
           this.cdTimer = d.blinkCd;
+          this.usingTicket = false;
         }
         return;
       }
@@ -1600,8 +1605,10 @@
       }
       if (this.cdTimer > 0) {
         this.cdTimer -= dt;
-      } else if (this.spawnGrace <= 0) {
+      } else if (this.spawnGrace <= 0 && game.canAttack()) {
+        // No ticket → fall through to the chase code below instead of blinking.
         this.windTimer = d.blinkTell; this.state = "wind";
+        this.usingTicket = true;
         return;
       }
       const dx = pl.x - this.x, dy = pl.y - this.y;

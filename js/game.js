@@ -1314,6 +1314,17 @@
       this.updateHUD();
     },
 
+    // Attack tickets: cap simultaneous melee windups so crowds stay readable
+    // even at the bigger wave sizes. Enemies flag usingTicket during their
+    // windup/attack; the count is live (dead enemies drop out via the flag
+    // check in their own think/die paths going quiet).
+    canAttack() {
+      let used = 0;
+      for (const e of this.enemies) if (!e.dead && e.usingTicket) used++;
+      const act = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
+      return used < JH.Balance.ticketBudget(act, JH.TICKETS.budgets);
+    },
+
     // Soft push-apart to keep a beat-em-up crowd readable.
     separate() {
       const a = this.enemies;
