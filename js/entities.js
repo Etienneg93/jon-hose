@@ -190,7 +190,17 @@
       this.nearShop = false;
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
     }
-    applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
+    applyStats(s) {
+      // Track which displayed stats changed so the shop panel can flash them.
+      const KEYS = ["sprayDamage", "sprayRange", "maxWater", "waterRegen",
+                    "moveSpeed", "dodgeChance", "vampiricRate", "maxHp"];
+      if (this.stats) {
+        this.statFlash = this.statFlash || {};
+        for (const k of KEYS)
+          if (s[k] !== this.stats[k]) this.statFlash[k] = 2.0;
+      }
+      this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp;
+    }
 
     applyBurn(n) {
       // Burn stacks have i-frames like hits: one application, then immune to
@@ -240,6 +250,9 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
+      if (this.statFlash)
+        for (const k in this.statFlash)
+          if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
 
       this.tickBurn(dt, game);
 

@@ -1812,7 +1812,46 @@
       return true;
     },
 
+    // Slim stat readout beside the hover shop: the numbers the scaling pass
+    // moves, flashing green for 2s after any purchase changes them. Sits at
+    // the top-left — the shop panel occupies PX=280..474, and no other HUD
+    // element claims this corner while the shop is open.
+    drawStatPanel(ctx) {
+      const S = this.player.stats, F = this.player.statFlash || {};
+      const rows = [
+        ["DMG",    Math.round(S.sprayDamage), "sprayDamage"],
+        ["RANGE",  Math.round(S.sprayRange),  "sprayRange"],
+        ["WATER",  Math.round(S.maxWater),    "maxWater"],
+        ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), "waterRegen"],
+        ["HP",     Math.round(S.maxHp),       "maxHp"],
+        ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed"],
+        ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance"],
+        ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate"],
+      ];
+      const X = 10, Y = 30, ROW = 9, W = 74;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.85)";
+      ctx.fillRect(X - 4, Y - 10, W, rows.length * ROW + 16);
+      ctx.strokeStyle = "#2a3550"; ctx.strokeRect(X - 4, Y - 10, W, rows.length * ROW + 16);
+      ctx.font = "bold 6px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#8fa8c8";
+      ctx.fillText("JON", X, Y - 3);
+      ctx.font = "6px monospace";
+      rows.forEach(([label, val, key], i) => {
+        const y = Y + 6 + i * ROW;
+        const hot = F[key] > 0 && (Math.floor(this.elapsed * 6) & 1) === 0;
+        ctx.fillStyle = "#667788";
+        ctx.fillText(label, X, y);
+        ctx.textAlign = "right";
+        ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
+        ctx.fillText(String(val) + (F[key] > 0 ? " ▲" : ""), X + W - 10, y);
+        ctx.textAlign = "left";
+      });
+      ctx.restore();
+    },
+
     drawHoverShop(ctx) {
+      this.drawStatPanel(ctx);
       const U = JH.Upgrades, pl = this.player;
       const selectable = this.shopSelectables();
       if (selectable.length > 0)
