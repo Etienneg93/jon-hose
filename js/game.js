@@ -1822,7 +1822,8 @@
         ["DMG",    Math.round(S.sprayDamage), "sprayDamage"],
         ["RANGE",  Math.round(S.sprayRange),  "sprayRange"],
         ["WATER",  Math.round(S.maxWater),    "maxWater"],
-        ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), "waterRegen"],
+        // REGEN displays the sum of two stats, so it flashes on either key.
+        ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), ["waterRegen", "moveRegen"]],
         ["HP",     Math.round(S.maxHp),       "maxHp"],
         ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed"],
         ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance"],
@@ -1839,12 +1840,14 @@
       ctx.font = "6px monospace";
       rows.forEach(([label, val, key], i) => {
         const y = Y + 6 + i * ROW;
-        const hot = F[key] > 0 && (Math.floor(this.elapsed * 6) & 1) === 0;
+        // A row may aggregate several stat keys — flash if any of them changed.
+        const live = [].concat(key).some((k) => F[k] > 0);
+        const hot = live && (Math.floor(this.elapsed * 6) & 1) === 0;
         ctx.fillStyle = "#667788";
         ctx.fillText(label, X, y);
         ctx.textAlign = "right";
         ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
-        ctx.fillText(String(val) + (F[key] > 0 ? " ▲" : ""), X + W - 10, y);
+        ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
         ctx.textAlign = "left";
       });
       ctx.restore();
