@@ -4170,6 +4170,15 @@
         this.state = "walk";
       } else { this.state = "idle"; }
     }
+    die(game) {
+      // The death explosion hurls one slag at Jon's position — a last spiteful
+      // lob using the smelt-bomb arc (small patch on landing).
+      const pl = game.player;
+      game.embers.push(new JH.SmeltBomb(this.x, this.y, pl.x, pl.y, {
+        lobBombSpeed: 120, lobGravity: 300, lobBombRadius: 24, lobBombDur: 1.8,
+      }));
+      super.die(game);
+    }
   }
   JH.Furnace = Furnace;
 
