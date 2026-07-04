@@ -49,14 +49,14 @@ test("eliteScale ramps by act level", () => {
   assert.ok(a4.speed > a2.speed);
 });
 
-test("eliteScale ramps with player power and caps at 15 owned", () => {
+test("eliteScale ramps with player power and caps at 24 owned", () => {
   const fresh = Balance.eliteScale(2, 0);
   const mid = Balance.eliteScale(2, 10);
-  const capped = Balance.eliteScale(2, 15);
+  const capped = Balance.eliteScale(2, 24);
   const over = Balance.eliteScale(2, 99);
   assert.ok(mid.hp > fresh.hp);
-  assert.strictEqual(capped.hp, over.hp);   // capped at 15
-  assert.strictEqual(over.hp, 2.61);        // 1.8 * (1 + 0.03*15) = 1.8*1.45
+  assert.strictEqual(capped.hp, over.hp);   // capped at 24
+  assert.strictEqual(over.hp, 3.096);       // 1.8 * (1 + 0.03*24) = 1.8*1.72
 });
 
 test("capEnemyType clamps a type and reassigns excess to fallback", () => {
@@ -195,4 +195,46 @@ test("pickSprinkles honors per-type caps", () => {
 test("pickSprinkles returns fewer picks when nothing is eligible", () => {
   const picks = Balance.pickSprinkles(["bulwark"], 3, { heavies: ["bulwark"], heavyCap: 1, rng: () => 0 });
   assert.deepStrictEqual(picks, ["bulwark"]);
+});
+
+test("powerCount = nodes + repeatable buys + total Mirror ranks", () => {
+  const owned = { pw1: true, tk1: true, vt1: true };                       // 3 nodes
+  const reps = { ov_dmg: 4, ov_hp: 2 };                                    // 6 buys
+  const church = { mirror: { water_vigor: { side: "b", rank: 3 }, earth_stance: { side: "a", rank: 2 } } }; // 5 ranks
+  assert.strictEqual(Balance.powerCount(owned, reps, church), 14);
+  assert.strictEqual(Balance.powerCount({}, {}, null), 0);
+  assert.strictEqual(Balance.powerCount(null, null, undefined), 0);
+});
+
+test("eliteScale power term now caps at 24, not 15", () => {
+  const at15 = Balance.eliteScale(2, 15);
+  const at24 = Balance.eliteScale(2, 24);
+  assert.ok(at24.hp > at15.hp);                       // 15 is no longer the ceiling
+  assert.deepStrictEqual(Balance.eliteScale(2, 24), Balance.eliteScale(2, 99)); // 24 is
+});
+
+test("bossHpScale: +2% base HP per owned power point", () => {
+  assert.strictEqual(Balance.bossHpScale(1000, 0), 1000);
+  assert.strictEqual(Balance.bossHpScale(1000, 10), 1200);
+  assert.strictEqual(Balance.bossHpScale(620, 24), Math.round(620 * 1.48));
+});
+
+test("superEliteDef: 7x hp, 2x damage fields, 0.85x speed, 4x suds, 1.6x body — input untouched", () => {
+  const base = { hp: 40, speed: 46, touchDmg: 8, meleeDmg: 10, suds: 5, bodyW: 16, bodyH: 28 };
+  const d = Balance.superEliteDef(base);
+  assert.strictEqual(d.hp, 280);
+  assert.strictEqual(d.touchDmg, 16);
+  assert.strictEqual(d.meleeDmg, 20);
+  assert.strictEqual(d.speed, Math.round(46 * 0.85));
+  assert.strictEqual(d.suds, 20);
+  assert.strictEqual(d.bodyW, Math.round(16 * 1.6));
+  assert.strictEqual(base.hp, 40);                     // clone, not mutation
+});
+
+test("ticketBudget indexes budgets by actLevel+1 and clamps", () => {
+  const B = [4, 4, 5, 5, 6];
+  assert.strictEqual(Balance.ticketBudget(-1, B), 4);  // Act 1
+  assert.strictEqual(Balance.ticketBudget(1, B), 5);   // Act 3
+  assert.strictEqual(Balance.ticketBudget(3, B), 6);   // Act 5 (fire)
+  assert.strictEqual(Balance.ticketBudget(9, B), 6);   // clamped high
 });

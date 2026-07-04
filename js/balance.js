@@ -20,13 +20,56 @@
     // (owned-upgrade count, capped at 15) so late fights stay tense.
     eliteScale(actLevel, ownedCount) {
       const lvl = Math.max(0, actLevel);
-      const power = 1 + 0.03 * Math.min(ownedCount || 0, 15);
+      const power = 1 + 0.03 * Math.min(ownedCount || 0, 24);
       const round3 = (n) => Math.round(n * 1000) / 1000;
       return {
         hp: round3((1.3 + 0.25 * lvl) * power),
         dmg: round3(1.2 + 0.12 * lvl),
         speed: round3(1.08 + 0.03 * lvl),
       };
+    },
+
+    // Total player-power count fed to eliteScale/bossHpScale: one-time nodes
+    // + repeatable Overcharge buys + total Mirror ranks. All sources of
+    // permanent stat growth count, so the enemy ramp can see them.
+    powerCount(owned, repCount, churchState) {
+      let n = Object.keys(owned || {}).length;
+      const rc = repCount || {};
+      for (const k in rc) n += rc[k] || 0;
+      const m = (churchState && churchState.mirror) || {};
+      for (const k in m) n += (m[k] && m[k].rank) || 0;
+      return n;
+    },
+
+    // Boss HP at spawn scales with player power (same count as eliteScale).
+    bossHpScale(baseHp, ownedCount) {
+      return Math.round(baseHp * (1 + 0.02 * (ownedCount || 0)));
+    },
+
+    // Super-elite def: scaled clone of a regular def. Runtime draw scale
+    // (1.8x) is applied at draw time, not here — body box grows less (1.6x)
+    // so the hitbox stays a touch inside the sprite.
+    superEliteDef(def) {
+      const d = Object.assign({}, def);
+      d.hp = Math.round(d.hp * 7);
+      d.touchDmg = Math.round(d.touchDmg * 2);
+      if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * 2);
+      if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * 2);
+      if (d.emberDmg)  d.emberDmg  = Math.round(d.emberDmg * 2);
+      if (d.strikeDmg) d.strikeDmg = Math.round(d.strikeDmg * 2);
+      if (d.slamDmg)   d.slamDmg   = Math.round(d.slamDmg * 2);
+      if (d.speed)     d.speed     = Math.round(d.speed * 0.85);
+      d.suds = Math.round((d.suds || 0) * 4);
+      d.bodyW = Math.round(d.bodyW * 1.6);
+      d.bodyH = Math.round(d.bodyH * 1.6);
+      return d;
+    },
+
+    // Attack-ticket budget per act; budgets indexed actLevel+1 (like
+    // SPRINKLE.counts), clamped to the last entry.
+    ticketBudget(actLevel, budgets) {
+      const i = Math.max(0, Math.min(budgets.length - 1, (actLevel | 0) + 1));
+      return budgets[i];
     },
 
     // Clamp total count of `type` to `cap`; excess becomes `fallback` enemies
