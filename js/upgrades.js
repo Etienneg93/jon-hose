@@ -72,8 +72,8 @@
       name: "Second Wind", desc: "+30 max HP. 5% chance to dodge incoming damage.",
       apply: (s) => { s.maxHp += 30; s.dodgeChance = Math.max(s.dodgeChance, 0.05); } },
     { id: "vt3", branch: "VITALITY", tier: 3, req: ["vt2"], cost: 120,
-      name: "Vampiric Hose", desc: "Heal 10% of spray damage dealt.",
-      apply: (s) => { s.vampiricRate += 0.10; } },
+      name: "Vampiric Hose", desc: "Heal 5% of spray damage dealt.",
+      apply: (s) => { s.vampiricRate += 0.05; } },
   ];
 
   // Repeatable "Overcharge" nodes: bought any number of times, cost rises each
@@ -136,6 +136,8 @@
       if (JH.Mirror && JH.Church && JH.Church.state && JH.MIRROR) {
         JH.Mirror.apply(s, JH.Church.state, JH.MIRROR.nodes);
       }
+      // Hard cap: dodge never exceeds 25% no matter which sources stack.
+      s.dodgeChance = Math.min(s.dodgeChance, 0.25);
       return s;
     },
 

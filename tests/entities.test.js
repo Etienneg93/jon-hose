@@ -530,3 +530,20 @@ test("neutral dash goes toward facing", () => {
   assert.strictEqual(p._dashX, -1, "dashes toward facing");
   assert.strictEqual(p._dashY, 0);
 });
+
+test("computeStats caps dodgeChance at 25%", () => {
+  JH.Upgrades.reset();
+  // Force an over-cap contribution through a repeatable-free path: fake a
+  // Mirror application by monkey-patching (Mirror isn't loaded in tests).
+  global.window.JH.Mirror = { apply: (s) => { s.dodgeChance = 0.4; } };
+  global.window.JH.Church = { state: {} };
+  const s = JH.Upgrades.computeStats({});
+  assert.ok(s.dodgeChance <= 0.25, "dodge capped, got " + s.dodgeChance);
+  delete global.window.JH.Mirror; delete global.window.JH.Church;
+});
+
+test("Vampiric Hose (vt3) grants 5% lifesteal", () => {
+  JH.Upgrades.reset();
+  const s = JH.Upgrades.computeStats({ vt1: true, vt2: true, vt3: true });
+  assert.ok(Math.abs(s.vampiricRate - 0.05) < 1e-9);
+});

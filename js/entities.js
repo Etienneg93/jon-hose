@@ -543,9 +543,9 @@
           }
         }
         didHit = true;
-        // Vampiric lifesteal at half rate against bosses — their huge HP pools
-        // gave full-rate sustain near-permanent uptime, trivializing the fights.
-        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * (e.isBoss ? 0.5 : 1);
+        // Vampiric lifesteal at half rate against bosses and elites — their
+        // huge HP pools gave full-rate sustain near-permanent uptime.
+        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
         if (S.splitStream) hitEnemies.push(e);
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
