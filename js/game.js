@@ -322,6 +322,7 @@
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
+      this.deathCount = 0;
       this.elapsed = 0; this.kills = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
@@ -1069,6 +1070,12 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
+      // First death of the RUN: bank a pity Essence and cue Father Jon's line.
+      this.deathCount = (this.deathCount || 0) + 1;
+      if (this.deathCount === 1 && JH.Church) {
+        JH.Church.addEssence(1);
+        JH.Church.pendingPity = true;
+      }
       this.diedWave = this.waveIndex;        // the wave to re-arm on return
       this.state = "playerDeathSeq";
       this.deathSeqT = 0;
