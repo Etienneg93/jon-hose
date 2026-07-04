@@ -316,6 +316,7 @@
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
+      JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
       this.elapsed = 0; this.kills = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
@@ -339,6 +340,8 @@
 
     startWave(i) {
       this.waveIndex = i;
+      // Shop reads this for the tier-3 act gate.
+      JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
       this.checkpointWave = JH.Balance.actStartForWave(i, JH.ACT_STARTS);
       this.waveActive = true;
       this.waveCleared = false;
@@ -979,6 +982,8 @@
       this.shopNpc = null; this.nearShop = false;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = next - 1;
+      // Act gate keyed to the wave being re-fought, not the decremented index.
+      JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(next, JH.ACT_STARTS);
       this.waveActive = false; this.waveCleared = false;
       this.bounds = { minX: 8, maxX: maxX };
       // Church-return arrival: hold on black, then a water jet drops Jon from the

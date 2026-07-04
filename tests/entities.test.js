@@ -547,3 +547,13 @@ test("Vampiric Hose (vt3) grants 5% lifesteal", () => {
   const s = JH.Upgrades.computeStats({ vt1: true, vt2: true, vt3: true });
   assert.ok(Math.abs(s.vampiricRate - 0.05) < 1e-9);
 });
+
+test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {
+  JH.Upgrades.reset();
+  JH.Upgrades.owned = { pw1: true, pw2: true };
+  JH.Upgrades.currentActLevel = -1;                     // Act 1
+  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), false);
+  JH.Upgrades.currentActLevel = 1;                      // Act 3 (>= Act 2 gate)
+  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
+});
