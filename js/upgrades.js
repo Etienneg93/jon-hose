@@ -149,6 +149,8 @@
       if (JH.Mirror && JH.Church && JH.Church.state && JH.MIRROR) {
         JH.Mirror.apply(s, JH.Church.state, JH.MIRROR.nodes);
       }
+      // In-run benedictions (JH.Benedictions.active); dashSpeed lives in JH.PLAYER.
+      if (JH.Benedictions) JH.Benedictions.applyStats(s);
       // Hard cap: dodge never exceeds 25% no matter which sources stack.
       s.dodgeChance = Math.min(s.dodgeChance, 0.25);
       return s;
