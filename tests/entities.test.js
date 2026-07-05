@@ -1019,6 +1019,9 @@ test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown"
   const p2 = new JH.FirePatch(100, 40, 24, 3);
   p2.update(1 / 60, g);
   assert.strictEqual(p2.dead, false, "a second patch within the cooldown is not doused");
+  assert.strictEqual(g.player.burnStacks, 0, "first contact on this fresh patch is still free");
+  p2.update(1 / 60, g);   // still standing in the same patch: the free stack is already spent
+  assert.ok(g.player.burnStacks > 0, "immunity is once per patch — the next tick burns");
 
   // Rank II: shorter cooldown and a bigger pop (10 dmg vs 6).
   B.take("ash_walk");                              // rank 2
@@ -1063,7 +1066,39 @@ test("Landslide: an overlapping enemy under knockback batters the enemy next to 
   const hp0 = victim.hp;
   slammed.update(0.016, g);
   assert.ok(victim.hp < hp0, "overlapping enemy takes landslide damage");
+
+  // Rank II: staggers the victim unconditionally — no wall-slam-stagger
+  // capstone required (that pillar perk is a separate, independently-consumed
+  // effect applied elsewhere).
+  B.take("landslide");   // rank 2
+  assert.ok(!g.player.stats.wallSlamStagger, "capstone not owned in this test");
+  victim._lsCdT = 0;   // clear the per-victim tag set by the first update() above
+  victim.windTimer = 0.5; victim.state = "wind"; victim.cdTimer = 0;
+  slammed.update(0.016, g);
+  assert.strictEqual(victim.windTimer, 0, "windup cancelled by the stagger");
+  assert.strictEqual(victim.state, "idle");
+  assert.ok(victim.cdTimer >= 0.6, "stagger cooldown applied");
   B.reset();
+});
+
+test("Bedrock Vigor: taking a hit grants a 3s +20% knockback window", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("bedrock");
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  assert.strictEqual(p.vigorT, 0);
+  p.takeHit(10, g, p.x - 10);
+  assert.strictEqual(p.vigorT, 3, "landing a hit arms the vigor window");
+  B.reset();
+});
+
+test("Bedrock Vigor: no window without the benediction", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  p.takeHit(10, g, p.x - 10);
+  assert.strictEqual(p.vigorT, 0, "no bedrock owned — no vigor window");
 });
 
 // ---- Benedictions: Air (Eye of the Storm, Slipstream) ----

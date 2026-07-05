@@ -198,6 +198,7 @@
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
       this.lastDmgScale = 1;  // Pressure Sermon: most recent doSpray pressure tier
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
+      this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them.
@@ -265,6 +266,7 @@
       if (this.douseCdT > 0) this.douseCdT -= dt;
       if (this.freeSprayT > 0) this.freeSprayT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
+      if (this.vigorT > 0) this.vigorT -= dt;
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
@@ -711,7 +713,7 @@
         }
         if (this.stats.baselineScald && dmgScale >= 1.2) e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
         if (e.onSprayHit) e.onSprayHit(dt, game);
-        e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
+        e.applyKnockback(this.facing, S.knockback * dt * 2.2 * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
           burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
             { speed: 70, life: 0.25, size: 2 });
@@ -833,7 +835,7 @@
         if (e.dead) continue;
         if (Geo.inHitArc(this, e, this.facing, S.meleeRange, 16)) {
           e.takeDamage(S.meleeDamage, game, this.facing, S.meleeKnock);
-          e.applyKnockback(this.facing, S.meleeKnock, (e.y - this.y) * 0.1);
+          e.applyKnockback(this.facing, S.meleeKnock * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.1);
           burst(game, e.x, e.y, e.z + 14, "#fff", 4, { speed: 90, life: 0.2 });
           hit = true;
         }
@@ -864,6 +866,7 @@
       this.hp -= dmg;
       this.invulnTimer = this.stats.invuln;
       this.hurt();
+      if (this.beneRank("bedrock")) this.vigorT = 3;   // Bedrock Vigor: +20% knockback window
       const dir = this.x < fromX ? -1 : 1;
       // Standing Stone: braced turret stance eats the knockback; damage still lands.
       if (!(this.stillT >= 0.5 && this.beneRank("standing_stone"))) this.applyKnockback(dir, 90);
@@ -1157,7 +1160,7 @@
           if (!Geo.bodiesOverlap(this, o)) continue;
           o._lsCdT = 0.3;
           o.takeDamage(lsRank >= 2 ? 14 : 8, game, 0, 0);
-          if (lsRank >= 2 && game.player.stats.wallSlamStagger)
+          if (lsRank >= 2)
             { o.windTimer = 0; o.state = "idle"; o.cdTimer = Math.max(o.cdTimer, 0.6); }
         }
       }
@@ -2026,13 +2029,13 @@
           this.rimFlashT = 0.2;
           if (game.audio) game.audio.play("sizzle");
         }
-        // Ash Walk: while fully unburned, the patch's first stack is ignored
-        // outright (guard checks .beneRank exists — test stubs use plain
-        // player objects without it). Already-burning players still tick
-        // normally, so the immunity can't be used to sit in fire forever.
+        // Ash Walk: while fully unburned, this patch's first stack is ignored
+        // outright — but only once per patch (guard checks .beneRank exists —
+        // test stubs use plain player objects without it). Staying in the
+        // patch after the free stack burns normally on the next tick.
         const aw = pl.beneRank && pl.beneRank("ash_walk");
-        if (aw && pl.burnStacks === 0) {
-          // immune — no burn application this contact
+        if (aw && pl.burnStacks === 0 && !this._awUsed) {
+          this._awUsed = true;   // immune — no burn application this contact
         } else if (inside && this.patchBurnT <= 0) {
           // Only consume the tick when the stack actually lands; if the
           // player's burn i-frames blocked it, retry next frame so the next
