@@ -337,7 +337,7 @@
           }
         }
       } else if (this.spraying) {
-        speed *= 0.55; // slow while hosing
+        if (!S.noSpraySlow) speed *= 0.55; // slow while hosing (Sure Grip removes this)
       } else if (this.dashBoostTimer > 0 && S.dashBoost > 0) {
         speed += S.dashBoost;
       }
@@ -912,6 +912,8 @@
       this._puddleSlow = 0;  // vsEnemies SlowZone tag for this frame; see update()
       this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
       this.scaldDps = 0;
+      this.slamCdT = 0;     // Aftershock: per-enemy cooldown between wall-slam hits
+      this._lsCdT = 0;      // Landslide: cooldown before this enemy can be hit again as a victim
     }
 
     // Rank-max, not additive: reapplying Scald refreshes to the stronger of
@@ -989,6 +991,22 @@
     // Generic chase toward the player; subclasses override think().
     update(dt, game) {
       this.basePhysics(dt);
+      if (this.slamCdT > 0) this.slamCdT -= dt;
+      if (this._lsCdT > 0) this._lsCdT -= dt;
+      // Landslide: while under strong knockback, this enemy batters other
+      // enemies it overlaps (Earth benediction). Per-victim 0.3s tag so an
+      // overlap doesn't re-hit every frame.
+      const lsRank = game.player.beneRank ? game.player.beneRank("landslide") : 0;
+      if (lsRank && Math.abs(this.knockVX) > 60 && game.enemies) {
+        for (const o of game.enemies) {
+          if (o === this || o.dead || o._lsCdT > 0) continue;
+          if (!Geo.bodiesOverlap(this, o)) continue;
+          o._lsCdT = 0.3;
+          o.takeDamage(lsRank >= 2 ? 14 : 8, game, 0, 0);
+          if (lsRank >= 2 && game.player.stats.wallSlamStagger)
+            { o.windTimer = 0; o.state = "idle"; o.cdTimer = Math.max(o.cdTimer, 0.6); }
+        }
+      }
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
       // Wetness dries off over time; visibly soaked enemies drip.
@@ -1023,7 +1041,21 @@
       // Arena containment: hose knockback (and charge overshoot) can't shove
       // an enemy past the locked wave bounds where Jon can't follow — waves
       // only clear on kills, so an unreachable enemy would soft-lock the wave.
+      const preClamp = this.x;
       this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
+      // Wall slam: a knocked enemy stopped by the arena edge takes crunch
+      // damage (Aftershock benediction) and staggers (Earth pillar III).
+      if (this.x !== preClamp && Math.abs(this.knockVX || 0) > 60 && this.slamCdT <= 0) {
+        this.slamCdT = 0.5;
+        const asr = game.player.beneRank ? game.player.beneRank("aftershock") : 0;
+        if (asr) {
+          this.takeDamage(asr >= 2 ? 25 : 15, game, 0, 0);
+          game.shake(3); game.audio.play("whack");
+          if (asr >= 2) for (const o of game.enemies || [])
+            if (o !== this && !o.dead && Math.hypot(o.x - this.x, o.y - this.y) < 30) o.takeDamage(8, game, 0, 0);
+        }
+        if (game.player.stats.wallSlamStagger) { this.windTimer = 0; this.state = "idle"; this.cdTimer = Math.max(this.cdTimer, 0.6); }
+      }
       // contact damage
       const pl = game.player;
       if (!this.dead && pl.alive && Geo.bodiesOverlap(this, pl) && this.contactTimer <= 0

@@ -919,3 +919,35 @@ test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown"
   assert.ok(g2.player.douseCdT <= 6, "rank-II cooldown is the shorter 6s");
   B.reset();
 });
+
+// ---- Benedictions: Earth (Aftershock, Landslide) ----
+
+test("Aftershock: an enemy slammed into the arena wall takes wall-slam damage", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("aftershock");
+  const g = makeThinkGame(1000, 40);   // player far off-screen — chase moves toward the wall, not away
+  const m = new JH.Enemy("mook", g.bounds.maxX - 2, 40);
+  m.spawnGrace = 0;
+  m.knockVX = 200;                     // strong knockback, headed at the wall
+  g.enemies = [m];
+  const hp0 = m.hp;
+  m.update(0.05, g);
+  assert.strictEqual(m.x, g.bounds.maxX, "clamped at the arena edge");
+  assert.ok(m.hp < hp0, "wall slam damage landed");
+  B.reset();
+});
+
+test("Landslide: an overlapping enemy under knockback batters the enemy next to it", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("landslide");
+  const g = makeThinkGame(1000, 40);   // player far off — no melee/contact interference
+  const slammed = new JH.Enemy("mook", 100, 40);
+  const victim = new JH.Enemy("mook", 102, 40);   // overlapping the slammed enemy
+  slammed.spawnGrace = 0; victim.spawnGrace = 0;
+  slammed.knockVX = 200;               // strong knockback triggers the landslide check
+  g.enemies = [slammed, victim];
+  const hp0 = victim.hp;
+  slammed.update(0.016, g);
+  assert.ok(victim.hp < hp0, "overlapping enemy takes landslide damage");
+  B.reset();
+});
