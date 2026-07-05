@@ -1003,4 +1003,7 @@ test("Firestorm: a friendly fire patch damages an enemy inside it but never burn
   assert.ok(e.hp < hp0, "enemy standing in the friendly patch takes damage");
   assert.strictEqual(g.player.burnStacks, 0, "the player standing in the same patch is never burned");
   assert.strictEqual(fp.sizzled, false, "friendly patches never run the player-facing sizzle/burn logic");
+  // Wall-clock expiry: nobody sprays a harmless patch, so it must die on time.
+  fp.update(3.1, g);                          // pushes fp.t past extinguishDur (3)
+  assert.strictEqual(fp.dead, true, "friendly patch expires on wall-clock time without being sprayed");
 });

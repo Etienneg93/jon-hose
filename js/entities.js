@@ -1857,14 +1857,17 @@
       if (this.rimFlashT > 0) this.rimFlashT -= dt;
       if (this.friendly) {
         // Firestorm: skip all player-facing logic (burn/sizzle/ash-walk);
-        // this patch instead cooks enemies standing in it.
+        // this patch instead cooks enemies standing in it. Nobody sprays a
+        // harmless patch, so it expires on WALL-CLOCK time (extinguishDur
+        // seconds since spawn), not spray progress — otherwise it would live
+        // forever and its footprint would block hostile-patch spawns.
+        if (this.t >= this.extinguishDur) { this.dead = true; return; }
         const f = this.footprint();
         for (const e of game.enemies) {
           if (e.dead) continue;
           if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
             e.takeDamage(8 * dt, game, 0, 0);
         }
-        if (this.sprayProgress >= this.extinguishDur) this.dead = true;
         return;
       }
       const pl = game.player;
