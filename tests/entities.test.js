@@ -1419,3 +1419,15 @@ test("death wash: benedictions clear, levels/signatures survive respawn refresh"
   assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // signature survived
   JH.Upgrades.reset(); JH.Benedictions.reset();
 });
+
+test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {
+  const p = makePlayer();
+  p.upgradeQ.length = 0;
+  const grown = Object.assign({}, p.stats, { sprayDamage: p.stats.sprayDamage + 3 });
+  p.applyStats(grown);
+  assert.strictEqual(p.upgradeQ.length, 1);
+  assert.strictEqual(p.upgradeQ[0].icon, "dmg");
+  assert.strictEqual(p.upgradeQ[0].text, "+3 DMG");
+  p.applyStats(Object.assign({}, p.stats));   // identical rebuild → no entry
+  assert.strictEqual(p.upgradeQ.length, 1);
+});

@@ -912,16 +912,8 @@
         JH.burst(this, p.x, p.y, p.z + 16, "#ffd23f", 16, { speed: 90, life: 0.5, up: 70, size: 2 });
         this.shake(3);
         this.float(p.x, p.y - 34, "LEVEL UP", "#ffd23f");
-        const step = JH.LEVELS.cycle[(this.playerLevel - 1) % JH.LEVELS.cycle.length];
-        const statLabel = {
-          sprayDamage: "SPRAY DMG", maxWater: "MAX WATER", maxHp: "MAX HP",
-          sprayRange: "RANGE", waterRegen: "REGEN",
-        };
-        let row = 1;
-        for (const key of Object.keys(step)) {
-          this.float(p.x, p.y - 34 - row * 8, "+" + step[key] + " " + (statLabel[key] || key), "#7dff5a");
-          row++;
-        }
+        // The stat delta itself plays through the upgrade sequence (icon +
+        // amount rising off Jon, queued by applyStats) — no text spam here.
       }
     },
 

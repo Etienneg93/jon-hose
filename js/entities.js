@@ -195,20 +195,40 @@
       this.nearShop = false;
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
       this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
+      this.upgradeQ = [];     // pending stat-gain sequence entries {icon, text}
+      this.upgradeT = 0;      // time left on the entry currently showing
+      this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
       this.lastDmgScale = 1;  // Pressure Sermon: most recent doSpray pressure tier
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
     applyStats(s) {
-      // Track which displayed stats changed so the shop panel can flash them.
+      // Track which displayed stats changed so the shop panel can flash them,
+      // and queue the upgrade sequence (icon + delta rising off Jon) for each
+      // stat that GREW — every gain source routes through here.
       const KEYS = ["sprayDamage", "sprayRange", "maxWater", "waterRegen",
                     "moveRegen", "moveSpeed", "dodgeChance", "vampiricRate",
                     "maxHp", "knockback"];
+      const META = {
+        sprayDamage: ["dmg", "DMG"], sprayRange: ["range", "RANGE"],
+        maxWater: ["water", "WATER"], waterRegen: ["regen", "REGEN"],
+        moveRegen: ["regen", "REGEN"], maxHp: ["hp", "HP"],
+        moveSpeed: ["speed", "SPEED"], knockback: ["knockback", "KB"],
+        dodgeChance: ["dodge", "DODGE"], vampiricRate: ["vamp", "VAMP"],
+      };
       if (this.stats) {
         this.statFlash = this.statFlash || {};
-        for (const k of KEYS)
-          if (s[k] !== this.stats[k]) this.statFlash[k] = 2.0;
+        for (const k of KEYS) {
+          if (s[k] === this.stats[k]) continue;
+          this.statFlash[k] = 2.0;
+          const delta = s[k] - this.stats[k];
+          if (delta > 0 && this.upgradeQ.length < 8) {
+            const pct = k === "dodgeChance" || k === "vampiricRate";
+            const amt = pct ? Math.round(delta * 100) + "%" : "+" + Math.round(delta);
+            this.upgradeQ.push({ icon: META[k][0], text: (pct ? "+" + amt : amt) + " " + META[k][1] });
+          }
+        }
       }
       this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp;
     }
@@ -271,6 +291,22 @@
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
+
+      // Upgrade sequence: pending stat gains play one at a time — chime up a
+      // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
+      if (this.upgradeQ.length) {
+        if (this.upgradeT <= 0) {
+          this.upgradeT = 0.55;
+          this.upgradeIdx++;
+          game.audio.play("upgrade", { pitch: 1 + 0.12 * Math.min(5, this.upgradeIdx) });
+          burst(game, this.x, this.y, this.z + 22, "#ffd23f", 8, { speed: 55, life: 0.4, up: 55, size: 2 });
+        }
+        this.upgradeT -= dt;
+        if (this.upgradeT <= 0) {
+          this.upgradeQ.shift();
+          if (!this.upgradeQ.length) this.upgradeIdx = 0;
+        }
+      }
 
       this.tickBurn(dt, game);
 
@@ -881,6 +917,21 @@
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
       const spriteSy = Geo.feetScreenY(this.y, this.z);
+      // Upgrade sequence: the current stat gain rises off Jon's head — icon
+      // + green delta, fading in fast and out at the end of its beat.
+      if (this.upgradeQ.length && this.upgradeT > 0) {
+        const e = this.upgradeQ[0];
+        const k = 1 - this.upgradeT / 0.55;                       // 0 → 1
+        const a = Math.min(1, k / 0.15) * Math.min(1, (1 - k) / 0.25);
+        const iy = spriteSy - this.stats.bodyH - 12 - 10 * k;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, a);
+        Assets.icon(ctx, e.icon, sx - 16, iy, 1);
+        ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+        ctx.fillStyle = "#80ff80";
+        ctx.fillText(e.text, sx - 8, iy + 3);
+        ctx.restore();
+      }
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
       // that — active buffs stack visually instead of overwriting. Burn's
