@@ -39,6 +39,21 @@ test("legendary appears only with >= 2 boons of its element and only once", () =
     assert.ok(!B.pickOffers(state, Math.random).some((o) => o.id === "pressure_sermon"));
 });
 
+test("legendary pick is uniform among eligible elements (no DEFS-order starvation)", () => {
+  // water AND air both eligible (2 owned boons each); over many rolls both
+  // legendaries must appear — the earlier element must not shadow the later.
+  const state = {
+    active: { baptize: 1, overflow: 1, gale_stride: 1, tailwind: 1 },
+    pillarRanks: {}, usedOnce: {}, censer: false,
+  };
+  const seen = {};
+  for (let i = 0; i < 600; i++)
+    for (const o of B.pickOffers(state, Math.random))
+      if (B.byId(o.id).kind === "legendary") seen[o.id] = true;
+  assert.ok(seen.pressure_sermon, "water legendary offered");
+  assert.ok(seen.whirlwind_walk, "air legendary offered");
+});
+
 test("applyStats folds stat boons only", () => {
   B.reset(); B.take("bedrock"); B.take("gale_stride");
   const s = { maxHp: 100, dashSpeed: 240 };

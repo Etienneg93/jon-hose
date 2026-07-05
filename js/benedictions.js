@@ -227,15 +227,15 @@
       }
 
       // Legendary check: only rolled if no duo replaced the slot this offer.
+      // Single 15% roll over ALL eligible legendaries, then a uniform pick —
+      // DEFS order must not starve later elements when several are eligible.
       if (!replaced) {
-        const legendaries = DEFS.filter((d) => d.kind === "legendary");
-        for (const leg of legendaries) {
-          if (usedOnce[leg.id]) continue;
-          if (ownedOf(leg.element) < 2) continue;
-          if (rng() < 0.15) {
-            offers[offers.length - 1] = { id: leg.id, deepen: false };
-          }
-          break;
+        const eligible = DEFS.filter(
+          (d) => d.kind === "legendary" && !usedOnce[d.id] && ownedOf(d.element) >= 2
+        );
+        if (eligible.length > 0 && rng() < 0.15) {
+          const li = Math.min(Math.floor(rng() * eligible.length), eligible.length - 1);
+          offers[offers.length - 1] = { id: eligible[li].id, deepen: false };
         }
       }
 
