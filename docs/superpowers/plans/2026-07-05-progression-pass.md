@@ -18,6 +18,7 @@
 - All tunables land at the spec's numbers verbatim; tuning happens at the compound playtest gate (v0.26 + boss art + this).
 - Commits end with: `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
 - Test-file boot pattern (tests/entities.test.js): `global.window = {}` → require config → stub `JH.Loader` → world → upgrades → entities; extend with pillars/benedictions requires where a task says so.
+- **Essence is pickup-only** — see "TODO notes" at the bottom before touching Tasks 3, 6, 15, 17, or any `addEssence`/`markBossDefeated` call site; floating gain-text + real-icon notes live there too.
 
 ---
 
@@ -819,3 +820,87 @@ test("death wash: benedictions clear, levels/signatures survive respawn refresh"
 - Scald ticks route through raw `hp -=` + `die()` (not `takeDamage`) to avoid knockback/wetness side-effects from a DoT; Bushfire spreads depth-1 via `_spreadDone`.
 - Mirror deletion is confined to Task 17 so every earlier task runs with the suite green.
 - Test-count expectations are approximate floors; the binding requirement is "green with the task's new tests present."
+
+---
+
+### Task 20: Floaters + essence pickup-only (EXECUTE AFTER TASK 3 — gates Tasks 6/15/17 semantics)
+
+**Files:** `js/game.js` (floater pool, essence conversions), `js/entities.js` (Pickup.collect floater), `js/church.js` (markBossDefeated stops adding essence), tests append
+
+**Interfaces:**
+- Produces: `game.float(x, y, text, color)` — pooled world-space floating text (rises ~22px over 0.9s, fades; cap 20 oldest-dropped; drawn in the world pass after pickups, 6px monospace centered). Consumed by Tasks 6 (sigil picks), 16 (kibble ticks), 17 (pillar buys).
+- RULE (user, plan TODO §1): **Essence enters `Church.state.essence` ONLY via cross collection.**
+
+- [ ] Floater pool: `this.floaters = []` init in startGame + respawnFromChurch; `float(x,y,text,color)` pushes `{x,y,t:0,text,color}`; tick+cull in update; draw with `alpha = 1 - t/0.9`, rise `-22*t/0.9`.
+- [ ] Cross collect (entities.js `Pickup.collect` cross branch): `game.float(pl.x, pl.y - 30, "+" + (this.value || 1) + " HOLY ESSENCE", "#ffd23f");`
+- [ ] Boss essence → cross: `Church.markBossDefeated` (church.js ~170) loses its `essence +=` line (keeps shrine lighting + save). `onEnemyKilled` boss branch (game.js ~776): after markBossDefeated, `this.spawnPickup("cross", e.x, e.y, 1);`. (World-dim now fires on boss kills — intended.)
+- [ ] Pity → cross: `startPlayerDeathSeq` first-death block drops the `addEssence(1)` call, keeps `pendingPity` (sermon line), sets `this.pendingPityCross = true;`. `respawnFromChurch` after player placement: `if (this.pendingPityCross) { this.spawnPickup("cross", p.x + 34, p.y, 1); this.pendingPityCross = false; }`
+- [ ] Level-up floaters (grantXp, after the burst): `"LEVEL UP"` gold at p.y-34 + one green floater per stat in `JH.LEVELS.cycle[(this.playerLevel - 1) % 6]` (key→label map: sprayDamage "SPRAY DMG", maxWater "MAX WATER", maxHp "MAX HP", sprayRange "RANGE", waterRegen "REGEN"), stacked 8px apart.
+- [ ] Shop purchase floaters: where `U.buy`/`U.buyRep` succeed in the confirm handler, `this.float(player.x, player.y - 30, node name, "#80ff80")`.
+- [ ] Tests: float cap 20 + age cull (stub game); adjust the curve-pass pity expectation if any test asserts direct addEssence on death.
+- [ ] Suite green. **Commit** — `feat(essence): pickup-only essence — boss + pity crosses; world floating text`
+
+### Task 21: Icon atlas (EXECUTE AFTER TASK 17, BEFORE TASK 18)
+
+**Files:** Create `tools/icon-sprites.mjs`, `sprites/icons/*.png`; modify `js/config.js` (JH.ICONS), `js/assets.js` (`Assets.icon` helper), swap sites in game.js (HUD strip, stat panel, shop rows), church.js (essence readout, pillar icons), entities.js (sigil glyphs)
+
+- [ ] Baker (`tools/icon-sprites.mjs`, enemy-sprites pipeline: 2px/logical grid, 2x save = 4x logical, outline pass, arg validation like boss-sprites.mjs): 12x12-logical (48px) icons. Keys: stats `dmg, range, water, regen, hp, knockback, speed, dash, dodge, vamp`; elements `el_water, el_fire, el_earth, el_air` (drop/flame/rock/gust); `essence` (cross); relics `brass_nozzle, spigot_key, loaded_sponge, prayer_bead, collection_plate, censer, sunday_suit, punch_card, dowsing_rod, alarm_bell`; frames `frame_duo, frame_legendary`. Boon icons = element icon + 4px corner verb mark (stream/dash/body) — one consistent set, not 24 bespoke drawings (user TODO §2).
+- [ ] `JH.ICONS = { size: 12 }` manifest + `Assets.icon(ctx, key, x, y, scale)` (imageSmoothing off; silent no-op while loading — procedural glyphs stay as the fallback at every swap site).
+- [ ] Swap: HUD sigil strip + stat panel rows, Sigil entity glyph (element icon + frame overlay), church `✦` readout + pillar station icons, shop relic/signature rows. Icons replace glyphs only; text labels stay.
+- [ ] Verify: headless screenshots (shop + sigil beat + church); `git status sprites/` shows only sprites/icons/.
+- [ ] Suite green. **Commit** — `art(icons): baked icon atlas replaces glyph placeholders`
+
+**Cross-task amendments (binding):** Task 15's `sunday_suit` relic = the boss cross spawns with `value: 2` when owned (never a direct add); Task 17's pillar-buy juice includes `game.float(station, "+RANK " + …)` via the Task 20 helper; Task 6's sigil pick adds a floater with the boon name.
+
+---
+
+## TODO notes (added 2026-07-05, user)
+
+### 1. Holy Essence is pickup-only + gain-feedback floating text
+
+**Rule: the ONLY way Essence enters `Church.state.essence` during play is by
+collecting the cross pickup.** Audit found two sequences that currently hide
+the pickup and grant directly — both must be converted to a spawned cross:
+
+- **Boss defeat** — `game.js:776` calls `Church.markBossDefeated`, which adds
+  essence directly (`church.js:170`). The wave-clear cross condition at
+  `game.js:499` deliberately excludes `boss` because of this. Fix: drop a
+  cross on boss defeat instead; `markBossDefeated` keeps only the
+  shrine-lighting side, or the cross's collect handler routes through it.
+- **First-death pity** — `game.js:1078` calls `addEssence(1)` directly during
+  `startPlayerDeathSeq`. Fix: make the pity essence a visible pickup (e.g.
+  cross waiting at the church/respawn point), not a silent bank.
+- **Task 15 `sunday_suit` relic** (+1 extra essence on boss defeat) must ride
+  the same cross-drop path (drop 2 crosses or a `value: 2` cross), never a
+  direct add.
+- Set-piece waves already do this right (`game.js:500` spawns the cross) —
+  that's the pattern.
+
+**Feedback text:** on cross collect, show a **"+1 Holy Essence"**
+upward-drifting, fading text at the pickup. No world-space floating-text
+helper exists yet (only the DOM `banner`) — add a small pooled floater
+(spawn(x, y, text, color), rises ~20px over ~0.9s while fading). Reuse it
+for:
+
+- **Level-up moment** (Task 3): "LEVEL UP" plus the granted stat line(s).
+- **Stat upgrades bought or picked up**: shop vendor buys, pillar rank buys
+  (Task 17), sigil picks (Task 6) — float the stat delta (e.g. "+3 spray
+  dmg") at Jon/the station.
+
+### 2. Real icons, not mojibake
+
+Replace unicode-glyph placeholders with proper PNG icons **if findable or
+drawable** (sprite-forge / tools bakers; per the canvas-resolution note, size
+art for device pixels — ~4x the logical size, so a "10px" HUD icon should be
+authored at 40px+):
+
+- Current/planned glyph spots: `✦` essence readout (`church.js:538`),
+  Task 6 sigils ("diamond + element letter, procedural"), Task 18 HUD strip
+  ("one 8px glyph per active benediction"), stat panel rows.
+- Coverage wanted: **each stat** (spray dmg, spray range, hit band, max
+  water, water regen/return, max HP, knockback, move speed, dash, dodge,
+  lifesteal, …), **each benediction/boon** (incl. duo + legendary variants),
+  **the 4 element pillars**, **relics**, **shop stat nodes**, and the
+  **essence cross** itself.
+- One consistent set > mixed sources; bake to `sprites/icons/` with a
+  manifest so HUD/shop/church all pull from the same atlas.
