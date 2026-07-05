@@ -304,7 +304,7 @@
         if (this.kibbleTickT <= 0) {
           this.kibbleTickT += 0.5;
           const healed = Math.round(this.kibbleTickAcc);
-          if (healed > 0) game.float(this.x, this.y - 30, "+" + healed, "#44ee66");
+          if (healed > 0 && game.float) game.float(this.x, this.y - 30, "+" + healed, "#44ee66");
           this.kibbleTickAcc = 0;
         }
       }
@@ -2215,6 +2215,7 @@
       this.isProjectile = true;   // Whirlwind Walk can destroy it mid-flight (counterplay)
     }
     update(dt, game) {
+      if (this.dead) return false;
       this.t += dt;
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.vz -= 300 * dt; this.z += this.vz * dt;
@@ -3200,7 +3201,7 @@
       this.scale = (opt && opt.scale) || 1;
       this.life = m ? m.count / m.fps : 0.5;
       this.t = 0; this.dead = false;
-      this.isFx = true;   // visual-only marker: Whirlwind Walk's ember sweep skips these
+      this.isFx = true;   // visual-only marker: not in the Whirlwind Walk isProjectile sweep whitelist
     }
     update(dt) {
       this.t += dt;
