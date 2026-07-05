@@ -205,6 +205,33 @@
       }
       return picks;
     },
+
+    // XP needed to climb from level n-1 to n.
+    xpForLevel(n) { return 20 + 12 * (n | 0); },
+
+    // Summed stat deltas for `levelCount` level-ups walking the repeating
+    // gain cycle. Returns {statKey: total}.
+    levelGains(levelCount, cycle) {
+      const out = {};
+      for (let i = 0; i < (levelCount | 0); i++) {
+        const step = cycle[i % cycle.length];
+        for (const k in step) out[k] = (out[k] || 0) + step[k];
+      }
+      return out;
+    },
+
+    // One drop decision per kill. Pity: 6+ dry kills guarantees an item.
+    // Need-weighting doubles the low resource's share of the item roll.
+    rollDrop(dropMult, dryStreak, hpFrac, waterFrac, rng) {
+      rng = rng || Math.random;
+      const t = this.dropThresholds(dropMult);
+      const itemChance = (dryStreak >= 6) ? 1 : t.water;   // t.water = cumulative item chance
+      if (rng() >= itemChance) return null;
+      let wh = t.health, ww = t.water - t.health;
+      if (hpFrac < 0.5) wh *= 2;
+      if (waterFrac < 0.3) ww *= 2;
+      return rng() < wh / (wh + ww) ? "health" : "water";
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

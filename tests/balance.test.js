@@ -248,3 +248,30 @@ test("superEliteDef honors a per-type hp override; other multipliers unchanged",
   assert.strictEqual(base.hp, 300);                    // clone, not mutation
   assert.strictEqual(Balance.superEliteDef(base).hp, 2100);  // no tune = 7x
 });
+
+test("xpForLevel: 20 + 12n curve", () => {
+  assert.strictEqual(Balance.xpForLevel(1), 32);
+  assert.strictEqual(Balance.xpForLevel(5), 80);
+  assert.strictEqual(Balance.xpForLevel(13), 176);
+});
+
+test("levelGains sums the repeating cycle", () => {
+  const cycle = [
+    { sprayDamage: 3 }, { maxWater: 8 }, { maxHp: 8 },
+    { sprayRange: 4 }, { sprayDamage: 3 }, { waterRegen: 2 },
+  ];
+  assert.deepStrictEqual(Balance.levelGains(0, cycle), {});
+  assert.deepStrictEqual(Balance.levelGains(2, cycle), { sprayDamage: 3, maxWater: 8 });
+  const g13 = Balance.levelGains(13, cycle);          // two full cycles + 1
+  assert.strictEqual(g13.sprayDamage, 3 * 2 * 2 + 3); // 4 dmg steps + the 13th (dmg)
+  assert.strictEqual(g13.maxWater, 16);
+  assert.strictEqual(g13.waterRegen, 4);
+});
+
+test("rollDrop: pity guarantees an item at streak >= 6; need-weighting biases the split", () => {
+  assert.notStrictEqual(Balance.rollDrop(1, 6, 1, 1, () => 0.99), null);   // pity fires
+  assert.strictEqual(Balance.rollDrop(1, 0, 1, 1, () => 0.99), null);      // no pity, high roll
+  // low hp doubles health weight: with rng 0.5 the pick tips to health
+  assert.strictEqual(Balance.rollDrop(1, 6, 0.3, 1, () => 0.5), "health");
+  assert.strictEqual(Balance.rollDrop(1, 6, 1, 0.1, () => 0.5), "water");
+});
