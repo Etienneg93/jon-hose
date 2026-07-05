@@ -94,6 +94,21 @@
     firePatch: "#ff6010",  firePatchHi: "#ffd040",
   };
 
+  // ---- Baked UI icon atlas (sprites/icons/<key>.png, tools/icon-sprites.mjs).
+  // size = logical px per icon side; PNGs are baked at 4x (48px). keys drives
+  // the Assets.icon preload — keep in sync with the baker's BAKERS set.
+  JH.ICONS = {
+    size: 12,
+    keys: [
+      "dmg", "range", "water", "regen", "hp", "knockback", "speed", "dash", "dodge", "vamp",
+      "el_water", "el_fire", "el_earth", "el_air",
+      "essence",
+      "brass_nozzle", "spigot_key", "loaded_sponge", "prayer_bead", "collection_plate",
+      "censer", "sunday_suit", "punch_card", "dowsing_rod", "alarm_bell",
+      "frame_duo", "frame_legendary",
+    ],
+  };
+
   // ---- Player base stats (pre-upgrade) --------------------------------
   JH.PLAYER = {
     maxHp: 100,

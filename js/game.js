@@ -2029,16 +2029,17 @@
     // element claims this corner while the shop is open.
     drawStatPanel(ctx) {
       const S = this.player.stats, F = this.player.statFlash || {};
+      // 4th column = baked icon key (drawn at half size before the label).
       const rows = [
-        ["DMG",    Math.round(S.sprayDamage), "sprayDamage"],
-        ["RANGE",  Math.round(S.sprayRange),  "sprayRange"],
-        ["WATER",  Math.round(S.maxWater),    "maxWater"],
+        ["DMG",    Math.round(S.sprayDamage), "sprayDamage", "dmg"],
+        ["RANGE",  Math.round(S.sprayRange),  "sprayRange",  "range"],
+        ["WATER",  Math.round(S.maxWater),    "maxWater",    "water"],
         // REGEN displays the sum of two stats, so it flashes on either key.
-        ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), ["waterRegen", "moveRegen"]],
-        ["HP",     Math.round(S.maxHp),       "maxHp"],
-        ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed"],
-        ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance"],
-        ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate"],
+        ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), ["waterRegen", "moveRegen"], "regen"],
+        ["HP",     Math.round(S.maxHp),       "maxHp",       "hp"],
+        ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed",   "speed"],
+        ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"],
+        ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"],
       ];
       const beneIds = JH.Benedictions ? Object.keys(JH.Benedictions.active) : [];
       const X = 10, Y = 30, ROW = 9, W = 74;
@@ -2051,13 +2052,15 @@
       ctx.fillStyle = "#8fa8c8";
       ctx.fillText("JON", X, Y - 3);
       ctx.font = "6px monospace";
-      rows.forEach(([label, val, key], i) => {
+      rows.forEach(([label, val, key, ik], i) => {
         const y = Y + 6 + i * ROW;
         // A row may aggregate several stat keys — flash if any of them changed.
         const live = [].concat(key).some((k) => F[k] > 0);
         const hot = live && (Math.floor(this.elapsed * 6) & 1) === 0;
+        // Stat icon at half size (6px) before the label; label alone until loaded.
+        const hasIcon = ik && JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
         ctx.fillStyle = "#667788";
-        ctx.fillText(label, X, y);
+        ctx.fillText(label, hasIcon ? X + 8 : X, y);
         ctx.textAlign = "right";
         ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
         ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
@@ -2183,8 +2186,16 @@
         }
         ctx.font = "bold 6px monospace";
         ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
+        // Baked icon replaces the •/▸/✓ mark: relics by id, signatures and
+        // Overcharge by the stat they push. Text mark remains the fallback.
+        const ik = r.t === "relic" ? r.id
+          : r.t === "node" ? ({ sig_dash: "dash", sig_marshal: "range", sig_lance: "dmg" })[r.n.id]
+          : r.t === "rep" ? "dmg" : null;
+        ctx.globalAlpha = locked ? 0.45 : 1;
+        const hasIcon = ik && JH.Assets.icon(ctx, ik, PX + 8, ry + 5, 0.5);
+        ctx.globalAlpha = 1;
         const mark = owned ? "✓" : locked ? "▸" : "•";
-        ctx.fillText(mark + " " + name + suffix, PX + 5, ry + 8);
+        ctx.fillText(hasIcon ? name + suffix : mark + " " + name + suffix, hasIcon ? PX + 13 : PX + 5, ry + 8);
         if (!owned) {
           ctx.textAlign = "right";
           ctx.fillStyle = locked ? "#3a4a5a" : afford ? "#ffd23f" : "#cc4444";
@@ -2297,7 +2308,7 @@
       const active = JH.Benedictions.active;
       const ids = Object.keys(active);
       if (ids.length === 0) return;
-      const X = 10, Y = 16, GAP = 10;
+      const X = 10, Y = 16, GAP = 13;
       ctx.save();
       ids.forEach((id, i) => {
         const d = JH.Benedictions.byId(id);
@@ -2307,10 +2318,18 @@
         const col = JH.SIGIL_COLORS[el] || "#ffd23f";
         const x = X + i * GAP;
         ctx.globalAlpha = rank >= 2 ? 1 : 0.55;
-        ctx.fillStyle = col;
-        ctx.fillRect(x, Y, 8, 8);
-        ctx.strokeStyle = "#0a0e18";
-        ctx.strokeRect(x, Y, 8, 8);
+        // Baked element icon (procedural pip while it streams in).
+        if (!JH.Assets.icon(ctx, "el_" + el, x + 4, Y + 4, 1)) {
+          ctx.fillStyle = col;
+          ctx.fillRect(x, Y, 8, 8);
+          ctx.strokeStyle = "#0a0e18";
+          ctx.strokeRect(x, Y, 8, 8);
+        }
+        // Rank-2 boons keep the bright ring.
+        if (rank >= 2) {
+          ctx.strokeStyle = col;
+          ctx.strokeRect(x - 2.5, Y - 2.5, 13, 13);
+        }
       });
       ctx.globalAlpha = 1;
       ctx.restore();

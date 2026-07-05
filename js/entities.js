@@ -2567,25 +2567,31 @@
       const col = SIGIL_COLORS[this.element] || "#ffffff";
       const dk = SIGIL_COLORS_DK[this.element] || "#333333";
       Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 6);
-      ctx.save();
-      ctx.translate(sx, sy);
-      ctx.rotate(Math.PI / 4);
-      const half = 5;   // 10px diamond
-      if (this.kind === "duo" && d.needs) {
-        // Split two-tone: half in each contributing element's color.
-        ctx.fillStyle = SIGIL_COLORS[d.needs[0]] || col;
-        ctx.fillRect(-half, -half, half, half * 2);
-        ctx.fillStyle = SIGIL_COLORS[d.needs[1]] || col;
-        ctx.fillRect(0, -half, half, half * 2);
-      } else {
-        ctx.fillStyle = col;
-        ctx.fillRect(-half, -half, half * 2, half * 2);
+      // Baked element icon; the rotated diamond stays as the streaming fallback.
+      const hasIcon = Assets.icon(ctx, "el_" + this.element, sx, sy, 1);
+      if (!hasIcon) {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(Math.PI / 4);
+        const half = 5;   // 10px diamond
+        if (this.kind === "duo" && d.needs) {
+          // Split two-tone: half in each contributing element's color.
+          ctx.fillStyle = SIGIL_COLORS[d.needs[0]] || col;
+          ctx.fillRect(-half, -half, half, half * 2);
+          ctx.fillStyle = SIGIL_COLORS[d.needs[1]] || col;
+          ctx.fillRect(0, -half, half, half * 2);
+        } else {
+          ctx.fillStyle = col;
+          ctx.fillRect(-half, -half, half * 2, half * 2);
+        }
+        ctx.strokeStyle = dk; ctx.lineWidth = 1;
+        ctx.strokeRect(-half, -half, half * 2, half * 2);
+        ctx.restore();
       }
-      ctx.strokeStyle = dk; ctx.lineWidth = 1;
-      ctx.strokeRect(-half, -half, half * 2, half * 2);
-      ctx.restore();
-      if (this.kind === "legendary") {
-        // Gold double-ring around legendary sigils.
+      // Kind frames ring the icon at 1.5x so they read around the glyph.
+      if (this.kind === "duo" && hasIcon) Assets.icon(ctx, "frame_duo", sx, sy, 1.5);
+      if (this.kind === "legendary" && !Assets.icon(ctx, "frame_legendary", sx, sy, 1.5)) {
+        // Gold double-ring around legendary sigils (fallback).
         ctx.save();
         ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();

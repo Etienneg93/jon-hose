@@ -422,6 +422,8 @@
           ctx.fillRect(x - 2, topY + 3, 4, baseY - topY - 6);
           ctx.restore();
           ctx.fillStyle = col; ctx.fillRect(x - 6, topY - 2, 12, 2);  // capital trim
+          // Element icon set into the top of the shaft (silent until loaded).
+          JH.Assets.icon(ctx, "el_" + st.pillar, x, topY + 12, 1);
         } else {
           // Nemesis silhouette over the dark column — someone's missing here.
           const painter = NEMESIS_PAINTER[def.gateBoss];
@@ -594,8 +596,11 @@
       }
 
       // Holy Essence readout — always visible so the currency reads.
+      // Baked cross icon before the text ("✦" prefix until it loads).
       ctx.textAlign = "right"; ctx.fillStyle = "#d6f6ff";
-      ctx.fillText("✦ Holy Essence: " + this.state.essence, VW - 8, 14);
+      const etxt = "Holy Essence: " + this.state.essence;
+      const eicon = JH.Assets.icon(ctx, "essence", VW - 14 - ctx.measureText(etxt).width, 10, 1);
+      ctx.fillText((eicon ? "" : "✦ ") + etxt, VW - 8, 14);
 
       // Father Jon's dialogue box.
       if (sc.dialogue) {

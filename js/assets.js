@@ -416,6 +416,26 @@
   };
   JH.Assets = Assets;
 
+  // ---- baked UI icon atlas (tools/icon-sprites.mjs -> sprites/icons/) --
+  // One 12x12-logical PNG per key (baked at 4x = 48px), preloaded at boot.
+  // icon() blits centered on (x, y) at size*scale logical px, nearest-
+  // neighbor. Returns false (draws nothing) until the PNG has loaded —
+  // call sites keep their procedural glyph as the fallback on false.
+  const _iconImgs = {};
+  ((JH.ICONS && JH.ICONS.keys) || []).forEach((k) => {
+    _iconImgs[k] = JH.Loader.img("sprites/icons/" + k + ".png");
+  });
+  Assets.icon = function (ctx, key, x, y, scale) {
+    const img = _iconImgs[key];
+    if (!img || !img._ready) return false;
+    const s = Math.round((scale || 1) * (JH.ICONS ? JH.ICONS.size : 12));
+    const prev = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+    ctx.imageSmoothingEnabled = prev;
+    return true;
+  };
+
   // ---- shared bits ----------------------------------------------------
   function shadow(ctx, x, y, w) {
     ctx.save();
