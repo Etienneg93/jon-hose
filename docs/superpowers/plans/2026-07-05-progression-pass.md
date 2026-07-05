@@ -829,7 +829,7 @@ test("death wash: benedictions clear, levels/signatures survive respawn refresh"
 
 **Interfaces:**
 - Produces: `game.float(x, y, text, color)` — pooled world-space floating text (rises ~22px over 0.9s, fades; cap 20 oldest-dropped; drawn in the world pass after pickups, 6px monospace centered). Consumed by Tasks 6 (sigil picks), 16 (kibble ticks), 17 (pillar buys).
-- RULE (user, plan TODO §1): **Essence enters `Church.state.essence` ONLY via cross collection.**
+- RULE (user, plan TODO §1): **Essence enters `Church.state.essence` only via collection of a spawned cross (player pickup or end-of-context sweep at win/respawn).**
 
 - [ ] Floater pool: `this.floaters = []` init in startGame + respawnFromChurch; `float(x,y,text,color)` pushes `{x,y,t:0,text,color}`; tick+cull in update; draw with `alpha = 1 - t/0.9`, rise `-22*t/0.9`.
 - [ ] Cross collect (entities.js `Pickup.collect` cross branch): `game.float(pl.x, pl.y - 30, "+" + (this.value || 1) + " HOLY ESSENCE", "#ffd23f");`
