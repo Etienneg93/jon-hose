@@ -1192,6 +1192,37 @@ test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", 
   assert.ok(far.hp < hpFar1, "Brass Nozzle: second-closest enemy also hit");
 });
 
+test("Brass Nozzle: never promotes a target past an active dome blocker (regression)", () => {
+  const g = makeThinkGame(60, 40);
+  g.relics = { brass_nozzle: true };
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;   // long reach — the arc spans well past the dome
+  // Dome (r 58) between Jon and the mook; Jon outside it, mook beyond its far edge.
+  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];
+  const beyond = new JH.Enemy("mook", p.x + 250, p.y);
+  g.enemies = [beyond];
+  const hp0 = beyond.hp;
+  p.doSpray(0.05, g);
+  assert.strictEqual(beyond.hp, hp0, "dome stops the stream — no second target promoted past it");
+});
+
+test("Brass Nozzle: enemy blocker with a dome behind it — second target can't sit past the dome", () => {
+  const g = makeThinkGame(60, 40);
+  g.relics = { brass_nozzle: true };
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];   // dome near edge ~30px out
+  const near   = new JH.Enemy("mook", p.x + 20, p.y);    // in front of the dome — the blocker
+  const beyond = new JH.Enemy("mook", p.x + 250, p.y);   // past the dome's far edge
+  g.enemies = [near, beyond];
+  const hpNear0 = near.hp, hpBeyond0 = beyond.hp;
+  p.doSpray(0.05, g);
+  assert.ok(near.hp < hpNear0, "enemy in front of the dome still takes the stream");
+  assert.strictEqual(beyond.hp, hpBeyond0, "second target is never promoted past the dome");
+});
+
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
   const pull = new JH.Pickup("water_can", 0, 0, 10);
   const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60

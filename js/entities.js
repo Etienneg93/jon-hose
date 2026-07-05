@@ -521,6 +521,8 @@
       const pierce = beam >= 3;
       let blocker = null;
       let minFwd = Infinity;   // near-edge distance of the chosen blocker (used below)
+      let shieldFwd = Infinity;     // near edge of the CLOSEST blocking shield/dome in the stream
+      let blockerIsEnemy = false;   // final blocker came from game.enemies (not a shield/dome)
       {
         if (!pierce) {
           for (const e of game.enemies) {
@@ -528,7 +530,7 @@
             if (e.dropping) continue;   // airborne drop-ins can't block or be hit
             if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
-            if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+            if (fwd < minFwd) { minFwd = fwd; blocker = e; blockerIsEnemy = true; }
           }
         }
         for (const s of game.shields) {
@@ -546,23 +548,38 @@
             const half = s.radius * Math.sqrt(1 - (dyS * dyS) / (ry * ry));// x half-width at this depth
             const edgeFwd = (s.x - ox) * this.facing - half;               // near edge along facing
             if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
-            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
+            if (edgeFwd < shieldFwd) shieldFwd = edgeFwd;
+            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; blockerIsEnemy = false; }
           } else {
             if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (s.x - ox) * this.facing;
-            if (fwd < minFwd) { minFwd = fwd; blocker = s; }
+            if (fwd < shieldFwd) shieldFwd = fwd;
+            if (fwd < minFwd) { minFwd = fwd; blocker = s; blockerIsEnemy = false; }
           }
         }
       }
       // Brass Nozzle: the non-pierce stream also catches the next-closest
-      // enemy in arc (a second, independent blocker — not just splash off the first).
+      // enemy in arc (a second, independent blocker — not just splash off the
+      // first). Only when the primary blocker is an ENEMY (a shield/dome
+      // blocker means the stream is stopped by a wall — nothing gets promoted
+      // past it), and never a candidate at/past any blocking shield's near
+      // edge or sheltered inside an active dome.
       let blocker2 = null;
-      if (!pierce && blocker && game.relics && game.relics.brass_nozzle) {
+      if (!pierce && blockerIsEnemy && game.relics && game.relics.brass_nozzle) {
         let minFwd2 = Infinity;
         for (const e of game.enemies) {
           if (e.dead || e.dropping || e === blocker) continue;
           if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
           const fwd = (e.x - ox) * this.facing;
+          if (fwd >= shieldFwd) continue;   // the stream never reaches past a shield/dome
+          // Dome shelter mirrors the damage loop's rule: don't promote a
+          // target the loop would refuse to hit — pick a reachable one instead.
+          let sheltered = false;
+          for (const s of game.shields) {
+            if (s.dead || !s.radius || !s.active) continue;
+            if (insideDome(s, e.x, e.y) && !insideDome(s, this.x, this.y)) { sheltered = true; break; }
+          }
+          if (sheltered) continue;
           if (fwd < minFwd2) { minFwd2 = fwd; blocker2 = e; }
         }
       }
