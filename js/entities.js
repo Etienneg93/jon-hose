@@ -321,6 +321,7 @@
         this._dashX = (mx || my) ? mx : this.facing;
         this._dashY = my;
         this._dashTouched = new Set();   // Backdraft: enemies scalded this dash
+        this._gustTouched = new Set();   // Whirlwind Walk: enemies gusted this dash
         this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
@@ -353,22 +354,22 @@
             if (bdRank >= 2) e.takeDamage(8, game, this.facing, 60);
           }
         }
-        // Whirlwind Walk: the dash body destroys any embers-pipeline
-        // projectile it touches (FX bursts excluded via isFx) and gusts
-        // overlapping non-boss enemies aside, each once per dash (shares
-        // _dashTouched with Backdraft above).
+        // Whirlwind Walk: the dash body destroys projectiles it touches
+        // (isProjectile whitelist — Ember/Fireball/SmeltBomb/Rock/ShieldLob;
+        // boss patterns, KillPops and other FX riders are never swept) and
+        // gusts overlapping non-boss enemies aside, each once per dash
+        // (own _gustTouched set — independent of Backdraft's).
         if (this.beneRank("whirlwind_walk")) {
           for (const em of game.embers) {
-            if (em.isFx) continue;
-            if (typeof em.x !== "number" || typeof em.y !== "number") continue;
+            if (!em.isProjectile || em.dead) continue;
             if (Math.hypot(em.x - this.x, em.y - this.y) >= 14) continue;
             em.dead = true;
             burst(game, em.x, em.y, em.z || 0, "#ffffff", 6, { speed: 60, life: 0.25, up: 20 });
           }
           for (const e of game.enemies) {
-            if (e.dead || e.isBoss || e.dropping || this._dashTouched.has(e)) continue;
+            if (e.dead || e.isBoss || e.dropping || this._gustTouched.has(e)) continue;
             if (!Geo.bodiesOverlap(this, e)) continue;
-            this._dashTouched.add(e);
+            this._gustTouched.add(e);
             e.applyKnockback(this.facing, 140);
             e.takeDamage(15, game, this.facing, 0);
           }
@@ -1476,6 +1477,7 @@
       Object.assign(this, { x, y, z, vx, vy, dmg, life: 2.2, t: 0, dead: false });
       // opts.patch = {r, dur}: spawn a FirePatch where the ember expires
       this.patch = (opts && opts.patch) || null;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -1546,6 +1548,7 @@
       this.life = d.lifespan;
       this.t = 0;
       this.dead = false;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -1623,6 +1626,7 @@
       this.slam = null;        // active slam telegraph {range, band, dmg, dur, t}
       this.state = "idle";     // animation state only ("walk"/"idle")
       this.thrownZone = null;  // super only: the SlowZone from its lobbed shield, while live
+      this.lob = null;         // super only: the in-flight ShieldLob (null once landed)
     }
     die(game) {
       if (this.shield) { this.shield.dead = true; this.shield = null; }
@@ -1747,13 +1751,21 @@
       if (this.phase === "throwWind") {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          game.embers.push(new JH.ShieldLob(this.x, this.y, pl.x, pl.y, this));
+          this.lob = new JH.ShieldLob(this.x, this.y, pl.x, pl.y, this);
+          game.embers.push(this.lob);
           this.hasShield = false;
           this.phase = "brawl"; this.cdTimer = 0.6;
         }
         return;
       }
       if (this.phase === "brawl") {
+        // Lob destroyed mid-flight (Whirlwind Walk): no zone/dome ever lands,
+        // so reclaim the shield here or the brawl phase never exits.
+        if (!this.thrownZone && this.lob && this.lob.dead) {
+          this.lob = null; this.hasShield = true;
+          this.phase = "approach"; this.cdTimer = d.redeployCd;
+          return;
+        }
         if (this.thrownZone && this.thrownZone.dead) {
           this.thrownZone = null; this.hasShield = true;
           if (this.shield) { this.shield.dead = true; this.shield = null; }
@@ -2147,6 +2159,7 @@
       this.vx = (tx - x) / flightT; this.vy = (ty - y) / flightT;
       this.vz = 0.5 * 300 * flightT - this.z / flightT;
       this.t = 0; this.dead = false;
+      this.isProjectile = true;   // Whirlwind Walk can destroy it mid-flight (counterplay)
     }
     update(dt, game) {
       this.t += dt;
@@ -2161,7 +2174,7 @@
         dome.radius = 34;
         dome.domeDur = dome.domeT = 5;
         game.shields.push(dome);
-        if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; }
+        if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; this.owner.lob = null; }
         game.shake(3); if (game.audio) game.audio.play("whack");
         this.dead = true;
       }
@@ -3346,6 +3359,7 @@
       this.dmg = dmg; this.travelTime = travelTime || 0.7;
       this.variant = Math.floor(Math.random() * 6);
       this.t = 0; this.dead = false; this.hit = false;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -4186,6 +4200,7 @@
       this.t = 0;
       this.dead = false;
       this.bounces = (opts && opts.bounces) || 0;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;

@@ -1052,3 +1052,31 @@ test("Whirlwind Walk: dashing near a live ember destroys it", () => {
   assert.strictEqual(em.dead, true, "ember destroyed by the dash sweep");
   B.reset();
 });
+
+test("Whirlwind Walk: non-projectile embers riders (FireRing) survive the sweep", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("whirlwind_walk");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  const ring = new JH.FireRing(p.x + 2, p.y, { maxR: 60, speed: 40, dmg: 10 });
+  g.embers = [ring];
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.strictEqual(ring.dead, false, "boss pattern untouched — sweep is isProjectile-only");
+  B.reset();
+});
+
+test("super bulwark recovers its shield when the lob dies mid-flight", () => {
+  const g = makeThinkGame(200, 40);
+  const b = JH.makeEnemy("bulwark", 60, 40);
+  b.makeSuper();
+  b.phase = "brawl"; b.hasShield = false;
+  b.lob = { dead: true };   // destroyed before landing — no zone, no dome
+  b.superThink(1 / 60, g);
+  assert.strictEqual(b.hasShield, true, "shield reclaimed despite the lob never landing");
+  assert.strictEqual(b.phase, "approach", "brawl phase exits instead of locking forever");
+  assert.strictEqual(b.lob, null, "stale lob reference cleared");
+});
