@@ -436,6 +436,25 @@
     return true;
   };
 
+  // Boon verb corner mark (procedural, no PNG): stream = bar, dash = chevron,
+  // body = dot. (x, y) is the TOP-RIGHT corner of the icon the mark tags —
+  // the mark hangs down-left from it. Unknown/missing verb draws nothing.
+  Assets.verbMark = function (ctx, verb, x, y) {
+    x = Math.round(x); y = Math.round(y);
+    if (verb === "stream") {
+      ctx.fillStyle = "#d6f6ff";
+      ctx.fillRect(x - 4, y, 4, 2);
+    } else if (verb === "dash") {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(x - 4, y, 2, 1);
+      ctx.fillRect(x - 3, y + 1, 2, 1);
+      ctx.fillRect(x - 4, y + 2, 2, 1);
+    } else if (verb === "body") {
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(x - 3, y, 3, 3);
+    }
+  };
+
   // ---- shared bits ----------------------------------------------------
   function shadow(ctx, x, y, w) {
     ctx.save();

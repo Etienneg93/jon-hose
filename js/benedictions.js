@@ -4,7 +4,11 @@
    Dual-export like pillars.js/balance.js.
 
    DEFS entries:
-     boon:       {id, element, name, desc, descII, kind:"boon"}
+     boon:       {id, element, verb, name, desc, descII, kind:"boon"}
+                 verb: "stream" | "dash" | "body" — drives the HUD/sigil
+                 corner mark (Assets.verbMark) that tells same-element
+                 boons apart. Duos/legendaries carry no verb (their frame
+                 ring is the distinguisher).
      duo:        {id, name, desc, needs:[el,el], kind:"duo"}
      legendary:  {id, name, desc, element, kind:"legendary"}
 
@@ -23,61 +27,61 @@
 
   const DEFS = [
     // Water — control & sustain
-    { id: "split_stream", element: "water", kind: "boon", name: "Split Stream",
+    { id: "split_stream", verb: "stream", element: "water", kind: "boon", name: "Split Stream",
       desc: "50% of spray damage arcs to one nearby enemy with a visible chain-stream",
       descII: "two extra targets" },
-    { id: "baptismal_wake", element: "water", kind: "boon", name: "Baptismal Wake",
+    { id: "baptismal_wake", verb: "dash", element: "water", kind: "boon", name: "Baptismal Wake",
       desc: "Dash leaves a puddle (enemy-slowing, 0.7x, 3s)",
       descII: "larger + enemies inside take +10% dmg" },
-    { id: "overflow", element: "water", kind: "boon", name: "Overflow",
+    { id: "overflow", verb: "stream", element: "water", kind: "boon", name: "Overflow",
       desc: "Tank ≥80%: +20% spray dmg",
       descII: "+30%, threshold 70%" },
-    { id: "baptize", element: "water", kind: "boon", name: "Baptize",
+    { id: "baptize", verb: "stream", element: "water", kind: "boon", name: "Baptize",
       desc: "Enemies at wetness >0.3 take +15% spray dmg",
       descII: "+25%" },
-    { id: "absolution", element: "water", kind: "boon", name: "Absolution",
+    { id: "absolution", verb: "body", element: "water", kind: "boon", name: "Absolution",
       desc: "Wave clear heals 25",
       descII: "40 + clears burn" },
 
     // Fire — damage & risk
-    { id: "scalding_faith", element: "fire", kind: "boon", name: "Scalding Faith",
+    { id: "scalding_faith", verb: "stream", element: "fire", kind: "boon", name: "Scalding Faith",
       desc: "Full-pressure spray applies Scald: 4/s for 2s enemy DoT",
       descII: "6/s, 3s" },
-    { id: "backdraft", element: "fire", kind: "boon", name: "Backdraft",
+    { id: "backdraft", verb: "dash", element: "fire", kind: "boon", name: "Backdraft",
       desc: "Dashing through enemies Scalds them",
       descII: "+8 burst pop" },
-    { id: "trial_by_fire", element: "fire", kind: "boon", name: "Trial by Fire",
+    { id: "trial_by_fire", verb: "stream", element: "fire", kind: "boon", name: "Trial by Fire",
       desc: "+20% spray dmg to enemies that are burning, Scalded, or standing in a fire patch",
       descII: "+30%" },
-    { id: "ash_walk", element: "fire", kind: "boon", name: "Ash Walk",
+    { id: "ash_walk", verb: "body", element: "fire", kind: "boon", name: "Ash Walk",
       desc: "First burn stack per patch ignored; walking a patch douses it with a steam pop (6 dmg nearby), 10s cooldown",
       descII: "6s cd + bigger pop" },
 
     // Earth — force & interrupts
-    { id: "aftershock", element: "earth", kind: "boon", name: "Aftershock",
+    { id: "aftershock", verb: "stream", element: "earth", kind: "boon", name: "Aftershock",
       desc: "Enemies knocked into arena walls/debris take 15 slam dmg",
       descII: "25 + a small shockwave at the impact" },
-    { id: "sure_grip", element: "earth", kind: "boon", name: "Sure Grip",
+    { id: "sure_grip", verb: "body", element: "earth", kind: "boon", name: "Sure Grip",
       desc: "Spray no longer slows your movement",
       descII: "+10% knockback" },
-    { id: "bedrock", element: "earth", kind: "boon", name: "Bedrock Vigor",
+    { id: "bedrock", verb: "body", element: "earth", kind: "boon", name: "Bedrock Vigor",
       desc: "+40 max HP; taking a hit grants +20% knockback for 3s",
       descII: "+60 HP" },
-    { id: "landslide", element: "earth", kind: "boon", name: "Landslide",
+    { id: "landslide", verb: "stream", element: "earth", kind: "boon", name: "Landslide",
       desc: "Knocked-back enemies damage enemies they pass through (8)",
       descII: "14 + staggers them" },
 
     // Air — tempo
-    { id: "gale_stride", element: "air", kind: "boon", name: "Gale Stride",
+    { id: "gale_stride", verb: "dash", element: "air", kind: "boon", name: "Gale Stride",
       desc: "Dash travels 40% farther in the same time",
       descII: "60%" },
-    { id: "slipstream", element: "air", kind: "boon", name: "Slipstream Draft",
+    { id: "slipstream", verb: "dash", element: "air", kind: "boon", name: "Slipstream Draft",
       desc: "0.5s of free-water spray after each dash",
       descII: "0.8s" },
-    { id: "tailwind", element: "air", kind: "boon", name: "Tailwind Tithe",
+    { id: "tailwind", verb: "body", element: "air", kind: "boon", name: "Tailwind Tithe",
       desc: "+2% move speed per GUSH combo, cap +20%",
       descII: "cap +30%" },
-    { id: "eye_of_storm", element: "air", kind: "boon", name: "Eye of the Storm",
+    { id: "eye_of_storm", verb: "body", element: "air", kind: "boon", name: "Eye of the Storm",
       desc: "1s guaranteed dodge at wave start & after sigil pickup",
       descII: "1.5s + 15% move during" },
 

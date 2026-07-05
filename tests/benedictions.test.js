@@ -11,6 +11,14 @@ test("DEFS: 17 boons, 3 duos, 4 legendaries; ids unique", () => {
   assert.strictEqual(new Set(B.DEFS.map((d) => d.id)).size, B.DEFS.length);
 });
 
+test("DEFS: every boon carries a verb from the allowed set; duos/legendaries none", () => {
+  const VERBS = new Set(["stream", "dash", "body"]);
+  for (const d of B.DEFS) {
+    if (d.kind === "boon") assert.ok(VERBS.has(d.verb), d.id + " verb=" + d.verb);
+    else assert.strictEqual(d.verb, undefined, d.id + " should carry no verb");
+  }
+});
+
 test("pickOffers: 3 offers, distinct elements when possible, no rank-2 repeats", () => {
   const state = { active: {}, pillarRanks: {}, usedOnce: {}, censer: false };
   const offers = B.pickOffers(state, () => 0.9);   // high rolls: no duo/legendary

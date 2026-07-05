@@ -2325,6 +2325,8 @@
           ctx.strokeStyle = "#0a0e18";
           ctx.strokeRect(x, Y, 8, 8);
         }
+        // Verb corner mark tells same-element boons apart (boons only).
+        if (d.kind === "boon" && d.verb) JH.Assets.verbMark(ctx, d.verb, x + 10, Y - 2);
         // Rank-2 boons keep the bright ring.
         if (rank >= 2) {
           ctx.strokeStyle = col;
