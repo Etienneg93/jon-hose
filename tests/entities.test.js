@@ -1023,6 +1023,16 @@ test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown"
   p2.update(1 / 60, g);   // still standing in the same patch: the free stack is already spent
   assert.ok(g.player.burnStacks > 0, "immunity is once per patch — the next tick burns");
 
+  // The free token must NOT burn remotely: a patch ticking while the player
+  // is far away keeps its token for the actual first contact.
+  const gFar = makeThinkGame(400, 40);             // player far from the patch
+  const pFar = new JH.FirePatch(100, 40, 24, 3);
+  gFar.player.douseCdT = 99;                       // isolate the immunity path
+  pFar.update(1 / 60, gFar);                       // remote tick — token unspent
+  gFar.player.x = 100;                             // NOW step in
+  pFar.update(1 / 60, gFar);
+  assert.strictEqual(gFar.player.burnStacks, 0, "first real contact is still free after remote ticks");
+
   // Rank II: shorter cooldown and a bigger pop (10 dmg vs 6).
   B.take("ash_walk");                              // rank 2
   const g2 = makeThinkGame(100, 40);

@@ -2030,11 +2030,12 @@
           if (game.audio) game.audio.play("sizzle");
         }
         // Ash Walk: while fully unburned, this patch's first stack is ignored
-        // outright — but only once per patch (guard checks .beneRank exists —
-        // test stubs use plain player objects without it). Staying in the
-        // patch after the free stack burns normally on the next tick.
+        // outright — but only once per patch, and only on actual CONTACT
+        // (without the `inside` gate the token burned remotely every frame).
+        // Staying in the patch after the free stack burns normally on the
+        // next tick. (.beneRank guard: test stubs use plain player objects.)
         const aw = pl.beneRank && pl.beneRank("ash_walk");
-        if (aw && pl.burnStacks === 0 && !this._awUsed) {
+        if (aw && inside && pl.burnStacks === 0 && !this._awUsed) {
           this._awUsed = true;   // immune — no burn application this contact
         } else if (inside && this.patchBurnT <= 0) {
           // Only consume the tick when the stack actually lands; if the
