@@ -911,6 +911,29 @@ test("waveCleared_: Absolution + sigil beat land before the quake cutscene retur
   B.reset();
 });
 
+test("waveCleared_: final (Slayer) wave clear keeps its sigil beat — cutscene, not a synchronous win()", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  JH.Music = { setTrack() {} };
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.waveIndex = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+  assert.strictEqual(g.waveIndex, JH.LEVEL1.waves.length - 1, "Slayer is the final wave (premise)");
+  g.beneUsedOnce = {}; g.sigils = [];
+  let won = false;
+  g.win = () => { won = true; };
+  g.waveCleared_();
+  assert.strictEqual(g.state, "cutscene", "slayer clear enters its cutscene");
+  assert.strictEqual(g.cutscene && g.cutscene.who, "slayer");
+  assert.strictEqual(won, false, "win() never fires synchronously on the slayer clear");
+  assert.ok(g.sigils.length > 0, "final boss clear still offers sigils");
+  JH.Music = prevMusic;
+  if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
+  B.reset();
+});
+
 test("waveCleared_: vendor spawns every 3rd tracked clear, resets the counter", () => {
   const B = global.window.JH.Benedictions;
   B.reset();

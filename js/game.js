@@ -499,10 +499,11 @@
       // cross below deliberately excludes bosses — they get their own drop).
       // Also above the cutscene early-returns: quake/slayer are boss beats;
       // their sigils sit harmlessly through the cutscene (startWave clears
-      // any left unpicked). Skip on the final wave — win() below discards
-      // any sigils immediately, so don't bother spawning them.
-      const isFinalWave = this.waveIndex >= JH.LEVEL1.waves.length - 1;
-      if (!isFinalWave && clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+      // any left unpicked). The final (Slayer) wave keeps its beat: its
+      // cutscene early-return below fires before the win() check, so win()
+      // never runs synchronously here and the sigils are pickable in the
+      // post-cutscene free-walk.
+      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
         const offers = JH.Benedictions.pickOffers({
           active: JH.Benedictions.active,
           pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
@@ -549,7 +550,7 @@
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
       // The LAST wave (final boss) wins; a mid-boss just continues.
-      if (isFinalWave) { this.win(); return; }
+      if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
 
       // Free-walk onward; drop a shop vendor every 3rd wave clear (always on
       // a boss clear), tracked by clearsSinceVendor and reset when it spawns.
