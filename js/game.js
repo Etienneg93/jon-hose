@@ -2031,6 +2031,7 @@
       const S = this.player.stats, F = this.player.statFlash || {};
       // 4th column = baked icon key (drawn at half size before the label).
       const rows = [
+        ["LV",     this.playerLevel, null, null],
         ["DMG",    Math.round(S.sprayDamage), "sprayDamage", "dmg"],
         ["RANGE",  Math.round(S.sprayRange),  "sprayRange",  "range"],
         ["WATER",  Math.round(S.maxWater),    "maxWater",    "water"],

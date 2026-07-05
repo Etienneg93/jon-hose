@@ -1338,3 +1338,16 @@ test("dropLoot: dryStreak increments on a null roll and resets once an item drop
     Math.random = origRandom;
   }
 });
+
+test("death wash: benedictions clear, levels/signatures survive respawn refresh", () => {
+  JH.Upgrades.reset(); JH.Benedictions.reset();
+  JH.Upgrades.owned = { sig_marshal: true };
+  JH.Upgrades.levelCount = 4;
+  JH.Benedictions.take("bedrock");
+  const before = JH.Upgrades.computeStats(JH.Upgrades.owned);
+  JH.Benedictions.reset();                             // what respawnFromChurch does
+  const after = JH.Upgrades.computeStats(JH.Upgrades.owned);
+  assert.strictEqual(before.maxHp - after.maxHp, 40);  // bedrock gone
+  assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // signature survived
+  JH.Upgrades.reset(); JH.Benedictions.reset();
+});
