@@ -121,6 +121,15 @@
       this.syncAudioUI = sync;
       sync();
 
+      // Tab toggles the stat panel anywhere in play (UI chrome, not a
+      // combat verb — preventDefault stops browser focus-cycling).
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Tab" && this.state === "play") {
+          e.preventDefault();
+          this.showStats = !this.showStats;
+        }
+      });
+
       // ---- dev menu: localhost-only, backtick toggles wave-select overlay ----
       const h = window.location.hostname;
       const isDev = h === "localhost" || h === "127.0.0.1" || h === "";
@@ -510,8 +519,9 @@
           usedOnce: this.beneUsedOnce,
           censer: !!this.relics && !!this.relics.censer,
         }, Math.random);
+        // Horizontal row at one depth so the offer reads as a lineup.
         this.sigils = offers.map((o, i) =>
-          new JH.Sigil(this.player.x + 60 + i * 46, JH.DEPTH_MAX - 20 - i * 14, o));
+          new JH.Sigil(this.player.x + 50 + i * 46, 56, o));
       }
 
       // After Quake Walker, play his ally cutscene before continuing.
@@ -1824,8 +1834,16 @@
         ctx.textAlign = "left";
         ctx.restore();
       }
+      // Stat panel: at the vendor, or toggled anywhere with Tab.
+      if (this.state === "play" && (this.nearShop || this.showStats))
+        this.drawStatPanel(this.ctx);
       // Hover shop panel — drawn outside shake transform so it stays stable.
-      if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
+      if (this.nearShop && this.state === "play") {
+        this.drawHoverShop(this.ctx);
+        // Sigils must never hide behind the shop panel — redraw them above it.
+        for (const s of this.sigils) if (!s.dead) s.draw(this.ctx, JH.Camera.x);
+      }
+      if (this.state === "play") this.drawSigilCard(this.ctx);
       // Cutscene overlay (drawn after everything else).
       if (this.state === "cutscene" && this.cutscene) this.drawCutscene(this.ctx);
       // Dev menu drawn last so it's always on top.
@@ -2044,6 +2062,7 @@
         ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), ["waterRegen", "moveRegen"], "regen"],
         ["HP",     Math.round(S.maxHp),       "maxHp",       "hp"],
         ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed",   "speed"],
+        ["KB",     Math.round(S.knockback),   "knockback",   "knockback"],
         ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"],
         ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"],
       ];
@@ -2085,8 +2104,54 @@
       ctx.restore();
     },
 
+    // Bottom info card for the sigil the player is standing at: name, kind,
+    // rank-appropriate effect text, and the take prompt — so a pick is never
+    // blind. Nearest live sigil within reach wins.
+    drawSigilCard(ctx) {
+      const pl = this.player;
+      let near = null, best = 30;
+      for (const s of this.sigils) {
+        if (s.dead) continue;
+        const d = Math.hypot(pl.x - s.x, pl.y - s.y);
+        if (d < best) { best = d; near = s; }
+      }
+      if (!near) return;
+      const def = JH.Benedictions.byId(near.offer.id);
+      if (!def) return;
+      const el = def.element || (def.needs && def.needs.join("+")) || "";
+      const kind = def.kind === "duo" ? "DUO" : def.kind === "legendary" ? "LEGENDARY" : el.toUpperCase();
+      const deep = near.offer.deepen;
+      const desc = (deep && def.descII ? "II: " + def.descII : def.desc) || "";
+      const W = 300, H = 34, X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.92)";
+      ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = JH.SIGIL_COLORS[def.element || (def.needs && def.needs[0])] || "#ffd23f";
+      ctx.strokeRect(X, Y, W, H);
+      ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#dfe8f5";
+      ctx.fillText(def.name + (deep ? " II" : ""), X + 6, Y + 10);
+      ctx.textAlign = "right";
+      ctx.fillStyle = def.kind === "legendary" ? "#ffd23f" : "#8fa8c8";
+      ctx.fillText(kind, X + W - 6, Y + 10);
+      ctx.textAlign = "left";
+      ctx.font = "6px monospace";
+      ctx.fillStyle = "#aebdd4";
+      // Two-line wrap: split near the middle on a space.
+      if (desc.length > 52) {
+        let cut = desc.lastIndexOf(" ", 52);
+        if (cut < 20) cut = 52;
+        ctx.fillText(desc.slice(0, cut), X + 6, Y + 20);
+        ctx.fillText(desc.slice(cut + 1), X + 6, Y + 28);
+      } else {
+        ctx.fillText(desc, X + 6, Y + 22);
+      }
+      ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
+      ctx.fillText("E: TAKE", X + W - 6, Y + H - 6);
+      ctx.restore();
+    },
+
     drawHoverShop(ctx) {
-      this.drawStatPanel(ctx);
       const U = JH.Upgrades, pl = this.player;
       const selectable = this.shopSelectables();
       if (selectable.length > 0)

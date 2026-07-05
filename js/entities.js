@@ -203,7 +203,8 @@
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them.
       const KEYS = ["sprayDamage", "sprayRange", "maxWater", "waterRegen",
-                    "moveRegen", "moveSpeed", "dodgeChance", "vampiricRate", "maxHp"];
+                    "moveRegen", "moveSpeed", "dodgeChance", "vampiricRate",
+                    "maxHp", "knockback"];
       if (this.stats) {
         this.statFlash = this.statFlash || {};
         for (const k of KEYS)
