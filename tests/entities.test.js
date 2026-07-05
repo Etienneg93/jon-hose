@@ -1312,3 +1312,26 @@ test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly onc
   boss.think(1 / 60, g);
   assert.strictEqual(g.player.pressureBuffT, 0, "latch prevents re-granting on subsequent enraged frames");
 });
+
+test("dropLoot: dryStreak increments on a null roll and resets once an item drops", () => {
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.pickups = []; g.deferredQueue = []; g.dryStreak = 0;
+  const mook = new JH.Enemy("mook", 0, 0);   // dropMult 1 -> t.water = 0.45 cumulative item chance
+
+  const origRandom = Math.random;
+  try {
+    Math.random = () => 0.99;   // above every threshold: no item, streak-only miss
+    g.dropLoot(mook);
+    assert.strictEqual(g.dryStreak, 1);
+    g.dropLoot(mook);
+    assert.strictEqual(g.dryStreak, 2);
+
+    Math.random = () => 0;      // below every threshold: guaranteed health drop
+    g.dropLoot(mook);
+    assert.strictEqual(g.dryStreak, 0, "a landed drop resets the streak");
+    assert.ok(g.pickups.some((p) => p.kind === "health"));
+  } finally {
+    Math.random = origRandom;
+  }
+});

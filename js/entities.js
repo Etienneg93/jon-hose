@@ -182,6 +182,8 @@
       this.spigotT = 0;            // Spigot Key: +10% spray dmg window after a hydrant refill, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
+      this.kibbleTickT = 0;        // seconds until the next +N floater tick
+      this.kibbleTickAcc = 0;      // HP healed since the last floater tick
       this.gushRegenT = 0;         // GUSH milestone: water regen window (sec)
       this.gushRegenRate = 0;      // water/s while the window is live
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
@@ -292,7 +294,16 @@
       }
       if (this.kibbleTimer > 0) {
         this.kibbleTimer -= dt;
+        const before = this.hp;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
+        this.kibbleTickAcc += this.hp - before;
+        this.kibbleTickT -= dt;
+        if (this.kibbleTickT <= 0) {
+          this.kibbleTickT += 0.5;
+          const healed = Math.round(this.kibbleTickAcc);
+          if (healed > 0) game.float(this.x, this.y - 30, "+" + healed, "#44ee66");
+          this.kibbleTickAcc = 0;
+        }
       }
       // GUSH milestone water regen — independent of the regular regen delay.
       if (this.gushRegenT > 0) {

@@ -325,6 +325,7 @@
       this.cutscene = null; this.victoryPortal = null;
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
+      this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
       this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
@@ -484,6 +485,15 @@
       if (ab) {
         this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + (ab >= 2 ? 40 : 25));
         if (ab >= 2) this.player.clearBurn();
+      }
+      // Wave-clear bonus item: tough waves always force one; the Alarm Bell
+      // relic extends that to every wave clear. dryStreak 6 forces rollDrop
+      // past its pity gate so it always returns an item (never null).
+      if (clearedWave && (clearedWave.tough || (this.relics && this.relics.alarm_bell))) {
+        const p = this.player;
+        const kind = JH.Balance.rollDrop(1, 6, p.hp / p.stats.maxHp, p.water / p.stats.maxWater, Math.random);
+        if (kind === "health") this.spawnPickup("health", p.x + 20, p.y, 25);
+        else this.spawnPickup("water_can", p.x + 20, p.y, 40);
       }
       // Benediction beat: bosses AND set-pieces offer sigils (the essence
       // cross below deliberately excludes bosses — they get their own drop).
@@ -921,10 +931,12 @@
         }
       } else {
         JH.spawnSudsCoins(this, e.x, e.y, e.def.suds);
-        const t = JH.Balance.dropThresholds(e.def.dropMult);
-        const r = Math.random();
-        if (r < t.health) this.spawnPickup("health", e.x + 6, e.y, 25);
-        else if (r < t.water) this.spawnPickup("water_can", e.x - 6, e.y, 40);
+        const p = this.player;
+        const kind = JH.Balance.rollDrop(e.def.dropMult, this.dryStreak,
+          p.hp / p.stats.maxHp, p.water / p.stats.maxWater, Math.random);
+        if (kind === "health")     { this.spawnPickup("health", e.x + 6, e.y, 25); this.dryStreak = 0; }
+        else if (kind === "water") { this.spawnPickup("water_can", e.x - 6, e.y, 40); this.dryStreak = 0; }
+        else this.dryStreak++;
       }
     },
     // Add n/traumaDiv trauma (legacy 1..14 scale at existing call sites).
