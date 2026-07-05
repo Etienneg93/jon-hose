@@ -323,6 +323,7 @@
       this.cutscene = null; this.victoryPortal = null;
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
+      this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
@@ -536,14 +537,16 @@
       // The LAST wave (final boss) wins; a mid-boss just continues.
       if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
 
-      // Free-walk onward; drop a shop vendor — but NOT after the first
-      // introductory wave (only from wave 2 onward).
+      // Free-walk onward; drop a shop vendor every 3rd wave clear (always on
+      // a boss clear), tracked by clearsSinceVendor and reset when it spawns.
       const next = this.waveIndex + 1;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[next] + 30 };
-      if (this.waveIndex >= 1) {
+      this.clearsSinceVendor = (this.clearsSinceVendor || 0) + 1;
+      const isBoss = !!(clearedWave && clearedWave.boss);
+      if (this.clearsSinceVendor >= 3 || isBoss) {
+        this.clearsSinceVendor = 0;
         this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[next] - 150, JH.DEPTH_MIN + 6);
         // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
-        const isBoss = !!(clearedWave && clearedWave.boss);
         const clearText = isBoss ? "BOSS DOWN!" : "AREA CLEAR!";
         const clearDur  = isBoss ? 2.0 : 1.6;
         const delay = Math.max(0, this.bannerTimer - 1.0);

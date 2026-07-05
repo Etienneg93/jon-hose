@@ -89,6 +89,12 @@ test("repeatableCost rises 1.5x per purchase", () => {
   assert.strictEqual(Balance.repeatableCost(60, 3), 203); // round(202.5)
 });
 
+test("repeatableCost: optional factor overrides the 1.5x default", () => {
+  assert.strictEqual(Balance.repeatableCost(60, 0, 1.8), 60);
+  assert.strictEqual(Balance.repeatableCost(60, 1, 1.8), Math.round(60 * 1.8));
+  assert.strictEqual(Balance.repeatableCost(60, 2, 1.8), Math.round(60 * 1.8 * 1.8));
+});
+
 test("bulwarkShouldThrow: true when the player is within range", () => {
   assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 150, 40, 80), true);  // dist 50 <= 80
   assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 100, 40, 80), true);  // dist 0

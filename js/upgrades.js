@@ -1,18 +1,11 @@
 /* =====================================================================
-   upgrades.js — a branching SKILL TREE (replaces the old rank system).
+   upgrades.js — three signature purchases + a repeatable Overcharge sink
+   (replaces the old 15-node branching skill tree).
 
    Each node is bought ONCE, costs Suds, and may require earlier nodes in
    its branch. `owned` tracks purchased node ids; computeStats() folds the
    apply() of every owned node onto the base JH.PLAYER block. Some nodes
-   set flags (beam / waterReturn / dashPuddle) that
-   the player logic reads directly.
-
-   Branches:
-     PRESSURE  — damage + beam concentration (garden spray → cutting lance)
-     REACH     — stream length + knockback
-     TANK      — water capacity, regen, and water-on-hit
-     MOBILITY  — speed + dash tech
-     VITALITY  — survivability
+   set flags (beam / dashPuddle) that the player logic reads directly.
    ===================================================================== */
 (function () {
   "use strict";
@@ -20,75 +13,26 @@
 
   // tier = vertical position in its branch column (1 = root).
   const NODES = [
-    // ---- PRESSURE -----------------------------------------------------
-    { id: "pw1", branch: "PRESSURE", tier: 1, req: [], cost: 32,
-      name: "Thumb on the Nozzle", desc: "+8 dmg. Stream tightens into a jet.",
-      apply: (s) => { s.sprayDamage += 8; s.beam = Math.max(s.beam, 1); } },
-    { id: "pw2", branch: "PRESSURE", tier: 2, req: ["pw1"], cost: 80,
-      name: "Pressure Washer", desc: "+13 dmg, narrower, harder-hitting beam.",
-      apply: (s) => { s.sprayDamage += 13; s.beam = Math.max(s.beam, 2); s.sprayWidth -= 2; } },
-    { id: "pw3", branch: "PRESSURE", tier: 3, req: ["pw2"], cost: 168,
-      name: "Hydro Lance", desc: "+18 dmg. A cutting beam that punches through the whole line.",
-      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
-
-    // ---- REACH --------------------------------------------------------
-    { id: "rc1", branch: "REACH", tier: 1, req: [], cost: 36,
-      name: "Extension Hose", desc: "+26 stream range.",
-      apply: (s) => { s.sprayRange += 26; } },
-    { id: "rc2", branch: "REACH", tier: 2, req: ["rc1"], cost: 85,
+    { id: "sig_dash", branch: "SIGNATURE", tier: 1, req: [], cost: 160,
+      name: "Hydro-Dash", desc: "-0.2s dash cd. Dash boosts speed +28 for 3s and leaves a slick.",
+      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashPuddle = true; s.dashBoost = 28; s.dashBoostDur = 3; } },
+    { id: "sig_marshal", branch: "SIGNATURE", tier: 1, req: [], cost: 200,
       name: "Fire-Marshal Spec", desc: "+30 range, +30 knockback. Blow 'em back.",
       apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
-    { id: "rc3", branch: "REACH", tier: 3, req: ["rc2"], cost: 168,
-      name: "Split Stream", desc: "Hits arc to a nearby enemy for 30% damage.",
-      apply: (s) => { s.splitStream = true; } },
-
-    // ---- TANK ---------------------------------------------------------
-    { id: "tk1", branch: "TANK", tier: 1, req: [], cost: 20,
-      name: "Bladder Pack", desc: "+40 max water.",
-      apply: (s) => { s.maxWater += 40; } },
-    { id: "tk2", branch: "TANK", tier: 2, req: ["tk1"], cost: 55,
-      name: "Quick Prime", desc: "+10 regen/sec, faster recovery after spraying.",
-      apply: (s) => { s.waterRegen += 10; s.regenDelay = Math.max(0.15, s.regenDelay - 0.3); } },
-    { id: "tk3", branch: "TANK", tier: 3, req: ["tk2"], cost: 114,
-      name: "Closed Loop", desc: "-10 water drain/sec while hosing a target.",
-      apply: (s) => { s.waterReturn += 10; } },
-
-    // ---- MOBILITY -----------------------------------------------------
-    { id: "mb1", branch: "MOBILITY", tier: 1, req: [], cost: 32,
-      name: "Gripper Soles", desc: "+18 move speed.",
-      apply: (s) => { s.moveSpeed += 18; } },
-    { id: "mb2", branch: "MOBILITY", tier: 2, req: ["mb1"], cost: 85,
-      name: "Hydro-Dash", desc: "-0.2s dash cooldown. Dash boosts speed +28 for 3s.",
-      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashPuddle = true; s.dashBoost = 28; s.dashBoostDur = 3; } },
-    { id: "mb3", branch: "MOBILITY", tier: 3, req: ["mb2"], cost: 132,
-      name: "Kinetic Tap", desc: "+10 water/sec regen while moving.",
-      apply: (s) => { s.moveRegen += 10; } },
-
-    // ---- VITALITY -----------------------------------------------------
-    { id: "vt1", branch: "VITALITY", tier: 1, req: [], cost: 20,
-      name: "Wetsuit", desc: "+30 max HP.",
-      apply: (s) => { s.maxHp += 30; } },
-    { id: "vt2", branch: "VITALITY", tier: 2, req: ["vt1"], cost: 60,
-      name: "Second Wind", desc: "+30 max HP. 5% chance to dodge incoming damage.",
-      apply: (s) => { s.maxHp += 30; s.dodgeChance = Math.max(s.dodgeChance, 0.05); } },
-    { id: "vt3", branch: "VITALITY", tier: 3, req: ["vt2"], cost: 144,
-      name: "Vampiric Hose", desc: "Heal 5% of spray damage dealt.",
-      apply: (s) => { s.vampiricRate += 0.05; } },
+    { id: "sig_lance", branch: "SIGNATURE", tier: 3, req: [], cost: 220,
+      name: "Hydro Lance", desc: "+18 dmg. A cutting beam that pierces the whole line.",
+      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
   ];
 
-  // Repeatable "Overcharge" nodes: bought any number of times, cost rises each
-  // buy (JH.Balance.repeatableCost). The late-game Suds sink that keeps power
-  // creeping to match the elite ramp.
+  // Repeatable "Overcharge" node: bought any number of times, cost rises each
+  // buy (JH.Balance.repeatableCost, 1.8x factor). The late-game Suds sink
+  // that keeps power creeping to match the elite ramp.
   const REPEATABLES = [
     { id: "ov_dmg",   name: "Overcharge",  baseCost: 60, desc: "+4 spray dmg (repeatable).",
       apply: (s) => { s.sprayDamage += 4; } },
-    { id: "ov_water", name: "Reserves",    baseCost: 50, desc: "+12 max water (repeatable).",
-      apply: (s) => { s.maxWater += 12; } },
-    { id: "ov_hp",    name: "Conditioning",baseCost: 55, desc: "+12 max HP (repeatable).",
-      apply: (s) => { s.maxHp += 12; } },
   ];
 
-  const BRANCHES = ["PRESSURE", "REACH", "TANK", "MOBILITY", "VITALITY"];
+  const BRANCHES = ["SIGNATURE"];
 
   const Upgrades = {
     nodes: NODES,
@@ -172,7 +116,7 @@
     },
 
     repById(id) { return REPEATABLES.find((n) => n.id === id); },
-    repCost(id) { return JH.Balance.repeatableCost(this.repById(id).baseCost, this.repCount[id] || 0); },
+    repCost(id) { return JH.Balance.repeatableCost(this.repById(id).baseCost, this.repCount[id] || 0, 1.8); },
     canBuyRep(id, suds) { return !!this.repById(id) && suds >= this.repCost(id); },
     buyRep(id, player) {
       if (!this.canBuyRep(id, player.suds)) return false;

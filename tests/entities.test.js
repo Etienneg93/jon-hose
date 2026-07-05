@@ -551,12 +551,6 @@ test("computeStats caps dodgeChance at 25%", () => {
   delete global.window.JH.Mirror; delete global.window.JH.Church;
 });
 
-test("Vampiric Hose (vt3) grants 5% lifesteal", () => {
-  JH.Upgrades.reset();
-  const s = JH.Upgrades.computeStats({ vt1: true, vt2: true, vt3: true });
-  assert.ok(Math.abs(s.vampiricRate - 0.05) < 1e-9);
-});
-
 // ---- attack tickets: cap on simultaneous melee windups ----
 
 // Minimal game stub for enemy think() tests.
@@ -588,14 +582,33 @@ test("mook holds its windup when no attack ticket is free", () => {
 
 test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {
   JH.Upgrades.reset();
-  JH.Upgrades.owned = { pw1: true, pw2: true };
   JH.Upgrades.currentActLevel = -1;                     // Act 1
-  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), false);
+  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), false);
   JH.Upgrades.currentActLevel = 0;                      // Act 2 — gate opens here
-  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
   JH.Upgrades.currentActLevel = 1;                      // Act 3 — still available
-  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
   JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
+});
+
+test("Upgrades NODES: exactly three signatures, retired ids gone", () => {
+  const ids = JH.Upgrades.nodes.map((n) => n.id).sort();
+  assert.deepStrictEqual(ids, ["sig_dash", "sig_lance", "sig_marshal"]);
+  assert.deepStrictEqual(JH.Upgrades.branches, ["SIGNATURE"]);
+  assert.strictEqual(JH.Upgrades.repeatables.length, 1);
+  assert.strictEqual(JH.Upgrades.repeatables[0].id, "ov_dmg");
+  ["pw1", "pw2", "pw3", "rc1", "rc2", "rc3", "tk1", "tk2", "tk3",
+   "mb1", "mb2", "mb3", "vt1", "vt2", "vt3", "ov_water", "ov_hp"].forEach((id) => {
+    assert.strictEqual(JH.Upgrades.byId(id), undefined, id + " should be retired");
+  });
+});
+
+test("repCost: Overcharge escalates at 1.8x per prior buy", () => {
+  JH.Upgrades.reset();
+  assert.strictEqual(JH.Upgrades.repCost("ov_dmg"), 60);
+  JH.Upgrades.repCount.ov_dmg = 1;
+  assert.strictEqual(JH.Upgrades.repCost("ov_dmg"), Math.round(60 * 1.8));
+  JH.Upgrades.reset();
 });
 
 test("game.float pools with a 20 cap (oldest dropped) and culls by age", () => {
@@ -842,6 +855,33 @@ test("waveCleared_: Absolution + sigil beat land before the quake cutscene retur
   assert.strictEqual(g.state, "cutscene", "quake clear still enters its cutscene");
   assert.strictEqual(g.player.hp, 35, "rank-I Absolution healed 25 despite the early return");
   assert.ok(g.sigils.length > 0, "boss beat still offers sigils despite the early return");
+  JH.Music = prevMusic;
+  if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
+  B.reset();
+});
+
+test("waveCleared_: vendor spawns every 3rd tracked clear, resets the counter", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  JH.Music = { setTrack() {} };
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.banner = () => {}; g.bannerTimer = 0;
+  g.beneUsedOnce = {}; g.sigils = [];
+  g.shopNpc = null;
+  g.clearsSinceVendor = 1;              // matches startGame's seed
+  g.waveIndex = 0;                      // plain "WAVE 1" — not boss/set-piece
+  g.waveCleared_();
+  assert.strictEqual(g.shopNpc, null, "no vendor after the 1st clear");
+  assert.strictEqual(g.clearsSinceVendor, 2);
+
+  g.waveIndex = 1;                      // 2nd clear — counter hits 3, vendor due
+  g.waveCleared_();
+  assert.ok(g.shopNpc, "vendor spawns on the 3rd tracked clear");
+  assert.strictEqual(g.clearsSinceVendor, 0, "counter resets on spawn");
+
   JH.Music = prevMusic;
   if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
   B.reset();

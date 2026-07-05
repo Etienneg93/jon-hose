@@ -130,7 +130,6 @@
     dodgeChance: 0,         // fraction chance to negate a hit entirely (Second Wind)
     burnTakenMult: 1,       // damage multiplier for burn taken (Pillar of Fire rank 3+)
     vampiricRate: 0,        // fraction of spray damage converted to HP (Vampiric Hose)
-    splitStream: false,     // spray arcs to a nearby secondary target (Split Stream)
     moveRegen: 0,           // extra water regen/sec while moving (Kinetic Tap)
     dashBoost: 0,           // extra move speed px/sec after dashing (Hydro-Dash)
     dashBoostDur: 0,        // seconds the post-dash speed boost lasts

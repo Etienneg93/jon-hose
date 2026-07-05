@@ -98,9 +98,10 @@
       return out;
     },
 
-    // Cost of the next purchase of a repeatable node (1.5x per prior buy).
-    repeatableCost(base, timesBought) {
-      return Math.round(base * Math.pow(1.5, timesBought || 0));
+    // Cost of the next purchase of a repeatable node (factor per prior buy,
+    // default 1.5x; Overcharge passes 1.8x for a steeper late-game curve).
+    repeatableCost(base, timesBought, factor) {
+      return Math.round(base * Math.pow(factor || 1.5, timesBought || 0));
     },
 
     // Act-start checkpoint for a wave: largest actStarts entry <= waveIndex
