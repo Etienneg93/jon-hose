@@ -119,6 +119,21 @@
       return (timesBought || 0) + 1;
     },
 
+    // Per-visit relic stock: filter already-owned ids out of the pool,
+    // Fisher-Yates shuffle the rest with the injected rng, take the first n.
+    // Pure — never mutates poolIds. May return fewer than n if the pool is
+    // thin (most owned).
+    pickRelics(poolIds, ownedMap, n, rng) {
+      const owned = ownedMap || {};
+      const r = rng || Math.random;
+      const pool = poolIds.filter((id) => !owned[id]);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(r() * (i + 1));
+        const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+      return pool.slice(0, n);
+    },
+
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
     // The 0.9 cap applies to the cumulative water threshold, not per-item.

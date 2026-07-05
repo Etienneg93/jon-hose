@@ -302,3 +302,40 @@ test("beneDmgMult: qualifying boons stack multiplicatively", () => {
   const m = Balance.beneDmgMult({ overflow: 1, baptize: 1, trial: 1 }, { waterFrac: 0.9, wet: 0.5, burning: true });
   assert.ok(Math.abs(m - 1.2 * 1.15 * 1.2) < 1e-9);
 });
+
+test("pickRelics: never returns an owned id, returns at most n", () => {
+  const pool = ["a", "b", "c", "d", "e"];
+  const owned = { a: true, c: true };
+  const picks = Balance.pickRelics(pool, owned, 3, Math.random);
+  assert.ok(picks.length <= 3);
+  assert.ok(picks.every((id) => id === "b" || id === "d" || id === "e"), "never picks an owned id");
+  assert.strictEqual(new Set(picks).size, picks.length, "no duplicates");
+});
+
+test("pickRelics: returns fewer than n when the unowned pool is thin", () => {
+  const pool = ["a", "b", "c"];
+  const owned = { a: true, b: true };
+  const picks = Balance.pickRelics(pool, owned, 3, Math.random);
+  assert.deepStrictEqual(picks, ["c"]);
+});
+
+test("pickRelics: deterministic under a seeded rng, never mutates the input pool", () => {
+  const pool = ["a", "b", "c", "d"];
+  const seq1 = [0.1, 0.9, 0.5];
+  let i1 = 0;
+  const rng1 = () => seq1[i1++];
+  const picks1 = Balance.pickRelics(pool, {}, 2, rng1);
+
+  let i2 = 0;
+  const rng2 = () => seq1[i2++];
+  const picks2 = Balance.pickRelics(pool, {}, 2, rng2);
+
+  assert.deepStrictEqual(picks1, picks2, "same rng sequence -> same picks");
+  assert.deepStrictEqual(pool, ["a", "b", "c", "d"], "input pool array untouched");
+});
+
+test("pickRelics: no owned map treats every id as available", () => {
+  const pool = ["a", "b"];
+  const picks = Balance.pickRelics(pool, null, 5, Math.random);
+  assert.strictEqual(picks.length, 2);
+});

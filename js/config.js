@@ -304,6 +304,24 @@
     pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
   };
 
+  // Relics: one-time flag purchases (game.relics[id] = true), never a
+  // repeatable. Effects are hook-checks scattered across game.js/entities.js
+  // (grep the id) rather than an apply fn — see each id's comment there.
+  // A rotating stock of 3 is rolled per vendor visit from the still-unowned
+  // pool (Balance.pickRelics).
+  JH.RELICS = [
+    { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "Non-pierce stream also catches the next-closest enemy" },
+    { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "Hydrant refill grants +10% spray dmg for 15s" },
+    { id: "loaded_sponge",   name: "Loaded Sponge",    cost: 160, desc: "GUSH milestone water refund doubled" },
+    { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants a brief pressure buff" },
+    { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
+    { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
+    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Boss essence crosses are worth double" },
+    { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
+    { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
+    { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },
+  ];
+
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
 

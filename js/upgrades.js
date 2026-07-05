@@ -64,7 +64,9 @@
     // Locked = prerequisites not yet met, or act-gated (shown greyed in the shop).
     isLocked(id) { return !this.owned[id] && !this.isAvailable(id); },
 
-    canBuy(id, suds) { return this.isAvailable(id) && suds >= this.cost(id); },
+    // `price` (optional) overrides the sticker cost — game.priceOf applies
+    // the Punch Card relic discount before calling in.
+    canBuy(id, suds, price) { return this.isAvailable(id) && suds >= (price != null ? price : this.cost(id)); },
 
     // Every one-time skill node purchased — gates the repeatable OVERCHARGE nodes.
     allNodesOwned() { return NODES.every((n) => this.owned[n.id]); },
@@ -101,10 +103,11 @@
     },
 
     // Attempt purchase; returns true on success. Carries HP/water headroom
-    // when a node raises a capacity.
-    buy(id, player) {
-      if (!this.canBuy(id, player.suds)) return false;
-      player.suds -= this.cost(id);
+    // when a node raises a capacity. `price` (optional) overrides the cost
+    // charged (see canBuy).
+    buy(id, player, price) {
+      if (!this.canBuy(id, player.suds, price)) return false;
+      player.suds -= (price != null ? price : this.cost(id));
       this.owned[id] = true;
       const fresh = this.computeStats(this.owned);
       const hpGain = fresh.maxHp - player.stats.maxHp;
@@ -117,10 +120,11 @@
 
     repById(id) { return REPEATABLES.find((n) => n.id === id); },
     repCost(id) { return JH.Balance.repeatableCost(this.repById(id).baseCost, this.repCount[id] || 0, 1.8); },
-    canBuyRep(id, suds) { return !!this.repById(id) && suds >= this.repCost(id); },
-    buyRep(id, player) {
-      if (!this.canBuyRep(id, player.suds)) return false;
-      player.suds -= this.repCost(id);
+    // `price` (optional) overrides the sticker cost (see canBuy).
+    canBuyRep(id, suds, price) { return !!this.repById(id) && suds >= (price != null ? price : this.repCost(id)); },
+    buyRep(id, player, price) {
+      if (!this.canBuyRep(id, player.suds, price)) return false;
+      player.suds -= (price != null ? price : this.repCost(id));
       this.repCount[id] = (this.repCount[id] || 0) + 1;
       const fresh = this.computeStats(this.owned);
       const hpGain = fresh.maxHp - player.stats.maxHp;

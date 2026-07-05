@@ -635,6 +635,54 @@ test("sweepCrosses banks live crosses so win/respawn can't lose essence", () => 
   if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
 });
 
+test("priceOf: Punch Card discounts 20%, rounded; absent relic charges full price", () => {
+  assert.strictEqual(JH.Game.priceOf.call({ relics: {} }, 150), 150);
+  assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 150), 120);
+  assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 155), Math.round(155 * 0.8));
+  assert.strictEqual(JH.Game.priceOf.call({}, 150), 150, "missing relics map never throws");
+});
+
+// Minimal game stub for onEnemyKilled: a real Player (suds/water/gushRegen
+// fields) plus the handful of game-level methods the function calls.
+function makeKillGame() {
+  return {
+    kills: 0, combo: 0, comboTimer: 0, comboFlash: 0,
+    grantXp() {}, audio: { play() {} }, shake() {}, particles: [],
+    pickups: [],
+    spawnPickup(kind, x, y, value) { this.pickups.push({ kind, x, y, value }); },
+    player: makePlayer(),
+    relics: {},
+  };
+}
+
+test("onEnemyKilled: Collection Plate grants +2 bonus suds per kill; absent grants none", () => {
+  const g = makeKillGame();
+  g.relics.collection_plate = true;
+  JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.player.suds, 2);
+  assert.strictEqual(g.player.sudsEarned, 2);
+
+  const g2 = makeKillGame();
+  JH.Game.onEnemyKilled.call(g2, null);
+  assert.strictEqual(g2.player.suds, 0, "no relic, no bonus");
+});
+
+test("onEnemyKilled: boss cross is worth 1, or 2 with Sunday Suit", () => {
+  const prevChurch = JH.Church;
+  JH.Church = { markBossDefeated() {} };
+
+  const g1 = makeKillGame();
+  JH.Game.onEnemyKilled.call(g1, { isBoss: true, type: "boss", x: 10, y: 20 });
+  assert.strictEqual(g1.pickups[0].value, 1);
+
+  const g2 = makeKillGame();
+  g2.relics.sunday_suit = true;
+  JH.Game.onEnemyKilled.call(g2, { isBoss: true, type: "boss", x: 10, y: 20 });
+  assert.strictEqual(g2.pickups[0].value, 2);
+
+  if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
+});
+
 // makeSuper reads JH.Balance.superEliteDef at call time.
 require("../js/balance.js");
 require("../js/pillars.js");
@@ -1119,4 +1167,117 @@ test("super bulwark recovers its shield when the lob dies mid-flight", () => {
   assert.strictEqual(b.hasShield, true, "shield reclaimed despite the lob never landing");
   assert.strictEqual(b.phase, "approach", "brawl phase exits instead of locking forever");
   assert.strictEqual(b.lob, null, "stale lob reference cleared");
+});
+
+// ---- Relics: runtime effect hooks ----
+
+test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const near = new JH.Enemy("mook", p.x + 20, p.y);
+  const far  = new JH.Enemy("mook", p.x + 40, p.y);
+  g.enemies = [far, near];   // order shouldn't matter — nearest is still the primary blocker
+
+  // Without the relic: only the closest (blocker) takes damage.
+  const hpNear0 = near.hp, hpFar0 = far.hp;
+  p.doSpray(0.05, g);
+  assert.ok(near.hp < hpNear0, "closest enemy always hit");
+  assert.strictEqual(far.hp, hpFar0, "no relic: second enemy in line is untouched");
+
+  // With the relic: the next-closest also takes damage.
+  g.relics = { brass_nozzle: true };
+  const hpFar1 = far.hp;
+  p.doSpray(0.05, g);
+  assert.ok(far.hp < hpFar1, "Brass Nozzle: second-closest enemy also hit");
+});
+
+test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
+  const pull = new JH.Pickup("water_can", 0, 0, 10);
+  const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60
+  const x0 = pull.x;
+  pull.update(1 / 60, g);
+  assert.strictEqual(pull.x, x0, "outside the base 30px radius: no pull");
+
+  g.relics = { dowsing_rod: true };
+  pull.update(1 / 60, g);
+  assert.notStrictEqual(pull.x, x0, "Dowsing Rod: pulled in from 45px away");
+
+  const p = makePlayer();
+  p.water = 0;
+  const can = new JH.Pickup("water_can", p.x, p.y, 10);
+  can.collect({ player: p, audio: { play() {} }, particles: [], relics: { dowsing_rod: true } });
+  assert.strictEqual(p.water, 15, "Dowsing Rod: water_can value x1.5 (10 -> 15)");
+});
+
+test("Spigot Key: hydrant contact arms a 15s window; doSpray deals +10% while it's live", () => {
+  const p = makePlayer();
+  p.facing = 1;
+  const g = { hydrants: [{ x: p.x, y: p.y, t: 0 }], relics: { spigot_key: true },
+    particles: [], bounds: { minX: 0, maxX: 480 }, input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} } };
+  // Drive just the hydrant-proximity slice of Player.update via a direct call
+  // to the same logic: assert the flag through a real update() tick.
+  p.update(1 / 60, g);
+  assert.strictEqual(p.spigotT, 15, "standing at a hydrant arms Spigot Key's window");
+
+  const g2 = makeThinkGame(60, 40);
+  const e = new JH.Enemy("mook", p.x + 20, p.y);
+  g2.player = p; g2.enemies = [e]; g2.relics = { spigot_key: true };
+  p.water = p.stats.maxWater;
+  const hpBefore = e.hp;
+  p.doSpray(0.05, g2);
+  const dmgWithBuff = hpBefore - e.hp;
+
+  p.spigotT = 0;
+  const e2 = new JH.Enemy("mook", p.x + 20, p.y);
+  g2.enemies = [e2];
+  p.water = p.stats.maxWater;
+  const hpBefore2 = e2.hp;
+  p.doSpray(0.05, g2);
+  const dmgWithoutBuff = hpBefore2 - e2.hp;
+  assert.ok(Math.abs(dmgWithBuff - dmgWithoutBuff * 1.1) < 1e-6, "spigotT active: +10% spray dmg");
+});
+
+test("shopSelectables lists the current relic stock; buyRelic spends suds, flags ownership, and clears stock", () => {
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.player.suds = 300;
+  g.relics = {};
+  g.relicStock = ["brass_nozzle", "spigot_key"];
+  const sel = g.shopSelectables();
+  const relicRows = sel.filter((s) => s.kind === "relic");
+  assert.deepStrictEqual(relicRows.map((r) => r.id), ["brass_nozzle", "spigot_key"]);
+
+  assert.strictEqual(g.buyRelic("dowsing_rod"), false, "not in stock: rejected");
+  const cost = JH.RELICS.find((r) => r.id === "brass_nozzle").cost;
+  const before = g.player.suds;
+  assert.strictEqual(g.buyRelic("brass_nozzle"), true);
+  assert.strictEqual(g.player.suds, before - cost);
+  assert.strictEqual(g.relics.brass_nozzle, true);
+  assert.ok(!g.relicStock.includes("brass_nozzle"), "bought relic leaves the stock");
+  assert.strictEqual(g.buyRelic("brass_nozzle"), false, "already owned: rejected");
+});
+
+test("Punch Card discounts a relic purchase by 20%", () => {
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.relics = { punch_card: true };
+  const def = JH.RELICS.find((r) => r.id === "spigot_key");
+  g.player.suds = Math.round(def.cost * 0.8);   // exactly the discounted price, not the sticker price
+  g.relicStock = ["spigot_key"];
+  assert.strictEqual(g.buyRelic("spigot_key"), true, "discounted price is enough to buy");
+  assert.strictEqual(g.player.suds, 0);
+});
+
+test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly once", () => {
+  const g = makeThinkGame(400, 40);   // far away so the boss doesn't commit to an attack this tick
+  g.relics = { prayer_bead: true };
+  const boss = new JH.Boss(60, 40, Object.assign({}, JH.BOSS, { enrageAt: 0.99 }), "boss");
+  boss.hp = boss.maxHp * 0.5;         // already below the (high) enrageAt threshold
+  g.player.pressureBuffT = 0;
+  boss.think(1 / 60, g);
+  assert.strictEqual(g.player.pressureBuffT, 4, "first enrage tick grants the buff");
+  g.player.pressureBuffT = 0;         // simulate the buff wearing off
+  boss.think(1 / 60, g);
+  assert.strictEqual(g.player.pressureBuffT, 0, "latch prevents re-granting on subsequent enraged frames");
 });

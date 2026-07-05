@@ -22,6 +22,7 @@
     player: null,
     enemies: [], embers: [], pickups: [], particles: [], floaters: [], sigils: [],
     beneUsedOnce: {},
+    relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
     hydrants: [], shopNpc: null, nearShop: false,
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
@@ -211,7 +212,7 @@
       // Hydrant just in front of the group
       this.hydrants.push({ x: gx - 55, y: gy, t: 0 });
       // Shop NPC visible from spawn
-      this.shopNpc = new JH.ShopNPC(220, JH.DEPTH_MIN + 6);
+      this.spawnVendor(220);
       // Sprite gallery along the top row: every combat entity as a frozen,
       // unkillable statue for visual inspection (labels via drawRangeStations).
       let gx2 = 300;
@@ -314,6 +315,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
+      this.relics = {}; this.relicStock = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -545,7 +547,7 @@
       const isBoss = !!(clearedWave && clearedWave.boss);
       if (this.clearsSinceVendor >= 3 || isBoss) {
         this.clearsSinceVendor = 0;
-        this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[next] - 150, JH.DEPTH_MIN + 6);
+        this.spawnVendor(WAVE_TRIGGERS[next] - 150);
         // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
         const clearText = isBoss ? "BOSS DOWN!" : "AREA CLEAR!";
         const clearDur  = isBoss ? 2.0 : 1.6;
@@ -568,7 +570,7 @@
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
-      this.shopNpc = new JH.ShopNPC(WAVE_TRIGGERS[nextWaveIdx] - 150, JH.DEPTH_MIN + 6);
+      this.spawnVendor(WAVE_TRIGGERS[nextWaveIdx] - 150);
       this.showScreen("hud");
       this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
     },
@@ -771,6 +773,33 @@
     spawnPickup(kind, x, y, value) {
       this.pickups.push(new JH.Pickup(kind, x, y, value));
     },
+    // Punch Card relic: every shop price (node/rep/consumable/relic) is 20%
+    // cheaper, rounded. Single source of truth for the discount — every
+    // purchase path and its drawn price route through this.
+    priceOf(base) {
+      return (this.relics && this.relics.punch_card) ? Math.round(base * 0.8) : base;
+    },
+    // Places a walk-up vendor and rolls its relic stock (3 of the still-
+    // unowned pool). Single spot so every vendor spawn site rolls stock the
+    // same way.
+    spawnVendor(x) {
+      this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
+      this.relicStock = JH.Balance.pickRelics(JH.RELICS.map((r) => r.id), this.relics, 3, Math.random);
+    },
+    // Attempt to buy a relic from the current vendor stock; returns true on success.
+    buyRelic(id) {
+      if (!this.relicStock || !this.relicStock.includes(id)) return false;
+      if (this.relics && this.relics[id]) return false;
+      const def = JH.RELICS.find((r) => r.id === id);
+      if (!def) return false;
+      const price = this.priceOf(def.cost);
+      if (this.player.suds < price) return false;
+      this.player.suds -= price;
+      this.relics = this.relics || {};
+      this.relics[id] = true;
+      this.relicStock = this.relicStock.filter((rid) => rid !== id);
+      return true;
+    },
     // Pooled world-space floating text (essence gains, level-ups, shop buys).
     // Rises ~22px over 0.9s while fading; oldest dropped past a 20-cap so a
     // burst of simultaneous pickups can't grow the pool unbounded.
@@ -814,7 +843,9 @@
           const tier = this.combo / 5;
           p.gushRegenT = J.gushRegenDur;
           p.gushRegenRate = J.gushRegen5 * tier;
-          p.water = Math.min(p.stats.maxWater, p.water + J.comboWaterRefund);
+          // Loaded Sponge: GUSH milestone water refund doubled.
+          const refundMult = (this.relics && this.relics.loaded_sponge) ? 2 : 1;
+          p.water = Math.min(p.stats.maxWater, p.water + J.comboWaterRefund * refundMult);
           p.regenLock = 0;
           this.shake(Math.min(4 + tier, 8));
           this.audio.play("upgrade", { pitch: 1 + 0.25 * tier });
@@ -829,9 +860,15 @@
             }));
         }
       }
+      // Collection Plate: flat suds bonus per kill.
+      if (this.relics && this.relics.collection_plate && p && p.alive) {
+        p.suds += 2; p.sudsEarned += 2;
+      }
       if (e && e.isBoss && JH.Church) {
         JH.Church.markBossDefeated(e.type);
-        this.spawnPickup("cross", e.x, e.y, 1);
+        // Sunday Suit: the boss's essence cross is worth double.
+        const crossVal = (this.relics && this.relics.sunday_suit) ? 2 : 1;
+        this.spawnPickup("cross", e.x, e.y, crossVal);
       }
     },
 
@@ -1372,12 +1409,20 @@
               const e = sel[this.shopCursor];
               let ok = false;
               if (e.kind === "node") {
-                ok = U.buy(e.id, this.player);
+                ok = U.buy(e.id, this.player, this.priceOf(U.cost(e.id)));
                 if (ok) { this.upgradeFx(U.byId(e.id)); this.float(this.player.x, this.player.y - 30, U.byId(e.id).name, "#80ff80"); }
               } else if (e.kind === "rep") {
-                ok = U.buyRep(e.id, this.player);
+                ok = U.buyRep(e.id, this.player, this.priceOf(U.repCost(e.id)));
                 if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, U.repById(e.id).name, "#80ff80"); }
               } else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
+              else if (e.kind === "relic") {
+                ok = this.buyRelic(e.id);
+                if (ok) {
+                  const r = JH.RELICS.find((x) => x.id === e.id);
+                  this.audio.play("upgrade");
+                  this.float(this.player.x, this.player.y - 30, r.name, "#80ff80");
+                }
+              }
               if (!ok) this.audio.play("hurt");
               else this.shopCursor = Math.min(this.shopCursor, Math.max(0, this.shopSelectables().length - 1));
             }
@@ -1952,13 +1997,16 @@
       Object.keys(JH.CONSUMABLES).forEach((k) => {
         if (k !== "pressure") out.push({ kind: "consumable", id: k });
       });
+      (this.relicStock || []).forEach((id) => out.push({ kind: "relic", id }));
       return out;
     },
     // Buy a between-wave consumable; returns true on success.
     buyConsumable(key) {
       const c = JH.CONSUMABLES[key];
-      if (!c || this.player.suds < c.cost) return false;
-      this.player.suds -= c.cost;
+      if (!c) return false;
+      const price = this.priceOf(c.cost);
+      if (this.player.suds < price) return false;
+      this.player.suds -= price;
       if (key === "medkit") this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
       return true;
     },
@@ -2066,11 +2114,14 @@
       else rows.push({ t: "lock", label: "Max the skill tree to unlock" });
       rows.push({ t: "head", label: "── SUPPLIES ──" });
       Object.keys(JH.CONSUMABLES).forEach((k) => rows.push({ t: "con", k }));
+      rows.push({ t: "head", label: "── RELICS ──" });
+      (this.relicStock || []).forEach((id) => rows.push({ t: "relic", id }));
 
       const isCurRow = (r) => cur && (
         (r.t === "node" && cur.kind === "node" && cur.id === r.n.id) ||
         (r.t === "rep" && cur.kind === "rep" && cur.id === r.n.id) ||
-        (r.t === "con" && cur.kind === "consumable" && cur.id === r.k));
+        (r.t === "con" && cur.kind === "consumable" && cur.id === r.k) ||
+        (r.t === "relic" && cur.kind === "relic" && cur.id === r.id));
 
       let cy = 0, cursorCY = 0;
       rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
@@ -2101,13 +2152,18 @@
         if (r.t === "node") {
           const n = r.n;
           owned = U.isOwned(n.id); locked = U.isLocked(n.id);
-          afford = U.isAvailable(n.id) && pl.suds >= n.cost;
-          name = n.name; cost = n.cost;
+          cost = this.priceOf(n.cost);
+          afford = U.isAvailable(n.id) && pl.suds >= cost;
+          name = n.name;
         } else if (r.t === "rep") {
-          cost = U.repCost(r.n.id); afford = pl.suds >= cost; name = r.n.name;
+          cost = this.priceOf(U.repCost(r.n.id)); afford = pl.suds >= cost; name = r.n.name;
           if (U.repCount[r.n.id]) suffix = " x" + U.repCount[r.n.id];
+        } else if (r.t === "relic") {
+          const rd = JH.RELICS.find((x) => x.id === r.id);
+          owned = !!(this.relics && this.relics[r.id]);
+          cost = this.priceOf(rd.cost); afford = pl.suds >= cost; name = rd.name;
         } else {
-          const c = JH.CONSUMABLES[r.k]; cost = c.cost; afford = pl.suds >= cost; name = c.name;
+          const c = JH.CONSUMABLES[r.k]; cost = this.priceOf(c.cost); afford = pl.suds >= cost; name = c.name;
         }
         if (isCurRow(r)) {
           ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
@@ -2143,6 +2199,9 @@
         else if (cur.kind === "consumable") {
           const c = JH.CONSUMABLES[cur.id];
           desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now." : "";
+        } else if (cur.kind === "relic") {
+          const rd = JH.RELICS.find((x) => x.id === cur.id);
+          desc = rd ? rd.desc : "";
         }
       }
       if (desc) {
