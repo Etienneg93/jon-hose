@@ -427,7 +427,12 @@
           const painter = NEMESIS_PAINTER[def.gateBoss];
           ctx.save(); ctx.globalAlpha = 0.35;
           if (painter && JH.Assets.has(painter)) {
-            JH.Assets.draw(ctx, painter, x, baseY, 1, { state: "idle", t: sc.t, frame: 0, scale: 0.55 });
+            // Shrink via a ctx transform: opt.scale only reaches procedural
+            // fallback painters — the atlas/fixed-height paths blit at native
+            // size and ignore it. Draw at local (0,0) so the translate
+            // anchors the feet at the column base.
+            ctx.translate(x, baseY); ctx.scale(0.55, 0.55);
+            JH.Assets.draw(ctx, painter, 0, 0, 1, { state: "idle", t: sc.t, frame: 0 });
           } else {
             ctx.fillStyle = "#3a4055"; ctx.font = "bold 22px monospace";
             ctx.fillText("?", x, baseY - 22);
