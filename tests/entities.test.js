@@ -972,3 +972,35 @@ test("Slipstream: freeSprayT skips the water drain in doSpray", () => {
   p.doSpray(0.1, g);
   assert.strictEqual(p.water, water0, "spray drains no water while freeSprayT is active");
 });
+
+// ---- Benedictions: duos (Steam Sermon, Firestorm) ----
+
+test("Steam Sermon: spraying a fire patch also vents steam damage onto an enemy standing in it", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("steam_sermon");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;
+  p.facing = 1;
+  const fp = new JH.FirePatch(p.x + 30, p.y, 24, 3);
+  g.firePatches = [fp];
+  const e = new JH.Enemy("mook", fp.x, fp.y);   // standing in the patch
+  g.enemies = [e];
+  const hp0 = e.hp;
+  p.doSpray(0.1, g);
+  assert.ok(fp.sprayProgress > 0, "spray still advances the patch's extinguish timer");
+  assert.ok(e.hp < hp0, "steam damage landed on the enemy standing in the sprayed patch");
+  B.reset();
+});
+
+test("Firestorm: a friendly fire patch damages an enemy inside it but never burns the player", () => {
+  const g = makeThinkGame(100, 40);   // player standing at the patch center
+  const fp = new JH.FirePatch(100, 40, 24, 3, { friendly: true });
+  const e = new JH.Enemy("mook", 100, 40);
+  g.enemies = [e];
+  const hp0 = e.hp;
+  fp.update(0.1, g);
+  assert.ok(e.hp < hp0, "enemy standing in the friendly patch takes damage");
+  assert.strictEqual(g.player.burnStacks, 0, "the player standing in the same patch is never burned");
+  assert.strictEqual(fp.sizzled, false, "friendly patches never run the player-facing sizzle/burn logic");
+});

@@ -311,6 +311,7 @@
         this._dashX = (mx || my) ? mx : this.facing;
         this._dashY = my;
         this._dashTouched = new Set();   // Backdraft: enemies scalded this dash
+        this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
@@ -346,6 +347,15 @@
         if (this.dashTimer <= 0) {
           const ssRank = this.beneRank("slipstream");
           if (ssRank) this.freeSprayT = ssRank >= 2 ? 0.8 : 0.5;
+        }
+        // Firestorm: dash trail — a friendly (harmless-to-Jon) fire patch
+        // every 24px of dash travel.
+        if (this.beneRank("firestorm")) {
+          this._dashDist = (this._dashDist || 0) + S.dashSpeed * dt;
+          while (this._dashDist >= 24) {
+            this._dashDist -= 24;
+            JH.spawnFirePatch(game, this.x, this.y, 12, 1.0, { friendly: true });
+          }
         }
       } else if (this.spraying) {
         if (!S.noSpraySlow) speed *= 0.55; // slow while hosing (Sure Grip removes this)
@@ -668,13 +678,27 @@
           wall.takeDamage(S.sprayDamage * dmgScale * dt, game);
       }
       // Fire patches: spray aimed at a patch's depth advances its extinguish timer.
+      const steamRank = this.beneRank("steam_sermon");
       if (game.firePatches) {
         for (const fp of game.firePatches) {
           if (fp.dead) continue;
           const fwd = (fp.x - ox) * this.facing;
           if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
-              && Math.abs(fp.y - oy) < S.sprayHitBand)
+              && Math.abs(fp.y - oy) < S.sprayHitBand) {
             fp.sprayProgress += dt;
+            // Steam Sermon: spraying a lit patch also vents a damaging steam
+            // cloud over its footprint, cooking any enemy standing in it.
+            if (steamRank) {
+              for (const e of game.enemies) {
+                if (e.dead) continue;
+                if (Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, fp.footprint().rx + 6))
+                  e.takeDamage(12 * dt, game, 0, 0);
+              }
+              if (Math.random() < 20 * dt)
+                burst(game, fp.x, fp.y, 10, "#ffffff", 1,
+                  { speed: 30, life: 0.4, up: 40, grav: -20, size: 1 });
+            }
+          }
         }
       }
       // Garden boxes: face each box and match its depth to water it.
@@ -926,6 +950,7 @@
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
       this._puddleSlow = 0;  // vsEnemies SlowZone tag for this frame; see update()
+      this._mudT = 0;        // Mudslide: seconds of lingering slow left after leaving a puddle
       this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
       this.scaldDps = 0;
       this.slamCdT = 0;     // Aftershock: per-enemy cooldown between wall-slam hits
@@ -1046,6 +1071,12 @@
       // back toward the pre-think position by that fraction. One hook here
       // slows every chaser/charger uniformly without touching per-class
       // movement code.
+      // Mudslide: lingering slow after leaving the puddle (tag set by
+      // SlowZone.update); reuses the _puddleSlow consume below.
+      if (this._mudT > 0) {
+        this._mudT -= dt;
+        if (!this._puddleSlow) this._puddleSlow = 0.7;
+      }
       const prePx = this.x, prePy = this.y;
       this.think(dt, game);
       if (this._puddleSlow) {
@@ -1800,10 +1831,12 @@
   // extinguished by spraying directly (tracked in Player.doSpray, not here).
   // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
   class FirePatch {
-    constructor(x, y, radius, extinguishDur) {
+    constructor(x, y, radius, extinguishDur, opts) {
       this.x = x; this.y = y; this.z = 0;
       this.radius = radius;
       this.extinguishDur = extinguishDur;
+      // Firestorm dash trail: harmless to Jon, cooks enemies instead (see update()).
+      this.friendly = !!(opts && opts.friendly);
       this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
       this.patchBurnT = 0;     // cooldown between burn-stack applications
       this.sizzled = false;    // first-contact cue fired (once per patch instance)
@@ -1822,6 +1855,18 @@
       this.t += dt;
       if (this.patchBurnT > 0) this.patchBurnT -= dt;
       if (this.rimFlashT > 0) this.rimFlashT -= dt;
+      if (this.friendly) {
+        // Firestorm: skip all player-facing logic (burn/sizzle/ash-walk);
+        // this patch instead cooks enemies standing in it.
+        const f = this.footprint();
+        for (const e of game.enemies) {
+          if (e.dead) continue;
+          if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
+            e.takeDamage(8 * dt, game, 0, 0);
+        }
+        if (this.sprayProgress >= this.extinguishDur) this.dead = true;
+        return;
+      }
       const pl = game.player;
       if (pl && pl.alive) {
         const f = this.footprint();
@@ -1917,21 +1962,21 @@
   // footprint, no new patch is made (returns null). All patch spawns route
   // through here — deliberate multi-patch patterns (furnace vent ring,
   // slayer trail) space their centers outside each other's footprints.
-  JH.spawnFirePatch = function (game, x, y, radius, dur) {
+  JH.spawnFirePatch = function (game, x, y, radius, dur, opts) {
     for (const fp of game.firePatches) {
       if (fp.dead) continue;
       const f = fp.footprint();
       if (Geo.inGroundEllipse(x, y, fp.x, fp.y, f.rx, f.ry)) return null;
     }
-    const p = new FirePatch(x, y, radius, dur);
+    const p = new FirePatch(x, y, radius, dur, opts);
     game.firePatches.push(p);
     return p;
   };
 
   // Trial by Fire's "burning" check: is this enemy standing in a live fire
   // patch's footprint? (Scald/burn-stack burning is checked separately by
-  // the caller — this only covers ground patches.) Friendly patches (Task 12)
-  // don't count as burning the enemy standing in them.
+  // the caller — this only covers ground patches.) Friendly patches don't
+  // count as burning the enemy standing in them.
   function enemyInFire(game, e) {
     if (!game.firePatches) return false;
     for (const fp of game.firePatches) {
@@ -1963,11 +2008,20 @@
       this.t += dt;
       if (this.t >= this.dur) { this.dead = true; return false; }
       if (this.vsEnemies) {
+        const mudRank = game.player.beneRank ? game.player.beneRank("mudslide") : 0;
         for (const e of game.enemies) {
           if (e.dead || e.isBoss) continue;
           if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, this.r)) continue;
           e._puddleSlow = this.slowMult;
           if (this.dmgAmp > 1) e.wetness = Math.max(e.wetness, 0.35);
+          // Mudslide: a knocked-back enemy crossing the puddle gets dragged
+          // harder (knockback amplified while inside), then keeps a lingering
+          // slow for a beat after leaving (_mudT, consumed in Enemy.update
+          // next to the _puddleSlow consume).
+          if (mudRank && Math.abs(e.knockVX) > 60) {
+            e.knockVX *= 1 + 2.5 * dt;
+            e._mudT = 0.8;
+          }
         }
         return true;
       }
