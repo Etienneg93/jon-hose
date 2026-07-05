@@ -54,6 +54,9 @@ relics, levels, pillars are kept) — the death loop's real stake.
   — pillar favor and build momentum pull their god back to you.
 - A **duo sigil** (dual glyph, visibly special) replaces one slot when its
   two-element prerequisites are held (25% chance, each duo offered once).
+- A **legendary sigil** (gold) replaces one slot when its element
+  prerequisite (≥2 owned boons of that element) is held (15% chance, each
+  offered once; duo takes priority if both roll).
 - **Deepen offers**: owned boons re-enter the pool as rank II upgrades —
   late beats never show dregs (the Pom of Power role).
 - The **Censer** relic adds a 4th sigil.
@@ -63,7 +66,7 @@ relics, levels, pillars are kept) — the death loop's real stake.
 active tech, the expansion route is elemental release-burst variants, never
 a new binding.
 
-### The vetted pool — 17 boons + 3 duos + 1 legendary, each with rank II
+### The vetted pool — 17 boons + 3 duos + 4 legendaries (boons have rank II)
 
 Vetting standard (user, 2026-07-05): every option must be a good pick —
 each entry lists its genre precedent, verb, synergies, and why it can't be
@@ -74,7 +77,7 @@ onto a contact-damage player) is reworked below as *Eddy*.
 
 | Boon | Effect (rank II) | Precedent / verb | Synergy / trap-check |
 |---|---|---|---|
-| **Eddy** | Stream drags hit enemies to the stream's **midpoint** and holds them clumped ~0.6s (II: wider gather + 0.5s slow after) | Clump-vacuum tools (VS magnet, Hades Poseidon inverted *safely*) / Stream | Sets up pierce, patches, Landslide, Baptize. Gather point is mid-stream (~40px out) — never pulls toward Jon |
+| **Split Stream** | 50% of spray damage arcs to one nearby enemy with a visible chain-stream (II: two extra targets) | Chain damage (Zeus bolts) / Stream | Promoted from the shop tree per vetting — pure damage spread, zero positioning risk. (Eddy was cut: pulling fights the knockback-is-safety design) |
 | **Baptismal Wake** | Dash leaves a puddle (reuses `SlowZone`, enemy-slowing variant, 0.7×, 3s) (II: larger + enemies inside take +10% dmg) | Dead Cells oil trail / Dash | Dash becomes control; purely positive |
 | **Overflow** | Tank ≥80%: +20% spray dmg (II: +30%, threshold 70%) | RoR full-HP items, Aphrodite privilege / Stream+Tank | Pairs with Closed Loop + water pillar; teaches burst discipline |
 | **Baptize** | Enemies at wetness >0.3 take +15% spray dmg (II: +25%) | Hades curse-amp (Weak) / Stream | Makes the existing soak mechanical — the status web's hub |
@@ -86,14 +89,14 @@ onto a contact-damage player) is reworked below as *Eddy*.
 |---|---|---|---|
 | **Scalding Faith** | Full-pressure spray applies Scald: 4/s for 2s enemy DoT (II: 6/s, 3s) | Ares Doom / Stream | The enemy-side status; new small `Enemy` status mirroring burn |
 | **Backdraft** | Dashing through enemies Scalds them (II: +8 burst pop) | Athena/Artemis dash boons / Dash | Dash-through-crowds is already the movement design (no body collision); i-frames cover the risk |
-| **Stoke the Boiler** | +25% spray dmg while you have ≥1 burn stack (II: +35%) | Berserk-at-risk items / Stream | Burn i-frames + Ash Walk manage the cost; fire is everywhere post-v0.26 so uptime is real and chosen |
-| **Ash Walk** | First burn stack per patch ignored; walking a patch douses it with a steam pop (6 dmg nearby) (II: instant douse + bigger pop) | Fire-immunity boots (DC) / Body | Defense that reads as offense; act-agnostic now that supers/fuses spread fire from Act 1 |
+| **Trial by Fire** | +20% spray dmg to enemies that are burning, Scalded, or standing in a fire patch (II: +30%) | Bonus-vs-status amps (Artemis vs marked) / Stream | Works standalone from Act 1 (enemy fire is everywhere post-v0.26), scales with a fire build; never requires Jon to be on fire (Stoke the Boiler cut in vetting for exactly that) |
+| **Ash Walk** | First burn stack per patch ignored (passive); walking a patch douses it with a steam pop (6 dmg nearby), douse on a **10s cooldown** (II: 6s cd + bigger pop) | Fire-immunity boots (DC) / Body | One free douse per engagement, not a fire vacuum; act-agnostic now that supers/fuses spread fire from Act 1 |
 
 **🪨 Earth — force & interrupts**
 
 | Boon | Effect (rank II) | Precedent / verb | Synergy / trap-check |
 |---|---|---|---|
-| **Stone Nozzle** | Full-pressure hits stagger (windup reset, 1/enemy/3s) (II: also interrupts charges) | Poise-break staggers / Stream | THE anti-elite/anti-super tool; capped so bosses aren't stunlocked |
+| **Aftershock** | Enemies knocked into arena walls/debris take 15 slam dmg (II: 25 + a small shockwave at the impact) | Hades Poseidon wall-slam — direct precedent / Stream | Stacks the knockback identity into damage; the arena x-clamp already exists in-engine. Works vs supers (giants aren't bosses, so they slam). (Stone Nozzle's stagger cut per vetting) |
 | **Sure Grip** | Spray no longer slows your movement (II: +10% knockback) | Hermes utility / Body | Pure QoL upside — the trade was cut in vetting |
 | **Bedrock Vigor** | +40 max HP; taking a hit grants +20% knockback for 3s (II: +60 HP) | Tank identity picks / Body | Downside removed in vetting; getting hit now has a payoff |
 | **Landslide** | Knocked-back enemies damage enemies they pass through (8) (II: 14 + staggers them) | Hades Poseidon + Breaking Wave — direct precedent / Stream | Clumps (Eddy!) become bowling; push = safety + damage |
@@ -102,7 +105,7 @@ onto a contact-damage player) is reworked below as *Eddy*.
 
 | Boon | Effect (rank II) | Precedent / verb | Synergy / trap-check |
 |---|---|---|---|
-| **Second Coming** | Kill during the dash-boost window resets dash cd (II: +10 water per reset) | Hermes / on-kill reset loops / Dash | Aggression loop; window already exists (`dashBoostTimer`) |
+| **Gale Stride** | Dash travels 40% farther in the same time (II: 60%) | Mobility reach (Hermes) / Dash | Dash cd is already low — air's identity is stride length and weave, not cd spam (Second Coming cut per vetting) |
 | **Slipstream Draft** | 0.5s of free-water spray after each dash (II: 0.8s) | Momentum weaves / Dash+Stream | Weaves the two verbs; always useful |
 | **Tailwind Tithe** | +2% move speed per GUSH combo, cap +20% (II: cap +30%) | Combo-speed scalars / Body | First mechanical GUSH hook; capped |
 | **Eye of the Storm** | 1s guaranteed dodge at wave start & after sigil pickup (II: 1.5s + 15% move during) | Opener protection (Hades' Divine Protection) / Body | Covers the exact spawn-rush moment the ticket system creates |
@@ -115,9 +118,20 @@ onto a contact-damage player) is reworked below as *Eddy*.
 - **Firestorm** (🔥🌬️) — dash leaves a short *friendly* flame trail
   (patches flagged harmless to Jon).
 
-**Legendary:** **Pressure Sermon** — releasing spray after ≥0.8s of
-continuous full pressure emits a knockback cone (10 water). The cast that
-needs no button (`sprayHeldT` exists).
+**Legendaries — one per element** (gold sigil; prerequisite: own ≥2 boons
+of that element; each offered once per run, 15% slot chance when eligible):
+- 💧 **Pressure Sermon** — releasing spray after ≥0.8s of continuous full
+  pressure emits a knockback cone (10 water). The cast that needs no
+  button (`sprayHeldT` exists).
+- 🔥 **Bushfire** — Scald spreads to enemies within 40px of a Scalded one
+  (contagion; Hades' spread-Doom chase, needs a Scald source which the
+  prereq guarantees in practice).
+- 🪨 **Standing Stone** — after 0.5s of not moving: no knockback taken,
+  +25% damage, wider spray until you move. Turret-mode playstyle flip;
+  dash out any time.
+- 🌬️ **Whirlwind Walk** — dashing destroys enemy projectiles it touches
+  and gusts non-boss enemies aside (15 dmg + knock). The anti-pyro/smelt/
+  Slayer skill pick.
 
 **HUD:** element-colored sigil strip near the buff auras; rank-II boons get
 a bright pip. Stat panel lists them by name.
@@ -153,10 +167,11 @@ relic rotation makes each visit a decision.
 **Stock per visit:**
 - *Lifeline (always):* Med Kit 45 · Pressure Charge 70.
 - *Signatures (listed until bought):* **Hydro-Dash** 160 (available from
-  the start) · **Split Stream** 200 and **Hydro Lance** 220 (unlock from
-  Act 2 — the old tier-3 gate, reused). The tree's three rule-nodes reborn
-  as standalone build pillars; the 12 stat nodes retire (their budget
-  lives in the level cycle).
+  the start) · **Fire-Marshal Spec** 200 (+30 range, +30 knockback — the
+  safety-through-knockback big buy) and **Hydro Lance** 220 (from Act 2 —
+  the old tier-3 gate, reused). Split Stream moved to the benediction pool
+  per vetting; the 12 stat nodes retire (their budget lives in the level
+  cycle).
 - *Relics — 3 of 10 rotate per visit, one-per-run each, 150–300:*
 
 | Relic | Effect |
