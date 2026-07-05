@@ -327,6 +327,11 @@
     burnTickInterval: 0.5,   // seconds between DoT damage beats (flash + ember puff)
   };
 
+  // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
+  // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
+  // downgrades an active scald.)
+  JH.SCALD = { dps: 4, dur: 2, dps2: 6, dur2: 3 };
+
   // ---- Juice / game-feel tunables --------------------------------------
   JH.JUICE = {
     // Hit-stop tier table — every freeze routes through game.hitStop, which

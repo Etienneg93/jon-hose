@@ -520,6 +520,7 @@
       const hitEnemies = [];
       let healAmt = 0;
       const ssRank = this.beneRank("split_stream");
+      const scaldRank = this.beneRank("scalding_faith");
       // Benediction damage-amp inputs, hoisted: ranks and tank fraction are
       // loop-invariant (only wet/burning vary per target). All-zero ranks
       // skip the multiplier (and the fire-patch scan) entirely.
@@ -555,6 +556,12 @@
         }) : 1;
         const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
+        // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
+        // fire pillar's baseline capstone are independent sources — both can land.
+        if (scaldRank && dmgScale >= 1.2) {
+          e.applyScald(...(scaldRank >= 2 ? [JH.SCALD.dps2, JH.SCALD.dur2] : [JH.SCALD.dps, JH.SCALD.dur]));
+        }
+        if (this.stats.baselineScald && dmgScale >= 1.2) e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
         if (e.onSprayHit) e.onSprayHit(dt, game);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
@@ -887,6 +894,15 @@
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
       this._puddleSlow = 0;  // vsEnemies SlowZone tag for this frame; see update()
+      this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
+      this.scaldDps = 0;
+    }
+
+    // Rank-max, not additive: reapplying Scald refreshes to the stronger of
+    // the current and incoming dps/duration rather than stacking.
+    applyScald(dps, dur) {
+      this.scaldDps = Math.max(this.scaldDps, dps);
+      this.scaldT = Math.max(this.scaldT, dur);
     }
 
     takeDamage(dmg, game, dirX, knock) {
@@ -966,6 +982,14 @@
           burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.7, this.y,
             6 + Math.random() * (this.bodyH * 0.6), "#00b4ff", 1,
             { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
+      }
+      // Scald DoT: raw hp damage + own die() call (not takeDamage) so a
+      // burning tick never triggers knockback or re-wets the enemy.
+      if (this.scaldT > 0) {
+        this.scaldT = Math.max(0, this.scaldT - dt);
+        this.hp -= this.scaldDps * dt;
+        if (Math.random() < 6 * dt) burst(game, this.x, this.y, this.bodyH * 0.6, JH.PAL.firePatchHi, 1, { speed: 20, life: 0.3, up: 30, size: 1 });
+        if (this.hp <= 0) this.die(game);
       }
       // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each
       // frame the enemy stands inside them; pull the think-driven displacement
@@ -1068,6 +1092,17 @@
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
+      // Scald tint: a pulsing orange ring around the body while the DoT runs.
+      if (this.scaldT > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.4 + 0.2 * Math.sin(this.t * 8);
+        ctx.strokeStyle = "#ff8030";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy - this.bodyH * 0.5, this.bodyW * 0.6, this.bodyH * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 4;

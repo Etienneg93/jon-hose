@@ -846,3 +846,30 @@ test("waveCleared_: Absolution + sigil beat land before the quake cutscene retur
   if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
   B.reset();
 });
+
+// ---- Scald status ----
+
+test("applyScald ticks damage over its duration and expires", () => {
+  const g = makeThinkGame(400, 40);
+  const m = new JH.Enemy("mook", 100, 40);
+  m.applyScald(4, 2);
+  const hp0 = m.hp;
+  m.update(1, g);
+  assert.ok(m.hp < hp0 && m.hp > hp0 - 6, "roughly 4 dmg over 1s");
+  m.update(1.5, g);
+  assert.strictEqual(m.scaldT, 0);
+});
+
+test("Scalding Faith: full-pressure spray applies scald", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("scalding_faith");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;   // full pressure tier (dmgScale 1.2)
+  p.facing = 1;
+  const e = new JH.Enemy("mook", p.x + 30, p.y);
+  g.enemies = [e];
+  p.doSpray(0.05, g);
+  assert.ok(e.scaldT > 0, "full-pressure hit under Scalding Faith applies scald");
+  B.reset();
+});
