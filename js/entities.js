@@ -1510,6 +1510,7 @@
       if (this.phase === "brawl") {
         if (this.thrownZone && this.thrownZone.dead) {
           this.thrownZone = null; this.hasShield = true;
+          if (this.shield) { this.shield.dead = true; this.shield = null; }
           this.phase = "approach"; this.cdTimer = d.redeployCd;
           return;
         }
@@ -1818,7 +1819,13 @@
       if (this.z <= 0) {
         const zone = new JH.SlowZone(this.x, this.y, 30, 5);
         game.slowZones.push(zone);
-        if (this.owner) this.owner.thrownZone = zone;
+        // The landed shield IS a barrier: a half-size dome (blocks spray from
+        // outside, shelters) lasting exactly as long as the slow zone.
+        const dome = new JH.DeployedShield(this.x, this.y, this.owner);
+        dome.radius = 34;
+        dome.domeDur = dome.domeT = 5;
+        game.shields.push(dome);
+        if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; }
         game.shake(3); if (game.audio) game.audio.play("whack");
         this.dead = true;
       }

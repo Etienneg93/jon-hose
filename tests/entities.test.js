@@ -751,3 +751,28 @@ test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () 
   full.makeSuper();                                    // no scale = full 7x
   assert.strictEqual(full.maxHp, JH.ENEMIES.mook.hp * 7);
 });
+
+test("super bulwark's thrown shield lands as barrier dome + slow zone", () => {
+  const g = makeThinkGame(200, 40);
+  g.slowZones = [];
+  const b = JH.makeEnemy("bulwark", 60, 40);
+  b.makeSuper();
+  const lob = new JH.ShieldLob(60, 40, 120, 40, b);
+  for (let i = 0; i < 200 && !lob.dead; i++) lob.update(1 / 60, g);
+  assert.strictEqual(g.slowZones.length, 1, "slow zone landed");
+  assert.strictEqual(g.shields.length, 1, "barrier dome landed");
+  assert.strictEqual(g.shields[0].radius, 34);
+  assert.strictEqual(b.shield, g.shields[0]);
+  // Reclaim: zone expiry restores the shield and removes the dome.
+  b.phase = "brawl"; b.thrownZone = g.slowZones[0]; b.hasShield = false;
+  g.slowZones[0].dead = true;
+  b.superThink(1 / 60, g);
+  assert.strictEqual(b.hasShield, true);
+  assert.strictEqual(g.shields[0].dead, true);
+});
+
+test("super bulwark hp uses its SUPER_TUNE override (2.5x)", () => {
+  const b = JH.makeEnemy("bulwark", 0, 0);
+  b.makeSuper();
+  assert.strictEqual(b.maxHp, Math.round(JH.ENEMIES.bulwark.hp * 2.5));
+});
