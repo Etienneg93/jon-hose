@@ -192,6 +192,8 @@
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
       this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
+      this.lastDmgScale = 1;  // Pressure Sermon: most recent doSpray pressure tier
+      this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
     }
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them.
@@ -271,6 +273,14 @@
       if (mx !== 0 && !wantSpray) this.facing = mx > 0 ? 1 : -1;
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
 
+      // Standing Stone: stillT counts seconds with no movement input and no
+      // dash in flight; any movement or dash resets it to 0.
+      if (mx !== 0 || my !== 0 || this.dashTimer > 0) this.stillT = 0;
+      else this.stillT += dt;
+      if (this.stillT >= 0.5 && this.beneRank("standing_stone") && Math.random() < 3 * dt)
+        burst(game, this.x + (Math.random() - 0.5) * 8, this.y, 1, JH.PAL.suds, 1,
+          { speed: 10, life: 0.5, up: 22, grav: 40, size: 1 });
+
       // ---- dash boost timer + trailing particles
       if (this.concertaTimer > 0) {
         this.concertaTimer -= dt;
@@ -343,6 +353,26 @@
             if (bdRank >= 2) e.takeDamage(8, game, this.facing, 60);
           }
         }
+        // Whirlwind Walk: the dash body destroys any embers-pipeline
+        // projectile it touches (FX bursts excluded via isFx) and gusts
+        // overlapping non-boss enemies aside, each once per dash (shares
+        // _dashTouched with Backdraft above).
+        if (this.beneRank("whirlwind_walk")) {
+          for (const em of game.embers) {
+            if (em.isFx) continue;
+            if (typeof em.x !== "number" || typeof em.y !== "number") continue;
+            if (Math.hypot(em.x - this.x, em.y - this.y) >= 14) continue;
+            em.dead = true;
+            burst(game, em.x, em.y, em.z || 0, "#ffffff", 6, { speed: 60, life: 0.25, up: 20 });
+          }
+          for (const e of game.enemies) {
+            if (e.dead || e.isBoss || e.dropping || this._dashTouched.has(e)) continue;
+            if (!Geo.bodiesOverlap(this, e)) continue;
+            this._dashTouched.add(e);
+            e.applyKnockback(this.facing, 140);
+            e.takeDamage(15, game, this.facing, 0);
+          }
+        }
         // Slipstream: dash expiry arms a short free-water spray window.
         if (this.dashTimer <= 0) {
           const ssRank = this.beneRank("slipstream");
@@ -379,7 +409,27 @@
       // ---- spray hose (held)
       this.spraying = false;
       if (wantSpray) this.doSpray(dt, game);
-      else this.sprayHeldT = 0;   // reset the stream-front timer on release
+      else {
+        // Pressure Sermon: releasing after >=0.8s of continuous full-pressure
+        // spray emits a knockback cone. Checked here, before sprayHeldT is
+        // zeroed below, so it fires exactly once per qualifying hold/release.
+        if (this.beneRank("pressure_sermon") && this.sprayHeldT >= 0.8
+            && this.lastDmgScale >= 1.2 && this.water >= 10) {
+          this.water -= 10;
+          for (const e of game.enemies) {
+            if (e.dead || e.dropping) continue;
+            const dx = e.x - this.x, dy = e.y - this.y;
+            if (Math.hypot(dx, dy) > 70) continue;
+            if (Math.abs(Math.atan2(dy, dx * this.facing)) > 0.6) continue;
+            e.takeDamage(15, game, this.facing, 0);
+            e.applyKnockback(this.facing, 200, (e.y - this.y) * 0.02);
+          }
+          burst(game, this.x + this.facing * 20, this.y, 20, JH.PAL.waterHi, 14,
+            { speed: 140, life: 0.4, up: 40 });
+          game.audio.play("blast");
+        }
+        this.sprayHeldT = 0;   // reset the stream-front timer on release
+      }
 
       // ---- water regen (after a short delay since last spray)
       if (!this.spraying && this.regenLock <= 0 && this.water < S.maxWater) {
@@ -445,8 +495,14 @@
       else if (frac >= 0.80) { dmgScale = 1.20; rangeMult = 1.00; }
       else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
+      this.lastDmgScale = dmgScale;   // Pressure Sermon: release check reads this
       if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
+
+      // Standing Stone: braced turret stance while still — bonus damage and a
+      // wider effective stream (particles only; sprayHitBand/stats untouched).
+      const standingStone = this.stillT >= 0.5 && this.beneRank("standing_stone");
+      const sprayWidth = S.sprayWidth + (standingStone ? 4 : 0);
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
@@ -510,7 +566,7 @@
       this.sprayEmitAcc += (dry ? 70 : 150 * density) * dt;
       while (this.sprayEmitAcc >= 1) {
         this.sprayEmitAcc -= 1;
-        const perpY = (Math.random() - 0.5) * S.sprayWidth * spread;  // depth jitter
+        const perpY = (Math.random() - 0.5) * sprayWidth * spread;  // depth jitter
         const perpZ = (Math.random() - 0.5) * 6 * spread;             // vertical jitter
         game.particles.push(new Particle({
           x: ox + this.facing * Math.random() * 8,
@@ -535,7 +591,7 @@
         for (let i = 0; i < 3; i++) {
           game.particles.push(new Particle({
             x: hx,
-            y: oy + (Math.random() - 0.5) * S.sprayWidth * 0.5,
+            y: oy + (Math.random() - 0.5) * sprayWidth * 0.5,
             z: oz + (Math.random() - 0.5) * 6,
             vx: -this.facing * (50 + Math.random() * 90),   // ricochet back toward the player
             vy: (Math.random() - 0.5) * 130,                // fan out along the dome face
@@ -591,7 +647,8 @@
           waterFrac, wet: e.wetness || 0,
           burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
         }) : 1;
-        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * dt;
+        const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
+        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
         // fire pillar's baseline capstone are independent sources — both can land.
@@ -754,7 +811,8 @@
       this.invulnTimer = this.stats.invuln;
       this.hurt();
       const dir = this.x < fromX ? -1 : 1;
-      this.applyKnockback(dir, 90);
+      // Standing Stone: braced turret stance eats the knockback; damage still lands.
+      if (!(this.stillT >= 0.5 && this.beneRank("standing_stone"))) this.applyKnockback(dir, 90);
       game.audio.play("hurt");
       game.shake(5, dir);                       // kick away from the impact
       game.hitStop(JH.JUICE.hitstop.playerHit);
@@ -953,6 +1011,7 @@
       this._mudT = 0;        // Mudslide: seconds of lingering slow left after leaving a puddle
       this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
       this.scaldDps = 0;
+      this._spreadDone = false;  // Bushfire: contagion fired for the current scald application
       this.slamCdT = 0;     // Aftershock: per-enemy cooldown between wall-slam hits
       this._lsCdT = 0;      // Landslide: cooldown before this enemy can be hit again as a victim
     }
@@ -1064,6 +1123,22 @@
         this.scaldT = Math.max(0, this.scaldT - dt);
         this.hp -= this.scaldDps * dt;
         if (Math.random() < 6 * dt) burst(game, this.x, this.y, this.bodyH * 0.6, JH.PAL.firePatchHi, 1, { speed: 20, life: 0.3, up: 30, size: 1 });
+        // Bushfire: once per application, contagion jumps to nearby enemies
+        // at this enemy's dps/dur. Spread targets have their own flag
+        // pre-set so the jump can't chain past depth 1.
+        if (!this._spreadDone) {
+          const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
+          if (bfRank) {
+            this._spreadDone = true;
+            for (const o of game.enemies) {
+              if (o === this || o.dead) continue;
+              if (Math.hypot(o.x - this.x, o.y - this.y) > 40) continue;
+              o._spreadDone = true;
+              o.applyScald(this.scaldDps, this.scaldT);
+            }
+          }
+        }
+        if (this.scaldT <= 0) this._spreadDone = false;
         if (this.hp <= 0) this.die(game);
       }
       // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each
@@ -3021,6 +3096,7 @@
       this.scale = (opt && opt.scale) || 1;
       this.life = m ? m.count / m.fps : 0.5;
       this.t = 0; this.dead = false;
+      this.isFx = true;   // visual-only marker: Whirlwind Walk's ember sweep skips these
     }
     update(dt) {
       this.t += dt;

@@ -1007,3 +1007,48 @@ test("Firestorm: a friendly fire patch damages an enemy inside it but never burn
   fp.update(3.1, g);                          // pushes fp.t past extinguishDur (3)
   assert.strictEqual(fp.dead, true, "friendly patch expires on wall-clock time without being sprayed");
 });
+
+// ---- Benedictions: Legendaries ----
+
+test("Standing Stone: braced stance eats knockback but damage still lands", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("standing_stone");
+  const p = makePlayer();
+  p.stillT = 1;   // past the 0.5s stationary threshold
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  const hp0 = p.hp;
+  p.takeHit(20, g, p.x - 10);
+  assert.strictEqual(p.hp, hp0 - 20, "damage still lands");
+  assert.strictEqual(p.knockVX, 0, "no knockback while braced and still");
+  B.reset();
+});
+
+test("Bushfire: scald spreads once to a nearby enemy", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("bushfire");
+  const g = makeThinkGame(400, 40);   // player kept well away from the mooks
+  const m1 = new JH.Enemy("mook", 100, 40);
+  const m2 = new JH.Enemy("mook", 130, 40);   // 30px away — within the 40px spread radius
+  g.enemies = [m1, m2];
+  m1.applyScald(4, 2);
+  m1.update(1 / 60, g);
+  assert.ok(m1.scaldT > 0, "source keeps burning");
+  assert.ok(m2.scaldT > 0, "nearby enemy catches the spread");
+  B.reset();
+});
+
+test("Whirlwind Walk: dashing near a live ember destroys it", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("whirlwind_walk");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  const em = new JH.Ember(p.x + 2, p.y, 10, 0, 0, 10, {});
+  g.embers = [em];
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.strictEqual(em.dead, true, "ember destroyed by the dash sweep");
+  B.reset();
+});
