@@ -167,6 +167,7 @@
       this.suds = 0;
       this.sudsEarned = 0;
       this.dashTimer = 0; this.dashCdTimer = 0; this.dashBoostTimer = 0;
+      this.dashGraceT = 0;         // post-dash i-frames (Pillar of Air III), set at dash end
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
       this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
@@ -240,7 +241,8 @@
       this.burnTimer -= dt;
       const expired = this.burnTimer <= 0;
       if (this.burnTickT >= F.burnTickInterval || expired) {
-        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT);
+        // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
+        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
@@ -254,6 +256,7 @@
       this.basePhysics(dt);
       if (this.invulnTimer > 0) this.invulnTimer -= dt;
       if (this.burnGraceT > 0) this.burnGraceT -= dt;
+      if (this.dashGraceT > 0) this.dashGraceT -= dt;
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
@@ -387,8 +390,10 @@
             e.takeDamage(15, game, this.facing, 0);
           }
         }
-        // Slipstream: dash expiry arms a short free-water spray window.
+        // Dash expiry: post-dash i-frame grace (Pillar of Air III) and
+        // Slipstream's short free-water spray window.
         if (this.dashTimer <= 0) {
+          this.dashGraceT = S.dashIframeBonus || 0;
           const ssRank = this.beneRank("slipstream");
           if (ssRank) this.freeSprayT = ssRank >= 2 ? 0.8 : 0.5;
         }
@@ -509,7 +514,9 @@
       let dmgScale, rangeMult;
       if (dry)               { dmgScale = 0.18; rangeMult = 0.35; }
       else if (frac >= 0.80) { dmgScale = 1.20; rangeMult = 1.00; }
-      else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
+      // pressureFloor (Pillar of Water III): never drop below the mid tier
+      // while any water remains — dry still sputters, 80%+ still gets bonus.
+      else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
       this.lastDmgScale = dmgScale;   // Pressure Sermon: release check reads this
       if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
@@ -843,7 +850,7 @@
     }
 
     takeHit(dmg, game, fromX) {
-      if (this.invulnTimer > 0 || this.dashTimer > 0) return;
+      if (this.invulnTimer > 0 || this.dashTimer > 0 || this.dashGraceT > 0) return;
       if (this.stormT > 0) {
         burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
         this.invulnTimer = 0.3;

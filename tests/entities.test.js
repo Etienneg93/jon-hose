@@ -543,12 +543,15 @@ test("neutral dash goes toward facing", () => {
 test("computeStats caps dodgeChance at 25%", () => {
   JH.Upgrades.reset();
   // Force an over-cap contribution through a repeatable-free path: fake a
-  // Mirror application by monkey-patching (Mirror isn't loaded in tests).
-  global.window.JH.Mirror = { apply: (s) => { s.dodgeChance = 0.4; } };
+  // pillar application by monkey-patching Pillars.apply.
+  const prevApply = JH.Pillars.apply;
+  const prevChurch = JH.Church;
+  JH.Pillars.apply = (s) => { s.dodgeChance = 0.4; };
   global.window.JH.Church = { state: {} };
   const s = JH.Upgrades.computeStats({});
   assert.ok(s.dodgeChance <= 0.25, "dodge capped, got " + s.dodgeChance);
-  delete global.window.JH.Mirror; delete global.window.JH.Church;
+  JH.Pillars.apply = prevApply;
+  if (prevChurch === undefined) delete global.window.JH.Church; else global.window.JH.Church = prevChurch;
 });
 
 // ---- attack tickets: cap on simultaneous melee windups ----

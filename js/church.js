@@ -12,6 +12,14 @@
   "use strict";
   const KEY = "jonhose.church.v1";
   const ELEMENTS = ["earth", "fire", "air", "water"];
+  // Element accent colors (water matches JH.PAL.water; literal so this module
+  // stays loadable without config.js in tests).
+  const ELCOL = { water: "#6cd3ff", earth: "#e0902f", fire: "#ff8a3c", air: "#cfe9ff" };
+  // Locked-pillar nemesis: gateBoss -> Assets painter key (null = no painter
+  // exists yet; draw a "?" instead).
+  const NEMESIS_PAINTER = { quake: "quake", slayer: "slayer", assman: null };
+  const NEMESIS_NAME = { quake: "QUAKE WALKER", slayer: "THE SLAYER", assman: "ASS MAN" };
+  const ROMAN = ["I", "II", "III"];
 
   // Scene presentation timings (seconds) — render/feel, not balance.
   const WALK_SPEED = 78, FATHER_MAT = 0.5, EXIT_FADE = 0.6;
@@ -88,29 +96,14 @@
   function defaults() {
     return {
       essence: 0,
-      blessings: {},                                   // LEGACY id -> count (migrated)
-      mirror: {},                                      // node id -> { side:"a"|"b", rank:int }
+      blessings: {},                                   // LEGACY id -> count (no longer applied)
+      pillars: { water: 0, earth: 0, fire: 0, air: 0 }, // element -> rank (0..3)
       elements: { earth: false, fire: false, air: false, water: true }, // water: Jon's own, open
       churchVisited: false,
     };
   }
 
   function num(v) { return (typeof v === "number" && isFinite(v)) ? v : 0; }
-
-  // One-time migration: old flat blessing counts -> Mirror Water nodes (side a,
-  // rank capped at maxRank). Runs only when mirror is empty and blessings exist,
-  // so it never double-applies. Keeps the legacy `blessings` field for rollback.
-  const BLESSING_TO_NODE = {
-    bless_dps: "water_pressure", bless_tank: "water_reservoir", bless_hp: "water_vigor",
-  };
-  function migrateBlessings(d) {
-    if (!d.blessings || Object.keys(d.mirror).length > 0) return;
-    const maxRank = (root.JH && root.JH.MIRROR && root.JH.MIRROR.maxRank) || 3;
-    for (const bid in BLESSING_TO_NODE) {
-      const count = num(d.blessings[bid]);
-      if (count > 0) d.mirror[BLESSING_TO_NODE[bid]] = { side: "a", rank: Math.min(count, maxRank) };
-    }
-  }
 
   function sanitize(raw) {
     const d = defaults();
@@ -123,14 +116,11 @@
       ELEMENTS.forEach((e) => { d.elements[e] = !!raw.elements[e]; });
     }
     d.elements.water = true;  // Water is always unlocked (Jon's own element).
-    if (raw.mirror && typeof raw.mirror === "object") {
-      for (const id in raw.mirror) {
-        const n = raw.mirror[id];
-        if (!n || typeof n !== "object") continue;
-        d.mirror[id] = { side: n.side === "b" ? "b" : "a", rank: Math.max(0, num(n.rank) | 0) };
-      }
+    if (raw.pillars && typeof raw.pillars === "object") {
+      ELEMENTS.forEach((e) => {
+        d.pillars[e] = Math.max(0, Math.min(3, num(raw.pillars[e]) | 0));
+      });
     }
-    migrateBlessings(d);
     d.churchVisited = !!raw.churchVisited;
     return d;
   }
@@ -177,7 +167,7 @@
     blessingCost(id) { return root.JH.Balance.blessingCost(this.blessingCount(id)); },
     canBuyBlessing(id) { return this.state.essence >= this.blessingCost(id); },
 
-    // Recompute effective stats from upgrades + Mirror, apply to the player,
+    // Recompute effective stats from upgrades + pillars, apply to the player,
     // and carry HP/water headroom up when a capacity rose. Shared by purchases.
     recarryStats(player) {
       const fresh = root.JH.Upgrades.computeStats(root.JH.Upgrades.owned);
@@ -188,32 +178,21 @@
       if (waterGain > 0) player.water = Math.min(fresh.maxWater, player.water + waterGain);
     },
 
-    // ---- Elemental Mirror nodes (the altar) ----
-    mirrorDef(id) { return (root.JH.MIRROR.nodes || []).find((n) => n.id === id); },
-    mirrorRank(id) { return root.JH.Mirror.nodeState(this.state, id).rank; },
-    mirrorSide(id) { return root.JH.Mirror.nodeState(this.state, id).side; },
-    mirrorCost(id) { return root.JH.Mirror.cost(this.mirrorRank(id)); },
-    mirrorMaxRank() { return root.JH.MIRROR.maxRank; },
-    mirrorUnlocked(id) {
-      const d = this.mirrorDef(id);
-      return !!d && root.JH.Mirror.branchUnlocked(this.state, d.element);
+    // ---- The four element pillars ----
+    pillarDef(element) {
+      return (root.JH.PILLARS.defs || []).find((d) => d.element === element);
     },
-    canBuyMirror(id) {
-      return root.JH.Mirror.canBuy(this.state, this.mirrorDef(id), root.JH.MIRROR.maxRank);
+    pillarUnlocked(element) {
+      const d = this.pillarDef(element);
+      return !!d && root.JH.Pillars.unlocked(this.state, d);
     },
-    // Buy a rank on the node's active side; recompute + carry the player's stats.
-    buyMirror(id, player) {
-      if (!root.JH.Mirror.buy(this.state, this.mirrorDef(id), root.JH.MIRROR.maxRank)) return false;
+    // Buy one rank; recompute + carry the player's stats. Returns success.
+    buyPillar(element, player) {
+      const d = this.pillarDef(element);
+      if (!d || !root.JH.Pillars.buy(this.state, d)) return false;
       this.save();
       this.recarryStats(player);
       return true;
-    },
-    // Flip a node's active side (free); recompute stats (the active effect changed).
-    toggleMirror(id, player) {
-      const d = this.mirrorDef(id); if (!d) return;
-      root.JH.Mirror.toggleSide(this.state, d);
-      this.save();
-      if (player) this.recarryStats(player);
     },
 
     // ---- The walkable Church of the Holy Hose ----------------------
@@ -232,6 +211,10 @@
         fatherShown: false, fatherT: 0, fatherSpawnX: 0,
         dialogue: null,
         activeStation: null,
+        // Pillar-buy juice: ring burst + staggered pip refill + rising text.
+        ringFx: null,                   // { x, color, t }
+        pipAnim: null,                  // { element, t } — pips refill staggered
+        buyFloat: null,                 // { text, x, color, t } — rises + fades
         exiting: false, exitT: 0,
       };
     },
@@ -249,6 +232,11 @@
       }
 
       if (sc.fatherShown) sc.fatherT += dt;
+
+      // Pillar-buy juice timers (run even while dialogue is up).
+      if (sc.ringFx && (sc.ringFx.t += dt) > 0.5) sc.ringFx = null;
+      if (sc.pipAnim && (sc.pipAnim.t += dt) > 0.6) sc.pipAnim = null;
+      if (sc.buyFloat && (sc.buyFloat.t += dt) > 0.9) sc.buyFloat = null;
 
       // Exit transition: fade out, then warp back into the world.
       if (sc.exiting) {
@@ -307,19 +295,24 @@
         return;
       }
 
-      // Mirror node stations: active when you stand near an UNLOCKED one.
-      // E = buy a rank on the active side; Shift/L = flip the node's side.
+      // Pillar stations: active when near ANY pillar (locked ones still show
+      // their info; E only buys on unlocked ones).
       sc.activeStation = null;
       for (const st of L.stations) {
-        if (!this.mirrorUnlocked(st.id)) continue;
-        if (Math.abs(sc.jonX - st.x) <= L.stationRange) { sc.activeStation = st.id; break; }
+        if (Math.abs(sc.jonX - st.x) <= L.stationRange) { sc.activeStation = st.pillar; break; }
       }
-      if (sc.activeStation) {
-        if (In.pressed("confirm")) {
-          if (this.buyMirror(sc.activeStation, game.player)) game.audio.play("upgrade");
-          else game.audio.play("hurt");
-        } else if (In.pressed("dash")) {
-          this.toggleMirror(sc.activeStation, game.player); game.audio.play("buy");
+      if (sc.activeStation && In.pressed("confirm") && this.pillarUnlocked(sc.activeStation)) {
+        const el = sc.activeStation;
+        if (this.buyPillar(el, game.player)) {
+          game.audio.play("bell");
+          const st = L.stations.find((s) => s.pillar === el);
+          const col = ELCOL[el] || "#9be8ff";
+          const rank = root.JH.Pillars.rank(this.state, el);
+          sc.ringFx = { x: st.x, color: col, t: 0 };
+          sc.pipAnim = { element: el, t: 0 };
+          sc.buyFloat = { text: "+RANK " + (ROMAN[rank - 1] || rank), x: st.x, color: col, t: 0 };
+        } else {
+          game.audio.play("hurt");   // can't afford / already MAX
         }
       }
 
@@ -405,32 +398,74 @@
         blit(ctx, lit ? ART.shrineLit : ART.shrineDim, x - 10, 48, 20, 44, () => {});
       });
 
-      // Mirror node stations: pedestal + bobbing icon, rank pips; node detail when
-      // near. Only UNLOCKED branches render (earth appears once Quake is redeemed).
-      const ELCOL = { water: PAL.water, earth: "#e0902f", fire: "#ff8a3c", air: "#cfe9ff" };
-      const maxR = this.mirrorMaxRank();
+      // The four element pillars: tall columns along the nave. Unlocked ones
+      // carry a glowing element core + rank pips; locked ones stand dark with
+      // their nemesis silhouette. Detail text when near (drawn after Jon).
       let nearStation = null;                  // captured, drawn after Jon/Father (stays on top)
       for (const st of L.stations) {
-        if (!this.mirrorUnlocked(st.id)) continue;
-        const def = this.mirrorDef(st.id); if (!def) continue;
+        const def = this.pillarDef(st.pillar); if (!def) continue;
+        const unlocked = this.pillarUnlocked(st.pillar);
         const x = Math.round(st.x - camX);
-        const near = sc.activeStation === st.id;
-        const bob = Math.sin(sc.t * 4 + st.x) * 2;
-        const col = ELCOL[def.element] || PAL.water;
-        blit(ctx, ART["station_" + st.id], x - 9, VH - 50, 18, 34, () => {
-          ctx.fillStyle = "#11141f"; ctx.fillRect(x - 7, VH - 50, 14, 34);   // fallback plinth
-        });
-        if (near) {
-          ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(sc.t * 8);
-          ctx.fillStyle = col; ctx.fillRect(x - 10, VH - 71 + bob, 20, 20); ctx.restore();
+        const near = sc.activeStation === st.pillar;
+        const col = ELCOL[st.pillar] || PAL.water;
+        const baseY = VH - 18, topY = VH - 82;                  // shaft footprint
+        // Base + capital + shaft.
+        ctx.fillStyle = unlocked ? "#1c2130" : "#0d0f16";
+        ctx.fillRect(x - 8, baseY, 16, 4);                      // base slab
+        ctx.fillRect(x - 8, topY - 4, 16, 4);                   // capital
+        ctx.fillRect(x - 6, topY, 12, baseY - topY);            // shaft
+        if (unlocked) {
+          // Element core: a lit stripe up the shaft, breathing; brighter near.
+          ctx.save();
+          ctx.globalAlpha = (near ? 0.75 : 0.5) + 0.2 * Math.sin(sc.t * 3 + st.x);
+          ctx.fillStyle = col;
+          ctx.fillRect(x - 2, topY + 3, 4, baseY - topY - 6);
+          ctx.restore();
+          ctx.fillStyle = col; ctx.fillRect(x - 6, topY - 2, 12, 2);  // capital trim
+        } else {
+          // Nemesis silhouette over the dark column — someone's missing here.
+          const painter = NEMESIS_PAINTER[def.gateBoss];
+          ctx.save(); ctx.globalAlpha = 0.35;
+          if (painter && JH.Assets.has(painter)) {
+            JH.Assets.draw(ctx, painter, x, baseY, 1, { state: "idle", t: sc.t, frame: 0, scale: 0.55 });
+          } else {
+            ctx.fillStyle = "#3a4055"; ctx.font = "bold 22px monospace";
+            ctx.fillText("?", x, baseY - 22);
+            ctx.font = "8px monospace";
+          }
+          ctx.restore();
+          ctx.save(); ctx.globalAlpha = near ? 0.9 : 0.4;
+          ctx.fillStyle = "#8a93ad";
+          ctx.fillText("SEALED", x, topY - 8);
+          ctx.restore();
         }
-        ctx.fillStyle = col; ctx.fillRect(x - 5, VH - 66 + bob, 10, 10);
-        const rank = this.mirrorRank(st.id);
-        for (let i = 0; i < maxR; i++) {                                     // rank pips
-          ctx.fillStyle = i < rank ? col : "#33384a";
-          ctx.fillRect(x - 7 + i * 5, VH - 52 + bob, 3, 3);
+        // Rank pips under the column (staggered refill for 0.4s after a buy).
+        const rank = root.JH.Pillars.rank(this.state, st.pillar);
+        const maxR = def.maxRank || 3;
+        const anim = sc.pipAnim && sc.pipAnim.element === st.pillar ? sc.pipAnim : null;
+        for (let i = 0; i < maxR; i++) {
+          let filled = i < rank, flash = false;
+          if (anim && filled) {
+            const fillAt = (i + 1) * (0.4 / maxR);
+            filled = anim.t >= fillAt;
+            flash = filled && anim.t < fillAt + 0.15;
+          }
+          ctx.fillStyle = flash ? "#ffffff" : (filled ? col : "#33384a");
+          ctx.fillRect(x - 8 + i * 6, baseY + 6, 4, 4);
         }
-        if (near) nearStation = { id: st.id, def, x, bob, rank };
+        if (near) nearStation = { pillar: st.pillar, def, x, unlocked, rank, maxR };
+      }
+
+      // Pillar-buy ring burst: an expanding element-color ring at the station.
+      if (sc.ringFx) {
+        const k = sc.ringFx.t / 0.5;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - k);
+        ctx.strokeStyle = sc.ringFx.color; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(Math.round(sc.ringFx.x - camX), VH - 50, 4 + k * 30, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Portal at the end of the nave.
@@ -520,17 +555,37 @@
       if (sc.fatherShown && sc.jonY > sc.fatherY) { drawFatherJon(); drawGhostJon(); }
       else { drawGhostJon(); drawFatherJon(); }
 
-      // Pedestal detail text — drawn last so Jon/Father never paint over it.
+      // Pillar detail text — drawn last so Jon/Father never paint over it.
       if (nearStation) {
-        const { id, def, x, bob, rank } = nearStation;
-        const side = def[this.mirrorSide(id)];
-        ctx.fillStyle = "#ffe9a8"; ctx.fillText(side.name + " — " + side.desc, x, VH - 84 + bob);
-        if (rank >= maxR) {
-          ctx.fillStyle = "#9be8ff"; ctx.fillText("MAX  ·  Shift: flip side", x, VH - 74 + bob);
+        const { pillar, def, x, unlocked, rank, maxR } = nearStation;
+        if (!unlocked) {
+          ctx.fillStyle = "#8a93ad";
+          ctx.fillText("SEALED — " + (NEMESIS_NAME[def.gateBoss] || "???"), x, VH - 104);
+          ctx.fillStyle = "#5a6178";
+          ctx.fillText("Redeem thy nemesis to open this pillar.", x, VH - 94);
         } else {
-          ctx.fillStyle = this.canBuyMirror(id) ? "#9be8ff" : "#a66";
-          ctx.fillText(this.mirrorCost(id) + " Essence · E: raise · Shift: flip", x, VH - 74 + bob);
+          ctx.fillStyle = "#ffe9a8";
+          ctx.fillText(def.name + (rank > 0 ? " " + (ROMAN[rank - 1] || rank) : ""), x, VH - 114);
+          ctx.fillStyle = "#c8d2e8";
+          wrapText(ctx, def.desc, x, VH - 104, 190, 10);
+          if (rank >= maxR) {
+            ctx.fillStyle = "#9be8ff"; ctx.fillText("MAX", x, VH - 84);
+          } else {
+            ctx.fillStyle = root.JH.Pillars.canBuy(this.state, def) ? "#9be8ff" : "#a66";
+            ctx.fillText(root.JH.Pillars.cost(rank) + " Essence · E: raise", x, VH - 84);
+          }
         }
+      }
+
+      // Rising "+RANK" float after a buy (church draws its own overlays).
+      if (sc.buyFloat) {
+        const bf = sc.buyFloat;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - bf.t / 0.9);
+        ctx.fillStyle = bf.color; ctx.font = "bold 8px monospace";
+        ctx.fillText(bf.text, Math.round(bf.x - camX), VH - 96 - bf.t * 22);
+        ctx.restore();
+        ctx.font = "8px monospace";
       }
 
       // Holy Essence readout — always visible so the currency reads.

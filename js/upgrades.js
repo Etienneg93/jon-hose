@@ -89,11 +89,10 @@
         const g = JH.Balance.levelGains(this.levelCount, JH.LEVELS.cycle);
         for (const k in g) s[k] += g[k];
       }
-      // Permanent Elemental Mirror nodes (survive Upgrades.reset()). Folds each
-      // owned, unlocked node's active side into the stats. Replaces the legacy
-      // flat Church blessings (old saves are migrated into Mirror Water nodes).
-      if (JH.Mirror && JH.Church && JH.Church.state && JH.MIRROR) {
-        JH.Mirror.apply(s, JH.Church.state, JH.MIRROR.nodes);
+      // Permanent Church pillar ranks (survive Upgrades.reset()). Folds each
+      // unlocked pillar's ranked effect into the stats.
+      if (JH.Pillars && JH.Church && JH.Church.state && JH.PILLARS) {
+        JH.Pillars.apply(s, JH.Church.state, JH.PILLARS.defs);
       }
       // In-run benedictions (JH.Benedictions.active); dashSpeed lives in JH.PLAYER.
       if (JH.Benedictions) JH.Benedictions.applyStats(s);

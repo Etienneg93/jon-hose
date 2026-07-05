@@ -1,7 +1,7 @@
 /* =====================================================================
    pillars.js — JH.Pillars: the four element pillars in the Church nave.
-   Replaces the Mirror node model. Pure logic + stat application;
-   dual-export like balance.js. state shape (on JH.Church.state):
+   Pure logic + stat application; dual-export like balance.js.
+   state shape (on JH.Church.state):
      { essence:int, elements:{...}, pillars:{water,earth,fire,air:int} }
    Rank r costs r+1 essence (1, 2, 3). Water has no gate; the others
    unlock when their nemesis is redeemed (state.elements[element]).
