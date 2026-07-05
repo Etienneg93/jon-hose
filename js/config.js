@@ -128,6 +128,7 @@
     meleeKnock: 110,
 
     dodgeChance: 0,         // fraction chance to negate a hit entirely (Second Wind)
+    burnTakenMult: 1,       // damage multiplier for burn taken (Pillar of Fire rank 3+)
     vampiricRate: 0,        // fraction of spray damage converted to HP (Vampiric Hose)
     splitStream: false,     // spray arcs to a nearby secondary target (Split Stream)
     moveRegen: 0,           // extra water regen/sec while moving (Kinetic Tap)
@@ -425,6 +426,25 @@
       { id: "bless_dps",  name: "Anointed Pressure", desc: "+4 spray dmg",   apply: (s) => { s.sprayDamage += 4; } },
       { id: "bless_tank", name: "Deep Reservoir",    desc: "+15 max water",  apply: (s) => { s.maxWater += 15; } },
       { id: "bless_hp",   name: "Blessed Vigor",     desc: "+20 max HP",     apply: (s) => { s.maxHp += 20; } },
+    ],
+  };
+
+  // ---- The four element pillars (replaces JH.MIRROR) ------------------
+  // Rank r costs r+1 essence. Locked pillars display their nemesis.
+  JH.PILLARS = {
+    defs: [
+      { element: "water", name: "Pillar of Water", gateBoss: null, maxRank: 3,
+        desc: "+15 max water, +3 regen / rank · III: pressure never drops below mid tier",
+        apply: (s, r) => { s.maxWater += 15 * r; s.waterRegen += 3 * r; if (r >= 3) s.pressureFloor = true; } },
+      { element: "earth", name: "Pillar of Earth", gateBoss: "quake", maxRank: 3,
+        desc: "+12 max HP, +15 knockback / rank · III: wall-slammed enemies stagger",
+        apply: (s, r) => { s.maxHp += 12 * r; s.knockback += 15 * r; if (r >= 3) s.wallSlamStagger = true; } },
+      { element: "fire", name: "Pillar of Fire", gateBoss: "slayer", maxRank: 3,
+        desc: "+3 spray dmg, burn on you -25%·rank/3 · III: full pressure Scalds",
+        apply: (s, r) => { s.sprayDamage += 3 * r; s.burnTakenMult = 1 - 0.25 * (r / 3); if (r >= 3) s.baselineScald = true; } },
+      { element: "air", name: "Pillar of Air", gateBoss: "assman", maxRank: 3,
+        desc: "+5 move speed, -0.05s dash cd / rank · III: +0.1s dash i-frames",
+        apply: (s, r) => { s.moveSpeed += 5 * r; s.dashCd = Math.max(0.2, s.dashCd - 0.05 * r); if (r >= 3) s.dashIframeBonus = 0.1; } },
     ],
   };
 
