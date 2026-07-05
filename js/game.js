@@ -750,6 +750,15 @@
       for (const f of this.floaters) f.t += dt;
       this.floaters = this.floaters.filter((f) => f.t < 0.9);
     },
+    // Auto-award any live essence crosses. Called wherever the pickup array is
+    // about to go away (win, church respawn) so banked essence can't be lost.
+    sweepCrosses() {
+      for (const p of this.pickups)
+        if (!p.dead && p.kind === "cross" && JH.Church) {
+          JH.Church.addEssence(p.value || 1);
+          p.dead = true;
+        }
+    },
     onEnemyKilled(e) {
       this.kills++;
       this.grantXp((e && e.def && e.def.suds) || 0);
@@ -1038,6 +1047,7 @@
       p.clearBurn();
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
+      this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.floaters = [];
       // First-death pity: banked at the death moment, paid out as a cross now
@@ -1105,6 +1115,7 @@
 
     // ------------------------------------------------------- end states
     win() {
+      this.sweepCrosses();   // bank any cross still on the ground (e.g. the Slayer's)
       JH.Music.setTrack("level");
       this.state = "win";
       document.getElementById("win-stats").textContent =

@@ -394,7 +394,6 @@
       ghostAlphaMax: 0.82,   // ghost's peak opacity
       total: 3.2,            // whole sequence length; updatePlayerDeathSeq exits the Church at this point
     },
-    essencePerBoss: 1,
     // Father Jon dialogue. `first` = in-character Holy-Essence tutorial (one
     // box per line); `repeat` = a single short line picked at random per visit.
     sermon: {

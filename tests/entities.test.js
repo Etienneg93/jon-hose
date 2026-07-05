@@ -606,6 +606,21 @@ test("game.float pools with a 20 cap (oldest dropped) and culls by age", () => {
   assert.strictEqual(g.floaters.length, 0, "aged-out floaters are culled");
 });
 
+test("sweepCrosses banks live crosses so win/respawn can't lose essence", () => {
+  const prevChurch = JH.Church;
+  JH.Church = { banked: 0, addEssence(n) { this.banked += n; } };
+  const g = { pickups: [
+    { kind: "cross", value: 2, dead: false },
+    { kind: "cross", dead: true },              // already collected — skipped
+    { kind: "health", value: 25, dead: false }, // not a cross — untouched
+  ] };
+  JH.Game.sweepCrosses.call(g);
+  assert.strictEqual(JH.Church.banked, 2, "live cross value banked");
+  assert.strictEqual(g.pickups[0].dead, true, "swept cross is killed");
+  assert.strictEqual(g.pickups[2].dead, false, "non-cross pickups untouched");
+  if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
+});
+
 // makeSuper reads JH.Balance.superEliteDef at call time.
 require("../js/balance.js");
 
