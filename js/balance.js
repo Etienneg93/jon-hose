@@ -30,14 +30,15 @@
     },
 
     // Total player-power count fed to eliteScale/bossHpScale: one-time nodes
-    // + repeatable Overcharge buys + total Mirror ranks. All sources of
+    // + repeatable Overcharge buys + total pillar ranks + XP levels. All sources of
     // permanent stat growth count, so the enemy ramp can see them.
-    powerCount(owned, repCount, churchState) {
+    powerCount(owned, repCount, churchState, levelCount) {
       let n = Object.keys(owned || {}).length;
       const rc = repCount || {};
       for (const k in rc) n += rc[k] || 0;
-      const m = (churchState && churchState.mirror) || {};
-      for (const k in m) n += (m[k] && m[k].rank) || 0;
+      const p = (churchState && churchState.pillars) || {};
+      for (const k in p) n += p[k] | 0;
+      n += levelCount | 0;
       return n;
     },
 

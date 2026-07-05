@@ -413,7 +413,7 @@
         this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
         const actLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
         const ownedCount = JH.Balance.powerCount(
-          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state);
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
         const eliteScale = wave.tough
           ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
         const spawnList = JH.Balance.capEnemyType(
@@ -730,7 +730,7 @@
       // instead of deleting them.
       if (e.isBoss) {
         const pc = JH.Balance.powerCount(
-          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state);
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
         e.hp = e.maxHp = JH.Balance.bossHpScale(e.maxHp, pc);
       }
       this.enemies.push(e);
@@ -1357,7 +1357,7 @@
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
               const sc = wave.tough
                 ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
-                    JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state))
+                    JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount))
                 : null;
               const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
               e.spawnGrace = 0.2;
@@ -1373,7 +1373,7 @@
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
             const sc = wave.tough
               ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
-                  JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state))
+                  JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount))
               : null;
             // Spawn from either edge so pressure comes from ahead AND behind.
             const ex = (Math.random() < 0.5)

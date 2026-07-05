@@ -197,13 +197,18 @@ test("pickSprinkles returns fewer picks when nothing is eligible", () => {
   assert.deepStrictEqual(picks, ["bulwark"]);
 });
 
-test("powerCount = nodes + repeatable buys + total Mirror ranks", () => {
+test("powerCount = nodes + repeatable buys + pillar ranks (mirror ignored)", () => {
   const owned = { pw1: true, tk1: true, vt1: true };                       // 3 nodes
   const reps = { ov_dmg: 4, ov_hp: 2 };                                    // 6 buys
-  const church = { mirror: { water_vigor: { side: "b", rank: 3 }, earth_stance: { side: "a", rank: 2 } } }; // 5 ranks
-  assert.strictEqual(Balance.powerCount(owned, reps, church), 14);
-  assert.strictEqual(Balance.powerCount({}, {}, null), 0);
-  assert.strictEqual(Balance.powerCount(null, null, undefined), 0);
+  const church = { pillars: { water: 3, earth: 1 }, mirror: { water_vigor: { rank: 3 } } }; // 4 pillar ranks (mirror ignored)
+  assert.strictEqual(Balance.powerCount(owned, reps, church, 0), 13);
+  assert.strictEqual(Balance.powerCount({}, {}, null, 0), 0);
+  assert.strictEqual(Balance.powerCount(null, null, undefined, 0), 0);
+});
+
+test("powerCount v2: nodes + reps + pillar ranks + levels (mirror term gone)", () => {
+  const church = { pillars: { water: 3, earth: 1 }, mirror: { water_vigor: { rank: 3 } } };
+  assert.strictEqual(Balance.powerCount({ a: 1 }, { ov: 2 }, church, 5), 1 + 2 + 4 + 5);
 });
 
 test("eliteScale power term now caps at 24, not 15", () => {
