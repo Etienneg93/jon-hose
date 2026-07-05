@@ -612,12 +612,12 @@
       { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }] },
       { name: "THE SWITCH", boss: true, bossType: "switch" },
       // ---- Act 3: the ruined district ----
-      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 4 }] },
+      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "bulwark", count: 1 }, { type: "mook", count: 4 }, { type: "charger", count: 2 }] },
       { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 3 }, { type: "mook", count: 4 }] },
       { name: "HOLD THE LINE", holdout: true, tough: true, holdDur: 22,
-        spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 2 }, { type: "charger", count: 1 }] },
-      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 2 }, { type: "mook", count: 2 }] },
-      { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }, { type: "charger", count: 2 }] },
+        spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }, { type: "bulwark", count: 1 }] },
+      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 4 }, { type: "mook", count: 3 }] },
+      { name: "LAST STAND", tough: true, spawns: [{ type: "mook", count: 5 }, { type: "charger", count: 2 }, { type: "bulwark", count: 1 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
       // ---- Act 4: the aftermath ----
       { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 4 }, { type: "mook", count: 2 }] },
