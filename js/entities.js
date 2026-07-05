@@ -520,6 +520,15 @@
       const hitEnemies = [];
       let healAmt = 0;
       const ssRank = this.beneRank("split_stream");
+      // Benediction damage-amp inputs, hoisted: ranks and tank fraction are
+      // loop-invariant (only wet/burning vary per target). All-zero ranks
+      // skip the multiplier (and the fire-patch scan) entirely.
+      const beneRanks = {
+        overflow: this.beneRank("overflow"), baptize: this.beneRank("baptize"),
+        trial: this.beneRank("trial_by_fire"),
+      };
+      const anyBene = beneRanks.overflow || beneRanks.baptize || beneRanks.trial;
+      const waterFrac = this.water / S.maxWater;
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
       for (const e of game.enemies) {
         if (e.dead) continue;
@@ -540,13 +549,10 @@
         }
         const mult = e.def ? (e.def.waterMult || 1) : 1;
         const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
-        const beneMult = JH.Balance.beneDmgMult({
-          overflow: this.beneRank("overflow"), baptize: this.beneRank("baptize"),
-          trial: this.beneRank("trial_by_fire"),
-        }, {
-          waterFrac: this.water / S.maxWater, wet: e.wetness || 0,
-          burning: (e.scaldT || 0) > 0 || enemyInFire(game, e),
-        });
+        const beneMult = anyBene ? JH.Balance.beneDmgMult(beneRanks, {
+          waterFrac, wet: e.wetness || 0,
+          burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
+        }) : 1;
         const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         if (e.onSprayHit) e.onSprayHit(dt, game);

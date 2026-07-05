@@ -827,3 +827,22 @@ test("sigil pick: takes the boon, refreshes stats, clears the beat", () => {
   assert.ok(g.sigils.every((s) => s.dead), "picking one clears the offer");
   global.window.JH.Benedictions.reset();
 });
+
+test("waveCleared_: Absolution + sigil beat land before the quake cutscene return", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("absolution");
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  JH.Music = { setTrack() {} };
+  const g = Object.create(JH.Game);
+  g.player = makePlayer(); g.player.hp = 10;
+  g.waveIndex = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+  g.beneUsedOnce = {}; g.sigils = [];
+  g.waveCleared_();
+  assert.strictEqual(g.state, "cutscene", "quake clear still enters its cutscene");
+  assert.strictEqual(g.player.hp, 35, "rank-I Absolution healed 25 despite the early return");
+  assert.ok(g.sigils.length > 0, "boss beat still offers sigils despite the early return");
+  JH.Music = prevMusic;
+  if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
+  B.reset();
+});

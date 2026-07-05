@@ -472,6 +472,30 @@
       JH.Music.setTrack("level");
       this.waveActive = false;
 
+      const clearedWave = JH.LEVEL1.waves[this.waveIndex];
+      // Absolution: heals on every wave clear. Above the cutscene
+      // early-returns below so quake/slayer boss clears heal too.
+      const ab = this.player.beneRank("absolution");
+      if (ab) {
+        this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + (ab >= 2 ? 40 : 25));
+        if (ab >= 2) this.player.clearBurn();
+      }
+      // Benediction beat: bosses AND set-pieces offer sigils (the essence
+      // cross below deliberately excludes bosses — they get their own drop).
+      // Also above the cutscene early-returns: quake/slayer are boss beats;
+      // their sigils sit harmlessly through the cutscene (startWave clears
+      // any left unpicked).
+      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+        const offers = JH.Benedictions.pickOffers({
+          active: JH.Benedictions.active,
+          pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
+          usedOnce: this.beneUsedOnce,
+          censer: !!this.relics && !!this.relics.censer,
+        }, Math.random);
+        this.sigils = offers.map((o, i) =>
+          new JH.Sigil(this.player.x + 60 + i * 46, JH.DEPTH_MAX - 20 - i * 14, o));
+      }
+
       // After Quake Walker, play his ally cutscene before continuing.
       const quakeIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
       if (quakeIdx >= 0 && this.waveIndex === quakeIdx) {
@@ -495,34 +519,15 @@
         return;
       }
 
-      const clearedWave = JH.LEVEL1.waves[this.waveIndex];
       if (clearedWave) {
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
-      }
-      // Absolution: heals on every wave clear (not just bosses/set-pieces).
-      const ab = this.player.beneRank("absolution");
-      if (ab) {
-        this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + (ab >= 2 ? 40 : 25));
-        if (ab >= 2) this.player.clearBurn();
       }
       // Mix-up set-pieces award Holy Essence like boss kills do — dropped as
       // a glowing cross pickup (never expires; awards on collect). No banner.
       if (clearedWave && (clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
         this.spawnPickup("cross", this.player.x + 34, this.player.y, 1);
         this.grantXp(JH.LEVELS.setPieceXp);
-      }
-      // Benediction beat: bosses AND set-pieces offer sigils (the essence
-      // cross above deliberately excludes bosses — they get their own drop).
-      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
-        const offers = JH.Benedictions.pickOffers({
-          active: JH.Benedictions.active,
-          pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
-          usedOnce: this.beneUsedOnce,
-          censer: !!this.relics && !!this.relics.censer,
-        }, Math.random);
-        this.sigils = offers.map((o, i) =>
-          new JH.Sigil(this.player.x + 60 + i * 46, JH.DEPTH_MAX - 20 - i * 14, o));
       }
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
