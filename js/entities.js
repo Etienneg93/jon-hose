@@ -191,6 +191,7 @@
       this.nearShop = false;
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
       this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
+      this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
     }
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them.
@@ -253,6 +254,8 @@
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
       if (this.douseCdT > 0) this.douseCdT -= dt;
+      if (this.freeSprayT > 0) this.freeSprayT -= dt;
+      if (this.stormT > 0) this.stormT -= dt;
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
@@ -320,6 +323,9 @@
             { vsEnemies: true, slowMult: 0.7, dmgAmp: wakeRank >= 2 ? 1.1 : 1 }));
       }
       let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
+      if (this.beneRank("tailwind"))
+        speed *= 1 + Math.min(this.beneRank("tailwind") >= 2 ? 0.30 : 0.20, 0.02 * (game.combo || 0));
+      if (this.stormT > 0 && this.beneRank("eye_of_storm") >= 2) speed *= 1.15;
       if (this.dashTimer > 0) {
         this.dashTimer -= dt;
         mx = this._dashX; my = this._dashY; speed = S.dashSpeed;
@@ -335,6 +341,11 @@
             e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
             if (bdRank >= 2) e.takeDamage(8, game, this.facing, 60);
           }
+        }
+        // Slipstream: dash expiry arms a short free-water spray window.
+        if (this.dashTimer <= 0) {
+          const ssRank = this.beneRank("slipstream");
+          if (ssRank) this.freeSprayT = ssRank >= 2 ? 0.8 : 0.5;
         }
       } else if (this.spraying) {
         if (!S.noSpraySlow) speed *= 0.55; // slow while hosing (Sure Grip removes this)
@@ -424,7 +435,7 @@
       else if (frac >= 0.80) { dmgScale = 1.20; rangeMult = 1.00; }
       else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      if (!dry && this.concertaTimer <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
+      if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
@@ -705,6 +716,11 @@
 
     takeHit(dmg, game, fromX) {
       if (this.invulnTimer > 0 || this.dashTimer > 0) return;
+      if (this.stormT > 0) {
+        burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
+        this.invulnTimer = 0.3;
+        return;
+      }
       if (this.stats.dodgeChance > 0 && Math.random() < this.stats.dodgeChance) {
         burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
         this.invulnTimer = 0.3;

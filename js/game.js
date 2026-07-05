@@ -358,6 +358,8 @@
       this.waveCleared = false;
       this.shopNpc = null;          // vendor gets left behind once the fight starts
       this.nearShop = false;
+      if (this.player.beneRank("eye_of_storm"))
+        this.player.stormT = this.player.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
       const wave = JH.LEVEL1.waves[i];
       JH.Camera.lock();
       // Confine the player to the current screen ("arena").

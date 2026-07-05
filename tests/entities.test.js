@@ -951,3 +951,24 @@ test("Landslide: an overlapping enemy under knockback batters the enemy next to 
   assert.ok(victim.hp < hp0, "overlapping enemy takes landslide damage");
   B.reset();
 });
+
+// ---- Benedictions: Air (Eye of the Storm, Slipstream) ----
+
+test("Eye of the Storm: takeHit no-ops while stormT is active, and consumes no HP", () => {
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  p.stormT = 1;
+  const hp0 = p.hp;
+  p.takeHit(20, g, p.x - 10);
+  assert.strictEqual(p.hp, hp0, "storm window blocks the hit entirely");
+  assert.ok(p.invulnTimer > 0, "a brief invuln follows the storm dodge, like a normal dodge");
+});
+
+test("Slipstream: freeSprayT skips the water drain in doSpray", () => {
+  const g = makeThinkGame(60, 40);
+  const p = makePlayer();
+  p.freeSprayT = 0.5;
+  const water0 = p.water;
+  p.doSpray(0.1, g);
+  assert.strictEqual(p.water, water0, "spray drains no water while freeSprayT is active");
+});
