@@ -233,6 +233,17 @@
       if (waterFrac < 0.3) ww *= 2;
       return rng() < wh / (wh + ww) ? "health" : "water";
     },
+
+    // Combined spray-damage multiplier from the water/fire dmg-amp boons.
+    // ranks: {overflow, baptize, trial} boon ranks (0/1/2). t: {waterFrac,
+    // wet, burning} target/attacker state. Stacks multiplicatively. Pure.
+    beneDmgMult(ranks, t) {
+      let m = 1;
+      if (ranks.overflow && t.waterFrac >= (ranks.overflow >= 2 ? 0.7 : 0.8)) m *= ranks.overflow >= 2 ? 1.3 : 1.2;
+      if (ranks.baptize && t.wet > 0.3) m *= ranks.baptize >= 2 ? 1.25 : 1.15;
+      if (ranks.trial && t.burning) m *= ranks.trial >= 2 ? 1.3 : 1.2;
+      return m;
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

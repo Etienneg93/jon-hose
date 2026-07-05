@@ -500,6 +500,12 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
+      // Absolution: heals on every wave clear (not just bosses/set-pieces).
+      const ab = this.player.beneRank("absolution");
+      if (ab) {
+        this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + (ab >= 2 ? 40 : 25));
+        if (ab >= 2) this.player.clearBurn();
+      }
       // Mix-up set-pieces award Holy Essence like boss kills do — dropped as
       // a glowing cross pickup (never expires; awards on collect). No banner.
       if (clearedWave && (clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {

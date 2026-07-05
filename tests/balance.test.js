@@ -280,3 +280,19 @@ test("rollDrop: pity guarantees an item at streak >= 6; need-weighting biases th
   assert.strictEqual(Balance.rollDrop(1, 6, 0.3, 1, () => 0.5), "health");
   assert.strictEqual(Balance.rollDrop(1, 6, 1, 0.1, () => 0.5), "water");
 });
+
+test("beneDmgMult: each boon gates on its own threshold, bigger + looser at rank II", () => {
+  assert.strictEqual(Balance.beneDmgMult({}, { waterFrac: 1, wet: 1, burning: true }), 1, "no owned ranks is a no-op");
+  assert.strictEqual(Balance.beneDmgMult({ overflow: 1 }, { waterFrac: 0.79, wet: 0, burning: false }), 1, "below rank-I tank threshold");
+  assert.strictEqual(Balance.beneDmgMult({ overflow: 1 }, { waterFrac: 0.8, wet: 0, burning: false }), 1.2);
+  assert.strictEqual(Balance.beneDmgMult({ overflow: 2 }, { waterFrac: 0.7, wet: 0, burning: false }), 1.3, "rank II lowers threshold to 0.7");
+  assert.strictEqual(Balance.beneDmgMult({ baptize: 1 }, { waterFrac: 0, wet: 0.3, burning: false }), 1, "wetness exactly 0.3 doesn't qualify");
+  assert.strictEqual(Balance.beneDmgMult({ baptize: 2 }, { waterFrac: 0, wet: 0.5, burning: false }), 1.25);
+  assert.strictEqual(Balance.beneDmgMult({ trial: 1 }, { waterFrac: 0, wet: 0, burning: false }), 1, "not burning doesn't qualify");
+  assert.strictEqual(Balance.beneDmgMult({ trial: 2 }, { waterFrac: 0, wet: 0, burning: true }), 1.3);
+});
+
+test("beneDmgMult: qualifying boons stack multiplicatively", () => {
+  const m = Balance.beneDmgMult({ overflow: 1, baptize: 1, trial: 1 }, { waterFrac: 0.9, wet: 0.5, burning: true });
+  assert.ok(Math.abs(m - 1.2 * 1.15 * 1.2) < 1e-9);
+});

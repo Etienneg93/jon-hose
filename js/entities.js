@@ -309,6 +309,12 @@
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
+        // Baptismal Wake: dash leaves an enemy-slowing puddle; rank II also
+        // soaks enemies standing in it (see SlowZone's vsEnemies comment).
+        const wakeRank = this.beneRank("baptismal_wake");
+        if (wakeRank && game.slowZones)
+          game.slowZones.push(new JH.SlowZone(this.x, this.y, 16, 3,
+            { vsEnemies: true, slowMult: 0.7, dmgAmp: wakeRank >= 2 ? 1.1 : 1 }));
       }
       let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
       if (this.dashTimer > 0) {
@@ -513,6 +519,7 @@
       let didHit = false;
       const hitEnemies = [];
       let healAmt = 0;
+      const ssRank = this.beneRank("split_stream");
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
       for (const e of game.enemies) {
         if (e.dead) continue;
@@ -533,7 +540,14 @@
         }
         const mult = e.def ? (e.def.waterMult || 1) : 1;
         const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
-        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * dt;
+        const beneMult = JH.Balance.beneDmgMult({
+          overflow: this.beneRank("overflow"), baptize: this.beneRank("baptize"),
+          trial: this.beneRank("trial_by_fire"),
+        }, {
+          waterFrac: this.water / S.maxWater, wet: e.wetness || 0,
+          burning: (e.scaldT || 0) > 0 || enemyInFire(game, e),
+        });
+        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         if (e.onSprayHit) e.onSprayHit(dt, game);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
@@ -561,19 +575,23 @@
         // Vampiric lifesteal at half rate against bosses and elites — their
         // huge HP pools gave full-rate sustain near-permanent uptime.
         if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
-        if (S.splitStream) hitEnemies.push(e);
+        if (ssRank) hitEnemies.push(e);
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
-      // Split Stream: 30% damage arc to all nearby enemies of each hit enemy.
-      if (S.splitStream && hitEnemies.length > 0) {
+      // Split Stream: 50% damage arc from each hit enemy to its closest
+      // nearby enemies — rank I picks 1 secondary, rank II picks 3.
+      if (ssRank && hitEnemies.length > 0) {
+        const maxSecondaries = ssRank >= 2 ? 3 : 1;
         for (const primary of hitEnemies) {
-          for (const e of game.enemies) {
-            if (e.dead || e.dropping || e === primary || hitEnemies.includes(e)) continue;
-            const d = Math.hypot(e.x - primary.x, e.y - primary.y);
-            if (d > 80) continue;
+          const nearby = game.enemies.filter((e) =>
+            !e.dead && !e.dropping && e !== primary && !hitEnemies.includes(e)
+            && Math.hypot(e.x - primary.x, e.y - primary.y) <= 80);
+          nearby.sort((a, b) =>
+            Math.hypot(a.x - primary.x, a.y - primary.y) - Math.hypot(b.x - primary.x, b.y - primary.y));
+          for (const e of nearby.slice(0, maxSecondaries)) {
             const m2 = e.def ? (e.def.waterMult || 1) : 1;
-            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.30, game, this.facing, 0);
+            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.50, game, this.facing, 0);
             // Chain visual: thin stream of particles from primary to secondary.
             const cx = e.x - primary.x, cy = e.y - primary.y;
             const chainLen = Math.hypot(cx, cy) || 1;
@@ -862,6 +880,7 @@
       this.state = "walk";
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
+      this._puddleSlow = 0;  // vsEnemies SlowZone tag for this frame; see update()
     }
 
     takeDamage(dmg, game, dirX, knock) {
@@ -942,7 +961,18 @@
             6 + Math.random() * (this.bodyH * 0.6), "#00b4ff", 1,
             { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
       }
+      // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each
+      // frame the enemy stands inside them; pull the think-driven displacement
+      // back toward the pre-think position by that fraction. One hook here
+      // slows every chaser/charger uniformly without touching per-class
+      // movement code.
+      const prePx = this.x, prePy = this.y;
       this.think(dt, game);
+      if (this._puddleSlow) {
+        this.x = prePx + (this.x - prePx) * this._puddleSlow;
+        this.y = prePy + (this.y - prePy) * this._puddleSlow;
+        this._puddleSlow = 0;
+      }
       resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
       // Arena containment: hose knockback (and charge overshoot) can't shove
       // an enemy past the locked wave bounds where Jon can't follow — waves
@@ -1768,16 +1798,49 @@
     return p;
   };
 
-  // Ground denial left by a super-Bulwark's thrown shield: slows Jon while
-  // he stands inside. Ellipse footprint like every ground zone.
+  // Trial by Fire's "burning" check: is this enemy standing in a live fire
+  // patch's footprint? (Scald/burn-stack burning is checked separately by
+  // the caller — this only covers ground patches.) Friendly patches (Task 12)
+  // don't count as burning the enemy standing in them.
+  function enemyInFire(game, e) {
+    if (!game.firePatches) return false;
+    for (const fp of game.firePatches) {
+      if (fp.dead) continue;
+      if (fp.friendly) continue;
+      const f = fp.footprint();
+      if (Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, f.rx, f.ry)) return true;
+    }
+    return false;
+  }
+
+  // Ground denial: slows whoever stands inside. Default mode (no opts) is
+  // the super-Bulwark's thrown-shield puddle, which slows Jon. `vsEnemies`
+  // mode (Baptismal Wake's dash puddle) inverts that — it tags non-boss
+  // enemies inside with `_puddleSlow` (consumed by Enemy.update, see there)
+  // instead of touching the player. `dmgAmp` > 1 (rank II Wake) doesn't
+  // multiply damage directly here — it soaks tagged enemies' wetness to
+  // >=0.35 instead, which feeds Baptize's wet-damage bonus naturally rather
+  // than stacking a second damage-multiplier path.
   class SlowZone {
-    constructor(x, y, r, dur) {
+    constructor(x, y, r, dur, opts) {
       this.x = x; this.y = y; this.r = r; this.dur = dur;
-      this.t = 0; this.dead = false; this.slowMult = 0.55;
+      this.t = 0; this.dead = false;
+      this.vsEnemies = !!(opts && opts.vsEnemies);
+      this.slowMult = (opts && opts.slowMult) || 0.55;
+      this.dmgAmp = (opts && opts.dmgAmp) || 1;
     }
     update(dt, game) {
       this.t += dt;
       if (this.t >= this.dur) { this.dead = true; return false; }
+      if (this.vsEnemies) {
+        for (const e of game.enemies) {
+          if (e.dead || e.isBoss) continue;
+          if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, this.r)) continue;
+          e._puddleSlow = this.slowMult;
+          if (this.dmgAmp > 1) e.wetness = Math.max(e.wetness, 0.35);
+        }
+        return true;
+      }
       const pl = game.player;
       if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r))
         pl.zoneSlow = this.slowMult;
@@ -1786,22 +1849,28 @@
     draw(ctx, cam) {
       const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
       const k = Math.max(0, 1 - this.t / this.dur);
+      // Baptismal Wake puddles read as water (no planted shield prop); the
+      // Bulwark's ground denial keeps its purple shield look.
+      const fill = this.vsEnemies ? JH.PAL.waterHi : JH.PAL.bulwarkShield;
+      const rim = this.vsEnemies ? JH.PAL.water : JH.PAL.bulwark;
       ctx.save();
       ctx.globalAlpha = 0.28 * k + 0.1;
-      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.fillStyle = fill;
       ctx.beginPath();
       ctx.ellipse(sx, sy, this.r, this.r * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 0.6 * k + 0.2;
-      ctx.strokeStyle = JH.PAL.bulwark;
+      ctx.strokeStyle = rim;
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      // The grounded shield itself, planted in the middle.
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = JH.PAL.bulwarkShield;
-      ctx.fillRect(sx - 5, sy - 16, 10, 16);
-      ctx.strokeStyle = JH.PAL.bulwarkDk;
-      ctx.strokeRect(sx - 5, sy - 16, 10, 16);
+      if (!this.vsEnemies) {
+        // The grounded shield itself, planted in the middle.
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = JH.PAL.bulwarkShield;
+        ctx.fillRect(sx - 5, sy - 16, 10, 16);
+        ctx.strokeStyle = JH.PAL.bulwarkDk;
+        ctx.strokeRect(sx - 5, sy - 16, 10, 16);
+      }
       ctx.restore();
     }
   }
