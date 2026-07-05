@@ -751,3 +751,14 @@ test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () 
   full.makeSuper();                                    // no scale = full 7x
   assert.strictEqual(full.maxHp, JH.ENEMIES.mook.hp * 7);
 });
+
+test("computeStats folds levelCount through the gain cycle", () => {
+  JH.Upgrades.reset();
+  const base = JH.Upgrades.computeStats({});
+  JH.Upgrades.levelCount = 2;                        // +3 dmg, +8 water
+  const s = JH.Upgrades.computeStats({});
+  assert.strictEqual(s.sprayDamage, base.sprayDamage + 3);
+  assert.strictEqual(s.maxWater, base.maxWater + 8);
+  JH.Upgrades.reset();
+  assert.strictEqual(JH.Upgrades.levelCount, 0);
+});

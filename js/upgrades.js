@@ -100,8 +100,9 @@
     // every waveIndex change; gates tier-3 nodes below.
     currentActLevel: -1,
     repCount: {},
+    levelCount: 0,
 
-    reset() { this.owned = {}; this.repCount = {}; },
+    reset() { this.owned = {}; this.repCount = {}; this.levelCount = 0; },
     byId(id) { return NODES.find((n) => n.id === id); },
     isOwned(id) { return !!this.owned[id]; },
     cost(id) { return this.byId(id).cost; },
@@ -137,6 +138,11 @@
         const c = rc[n.id] || 0;
         for (let i = 0; i < c; i++) n.apply(s);
       });
+      // XP level-ups: fold the gain cycle (see JH.LEVELS).
+      if (JH.LEVELS && this.levelCount > 0) {
+        const g = JH.Balance.levelGains(this.levelCount, JH.LEVELS.cycle);
+        for (const k in g) s[k] += g[k];
+      }
       // Permanent Elemental Mirror nodes (survive Upgrades.reset()). Folds each
       // owned, unlocked node's active side into the stats. Replaces the legacy
       // flat Church blessings (old saves are migrated into Mirror Water nodes).

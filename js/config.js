@@ -307,6 +307,16 @@
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
 
+  // XP level-ups: kills grant xp = the enemy's def.suds; each level applies
+  // the next step of this repeating cycle instantly (no pick, no pause).
+  JH.LEVELS = {
+    setPieceXp: 30,
+    cycle: [
+      { sprayDamage: 3 }, { maxWater: 8 }, { maxHp: 8 },
+      { sprayRange: 4 }, { sprayDamage: 3 }, { waterRegen: 2 },
+    ],
+  };
+
   // ---- Fire element tunables (Burn DoT + FirePatch) ---------------------
   JH.FIRE = {
     burnDpsPerStack: 4,      // hp/s per stack (3 stacks = 12 hp/s for burnDuration)

@@ -323,6 +323,7 @@
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
       this.deathCount = 0;
+      this.playerXp = 0; this.playerLevel = 0;
       this.elapsed = 0; this.kills = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
@@ -498,6 +499,7 @@
       // a glowing cross pickup (never expires; awards on collect). No banner.
       if (clearedWave && (clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
         this.spawnPickup("cross", this.player.x + 34, this.player.y, 1);
+        this.grantXp(JH.LEVELS.setPieceXp);
       }
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
@@ -738,6 +740,7 @@
     },
     onEnemyKilled(e) {
       this.kills++;
+      this.grantXp((e && e.def && e.def.suds) || 0);
       // GUSH combo: chained kills within a window. Feedback + capped water
       // crumbs at milestones — never affects damage or suds.
       this.combo++;
@@ -774,6 +777,25 @@
         }
       }
       if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
+    },
+
+    // XP: kills feed the bar; each threshold applies the next gain-cycle
+    // step instantly — flash + sting + 10% water/hp top-up, no pause.
+    grantXp(n) {
+      if (!this.player || !this.player.alive) return;
+      this.playerXp += n;
+      while (this.playerXp >= JH.Balance.xpForLevel(this.playerLevel + 1)) {
+        this.playerXp -= JH.Balance.xpForLevel(this.playerLevel + 1);
+        this.playerLevel++;
+        JH.Upgrades.levelCount = this.playerLevel;
+        const p = this.player;
+        p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+        p.hp = Math.min(p.stats.maxHp, p.hp + p.stats.maxHp * 0.1);
+        p.water = Math.min(p.stats.maxWater, p.water + p.stats.maxWater * 0.1);
+        this.audio.play("upgrade", { pitch: 1.3 });
+        JH.burst(this, p.x, p.y, p.z + 16, "#ffd23f", 16, { speed: 90, life: 0.5, up: 70, size: 2 });
+        this.shake(3);
+      }
     },
 
     // Loot with anti-farm: scripted-wave enemies always drop; "infinite"
@@ -1421,6 +1443,9 @@
       const hud = document.getElementById("hud");
       if (hud) hud.style.visibility = (this.state === "play" && this.nearShop) ? "hidden" : "";
       document.getElementById("hud-suds").textContent = Math.floor(this.player.suds);
+      document.getElementById("hud-xp-fill").style.width =
+        Math.min(100, 100 * this.playerXp / JH.Balance.xpForLevel(this.playerLevel + 1)) + "%";
+      document.getElementById("hud-lv").textContent = "LV " + this.playerLevel;
     },
 
     // ============================================================ RENDER
