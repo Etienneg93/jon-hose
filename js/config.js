@@ -274,6 +274,7 @@
   // sponge — x3 keeps it a fight, not a chore.
   JH.SUPER_TUNE = {
     smelt: { hp: 3 },
+    bulwark: { hp: 2.5 },   // 420 base + tough-wave elite ramp made 7x unhoseable
     // Per-act hp damp applied on top of the type multiplier, indexed
     // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
     // their whole wave.
