@@ -185,6 +185,7 @@
       this.gushRegenRate = 0;      // water/s while the window is live
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
+      this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
@@ -251,6 +252,7 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
+      if (this.douseCdT > 0) this.douseCdT -= dt;
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
@@ -305,6 +307,7 @@
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
         this._dashX = (mx || my) ? mx : this.facing;
         this._dashY = my;
+        this._dashTouched = new Set();   // Backdraft: enemies scalded this dash
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
@@ -320,6 +323,18 @@
       if (this.dashTimer > 0) {
         this.dashTimer -= dt;
         mx = this._dashX; my = this._dashY; speed = S.dashSpeed;
+        // Backdraft: enemies the dash body overlaps get Scalded, each enemy
+        // only once per dash (tracked by _dashTouched, cleared on the next dash).
+        const bdRank = this.beneRank("backdraft");
+        if (bdRank) {
+          for (const e of game.enemies) {
+            if (e.dead || this._dashTouched.has(e)) continue;
+            if (!Geo.bodiesOverlap(this, e)) continue;
+            this._dashTouched.add(e);
+            e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
+            if (bdRank >= 2) e.takeDamage(8, game, this.facing, 60);
+          }
+        }
       } else if (this.spraying) {
         speed *= 0.55; // slow while hosing
       } else if (this.dashBoostTimer > 0 && S.dashBoost > 0) {
@@ -1774,11 +1789,31 @@
           this.rimFlashT = 0.2;
           if (game.audio) game.audio.play("sizzle");
         }
-        if (inside && this.patchBurnT <= 0) {
+        // Ash Walk: while fully unburned, the patch's first stack is ignored
+        // outright (guard checks .beneRank exists — test stubs use plain
+        // player objects without it). Already-burning players still tick
+        // normally, so the immunity can't be used to sit in fire forever.
+        const aw = pl.beneRank && pl.beneRank("ash_walk");
+        if (aw && pl.burnStacks === 0) {
+          // immune — no burn application this contact
+        } else if (inside && this.patchBurnT <= 0) {
           // Only consume the tick when the stack actually lands; if the
           // player's burn i-frames blocked it, retry next frame so the next
           // stack arrives AT the i-frame boundary, not interval-aligned after.
           if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
+        }
+        // Ash Walk douse: walking a ready patch snuffs it instantly with a
+        // steam pop that damages enemies caught in the same footprint.
+        if (aw && pl.douseCdT <= 0 && inside) {
+          this.sprayProgress = this.extinguishDur;
+          pl.douseCdT = aw >= 2 ? 6 : 10;
+          for (const e of game.enemies) {
+            if (e.dead) continue;
+            if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
+              e.takeDamage(6, game, 1, 0);
+          }
+          burst(game, this.x, this.y, 10, "#ffffff", 10, { speed: 60, life: 0.35, up: 30 });
+          if (game.audio) game.audio.play("sizzle");
         }
       }
       if (this.sprayProgress >= this.extinguishDur) this.dead = true;

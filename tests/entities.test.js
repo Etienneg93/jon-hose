@@ -873,3 +873,37 @@ test("Scalding Faith: full-pressure spray applies scald", () => {
   assert.ok(e.scaldT > 0, "full-pressure hit under Scalding Faith applies scald");
   B.reset();
 });
+
+// ---- Benedictions: Backdraft + Ash Walk ----
+
+test("Backdraft: dashing through an enemy applies Scald", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("backdraft");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  const e = new JH.Enemy("mook", p.x + 2, p.y);   // overlapping Jon's body
+  g.enemies = [e];
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.ok(e.scaldT > 0, "enemy overlapped by the dash is scalded");
+  B.reset();
+});
+
+test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("ash_walk");
+  const g = makeThinkGame(100, 40);   // player standing at the patch center
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  p.update(1 / 60, g);
+  assert.strictEqual(p.dead, true, "douse extinguishes the patch immediately");
+  assert.ok(g.player.douseCdT > 0, "cooldown armed after the douse");
+  assert.strictEqual(g.player.burnStacks, 0, "first-burn immunity: no stack landed either");
+
+  const p2 = new JH.FirePatch(100, 40, 24, 3);
+  p2.update(1 / 60, g);
+  assert.strictEqual(p2.dead, false, "a second patch within the cooldown is not doused");
+  B.reset();
+});
