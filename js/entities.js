@@ -189,6 +189,7 @@
       this.alive = true;
       this.nearShop = false;
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
+      this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
     }
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them.
@@ -842,6 +843,10 @@
     }
   }
   JH.Player = Player;
+  // Rank of an owned benediction (0 if not owned, or module not loaded).
+  Player.prototype.beneRank = function (id) {
+    return JH.Benedictions ? JH.Benedictions.rank(id) : 0;
+  };
 
   // ============================================================ ENEMIES
   class Enemy extends Entity {
@@ -2115,6 +2120,82 @@
     }
   }
   JH.Pickup = Pickup;
+
+  // ================================================== BENEDICTION SIGILS
+  // Post-boss/set-piece walk-up offer: a floating element glyph, picked with
+  // E in range. Proximity + input are ticked game-side (game.tickSigils,
+  // mirrors tickRangeStations); the sigil only exposes near (label range)
+  // and pick(). Picking one offer clears all sigils on the field.
+  const SIGIL_COLORS = { water: "#6cd3ff", fire: "#ff8030", earth: "#c8a050", air: "#bfe8ff" };
+  const SIGIL_COLORS_DK = { water: "#1a5f80", fire: "#8a3810", earth: "#6a4a20", air: "#5a7a90" };
+  JH.SIGIL_COLORS = SIGIL_COLORS;   // shared with the game.js HUD strip / stat panel
+  class Sigil {
+    constructor(x, y, offer) {
+      this.x = x; this.y = y; this.z = 0; this.offer = offer;
+      this.t = 0; this.dead = false; this.near = false;
+      const d = JH.Benedictions.byId(offer.id);
+      this.element = d.element || (d.needs && d.needs[0]) || "water";
+      this.kind = d.kind;
+    }
+    update(dt) { this.t += dt; return !this.dead; }
+    pick(game) {
+      const d = JH.Benedictions.byId(this.offer.id);
+      JH.Benedictions.take(this.offer.id);
+      if (d.kind === "duo" || d.kind === "legendary") game.beneUsedOnce[this.offer.id] = true;
+      const p = game.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      if (p.beneRank("eye_of_storm")) p.stormT = p.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
+      game.audio.play("upgrade", { pitch: 0.9 });
+      burst(game, this.x, this.y, 14, SIGIL_COLORS[this.element], 18, { speed: 100, life: 0.6, up: 80, size: 2 });
+      game.banner(d.name.toUpperCase() + (this.offer.deepen ? " II" : ""), 1.4);
+      if (game.float) game.float(this.x, this.y - 20, d.name, "#80ff80");
+      for (const s of game.sigils) s.dead = true;
+    }
+    draw(ctx, cam) {
+      const d = JH.Benedictions.byId(this.offer.id);
+      const bob = Math.sin(this.t * 2) * 3;
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 14 + bob);
+      const col = SIGIL_COLORS[this.element] || "#ffffff";
+      const dk = SIGIL_COLORS_DK[this.element] || "#333333";
+      Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 6);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(Math.PI / 4);
+      const half = 5;   // 10px diamond
+      if (this.kind === "duo" && d.needs) {
+        // Split two-tone: half in each contributing element's color.
+        ctx.fillStyle = SIGIL_COLORS[d.needs[0]] || col;
+        ctx.fillRect(-half, -half, half, half * 2);
+        ctx.fillStyle = SIGIL_COLORS[d.needs[1]] || col;
+        ctx.fillRect(0, -half, half, half * 2);
+      } else {
+        ctx.fillStyle = col;
+        ctx.fillRect(-half, -half, half * 2, half * 2);
+      }
+      ctx.strokeStyle = dk; ctx.lineWidth = 1;
+      ctx.strokeRect(-half, -half, half * 2, half * 2);
+      ctx.restore();
+      if (this.kind === "legendary") {
+        // Gold double-ring around legendary sigils.
+        ctx.save();
+        ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+      if (this.offer.deepen) {
+        ctx.fillStyle = "#fff"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+        ctx.fillText("II", sx, sy - 15);
+        ctx.textAlign = "left";
+      }
+      if (this.near) {
+        ctx.fillStyle = "#eaf6ff"; ctx.font = "6px monospace"; ctx.textAlign = "center";
+        ctx.fillText(d.name, sx, sy - 22);
+        ctx.textAlign = "left";
+      }
+    }
+  }
+  JH.Sigil = Sigil;
 
   // ====================================================== SHOP VENDOR
   // A walk-up merchant ("Old Spigot") that appears between fights. Not an

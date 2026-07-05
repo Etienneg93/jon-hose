@@ -20,7 +20,8 @@
     input: null, audio: null,
 
     player: null,
-    enemies: [], embers: [], pickups: [], particles: [], floaters: [],
+    enemies: [], embers: [], pickups: [], particles: [], floaters: [], sigils: [],
+    beneUsedOnce: {},
     hydrants: [], shopNpc: null, nearShop: false,
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
@@ -307,10 +308,12 @@
     // ------------------------------------------------------- new game
     startGame() {
       JH.Upgrades.reset();
+      if (JH.Benedictions) JH.Benedictions.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.floaters = [];
+      this.sigils = []; this.beneUsedOnce = {};
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -347,6 +350,7 @@
 
     startWave(i) {
       this.waveIndex = i;
+      this.sigils = [];   // walking onto the next wave skips any unclaimed offer
       // Shop reads this for the tier-3 act gate.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
       this.checkpointWave = JH.Balance.actStartForWave(i, JH.ACT_STARTS);
@@ -501,6 +505,18 @@
       if (clearedWave && (clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
         this.spawnPickup("cross", this.player.x + 34, this.player.y, 1);
         this.grantXp(JH.LEVELS.setPieceXp);
+      }
+      // Benediction beat: bosses AND set-pieces offer sigils (the essence
+      // cross above deliberately excludes bosses — they get their own drop).
+      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+        const offers = JH.Benedictions.pickOffers({
+          active: JH.Benedictions.active,
+          pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
+          usedOnce: this.beneUsedOnce,
+          censer: !!this.relics && !!this.relics.censer,
+        }, Math.random);
+        this.sigils = offers.map((o, i) =>
+          new JH.Sigil(this.player.x + 60 + i * 46, JH.DEPTH_MAX - 20 - i * 14, o));
       }
       this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
       JH.Camera.unlock();
@@ -907,6 +923,24 @@
       }
     },
 
+    // Benediction sigils: walk-up offer stations from waveCleared_. Same
+    // proximity + buffered-E interact pattern as tickRangeStations. Picking
+    // any one sigil clears the whole offer (Sigil.pick kills every sigil).
+    tickSigils() {
+      if (!this.sigils.length) return;
+      const pl = this.player;
+      for (const s of this.sigils) {
+        if (s.dead) continue;
+        s.near = Math.abs(pl.x - s.x) < 24 && Math.abs(pl.y - s.y) < 24;
+        const pickable = Math.abs(pl.x - s.x) < 16 && Math.abs(pl.y - s.y) < 16;
+        if (pickable && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          s.pick(this);
+          break;
+        }
+      }
+    },
+
     killJuice(e) {
       const J = JH.JUICE;
       const heavy = !!e.elite || J.heavyTypes.includes(e.type);
@@ -1038,6 +1072,9 @@
     respawnFromChurch() {
       const next = Math.max(0, this.diedWave);     // the wave to re-fight
       const p = this.player;
+      // Death wipes in-run benedictions (suds/signatures/relics/pillars survive
+      // elsewhere) — reset before the stat refresh so the wipe takes immediately.
+      if (JH.Benedictions) JH.Benedictions.reset();
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
       const maxX = WAVE_TRIGGERS[next] + 30;
       p.x = clamp(this.lastHydrantX || 60, 12, maxX - 12);
@@ -1050,6 +1087,7 @@
       this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
       this.floaters = [];
+      this.sigils = [];   // usedOnce survives death; the benediction wipe above already reset ranks
       // First-death pity: banked at the death moment, paid out as a cross now
       // that the player (and the pickup array) are back in the world.
       if (this.pendingPityCross) { this.spawnPickup("cross", p.x + 34, p.y, 1); this.pendingPityCross = false; }
@@ -1282,6 +1320,7 @@
       for (const z of this.slowZones) z.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
+      this.sigils = this.sigils.filter((s) => s.update(dt));
       // Essence-cross event: while a cross is uncollected the world dims.
       const crossOut = this.pickups.some((p) => !p.dead && p.kind === "cross");
       this.essenceDim += ((crossOut ? 1 : 0) - this.essenceDim) * Math.min(1, 3 * dt);
@@ -1291,6 +1330,7 @@
       // --- hydrant timers + walk-up shop vendor
       for (const h of this.hydrants) h.t += dt;
       this.tickRangeStations();
+      this.tickSigils();
       // Remember the last hydrant visited — death returns Jon here.
       if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
       // Victory portal (post-Slayer): walk in and confirm to finish the run.
@@ -1540,6 +1580,8 @@
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
+        // benediction sigils (walk-up offer beat)
+        for (const s of this.sigils) if (!s.dead) s.draw(ctx, cam);
 
         // depth-sort actors (enemies + player + vendor) by world Y
         const actors = this.enemies.slice();
@@ -1593,6 +1635,7 @@
         const boss = this.enemies.find((e) => e.isBoss && !e.dying && !e.isGallery);
         if (boss) this.drawBossBar(ctx, boss);
 
+        if (this.state === "play") this.drawSigilStrip(ctx);
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
       }
       ctx.restore();
@@ -1921,11 +1964,13 @@
         ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance"],
         ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate"],
       ];
+      const beneIds = JH.Benedictions ? Object.keys(JH.Benedictions.active) : [];
       const X = 10, Y = 30, ROW = 9, W = 74;
+      const H = rows.length * ROW + 16 + (beneIds.length ? beneIds.length * ROW + 6 : 0);
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.85)";
-      ctx.fillRect(X - 4, Y - 10, W, rows.length * ROW + 16);
-      ctx.strokeStyle = "#2a3550"; ctx.strokeRect(X - 4, Y - 10, W, rows.length * ROW + 16);
+      ctx.fillRect(X - 4, Y - 10, W, H);
+      ctx.strokeStyle = "#2a3550"; ctx.strokeRect(X - 4, Y - 10, W, H);
       ctx.font = "bold 6px monospace"; ctx.textAlign = "left";
       ctx.fillStyle = "#8fa8c8";
       ctx.fillText("JON", X, Y - 3);
@@ -1941,6 +1986,16 @@
         ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
         ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
         ctx.textAlign = "left";
+      });
+      // Active benedictions, listed under the stat rows in their element color.
+      beneIds.forEach((id, i) => {
+        const d = JH.Benedictions.byId(id);
+        if (!d) return;
+        const rank = JH.Benedictions.active[id] | 0;
+        const el = d.element || (d.needs && d.needs[0]) || "water";
+        const y = Y + 6 + rows.length * ROW + 6 + i * ROW;
+        ctx.fillStyle = JH.SIGIL_COLORS[el] || "#ffd23f";
+        ctx.fillText(d.name + (rank >= 2 ? " II" : ""), X, y);
       });
       ctx.restore();
     },
@@ -2146,6 +2201,32 @@
       ctx.fillRect(JH.VIEW_W - 8 - 46 * frac, 44, 46 * frac, 2);
       ctx.restore();
       ctx.textAlign = "left";
+    },
+
+    // Active-benediction readout: one 8px pip per owned boon, under the
+    // top-left LV/XP HUD. Dim at rank 1, bright (full alpha) at rank 2.
+    drawSigilStrip(ctx) {
+      if (!JH.Benedictions) return;
+      const active = JH.Benedictions.active;
+      const ids = Object.keys(active);
+      if (ids.length === 0) return;
+      const X = 10, Y = 16, GAP = 10;
+      ctx.save();
+      ids.forEach((id, i) => {
+        const d = JH.Benedictions.byId(id);
+        if (!d) return;
+        const rank = active[id] | 0;
+        const el = d.element || (d.needs && d.needs[0]) || "water";
+        const col = JH.SIGIL_COLORS[el] || "#ffd23f";
+        const x = X + i * GAP;
+        ctx.globalAlpha = rank >= 2 ? 1 : 0.55;
+        ctx.fillStyle = col;
+        ctx.fillRect(x, Y, 8, 8);
+        ctx.strokeStyle = "#0a0e18";
+        ctx.strokeRect(x, Y, 8, 8);
+      });
+      ctx.globalAlpha = 1;
+      ctx.restore();
     },
   };
 

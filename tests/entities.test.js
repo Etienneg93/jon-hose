@@ -568,6 +568,7 @@ function makeThinkGame(px, py) {
     audio: { play() {} }, shake() {}, hitStop() {}, defer() {},
     killJuice() {}, dropLoot() {}, onEnemyKilled() {}, spawnEnemy() {},
     canAttack() { return this._tickets !== false; }, _tickets: true,
+    sigils: [], banner() {},
   };
 }
 
@@ -623,6 +624,8 @@ test("sweepCrosses banks live crosses so win/respawn can't lose essence", () => 
 
 // makeSuper reads JH.Balance.superEliteDef at call time.
 require("../js/balance.js");
+require("../js/pillars.js");
+require("../js/benedictions.js");
 
 test("makeSuper: 7x hp, superElite + elite flags, def untouched globally", () => {
   const m = new JH.Enemy("mook", 0, 0);
@@ -810,4 +813,17 @@ test("super bulwark hp uses its SUPER_TUNE override (2.5x)", () => {
   const b = JH.makeEnemy("bulwark", 0, 0);
   b.makeSuper();
   assert.strictEqual(b.maxHp, Math.round(JH.ENEMIES.bulwark.hp * 2.5));
+});
+
+test("sigil pick: takes the boon, refreshes stats, clears the beat", () => {
+  global.window.JH.Benedictions.reset();
+  const g = makeThinkGame(60, 40);
+  g.sigils = [new JH.Sigil(60, 40, { id: "bedrock", deepen: false }),
+              new JH.Sigil(120, 40, { id: "overflow", deepen: false })];
+  const hpBefore = g.player.stats.maxHp;
+  g.sigils[0].pick(g);
+  assert.strictEqual(global.window.JH.Benedictions.rank("bedrock"), 1);
+  assert.ok(g.player.stats.maxHp > hpBefore, "stat boon applied immediately");
+  assert.ok(g.sigils.every((s) => s.dead), "picking one clears the offer");
+  global.window.JH.Benedictions.reset();
 });
