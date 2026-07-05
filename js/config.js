@@ -579,18 +579,18 @@
     waves: [
       { name: "WAVE 1", spawns: [{ type: "mook", count: 4 }] },
       { name: "WAVE 2", spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
-      { name: "WAVE 3", superElite: "mook", spawns: [{ type: "mook", count: 4 }, { type: "pyro", count: 1 }] },
+      { name: "WAVE 3", spawns: [{ type: "mook", count: 4 }, { type: "pyro", count: 1 }] },
       { name: "WAVE 4", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
       // ---- Act 2: ELITE ----
       { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "charger", count: 2 }] },
-      { name: "STREET SWARM", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
         spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
       { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }] },
       { name: "THE SWITCH", boss: true, bossType: "switch" },
       // ---- Act 3: the ruined district ----
-      { name: "RUBBLE ROW", tough: true, superElite: "pyro", spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 4 }] },
+      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 4 }] },
       { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 3 }, { type: "mook", count: 4 }] },
       { name: "HOLD THE LINE", holdout: true, tough: true, holdDur: 22,
         spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 2 }, { type: "charger", count: 1 }] },
@@ -600,17 +600,17 @@
       // ---- Act 4: the aftermath ----
       { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 4 }, { type: "mook", count: 2 }] },
       { name: "STALKER AMBUSH", superElite: "stalker", spawns: [{ type: "stalker", count: 3 }, { type: "charger", count: 1 }, { type: "mook", count: 2 }] },
-      { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 5 }, { type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
+      { name: "WAVE 6", tough: true, superElite: "mook", spawns: [{ type: "mook", count: 5 }, { type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, superElite: "bulwark", spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 3 }, { type: "mook", count: 3 }] },
-      { name: "OVERRUN", tough: true, spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
+      { name: "OVERRUN", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
       { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
       // ---- Fire World (curated, un-tough) ----
-      { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 4 }, { type: "smelt", count: 1 }] },
+      { name: "FIRE INTRO", superElite: "pyro", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
       { name: "EMBER RUSH", superElite: "fuse", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
       { name: "DOUSE THE FLAMES", douse: true, spawns: [{ type: "smelt", count: 2 }] },
-      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 3 }] },
-      { name: "MELTDOWN", superElite: "smelt", spawns: [{ type: "smelt", count: 2 }, { type: "fuse", count: 4 }] },
+      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 4 }, { type: "smelt", count: 1 }] },
+      { name: "MELTDOWN", tough: true, superElite: "smelt", spawns: [{ type: "smelt", count: 2 }, { type: "fuse", count: 4 }] },
       { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };
