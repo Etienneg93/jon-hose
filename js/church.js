@@ -164,10 +164,10 @@
 
     addEssence(n) { this.state.essence += n; this.save(); },
 
-    // Boss defeated/redeemed: +essence, and light its element shrine if mapped.
+    // Boss defeated/redeemed: light its element shrine if mapped. Essence
+    // itself now arrives only via the cross pickup game.js spawns on kill.
     markBossDefeated(type) {
       const JH = root.JH;
-      this.state.essence += (JH && JH.CHURCH ? JH.CHURCH.essencePerBoss : 1);
       const sh = JH && JH.CHURCH && JH.CHURCH.shrines.find((s) => s.boss === type);
       if (sh) this.state.elements[sh.element] = true;
       this.save();

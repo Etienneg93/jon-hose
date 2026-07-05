@@ -2092,6 +2092,7 @@
         if (JH.Church) JH.Church.addEssence(this.value || 1);
         game.audio.play("upgrade");
         burst(game, pl.x, pl.y, pl.z + 12, "#fff7c2", 12, { speed: 80, life: 0.5, up: 70 });
+        if (game.float) game.float(pl.x, pl.y - 30, "+" + (this.value || 1) + " HOLY ESSENCE", "#ffd23f");
       }
       if (this.kind !== "pill" && this.kind !== "health" && this.kind !== "cross")
         burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : JH.PAL.water, 6, { speed: 60, life: 0.3 });

@@ -597,6 +597,15 @@ test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", ()
   JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
 });
 
+test("game.float pools with a 20 cap (oldest dropped) and culls by age", () => {
+  const g = { floaters: [] };
+  for (let i = 0; i < 25; i++) JH.Game.float.call(g, i, 0, "x", "#fff");
+  assert.strictEqual(g.floaters.length, 20, "capped at 20");
+  assert.strictEqual(g.floaters[0].x, 5, "the 5 oldest were dropped");
+  JH.Game.tickFloaters.call(g, 1.0);   // past the ~0.9s life
+  assert.strictEqual(g.floaters.length, 0, "aged-out floaters are culled");
+});
+
 // makeSuper reads JH.Balance.superEliteDef at call time.
 require("../js/balance.js");
 

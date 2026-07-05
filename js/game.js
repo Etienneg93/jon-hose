@@ -20,7 +20,7 @@
     input: null, audio: null,
 
     player: null,
-    enemies: [], embers: [], pickups: [], particles: [],
+    enemies: [], embers: [], pickups: [], particles: [], floaters: [],
     hydrants: [], shopNpc: null, nearShop: false,
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
@@ -310,6 +310,7 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
+      this.floaters = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -738,6 +739,17 @@
     spawnPickup(kind, x, y, value) {
       this.pickups.push(new JH.Pickup(kind, x, y, value));
     },
+    // Pooled world-space floating text (essence gains, level-ups, shop buys).
+    // Rises ~22px over 0.9s while fading; oldest dropped past a 20-cap so a
+    // burst of simultaneous pickups can't grow the pool unbounded.
+    float(x, y, text, color) {
+      this.floaters.push({ x, y, t: 0, text, color });
+      if (this.floaters.length > 20) this.floaters.shift();
+    },
+    tickFloaters(dt) {
+      for (const f of this.floaters) f.t += dt;
+      this.floaters = this.floaters.filter((f) => f.t < 0.9);
+    },
     onEnemyKilled(e) {
       this.kills++;
       this.grantXp((e && e.def && e.def.suds) || 0);
@@ -776,7 +788,10 @@
             }));
         }
       }
-      if (e && e.isBoss && JH.Church) JH.Church.markBossDefeated(e.type);
+      if (e && e.isBoss && JH.Church) {
+        JH.Church.markBossDefeated(e.type);
+        this.spawnPickup("cross", e.x, e.y, 1);
+      }
     },
 
     // XP: kills feed the bar; each threshold applies the next gain-cycle
@@ -795,6 +810,17 @@
         this.audio.play("upgrade", { pitch: 1.3 });
         JH.burst(this, p.x, p.y, p.z + 16, "#ffd23f", 16, { speed: 90, life: 0.5, up: 70, size: 2 });
         this.shake(3);
+        this.float(p.x, p.y - 34, "LEVEL UP", "#ffd23f");
+        const step = JH.LEVELS.cycle[(this.playerLevel - 1) % JH.LEVELS.cycle.length];
+        const statLabel = {
+          sprayDamage: "SPRAY DMG", maxWater: "MAX WATER", maxHp: "MAX HP",
+          sprayRange: "RANGE", waterRegen: "REGEN",
+        };
+        let row = 1;
+        for (const key of Object.keys(step)) {
+          this.float(p.x, p.y - 34 - row * 8, "+" + step[key] + " " + (statLabel[key] || key), "#7dff5a");
+          row++;
+        }
       }
     },
 
@@ -1013,6 +1039,10 @@
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
+      this.floaters = [];
+      // First-death pity: banked at the death moment, paid out as a cross now
+      // that the player (and the pickup array) are back in the world.
+      if (this.pendingPityCross) { this.spawnPickup("cross", p.x + 34, p.y, 1); this.pendingPityCross = false; }
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
@@ -1094,11 +1124,12 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
-      // First death of the RUN: bank a pity Essence and cue Father Jon's line.
+      // First death of the RUN: cue Father Jon's line; the pity Essence pays
+      // out as a cross pickup once respawnFromChurch places Jon back down.
       this.deathCount = (this.deathCount || 0) + 1;
       if (this.deathCount === 1 && JH.Church) {
-        JH.Church.addEssence(1);
         JH.Church.pendingPity = true;
+        this.pendingPityCross = true;
       }
       this.diedWave = this.waveIndex;        // the wave to re-arm on return
       this.state = "playerDeathSeq";
@@ -1244,6 +1275,7 @@
       const crossOut = this.pickups.some((p) => !p.dead && p.kind === "cross");
       this.essenceDim += ((crossOut ? 1 : 0) - this.essenceDim) * Math.min(1, 3 * dt);
       this.particles = this.particles.filter((p) => p.update(dt));
+      this.tickFloaters(dt);
 
       // --- hydrant timers + walk-up shop vendor
       for (const h of this.hydrants) h.t += dt;
@@ -1272,9 +1304,13 @@
               this.input.consume("confirm");
               const e = sel[this.shopCursor];
               let ok = false;
-              if (e.kind === "node") { ok = U.buy(e.id, this.player); if (ok) this.upgradeFx(U.byId(e.id)); }
-              else if (e.kind === "rep") { ok = U.buyRep(e.id, this.player); if (ok) this.audio.play("upgrade"); }
-              else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
+              if (e.kind === "node") {
+                ok = U.buy(e.id, this.player);
+                if (ok) { this.upgradeFx(U.byId(e.id)); this.float(this.player.x, this.player.y - 30, U.byId(e.id).name, "#80ff80"); }
+              } else if (e.kind === "rep") {
+                ok = U.buyRep(e.id, this.player);
+                if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, U.repById(e.id).name, "#80ff80"); }
+              } else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
               if (!ok) this.audio.play("hurt");
               else this.shopCursor = Math.min(this.shopCursor, Math.max(0, this.shopSelectables().length - 1));
             }
@@ -1636,6 +1672,24 @@
             18, "#ffd23f", 0.5 * this.essenceDim);
           p.draw(ctx, cam);
         }
+        ctx.restore();
+      }
+
+      // World floating text (essence/level-up/shop-buy feedback): drawn after
+      // the essence-dim overlay so it always reads at full brightness.
+      if (this.floaters && this.floaters.length && this.state === "play") {
+        const cam = JH.Camera.x;
+        ctx.save();
+        ctx.translate(so.x, so.y);
+        ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+        for (const f of this.floaters) {
+          const k = f.t / 0.9;
+          ctx.globalAlpha = Math.max(0, 1 - k);
+          ctx.fillStyle = f.color;
+          ctx.fillText(f.text, f.x - cam, JH.Geo.feetScreenY(f.y, 0) - 22 * k);
+        }
+        ctx.globalAlpha = 1;
+        ctx.textAlign = "left";
         ctx.restore();
       }
       // Hover shop panel — drawn outside shake transform so it stays stable.
