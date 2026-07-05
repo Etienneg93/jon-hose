@@ -2063,9 +2063,13 @@
         ["HP",     Math.round(S.maxHp),       "maxHp",       "hp"],
         ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed",   "speed"],
         ["KB",     Math.round(S.knockback),   "knockback",   "knockback"],
-        ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"],
-        ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"],
       ];
+      // Percent stats hide until they exist — a wall of 0% rows is noise.
+      // (Kept visible mid-flash so a fresh gain doesn't pop in unexplained.)
+      if (S.dodgeChance > 0 || F.dodgeChance > 0)
+        rows.push(["DODGE", Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"]);
+      if (S.vampiricRate > 0 || F.vampiricRate > 0)
+        rows.push(["VAMP", Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"]);
       const beneIds = JH.Benedictions ? Object.keys(JH.Benedictions.active) : [];
       const X = 10, Y = 30, ROW = 9, W = 74;
       const H = rows.length * ROW + 16 + (beneIds.length ? beneIds.length * ROW + 6 : 0);
