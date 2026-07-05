@@ -905,5 +905,17 @@ test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown"
   const p2 = new JH.FirePatch(100, 40, 24, 3);
   p2.update(1 / 60, g);
   assert.strictEqual(p2.dead, false, "a second patch within the cooldown is not doused");
+
+  // Rank II: shorter cooldown and a bigger pop (10 dmg vs 6).
+  B.take("ash_walk");                              // rank 2
+  const g2 = makeThinkGame(100, 40);
+  const e = new JH.Enemy("mook", 100, 40);         // standing in the patch
+  g2.enemies = [e];
+  const hp0 = e.hp;
+  const p3 = new JH.FirePatch(100, 40, 24, 3);
+  p3.update(1 / 60, g2);
+  assert.strictEqual(p3.dead, true, "rank-II douse still extinguishes");
+  assert.strictEqual(hp0 - e.hp, 10, "rank-II pop deals 10 to enemies in the footprint");
+  assert.ok(g2.player.douseCdT <= 6, "rank-II cooldown is the shorter 6s");
   B.reset();
 });

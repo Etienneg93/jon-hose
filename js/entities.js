@@ -329,6 +329,7 @@
         if (bdRank) {
           for (const e of game.enemies) {
             if (e.dead || this._dashTouched.has(e)) continue;
+            if (e.dropping) continue;   // airborne drop-ins can't be hit
             if (!Geo.bodiesOverlap(this, e)) continue;
             this._dashTouched.add(e);
             e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
@@ -1803,16 +1804,21 @@
           if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
         }
         // Ash Walk douse: walking a ready patch snuffs it instantly with a
-        // steam pop that damages enemies caught in the same footprint.
+        // steam pop that damages enemies caught in the footprint. Rank II:
+        // shorter cooldown AND a bigger pop (more damage, 1.3x reach).
         if (aw && pl.douseCdT <= 0 && inside) {
           this.sprayProgress = this.extinguishDur;
           pl.douseCdT = aw >= 2 ? 6 : 10;
+          const popDmg = aw >= 2 ? 10 : 6;
+          const popRx = aw >= 2 ? f.rx * 1.3 : f.rx;
+          const popRy = aw >= 2 ? f.ry * 1.3 : f.ry;
           for (const e of game.enemies) {
             if (e.dead) continue;
-            if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
-              e.takeDamage(6, game, 1, 0);
+            if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, popRx, popRy))
+              e.takeDamage(popDmg, game, 1, 0);
           }
-          burst(game, this.x, this.y, 10, "#ffffff", 10, { speed: 60, life: 0.35, up: 30 });
+          burst(game, this.x, this.y, 10, "#ffffff", aw >= 2 ? 16 : 10,
+            { speed: 60, life: 0.35, up: 30 });
           if (game.audio) game.audio.play("sizzle");
         }
       }
@@ -3972,6 +3978,9 @@
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.regenTimer > 0) this.regenTimer -= dt;
       else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 500 * dt);
+      // Scald wears off here too — this update() overrides Enemy's, so without
+      // this the dummy's scald tint would stick forever after one dash-through.
+      if (this.scaldT > 0) this.scaldT = Math.max(0, this.scaldT - dt);
       if (game.player) this.facing = game.player.x >= this.x ? 1 : -1;
       this.animate(dt, false);
     }
