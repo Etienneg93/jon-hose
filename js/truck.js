@@ -40,10 +40,12 @@
           spraying: false,
           regenLock: 0,
           dashTimer: 0, dashCdTimer: 0, dashDir: 0,
-          invulnT: 0,
+          invulnT: 0, burnT: 0,
         },
-        // Lists owned by later tasks (hazards T4, hydrants T5, pickups/furnace T7).
-        hazards: [], hydrants: [], pickups: [], furnace: null,
+        // Hazards/patches/embers (T4); hydrants (T5); pickups/furnace (T7).
+        hazards: [], firePatches: [], embers: [],
+        hydrants: [], pickups: [], furnace: null,
+        slowT: 0, shakeT: 0,
         wallGap: C.wall.startGap,
         wallTouched: false,
         essence: 0,
@@ -79,7 +81,15 @@
       if (sc.phase !== "intro") sc.scrollX += C.scrollSpeed * sc.speedMult * dt;
 
       this._drive(dt, C, In);
-      if (sc.phase !== "intro") this._hose(dt, C);
+      if (sc.phase !== "intro") {
+        this._hose(dt, C);
+        this._spawnFromTimeline(sc);
+        this._updateHazards(dt, C);
+        this._updatePatches(dt, C);
+        this._updateEmbers(dt, C);
+        if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
+        if (sc.shakeT > 0) sc.shakeT -= dt;
+      }
       // Hydrants/pickups/furnace/wall are advanced by later tasks.
     },
 
@@ -159,6 +169,118 @@
       sc.hazards.push({ worldX: this._nozzleWorldX(sc) + aheadPx, depth: depth, hp: hp, kind: "dummy" });
     },
 
+    // ---- hazards (fire roster reused; stats READ from JH.ENEMIES) --------
+    _spawnFromTimeline(sc) {
+      while (sc.cursor < sc.timeline.length && sc.t >= sc.timeline[sc.cursor].at) {
+        const ev = sc.timeline[sc.cursor++];
+        // Combat kinds spawn here; hydrant/cross are wired in Tasks 5/7.
+        if (ev.kind === "wreck" || ev.kind === "fuse" || ev.kind === "smelt" || ev.kind === "pyro")
+          this._spawnHazard(ev);
+      }
+    },
+
+    _spawnHazard(ev) {
+      const sc = this.scene, C = JH.TRUCKRUN, E = JH.ENEMIES;
+      const h = {
+        kind: ev.kind, depth: ev.depth, dead: false, cd: 0,
+        worldX: sc.scrollX + JH.VIEW_W + 24,   // enters from the right edge
+      };
+      if (ev.kind === "wreck") { h.hp = C.wreckHp; h.dmg = C.wreckDmg; }
+      else if (ev.kind === "fuse") { h.hp = E.fuse.hp; h.dmg = E.fuse.blastDmg; h.speed = E.fuse.speed; }
+      else if (ev.kind === "smelt") { h.hp = E.smelt.hp; h.dmg = E.smelt.touchDmg; }
+      else if (ev.kind === "pyro") { h.hp = E.pyro.hp; h.dmg = E.pyro.touchDmg; }
+      sc.hazards.push(h);
+    },
+
+    _updateHazards(dt, C) {
+      const sc = this.scene, t = sc.truck, E = JH.ENEMIES;
+      const truckWorldX = sc.scrollX + t.screenX;
+      for (const h of sc.hazards) {
+        // Movement: wrecks/smelt/pyro are static in road space (scroll carries
+        // them past); fuse chases the windshield.
+        if (h.kind === "fuse") {
+          h.worldX -= h.speed * dt;                       // closes faster than scroll
+          h.depth += Math.sign(t.depth - h.depth) * Math.min(Math.abs(t.depth - h.depth), h.speed * 0.6 * dt);
+        } else if (h.kind === "smelt") {
+          if ((h.cd -= dt) <= 0) {                        // lob a fire-patch ahead
+            h.cd = E.smelt.lobCd;
+            this._spawnPatch(sc.scrollX + t.screenX + 90 + Math.random() * 60,
+              C.lanes[(Math.random() * C.lanes.length) | 0], E.smelt.lobBombRadius, E.smelt.lobBombDur);
+          }
+        } else if (h.kind === "pyro") {
+          if ((h.cd -= dt) <= 0 && h.worldX - sc.scrollX < JH.VIEW_W) {
+            h.cd = E.pyro.shootCd;
+            this._spawnEmber(h, t, E.pyro.emberSpeed, E.pyro.emberDmg);
+          }
+        }
+
+        // Collision with the truck (unless dashing/i-frames). Consumables and
+        // rammed wrecks are destroyed; damage + brief slow.
+        if (Math.abs((h.worldX - sc.scrollX) - t.screenX) < 22 && Math.abs(h.depth - t.depth) < 14) {
+          if (t.invulnT <= 0) {
+            this._damageTruck(h.dmg);
+            if (h.kind === "fuse") this._spawnPatch(h.worldX, h.depth, E.fuse.blastPatchRadius, E.fuse.blastPatchDur);
+            this._collide(C);
+          }
+          h.dead = true;
+        }
+        if (h.worldX < sc.scrollX - 60) h.dead = true;    // passed behind
+      }
+      sc.hazards = sc.hazards.filter((h) => !h.dead);
+    },
+
+    _spawnPatch(worldX, depth, r, dur) {
+      this.scene.firePatches.push({ worldX: worldX, depth: depth, r: r, life: dur, maxLife: dur });
+    },
+
+    _updatePatches(dt, C) {
+      const sc = this.scene, t = sc.truck, F = JH.FIRE;
+      const truckWorldX = sc.scrollX + t.screenX;
+      let inFire = false;
+      for (const p of sc.firePatches) {
+        p.life -= dt;
+        const rx = p.r * 0.85, ry = rx * JH.GROUND_RY;
+        if (p.life > 0 && JH.Geo.inGroundEllipse(truckWorldX, t.depth, p.worldX, p.depth, rx, ry)) inFire = true;
+      }
+      sc.firePatches = sc.firePatches.filter((p) => p.life > 0);
+      if (inFire) t.burnT = F.burnDuration;               // refresh lingering burn
+      if (t.burnT > 0) { this._damageTruck(F.burnDpsPerStack * dt, true); t.burnT -= dt; }
+    },
+
+    _spawnEmber(from, truck, speed, dmg) {
+      const sc = this.scene;
+      const sx = from.worldX, sy = from.depth;
+      const tx = sc.scrollX + truck.screenX, ty = truck.depth;
+      const dx = tx - sx, dy = ty - sy, d = Math.hypot(dx, dy) || 1;
+      sc.embers.push({ worldX: sx, depth: sy, vx: (dx / d) * speed, vy: (dy / d) * speed, dmg: dmg, life: 2.5 });
+    },
+
+    _updateEmbers(dt, C) {
+      const sc = this.scene, t = sc.truck;
+      for (const e of sc.embers) {
+        e.worldX += e.vx * dt; e.depth += e.vy * dt; e.life -= dt;
+        if (Math.abs((e.worldX - sc.scrollX) - t.screenX) < 12 && Math.abs(e.depth - t.depth) < 10) {
+          if (t.invulnT <= 0) this._damageTruck(e.dmg);
+          e.life = 0;
+        }
+        if (e.worldX < sc.scrollX - 40) e.life = 0;
+      }
+      sc.embers = sc.embers.filter((e) => e.life > 0);
+    },
+
+    // Honest, NON-LETHAL truck HP: clamps at 0, feeds shake, never ends the run.
+    _damageTruck(amount, quiet) {
+      const t = this.scene.truck;
+      t.hp = Math.max(0, t.hp - amount);
+      if (!quiet) this.scene.shakeT = 0.25;
+    },
+
+    _collide(C) {
+      const sc = this.scene;
+      sc.speedMult = C.collideSlow;
+      sc.slowT = C.collideSlowDur;
+    },
+
     _finish(game) {
       this.scene = null;
       JH.Camera.unlock && JH.Camera.unlock();
@@ -169,6 +291,12 @@
     renderScene(ctx, game) {
       const sc = this.scene; if (!sc) return;
       const C = JH.TRUCKRUN, t = sc.truck;
+
+      // Collision shake (small; real trauma model is the play world's).
+      if (sc.shakeT > 0) {
+        const m = sc.shakeT * 10;
+        ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
+      }
 
       // Placeholder art (real chrome is Task 9). Fiery sky + scrolling road.
       const sky = ctx.createLinearGradient(0, 0, 0, JH.FLOOR_TOP);
@@ -190,13 +318,34 @@
         ctx.stroke();
       }
 
-      // Hazards (placeholder blocks; real sprites in Task 9).
+      // Fire patches — ONE ellipse shared with the burn hit test.
+      for (const p of sc.firePatches) {
+        const px = p.worldX - sc.scrollX;
+        if (px < -40 || px > JH.VIEW_W + 40) continue;
+        const rx = p.r * 0.85, ry = rx * JH.GROUND_RY;
+        ctx.fillStyle = "rgba(255,120,40," + (0.25 + 0.35 * (p.life / p.maxLife)) + ")";
+        ctx.beginPath();
+        ctx.ellipse(px, JH.Geo.feetScreenY(p.depth, 0), rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Hazards (placeholder blocks tinted by kind; real sprites in Task 9).
+      const HCOL = { wreck: "#8a5a3a", fuse: "#ff7a3c", smelt: "#c98a3a", pyro: "#ff5a4a", dummy: "#8a5a3a" };
       for (const h of sc.hazards) {
         const hx = h.worldX - sc.scrollX;
         if (hx < -40 || hx > JH.VIEW_W + 40) continue;
         const hy = JH.Geo.feetScreenY(h.depth, 0);
-        ctx.fillStyle = "#8a5a3a";
-        ctx.fillRect(hx - 8, hy - 14, 16, 14);
+        const w = h.kind === "smelt" ? 20 : 16;
+        ctx.fillStyle = HCOL[h.kind] || "#8a5a3a";
+        ctx.fillRect(hx - w / 2, hy - 14, w, 14);
+      }
+
+      // Embers (pyro shots).
+      ctx.fillStyle = "#ffcf6a";
+      for (const e of sc.embers) {
+        const ex = e.worldX - sc.scrollX;
+        if (ex < -8 || ex > JH.VIEW_W + 8) continue;
+        ctx.fillRect(ex - 2, JH.Geo.feetScreenY(e.depth, 0) - 6, 4, 4);
       }
 
       // The truck (placeholder rect) + Jon on the running board.
