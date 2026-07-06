@@ -7,6 +7,20 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.29.0 — Church Members' Discount (2026-07-06)
+
+### Father Jon's voucher
+- The first-death pity gift is now a **50% shop voucher** instead of a Holy
+  Essence — Father Jon vouches for you with his old friend at the stall, and
+  the chalkboard's "50% OFF FOR CHURCH MEMBERS" finally pays out. Prices
+  show the cut while you hold it; the next purchase redeems it.
+
+### Clarity
+- Benediction offers now announce **"BENEDICTION — CHOOSE ONE"**, a pulsing
+  CHOOSE ONE hangs over the sigil lineup, and the info card spells out
+  "E: TAKE — THE REST FADE."
+- The stat panel's KB row now says KNOCKBACK.
+
 ## v0.28.0 — Reliquary (2026-07-06)
 
 Live-playtest follow-up to Benedictions: death no longer eats your boons,

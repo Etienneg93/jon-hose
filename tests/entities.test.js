@@ -896,7 +896,7 @@ test("waveCleared_: Absolution + sigil beat land before the quake cutscene retur
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("absolution");
   const prevDoc = global.document, prevMusic = JH.Music;
-  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "", style: {} }) };
   JH.Music = { setTrack() {} };
   const g = Object.create(JH.Game);
   g.player = makePlayer(); g.player.hp = 10;
@@ -915,7 +915,7 @@ test("waveCleared_: final (Slayer) wave clear keeps its sigil beat — cutscene,
   const B = global.window.JH.Benedictions;
   B.reset();
   const prevDoc = global.document, prevMusic = JH.Music;
-  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "", style: {} }) };
   JH.Music = { setTrack() {} };
   const g = Object.create(JH.Game);
   g.player = makePlayer();
@@ -938,7 +938,7 @@ test("waveCleared_: vendor spawns every 3rd tracked clear, resets the counter", 
   const B = global.window.JH.Benedictions;
   B.reset();
   const prevDoc = global.document, prevMusic = JH.Music;
-  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "", style: {} }) };
   JH.Music = { setTrack() {} };
   const g = Object.create(JH.Game);
   g.player = makePlayer();

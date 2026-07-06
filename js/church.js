@@ -289,22 +289,25 @@
           : [JH.CHURCH.sermon.repeat[(Math.random() * JH.CHURCH.sermon.repeat.length) | 0]];
         if (this.pendingPity) {
           this.pendingPity = false;
-          lines.unshift("Take this, child — the water keeps what it takes.");
-          // The gift itself: a cross set down beside him, collected in-scene.
-          sc.pityCross = { x: sc.fatherSpawnX - 32, y: sc.fatherY };
+          lines.unshift(
+            "The vendor on that street is an old friend of this parish. He appears wherever the faithful struggle.",
+            "Take this voucher, child — half off his next ware. You're a church member now; the sign out front never lied."
+          );
+          // The gift itself: a voucher set down beside him, collected in-scene.
+          sc.pityVoucher = { x: sc.fatherSpawnX - 32, y: sc.fatherY };
         }
         sc.dialogue = { lines: lines, idx: 0 };
         return;
       }
 
-      // Father Jon's pity cross: walk over it to collect (Essence only ever
-      // enters via cross collection — this one just happens in the nave).
-      if (sc.pityCross &&
-          Math.hypot(sc.jonX - sc.pityCross.x, sc.jonY - sc.pityCross.y) < 14) {
-        this.addEssence(1);
+      // Father Jon's pity voucher: walk over it to collect — 50% off the
+      // next shop purchase (game.voucher50, consumed by priceOf's buyer).
+      if (sc.pityVoucher &&
+          Math.hypot(sc.jonX - sc.pityVoucher.x, sc.jonY - sc.pityVoucher.y) < 14) {
+        game.voucher50 = true;
         game.audio.play("upgrade");
-        sc.buyFloat = { text: "+1 HOLY ESSENCE", x: sc.pityCross.x, color: "#ffd23f", t: 0 };
-        sc.pityCross = null;
+        sc.buyFloat = { text: "+50% SHOP VOUCHER", x: sc.pityVoucher.x, color: "#6cd3ff", t: 0 };
+        sc.pityVoucher = null;
       }
 
       // Reliquary: benedictions washed away by death wait here; E reclaims
@@ -514,12 +517,21 @@
         }
       }
 
-      // Father Jon's pity cross, waiting on the floor beside him.
-      if (sc.pityCross) {
-        const cx = Math.round(sc.pityCross.x - camX);
-        const cy = Geo ? Geo.feetScreenY(sc.pityCross.y, 0) : floorY;
+      // Father Jon's pity voucher: a little bobbing ticket beside him.
+      if (sc.pityVoucher) {
+        const cx = Math.round(sc.pityVoucher.x - camX);
+        const cy = Geo ? Geo.feetScreenY(sc.pityVoucher.y, 0) : floorY;
+        const bob = Math.sin(sc.t * 3) * 2;
         JH.Assets.shadow(ctx, cx, cy, 5);
-        JH.Assets.draw(ctx, "essence_cross", cx, cy, 1, { t: sc.t });
+        ctx.save();
+        ctx.translate(cx, cy - 10 + bob);
+        ctx.rotate(-0.12);
+        ctx.fillStyle = "#f5ead2"; ctx.fillRect(-8, -5, 16, 10);   // ticket paper
+        ctx.fillStyle = "#6cd3ff"; ctx.fillRect(-8, -5, 2, 10);    // stub edge
+        ctx.fillStyle = "#2a3346";
+        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+        ctx.fillText("50%", 1, 2);
+        ctx.restore();
       }
 
       // Pillar-buy ring burst: an expanding element-color ring at the station.

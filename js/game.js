@@ -324,6 +324,7 @@
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
+      this.voucher50 = false;
       this.relics = {}; this.relicStock = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
@@ -537,6 +538,7 @@
         // Horizontal row at one depth so the offer reads as a lineup.
         this.sigils = offers.map((o, i) =>
           new JH.Sigil(this.player.x + 50 + i * 46, 56, o));
+        this.banner("BENEDICTION — CHOOSE ONE", 1.6);
       }
 
       // After Quake Walker, play his ally cutscene before continuing.
@@ -811,11 +813,14 @@
     spawnPickup(kind, x, y, value) {
       this.pickups.push(new JH.Pickup(kind, x, y, value));
     },
-    // Punch Card relic: every shop price (node/rep/consumable/relic) is 20%
-    // cheaper, rounded. Single source of truth for the discount — every
-    // purchase path and its drawn price route through this.
+    // Shop discounts, single source of truth — every purchase path and its
+    // drawn price route through this. Punch Card relic: all prices 20% off.
+    // Father Jon's pity voucher (voucher50): 50% off, consumed by the next
+    // successful purchase; while held, drawn prices already show the cut.
     priceOf(base) {
-      return (this.relics && this.relics.punch_card) ? Math.round(base * 0.8) : base;
+      let p = (this.relics && this.relics.punch_card) ? base * 0.8 : base;
+      if (this.voucher50) p *= 0.5;
+      return Math.round(p);
     },
     // Places a walk-up vendor and rolls its relic stock (3 of the still-
     // unowned pool). Single spot so every vendor spawn site rolls stock the
@@ -1454,7 +1459,13 @@
                 }
               }
               if (!ok) this.audio.play("hurt");
-              else this.shopCursor = Math.min(this.shopCursor, Math.max(0, this.shopSelectables().length - 1));
+              else {
+                if (this.voucher50) {
+                  this.voucher50 = false;
+                  this.float(this.player.x, this.player.y - 42, "VOUCHER REDEEMED", "#6cd3ff");
+                }
+                this.shopCursor = Math.min(this.shopCursor, Math.max(0, this.shopSelectables().length - 1));
+              }
             }
           }
         }
@@ -1699,8 +1710,23 @@
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
-        // benediction sigils (walk-up offer beat)
-        for (const s of this.sigils) if (!s.dead) s.draw(ctx, cam);
+        // benediction sigils (walk-up offer beat) + a persistent CHOOSE ONE
+        // label over the trio so the one-pick rule reads from anywhere.
+        {
+          const live = this.sigils.filter((s) => !s.dead);
+          for (const s of live) s.draw(ctx, cam);
+          if (live.length > 1) {
+            let cx = 0, cy = Infinity;
+            for (const s of live) { cx += s.x; cy = Math.min(cy, JH.Geo.feetScreenY(s.y, 0)); }
+            cx = cx / live.length - cam;
+            ctx.save();
+            ctx.globalAlpha = 0.7 + 0.3 * Math.sin(this.player.t * 4);
+            ctx.font = "bold 7px monospace"; ctx.textAlign = "center";
+            ctx.fillStyle = "#ffd23f";
+            ctx.fillText("CHOOSE ONE", Math.round(cx), Math.round(cy - 52));
+            ctx.restore();
+          }
+        }
 
         // depth-sort actors (enemies + player + vendor) by world Y
         const actors = this.enemies.slice();
@@ -2095,7 +2121,7 @@
         ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), ["waterRegen", "moveRegen"], "regen"],
         ["HP",     Math.round(S.maxHp),       "maxHp",       "hp"],
         ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed",   "speed"],
-        ["KB",     Math.round(S.knockback),   "knockback",   "knockback"],
+        ["KNOCKBACK", Math.round(S.knockback), "knockback",  "knockback"],
       ];
       // Percent stats hide until they exist — a wall of 0% rows is noise.
       // (Kept visible mid-flash so a fresh gain doesn't pop in unexplained.)
@@ -2184,7 +2210,7 @@
         ctx.fillText(desc, X + 6, Y + 22);
       }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
-      ctx.fillText("E: TAKE", X + W - 6, Y + H - 6);
+      ctx.fillText("E: TAKE — THE REST FADE", X + W - 6, Y + H - 6);
       ctx.restore();
     },
 
@@ -2219,6 +2245,12 @@
       ctx.fillStyle = "#9be8ff";
       ctx.font = "6px monospace";
       ctx.fillText(Math.floor(pl.suds) + " suds", MID + 2, PY + 19);
+      // Father Jon's voucher: prices below already show the 50% cut.
+      if (this.voucher50) {
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#6cd3ff";
+        ctx.fillText("✂ 50% VOUCHER", PX + PW - 6, PY + 19);
+      }
       ctx.textAlign = "left";
       // Separator
       ctx.fillStyle = "#334455";
