@@ -83,14 +83,26 @@
     return Math.min(1, (t - fadeStart) / ds.screenFadeDur);
   }
 
+  // Outlined fillText: the nave backdrop is busy, so free-floating text
+  // draws a near-black rim (4 offsets) under the current fillStyle to stay
+  // legible. Respects globalAlpha (outline fades with the text).
+  function otext(ctx, str, x, y) {
+    const col = ctx.fillStyle;
+    ctx.fillStyle = "rgba(4,8,14,0.9)";
+    ctx.fillText(str, x - 1, y); ctx.fillText(str, x + 1, y);
+    ctx.fillText(str, x, y - 1); ctx.fillText(str, x, y + 1);
+    ctx.fillStyle = col;
+    ctx.fillText(str, x, y);
+  }
+
   function wrapText(ctx, text, x, y, maxW, lh) {
     const words = text.split(" "); let line = "", yy = y;
     for (const w of words) {
       const test = line ? line + " " + w : w;
-      if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, yy); line = w; yy += lh; }
+      if (ctx.measureText(test).width > maxW && line) { otext(ctx, line, x, yy); line = w; yy += lh; }
       else line = test;
     }
-    if (line) ctx.fillText(line, x, yy);
+    if (line) otext(ctx, line, x, yy);
   }
 
   function defaults() {
@@ -475,7 +487,7 @@
           ctx.restore();
           ctx.save(); ctx.globalAlpha = near ? 0.9 : 0.4;
           ctx.fillStyle = "#8a93ad";
-          ctx.fillText("SEALED", x, topY - 8);
+          otext(ctx, "SEALED", x, topY - 8);
           ctx.restore();
         }
         // Rank pips under the column (staggered refill for 0.4s after a buy).
@@ -556,7 +568,7 @@
         ctx.globalAlpha = 0.6 + 0.4 * Math.sin(sc.t * 6);
         ctx.fillStyle = "#9be8ff";
         ctx.font = "bold 8px monospace";
-        ctx.fillText("PRESS E TO RETURN", px, VH - 112);
+        otext(ctx, "PRESS E TO RETURN", px, VH - 112);
         ctx.restore();
       }
 
@@ -638,19 +650,19 @@
         const { pillar, def, x, unlocked, rank, maxR } = nearStation;
         if (!unlocked) {
           ctx.fillStyle = "#8a93ad";
-          ctx.fillText("SEALED — " + (NEMESIS_NAME[def.gateBoss] || "???"), x, VH - 104);
+          otext(ctx, "SEALED — " + (NEMESIS_NAME[def.gateBoss] || "???"), x, VH - 104);
           ctx.fillStyle = "#5a6178";
-          ctx.fillText("Redeem thy nemesis to open this pillar.", x, VH - 94);
+          otext(ctx, "Redeem thy nemesis to open this pillar.", x, VH - 94);
         } else {
           ctx.fillStyle = "#ffe9a8";
-          ctx.fillText(def.name + (rank > 0 ? " " + (ROMAN[rank - 1] || rank) : ""), x, VH - 114);
+          otext(ctx, def.name + (rank > 0 ? " " + (ROMAN[rank - 1] || rank) : ""), x, VH - 114);
           ctx.fillStyle = "#c8d2e8";
           wrapText(ctx, def.desc, x, VH - 104, 190, 10);
           if (rank >= maxR) {
-            ctx.fillStyle = "#9be8ff"; ctx.fillText("MAX", x, VH - 84);
+            ctx.fillStyle = "#9be8ff"; otext(ctx, "MAX", x, VH - 84);
           } else {
             ctx.fillStyle = root.JH.Pillars.canBuy(this.state, def) ? "#9be8ff" : "#a66";
-            ctx.fillText(root.JH.Pillars.cost(rank) + " Essence · E: raise", x, VH - 84);
+            otext(ctx, root.JH.Pillars.cost(rank) + " Essence · E: raise", x, VH - 84);
           }
         }
       }
@@ -663,13 +675,13 @@
         const next = nextId && B.byId(nextId);
         const rx = Math.round(L.reliquaryX - camX);
         ctx.fillStyle = "#ffe9a8";
-        ctx.fillText("RELIQUARY — " + nWashed + " washed benediction" + (nWashed === 1 ? "" : "s"), rx, VH - 114);
+        otext(ctx, "RELIQUARY — " + nWashed + " washed benediction" + (nWashed === 1 ? "" : "s"), rx, VH - 114);
         if (next) {
           ctx.fillStyle = "#c8d2e8";
-          ctx.fillText("Next: " + next.name + (B.washed[nextId] >= 2 ? " II" : ""), rx, VH - 104);
+          otext(ctx, "Next: " + next.name + (B.washed[nextId] >= 2 ? " II" : ""), rx, VH - 104);
         }
         ctx.fillStyle = this.state.essence >= 1 ? "#9be8ff" : "#a66";
-        ctx.fillText("1 Essence · E: reclaim", rx, VH - 94);
+        otext(ctx, "1 Essence · E: reclaim", rx, VH - 94);
       }
 
       // Rising "+RANK" float after a buy (church draws its own overlays).
@@ -678,7 +690,9 @@
         ctx.save();
         ctx.globalAlpha = Math.max(0, 1 - bf.t / 0.9);
         ctx.fillStyle = bf.color; ctx.font = "bold 8px monospace";
-        ctx.fillText(bf.text, Math.round(bf.x - camX), VH - 96 - bf.t * 22);
+        // Starts above the station detail block (top row VH-114) so the rise
+        // never ghosts through the text underneath it.
+        otext(ctx, bf.text, Math.round(bf.x - camX), VH - 122 - bf.t * 22);
         ctx.restore();
         ctx.font = "8px monospace";
       }
@@ -688,7 +702,7 @@
       ctx.textAlign = "right"; ctx.fillStyle = "#d6f6ff";
       const etxt = "Holy Essence: " + this.state.essence;
       const eicon = JH.Assets.icon(ctx, "essence", VW - 14 - ctx.measureText(etxt).width, 10, 1);
-      ctx.fillText((eicon ? "" : "✦ ") + etxt, VW - 8, 14);
+      otext(ctx, (eicon ? "" : "✦ ") + etxt, VW - 8, 14);
 
       // Father Jon's dialogue box.
       if (sc.dialogue) {

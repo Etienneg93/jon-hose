@@ -7,6 +7,14 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.3 — Legible Liturgy (2026-07-06)
+
+- All free-floating Church text (pillar details, Reliquary, prompts, rising
+  floats, the Essence readout) now draws with a dark outline so it stays
+  readable over the painted nave.
+- The rising "+RANK" float starts above the station detail text instead of
+  ghosting through it.
+
 ## v0.27.2 — Church Members' Discount (2026-07-06)
 
 ### Father Jon's voucher
