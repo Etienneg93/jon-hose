@@ -29,31 +29,23 @@ test("blessingCost rises by 1 per purchase: 1, 2, 3, ...", () => {
 
 const Church = require("../js/church.js");
 
-test("defaults() is a fresh meta-state (water unlocked, empty mirror)", () => {
+test("defaults() is a fresh meta-state (water unlocked, all pillars rank 0)", () => {
   const d = Church.defaults();
   assert.strictEqual(d.essence, 0);
   assert.deepStrictEqual(d.blessings, {});
-  assert.deepStrictEqual(d.mirror, {});
+  assert.deepStrictEqual(d.pillars, { water: 0, earth: 0, fire: 0, air: 0 });
   assert.strictEqual(d.churchVisited, false);
   assert.deepStrictEqual(d.elements, { earth: false, fire: false, air: false, water: true });
 });
 
-test("sanitize migrates legacy blessings into Mirror Water nodes, capped + once", () => {
-  const s = Church.sanitize({ blessings: { bless_dps: 2, bless_hp: 5 } });
-  assert.deepStrictEqual(s.mirror.water_pressure, { side: "a", rank: 2 }); // dps -> pressure
-  assert.deepStrictEqual(s.mirror.water_vigor, { side: "a", rank: 3 });    // hp 5 capped at maxRank 3
-  // idempotent: existing mirror data blocks re-migration
-  const s2 = Church.sanitize({ blessings: { bless_dps: 1 }, mirror: { water_pressure: { side: "b", rank: 1 } } });
-  assert.deepStrictEqual(s2.mirror.water_pressure, { side: "b", rank: 1 });
+test("sanitize clamps pillar ranks to ints 0..3", () => {
+  const s = Church.sanitize({ pillars: { water: 2.9, earth: -4, fire: 99, air: "x" } });
+  assert.deepStrictEqual(s.pillars, { water: 2, earth: 0, fire: 3, air: 0 });
 });
 
-test("sanitize validates mirror node entries", () => {
-  const s = Church.sanitize({ mirror: {
-    water_vigor: { side: "b", rank: 2 }, bad: 5, water_pressure: { side: "x", rank: -3 },
-  } });
-  assert.deepStrictEqual(s.mirror.water_vigor, { side: "b", rank: 2 });
-  assert.strictEqual(s.mirror.bad, undefined);                          // non-object ignored
-  assert.deepStrictEqual(s.mirror.water_pressure, { side: "a", rank: 0 }); // bad side->a, neg rank->0
+test("sanitize restores a missing/garbage pillars object to defaults", () => {
+  assert.deepStrictEqual(Church.sanitize({ essence: 1 }).pillars, { water: 0, earth: 0, fire: 0, air: 0 });
+  assert.deepStrictEqual(Church.sanitize({ pillars: 7 }).pillars, { water: 0, earth: 0, fire: 0, air: 0 });
 });
 
 test("sanitize() merges partial/corrupt data over defaults", () => {

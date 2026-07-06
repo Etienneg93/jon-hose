@@ -94,6 +94,21 @@
     firePatch: "#ff6010",  firePatchHi: "#ffd040",
   };
 
+  // ---- Baked UI icon atlas (sprites/icons/<key>.png, tools/icon-sprites.mjs).
+  // size = logical px per icon side; PNGs are baked at 4x (48px). keys drives
+  // the Assets.icon preload — keep in sync with the baker's BAKERS set.
+  JH.ICONS = {
+    size: 12,
+    keys: [
+      "dmg", "range", "water", "regen", "hp", "knockback", "speed", "dash", "dodge", "vamp",
+      "el_water", "el_fire", "el_earth", "el_air",
+      "essence",
+      "brass_nozzle", "spigot_key", "loaded_sponge", "prayer_bead", "collection_plate",
+      "censer", "sunday_suit", "punch_card", "dowsing_rod", "alarm_bell",
+      "frame_duo", "frame_legendary",
+    ],
+  };
+
   // ---- Player base stats (pre-upgrade) --------------------------------
   JH.PLAYER = {
     maxHp: 100,
@@ -128,8 +143,8 @@
     meleeKnock: 110,
 
     dodgeChance: 0,         // fraction chance to negate a hit entirely (Second Wind)
+    burnTakenMult: 1,       // damage multiplier for burn taken (Pillar of Fire rank 3+)
     vampiricRate: 0,        // fraction of spray damage converted to HP (Vampiric Hose)
-    splitStream: false,     // spray arcs to a nearby secondary target (Split Stream)
     moveRegen: 0,           // extra water regen/sec while moving (Kinetic Tap)
     dashBoost: 0,           // extra move speed px/sec after dashing (Hydro-Dash)
     dashBoostDur: 0,        // seconds the post-dash speed boost lasts
@@ -311,8 +326,36 @@
     pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
   };
 
+  // Relics: one-time flag purchases (game.relics[id] = true), never a
+  // repeatable. Effects are hook-checks scattered across game.js/entities.js
+  // (grep the id) rather than an apply fn — see each id's comment there.
+  // A rotating stock of 3 is rolled per vendor visit from the still-unowned
+  // pool (Balance.pickRelics).
+  JH.RELICS = [
+    { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "Non-pierce stream also catches the next-closest enemy" },
+    { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "Hydrant refill grants +10% spray dmg for 15s" },
+    { id: "loaded_sponge",   name: "Loaded Sponge",    cost: 160, desc: "GUSH milestone water refund doubled" },
+    { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants a brief pressure buff" },
+    { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
+    { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
+    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Boss essence crosses are worth double" },
+    { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
+    { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
+    { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },
+  ];
+
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
+
+  // XP level-ups: kills grant xp = the enemy's def.suds; each level applies
+  // the next step of this repeating cycle instantly (no pick, no pause).
+  JH.LEVELS = {
+    setPieceXp: 30,
+    cycle: [
+      { sprayDamage: 3 }, { maxWater: 8 }, { maxHp: 8 },
+      { sprayRange: 4 }, { sprayDamage: 3 }, { waterRegen: 2 },
+    ],
+  };
 
   // ---- Fire element tunables (Burn DoT + FirePatch) ---------------------
   JH.FIRE = {
@@ -322,6 +365,11 @@
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
     burnTickInterval: 0.5,   // seconds between DoT damage beats (flash + ember puff)
   };
+
+  // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
+  // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
+  // downgrades an active scald.)
+  JH.SCALD = { dps: 4, dur: 2, dps2: 6, dur2: 3 };
 
   // ---- Juice / game-feel tunables --------------------------------------
   JH.JUICE = {
@@ -390,14 +438,13 @@
       ghostAlphaMax: 0.82,   // ghost's peak opacity
       total: 3.2,            // whole sequence length; updatePlayerDeathSeq exits the Church at this point
     },
-    essencePerBoss: 1,
     // Father Jon dialogue. `first` = in-character Holy-Essence tutorial (one
     // box per line); `repeat` = a single short line picked at random per visit.
     sermon: {
       first: [
         "Rise, child. You stand in the Church of the Holy Hose — where the fallen are made faithful.",
         "Each nemesis you redeem — and each trial you weather — leaves behind Holy Essence. I keep it here, gathered from your deeds.",
-        "Spend it at the shrines along the nave — Pressure, Vigor, Reservoir — and the blessing follows you into every life to come.",
+        "Spend it at the four pillars along the nave — Water, Earth, Fire, Air — and their strength follows you into every life to come.",
         "Death is not the end of the spray. Walk into the light when you are ready, and try again.",
       ],
       repeat: ["The water remembers you, child.", "Again you fall — again you rise.", "Spend what you have earned; the street still thirsts.", "Pressure builds in the faithful. Return to the light.", "Hose before Hoes, child."],
@@ -409,15 +456,13 @@
       length: 720, spawnX: 28, fatherX: 168, altarX: 300, portalX: 660,
       portalReach: 18, stationRange: 24,
       depthMin: 35, depthMax: 75,
-      // Walk-up Mirror node stations. id == JH.MIRROR node id; `element` gates
-      // visibility (earth appears once Quake is redeemed). Water nodes sit where
-      // the old flat blessing stations were.
+      // Walk-up pillar stations, one per element (JH.PILLARS.defs). Locked
+      // pillars still render (dark, with their nemesis) but can't be bought.
       stations: [
-        { id: "water_pressure",  x: 396, element: "water" },
-        { id: "water_reservoir", x: 470, element: "water" },
-        { id: "water_vigor",     x: 544, element: "water" },
-        { id: "earth_force",     x: 588, element: "earth" },
-        { id: "earth_stance",    x: 620, element: "earth" },
+        { pillar: "water", x: 396 },
+        { pillar: "earth", x: 470 },
+        { pillar: "fire",  x: 544 },
+        { pillar: "air",   x: 618 },
       ],
     },
     // Shrine -> element -> redeeming boss (s.type). null boss = capstone (Water/Jon).
@@ -427,8 +472,8 @@
       { element: "air",   boss: "assman", label: "AIR"   },
       { element: "water", boss: null,     label: "WATER" },
     ],
-    // LEGACY flat blessings — retained only so old saves migrate into the
-    // Mirror Water nodes (church.js migrateBlessings). No longer applied.
+    // LEGACY flat blessings — no longer applied (no saves exist to migrate;
+    // persistence is parked). Kept only for the state-field shape.
     blessings: [
       { id: "bless_dps",  name: "Anointed Pressure", desc: "+4 spray dmg",   apply: (s) => { s.sprayDamage += 4; } },
       { id: "bless_tank", name: "Deep Reservoir",    desc: "+15 max water",  apply: (s) => { s.maxWater += 15; } },
@@ -436,47 +481,24 @@
     ],
   };
 
-  // ---- The Elemental Mirror altar (permanent meta-upgrades) -----------
-  // Two-sided, Essence-bought, leveled nodes in four element branches.
-  // Water is open from the start; earth/fire/air unlock when their ally-boss
-  // is redeemed (JH.Church.state.elements). Folded into computeStats via
-  // JH.Mirror.apply. v1 effects map to existing stats (no new combat wiring);
-  // true elemental effects (burn/stun/gust) land with their acts.
-  // See docs/superpowers/specs/2026-06-30-elemental-mirror-altar-design.md.
-  JH.MIRROR = {
-    maxRank: 3,
-    nodes: [
-      // Water (open from start)
-      { id: "water_pressure", element: "water", name: "Pressure",
-        a: { name: "Anointed Pressure", desc: "+3 spray dmg",      apply: (s, r) => { s.sprayDamage += 3 * r; } },
-        b: { name: "Wide Spray",        desc: "+6 spray range",    apply: (s, r) => { s.sprayRange  += 6 * r; } } },
-      { id: "water_reservoir", element: "water", name: "Reservoir",
-        a: { name: "Deep Reservoir", desc: "+12 max water",        apply: (s, r) => { s.maxWater    += 12 * r; } },
-        b: { name: "Closed Loop",    desc: "+0.5 water return/s",  apply: (s, r) => { s.waterReturn += 0.5 * r; } } },
-      { id: "water_vigor", element: "water", name: "Vigor",
-        a: { name: "Blessed Vigor", desc: "+15 max HP",            apply: (s, r) => { s.maxHp        += 15 * r; } },
-        b: { name: "Vampiric Mist", desc: "+4% lifesteal",         apply: (s, r) => { s.vampiricRate += 0.04 * r; } } },
-      // Earth (Quake Walker)
-      { id: "earth_force", element: "earth", name: "Force",
-        a: { name: "Crushing Spray", desc: "+30 knockback",        apply: (s, r) => { s.knockback    += 30 * r; } },
-        b: { name: "Fault Line",     desc: "+3 hit band",          apply: (s, r) => { s.sprayHitBand += 3 * r; } } },
-      { id: "earth_stance", element: "earth", name: "Stance",
-        a: { name: "Sure Footing", desc: "+5% dodge",              apply: (s, r) => { s.dodgeChance += 0.05 * r; } },
-        b: { name: "Deep Roots",   desc: "+20 max water",          apply: (s, r) => { s.maxWater    += 20 * r; } } },
-      // Fire (The Slayer) — locked until redeemed
-      { id: "fire_zeal", element: "fire", name: "Zeal",
-        a: { name: "Searing Pressure", desc: "+4 spray dmg",       apply: (s, r) => { s.sprayDamage  += 4 * r; } },
-        b: { name: "Render",           desc: "+5% lifesteal",      apply: (s, r) => { s.vampiricRate += 0.05 * r; } } },
-      { id: "fire_reach", element: "fire", name: "Reach",
-        a: { name: "Long Burn",  desc: "+8 spray range",           apply: (s, r) => { s.sprayRange   += 8 * r; } },
-        b: { name: "Flashpoint", desc: "+4 hit band",              apply: (s, r) => { s.sprayHitBand += 4 * r; } } },
-      // Air (Ass Man) — locked until redeemed
-      { id: "air_swift", element: "air", name: "Swift",
-        a: { name: "Tailwind",   desc: "+8 move speed",            apply: (s, r) => { s.moveSpeed += 8 * r; } },
-        b: { name: "Slipstream", desc: "+18 dash boost",           apply: (s, r) => { s.dashBoost += 18 * r; } } },
-      { id: "air_drift", element: "air", name: "Drift",
-        a: { name: "Long Wake",  desc: "+0.25s dash boost",        apply: (s, r) => { s.dashBoostDur += 0.25 * r; } },
-        b: { name: "Slick Wake", desc: "dash leaves puddle",       apply: (s, r) => { if (r > 0) s.dashPuddle = true; } } },
+  // ---- The four element pillars (Church meta-upgrades) ----------------
+  // Rank r costs r+1 essence (JH.Pillars.cost). Water has no gate; the
+  // others unlock when their gateBoss is redeemed (Church.state.elements).
+  // Locked pillars render dark with the nemesis silhouette.
+  JH.PILLARS = {
+    defs: [
+      { element: "water", name: "Pillar of Water", gateBoss: null, maxRank: 3,
+        desc: "+15 max water, +3 regen / rank · III: pressure never drops below mid tier",
+        apply: (s, r) => { s.maxWater += 15 * r; s.waterRegen += 3 * r; if (r >= 3) s.pressureFloor = true; } },
+      { element: "earth", name: "Pillar of Earth", gateBoss: "quake", maxRank: 3,
+        desc: "+12 max HP, +15 knockback / rank · III: wall-slammed enemies stagger",
+        apply: (s, r) => { s.maxHp += 12 * r; s.knockback += 15 * r; if (r >= 3) s.wallSlamStagger = true; } },
+      { element: "fire", name: "Pillar of Fire", gateBoss: "slayer", maxRank: 3,
+        desc: "+3 spray dmg, burn on you -25%·rank/3 · III: full pressure Scalds",
+        apply: (s, r) => { s.sprayDamage += 3 * r; s.burnTakenMult = 1 - 0.25 * (r / 3); if (r >= 3) s.baselineScald = true; } },
+      { element: "air", name: "Pillar of Air", gateBoss: "assman", maxRank: 3,
+        desc: "+5 move speed, -0.05s dash cd / rank · III: +0.1s dash i-frames",
+        apply: (s, r) => { s.moveSpeed += 5 * r; s.dashCd = Math.max(0.2, s.dashCd - 0.05 * r); if (r >= 3) s.dashIframeBonus = 0.1; } },
     ],
   };
 
@@ -528,7 +550,7 @@
   };
 
   // The Slayer — Fire boss (pool cue, charge-dash movement, fireball volley).
-  // After defeat: ally cutscene, elements.fire unlocked, Fire Mirror branch lit.
+  // After defeat: ally cutscene, elements.fire unlocked, Fire pillar opens.
   // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
   JH.SLAYER = {
     name: "The Slayer", hp: 1900, bodyW: 44, bodyH: 58,
@@ -639,5 +661,6 @@
     sizzle: { type: "noise", dur: 0.15, gain: 0.10 },
     kill:   { type: "square", freq: 320, dur: 0.08, gain: 0.13 },  // combo-pitched kill blip
     dash:   { type: "noise", dur: 0.22, gain: 0.15, attack: 0.02, bpFrom: 450, bpTo: 2600, q: 0.7 },  // rising whoosh
+    bell:   { type: "sine", freq: 196, dur: 0.6, gain: 0.16 },  // pillar rank bought
   };
 })();

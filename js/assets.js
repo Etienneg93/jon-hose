@@ -416,6 +416,45 @@
   };
   JH.Assets = Assets;
 
+  // ---- baked UI icon atlas (tools/icon-sprites.mjs -> sprites/icons/) --
+  // One 12x12-logical PNG per key (baked at 4x = 48px), preloaded at boot.
+  // icon() blits centered on (x, y) at size*scale logical px, nearest-
+  // neighbor. Returns false (draws nothing) until the PNG has loaded —
+  // call sites keep their procedural glyph as the fallback on false.
+  const _iconImgs = {};
+  ((JH.ICONS && JH.ICONS.keys) || []).forEach((k) => {
+    _iconImgs[k] = JH.Loader.img("sprites/icons/" + k + ".png");
+  });
+  Assets.icon = function (ctx, key, x, y, scale) {
+    const img = _iconImgs[key];
+    if (!img || !img._ready) return false;
+    const s = Math.round((scale || 1) * (JH.ICONS ? JH.ICONS.size : 12));
+    const prev = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+    ctx.imageSmoothingEnabled = prev;
+    return true;
+  };
+
+  // Boon verb corner mark (procedural, no PNG): stream = bar, dash = chevron,
+  // body = dot. (x, y) is the TOP-RIGHT corner of the icon the mark tags —
+  // the mark hangs down-left from it. Unknown/missing verb draws nothing.
+  Assets.verbMark = function (ctx, verb, x, y) {
+    x = Math.round(x); y = Math.round(y);
+    if (verb === "stream") {
+      ctx.fillStyle = "#d6f6ff";
+      ctx.fillRect(x - 4, y, 4, 2);
+    } else if (verb === "dash") {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(x - 4, y, 2, 1);
+      ctx.fillRect(x - 3, y + 1, 2, 1);
+      ctx.fillRect(x - 4, y + 2, 2, 1);
+    } else if (verb === "body") {
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(x - 3, y, 3, 3);
+    }
+  };
+
   // ---- shared bits ----------------------------------------------------
   function shadow(ctx, x, y, w) {
     ctx.save();
@@ -937,27 +976,45 @@
   });
 
   // ===================== THE SWITCH OF DOOM (boss 2) ==================
-  // An 8-port rack switch chassis. The Doc-Ock cable tentacles are drawn by
-  // SwitchBoss itself (curved); this is the body + blinking ports.
-  Assets.register("switch", (p, opt) => {
+  // Baked chassis (tools/boss-sprites.mjs, 4x logical) + runtime LED
+  // overlay; port sockets are baked dark ("off") and the overlay lights
+  // them. Cable tentacles stay entity-drawn. Procedural fallback below
+  // covers the image-load window.
+  const SWITCH_ART = { w: 56, h: 25, feet: 23 };
+  const _switchImg = JH.Loader.img("sprites/switch/chassis.png");
+  const proceduralSwitch = (p, opt) => {
     const t = opt.t || 0;
-    // Chassis
     p(-24, 2, 48, 20, PAL.switchDk);
-    p(-23, 16, 46, 6, PAL.switchBody);     // front face
-    p(-23, 6, 46, 4, "#39455c");           // top bevel
+    p(-23, 16, 46, 6, PAL.switchBody);     // port face
+    p(-23, 6, 46, 4, "#39455c");           // bevel band
     p(-24, 0, 48, 2, "#0a0d14");           // base shadow
-    // 8 blinking RJ45 ports along the front
     for (let i = 0; i < 8; i++) {
-      const x = -21 + i * 5.4;
       const on = (Math.floor(t * 5) + i * 3) % 4 !== 0;
-      p(x, 16, 4, 4, on ? PAL.switchLed : "#0e2a1a");
+      p(-21 + i * 5.4, 16, 4, 4, on ? PAL.switchLed : "#0e2a1a");
     }
-    // status LEDs
     p(-22, 10, 2, 2, PAL.suds);
     p(20, 10, 2, 2, "#ff5a5a");
-    // mounting ears
     p(-26, 8, 2, 12, "#0a0d14");
     p(24, 8, 2, 12, "#0a0d14");
+  };
+  Assets.register("switch", (p, opt, ctx, x, y, facing) => {
+    if (!(_switchImg.complete && _switchImg.naturalWidth)) return proceduralSwitch(p, opt);
+    const s = opt.scale || 1;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(_switchImg,
+      Math.round(x - SWITCH_ART.w * s / 2), Math.round(y - SWITCH_ART.feet * s),
+      Math.round(SWITCH_ART.w * s), Math.round(SWITCH_ART.h * s));
+    ctx.restore();
+    // Blinking port LEDs — light/FX, kept off the silhouette offscreen.
+    // Same rhythm + positions as the sockets the baker rounded.
+    if (ctx !== _hurtOC2d) {
+      const t = opt.t || 0;
+      for (let i = 0; i < 8; i++) {
+        const on = (Math.floor(t * 5) + i * 3) % 4 !== 0;
+        if (on) p(Math.round(-21 + i * 5.4), 16, 4, 4, PAL.switchLed);
+      }
+    }
   });
 
   // ========================= QUAKE WALKER (boss 3) ====================
@@ -1218,51 +1275,69 @@
   });
 
   // ====================== GATEWAY KRUSHER 9000 (final boss) ===================
-  // A big STANDING switch chassis with an angry middle-aged face embedded.
-  Assets.register("gatewaykrusher", (p, opt) => {
+  // Baked standing chassis + embedded face (tools/boss-sprites.mjs, 4x
+  // logical) + runtime overlay for the blinking port rows and the glowing
+  // eyes (which pulse now that they're live). Procedural fallback covers
+  // the image-load window.
+  const GK_ART = { w: 52, h: 63, feet: 61 };
+  const _gkImg = JH.Loader.img("sprites/gatewaykrusher/chassis.png");
+  const proceduralGk = (p, opt) => {
     const t = opt.t || 0;
     const C = PAL.gkBody, D = PAL.gkDk;
-    // Outer chassis
     p(-22, 0, 44, 60, D);
     p(-20, 2, 40, 56, C);
     p(-20, 56, 40, 3, "#39455c");   // top bevel
     p(-22, 0, 44, 2, "#0a0c14");    // base strip
-    // Rack ears
-    p(-24, 8, 2, 44, "#0a0c10"); p(22, 8, 2, 44, "#0a0c10");
-    // Three rows of ports near top
+    p(-24, 8, 2, 44, "#0a0c10"); p(22, 8, 2, 44, "#0a0c10");  // rack ears
     for (let row = 0; row < 3; row++) {
       for (let i = 0; i < 8; i++) {
-        const px = -18 + i * 4.5;
-        const py = 42 + row * 5;
         const on = (Math.floor(t * 5 + i + row * 3) % 4 !== 0);
-        p(px, py, 3, 3, on ? PAL.gkLed : "#1a0808");
+        p(-18 + i * 4.5, 42 + row * 5, 3, 3, on ? PAL.gkLed : "#1a0808");
       }
     }
-    // Face embedded in middle section (ly 20-42)
-    p(-11, 22, 22, 20, PAL.gkFace);          // skin base
-    p(-10, 22, 20, 5, PAL.gkStubble);         // chin stubble band
-    // Stubble texture patches (lighter flecks)
+    p(-11, 22, 22, 20, PAL.gkFace);
+    p(-10, 22, 20, 5, PAL.gkStubble);
     p(-9, 22, 2, 4, PAL.gkFace); p(-5, 23, 2, 3, PAL.gkFace);
     p(-1, 22, 2, 4, PAL.gkFace); p( 3, 23, 2, 3, PAL.gkFace);
     p( 6, 22, 2, 4, PAL.gkFace);
-    // Mouth grimace
     p(-7, 27, 14, 2, "#1a1010");
-    p(-6, 28, 3, 2, "#0a0808"); p(3, 28, 3, 2, "#0a0808"); // teeth gaps
-    // Nose
+    p(-6, 28, 3, 2, "#0a0808"); p(3, 28, 3, 2, "#0a0808");
     p(-2, 29, 4, 5, "#9a8070");
-    // Brow ridge
     p(-10, 39, 8, 3, "#2a2020"); p(2, 39, 8, 3, "#2a2020");
-    // Eye sockets
     p(-9, 33, 7, 6, "#0a0808"); p(2, 33, 7, 6, "#0a0808");
-    // Glowing red eyes
     p(-8, 34, 5, 4, "#dd1100"); p(3, 34, 5, 4, "#dd1100");
     p(-7, 35, 2, 2, "#ff6644"); p(4, 35, 2, 2, "#ff6644");
-    // Vent slashes on body
     p(-18, 10, 5, 2, "#0a0c10"); p(-18, 13, 5, 1, "#0a0c10");
     p( 13, 10, 5, 2, "#0a0c10"); p( 13, 13, 5, 1, "#0a0c10");
-    // Status LEDs — all red/angry
     p(-19, 5, 3, 3, PAL.gkLed); p(16, 5, 3, 3, "#ff3a3a");
     p(-19, 18, 3, 3, PAL.gkLed); p(16, 18, 3, 3, "#ff3a3a");
+  };
+  Assets.register("gatewaykrusher", (p, opt, ctx, x, y, facing) => {
+    if (!(_gkImg.complete && _gkImg.naturalWidth)) return proceduralGk(p, opt);
+    const s = opt.scale || 1;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(_gkImg,
+      Math.round(x - GK_ART.w * s / 2), Math.round(y - GK_ART.feet * s),
+      Math.round(GK_ART.w * s), Math.round(GK_ART.h * s));
+    ctx.restore();
+    // Light/FX overlay — kept off the silhouette offscreen: blinking port
+    // rows (sockets baked dark) + glowing eyes with a slow menace pulse.
+    if (ctx !== _hurtOC2d) {
+      const t = opt.t || 0;
+      for (let row = 0; row < 3; row++) {
+        for (let i = 0; i < 8; i++) {
+          const on = (Math.floor(t * 5 + i + row * 3) % 4 !== 0);
+          if (on) p(Math.round(-18 + i * 4.5), 42 + row * 5, 3, 3, PAL.gkLed);
+        }
+      }
+      const pulse = 0.72 + 0.28 * Math.sin(t * 2.4);
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      p(-8, 34, 5, 4, "#dd1100"); p(3, 34, 5, 4, "#dd1100");
+      p(-7, 35, 2, 2, "#ff6644"); p(4, 35, 2, 2, "#ff6644");
+      ctx.restore();
+    }
   });
 
   // ========================= THE FIREWALL (wall boss) =================

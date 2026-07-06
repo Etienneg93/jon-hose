@@ -89,6 +89,12 @@ test("repeatableCost rises 1.5x per purchase", () => {
   assert.strictEqual(Balance.repeatableCost(60, 3), 203); // round(202.5)
 });
 
+test("repeatableCost: optional factor overrides the 1.5x default", () => {
+  assert.strictEqual(Balance.repeatableCost(60, 0, 1.8), 60);
+  assert.strictEqual(Balance.repeatableCost(60, 1, 1.8), Math.round(60 * 1.8));
+  assert.strictEqual(Balance.repeatableCost(60, 2, 1.8), Math.round(60 * 1.8 * 1.8));
+});
+
 test("bulwarkShouldThrow: true when the player is within range", () => {
   assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 150, 40, 80), true);  // dist 50 <= 80
   assert.strictEqual(Balance.bulwarkShouldThrow(100, 40, 100, 40, 80), true);  // dist 0
@@ -197,13 +203,18 @@ test("pickSprinkles returns fewer picks when nothing is eligible", () => {
   assert.deepStrictEqual(picks, ["bulwark"]);
 });
 
-test("powerCount = nodes + repeatable buys + total Mirror ranks", () => {
+test("powerCount = nodes + repeatable buys + pillar ranks (mirror ignored)", () => {
   const owned = { pw1: true, tk1: true, vt1: true };                       // 3 nodes
   const reps = { ov_dmg: 4, ov_hp: 2 };                                    // 6 buys
-  const church = { mirror: { water_vigor: { side: "b", rank: 3 }, earth_stance: { side: "a", rank: 2 } } }; // 5 ranks
-  assert.strictEqual(Balance.powerCount(owned, reps, church), 14);
-  assert.strictEqual(Balance.powerCount({}, {}, null), 0);
-  assert.strictEqual(Balance.powerCount(null, null, undefined), 0);
+  const church = { pillars: { water: 3, earth: 1 }, mirror: { water_vigor: { rank: 3 } } }; // 4 pillar ranks (mirror ignored)
+  assert.strictEqual(Balance.powerCount(owned, reps, church, 0), 13);
+  assert.strictEqual(Balance.powerCount({}, {}, null, 0), 0);
+  assert.strictEqual(Balance.powerCount(null, null, undefined, 0), 0);
+});
+
+test("powerCount v2: nodes + reps + pillar ranks + levels (mirror term gone)", () => {
+  const church = { pillars: { water: 3, earth: 1 }, mirror: { water_vigor: { rank: 3 } } };
+  assert.strictEqual(Balance.powerCount({ a: 1 }, { ov: 2 }, church, 5), 1 + 2 + 4 + 5);
 });
 
 test("eliteScale power term now caps at 24, not 15", () => {
@@ -247,4 +258,84 @@ test("superEliteDef honors a per-type hp override; other multipliers unchanged",
   assert.strictEqual(d.suds, 48);                      // suds still 4x
   assert.strictEqual(base.hp, 300);                    // clone, not mutation
   assert.strictEqual(Balance.superEliteDef(base).hp, 2100);  // no tune = 7x
+});
+
+test("xpForLevel: 20 + 12n curve", () => {
+  assert.strictEqual(Balance.xpForLevel(1), 32);
+  assert.strictEqual(Balance.xpForLevel(5), 80);
+  assert.strictEqual(Balance.xpForLevel(13), 176);
+});
+
+test("levelGains sums the repeating cycle", () => {
+  const cycle = [
+    { sprayDamage: 3 }, { maxWater: 8 }, { maxHp: 8 },
+    { sprayRange: 4 }, { sprayDamage: 3 }, { waterRegen: 2 },
+  ];
+  assert.deepStrictEqual(Balance.levelGains(0, cycle), {});
+  assert.deepStrictEqual(Balance.levelGains(2, cycle), { sprayDamage: 3, maxWater: 8 });
+  const g13 = Balance.levelGains(13, cycle);          // two full cycles + 1
+  assert.strictEqual(g13.sprayDamage, 3 * 2 * 2 + 3); // 4 dmg steps + the 13th (dmg)
+  assert.strictEqual(g13.maxWater, 16);
+  assert.strictEqual(g13.waterRegen, 4);
+});
+
+test("rollDrop: pity guarantees an item at streak >= 6; need-weighting biases the split", () => {
+  assert.notStrictEqual(Balance.rollDrop(1, 6, 1, 1, () => 0.99), null);   // pity fires
+  assert.strictEqual(Balance.rollDrop(1, 0, 1, 1, () => 0.99), null);      // no pity, high roll
+  // low hp doubles health weight: with rng 0.5 the pick tips to health
+  assert.strictEqual(Balance.rollDrop(1, 6, 0.3, 1, () => 0.5), "health");
+  assert.strictEqual(Balance.rollDrop(1, 6, 1, 0.1, () => 0.5), "water");
+});
+
+test("beneDmgMult: each boon gates on its own threshold, bigger + looser at rank II", () => {
+  assert.strictEqual(Balance.beneDmgMult({}, { waterFrac: 1, wet: 1, burning: true }), 1, "no owned ranks is a no-op");
+  assert.strictEqual(Balance.beneDmgMult({ overflow: 1 }, { waterFrac: 0.79, wet: 0, burning: false }), 1, "below rank-I tank threshold");
+  assert.strictEqual(Balance.beneDmgMult({ overflow: 1 }, { waterFrac: 0.8, wet: 0, burning: false }), 1.2);
+  assert.strictEqual(Balance.beneDmgMult({ overflow: 2 }, { waterFrac: 0.7, wet: 0, burning: false }), 1.3, "rank II lowers threshold to 0.7");
+  assert.strictEqual(Balance.beneDmgMult({ baptize: 1 }, { waterFrac: 0, wet: 0.3, burning: false }), 1, "wetness exactly 0.3 doesn't qualify");
+  assert.strictEqual(Balance.beneDmgMult({ baptize: 2 }, { waterFrac: 0, wet: 0.5, burning: false }), 1.25);
+  assert.strictEqual(Balance.beneDmgMult({ trial: 1 }, { waterFrac: 0, wet: 0, burning: false }), 1, "not burning doesn't qualify");
+  assert.strictEqual(Balance.beneDmgMult({ trial: 2 }, { waterFrac: 0, wet: 0, burning: true }), 1.3);
+});
+
+test("beneDmgMult: qualifying boons stack multiplicatively", () => {
+  const m = Balance.beneDmgMult({ overflow: 1, baptize: 1, trial: 1 }, { waterFrac: 0.9, wet: 0.5, burning: true });
+  assert.ok(Math.abs(m - 1.2 * 1.15 * 1.2) < 1e-9);
+});
+
+test("pickRelics: never returns an owned id, returns at most n", () => {
+  const pool = ["a", "b", "c", "d", "e"];
+  const owned = { a: true, c: true };
+  const picks = Balance.pickRelics(pool, owned, 3, Math.random);
+  assert.ok(picks.length <= 3);
+  assert.ok(picks.every((id) => id === "b" || id === "d" || id === "e"), "never picks an owned id");
+  assert.strictEqual(new Set(picks).size, picks.length, "no duplicates");
+});
+
+test("pickRelics: returns fewer than n when the unowned pool is thin", () => {
+  const pool = ["a", "b", "c"];
+  const owned = { a: true, b: true };
+  const picks = Balance.pickRelics(pool, owned, 3, Math.random);
+  assert.deepStrictEqual(picks, ["c"]);
+});
+
+test("pickRelics: deterministic under a seeded rng, never mutates the input pool", () => {
+  const pool = ["a", "b", "c", "d"];
+  const seq1 = [0.1, 0.9, 0.5];
+  let i1 = 0;
+  const rng1 = () => seq1[i1++];
+  const picks1 = Balance.pickRelics(pool, {}, 2, rng1);
+
+  let i2 = 0;
+  const rng2 = () => seq1[i2++];
+  const picks2 = Balance.pickRelics(pool, {}, 2, rng2);
+
+  assert.deepStrictEqual(picks1, picks2, "same rng sequence -> same picks");
+  assert.deepStrictEqual(pool, ["a", "b", "c", "d"], "input pool array untouched");
+});
+
+test("pickRelics: no owned map treats every id as available", () => {
+  const pool = ["a", "b"];
+  const picks = Balance.pickRelics(pool, null, 5, Math.random);
+  assert.strictEqual(picks.length, 2);
 });

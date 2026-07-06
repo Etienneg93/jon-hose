@@ -167,6 +167,7 @@
       this.suds = 0;
       this.sudsEarned = 0;
       this.dashTimer = 0; this.dashCdTimer = 0; this.dashBoostTimer = 0;
+      this.dashGraceT = 0;         // post-dash i-frames (Pillar of Air III), set at dash end
       this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
       this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
@@ -179,25 +180,55 @@
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
       this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
+      this.spigotT = 0;            // Spigot Key: +10% spray dmg window after a hydrant refill, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
+      this.kibbleTickT = 0;        // seconds until the next +N floater tick
+      this.kibbleTickAcc = 0;      // HP healed since the last floater tick
       this.gushRegenT = 0;         // GUSH milestone: water regen window (sec)
       this.gushRegenRate = 0;      // water/s while the window is live
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
+      this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
+      this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
+      this.upgradeQ = [];     // pending stat-gain sequence entries {icon, text}
+      this.upgradeT = 0;      // time left on the entry currently showing
+      this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
+      this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
+      this.lastDmgScale = 1;  // Pressure Sermon: most recent doSpray pressure tier
+      this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
+      this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
     applyStats(s) {
-      // Track which displayed stats changed so the shop panel can flash them.
+      // Track which displayed stats changed so the shop panel can flash them,
+      // and queue the upgrade sequence (icon + delta rising off Jon) for each
+      // stat that GREW — every gain source routes through here.
       const KEYS = ["sprayDamage", "sprayRange", "maxWater", "waterRegen",
-                    "moveRegen", "moveSpeed", "dodgeChance", "vampiricRate", "maxHp"];
+                    "moveRegen", "moveSpeed", "dodgeChance", "vampiricRate",
+                    "maxHp", "knockback"];
+      const META = {
+        sprayDamage: ["dmg", "DMG"], sprayRange: ["range", "RANGE"],
+        maxWater: ["water", "WATER"], waterRegen: ["regen", "REGEN"],
+        moveRegen: ["regen", "REGEN"], maxHp: ["hp", "HP"],
+        moveSpeed: ["speed", "SPEED"], knockback: ["knockback", "KB"],
+        dodgeChance: ["dodge", "DODGE"], vampiricRate: ["vamp", "VAMP"],
+      };
       if (this.stats) {
         this.statFlash = this.statFlash || {};
-        for (const k of KEYS)
-          if (s[k] !== this.stats[k]) this.statFlash[k] = 2.0;
+        for (const k of KEYS) {
+          if (s[k] === this.stats[k]) continue;
+          this.statFlash[k] = 2.0;
+          const delta = s[k] - this.stats[k];
+          if (delta > 0 && this.upgradeQ.length < 8) {
+            const pct = k === "dodgeChance" || k === "vampiricRate";
+            const amt = pct ? Math.round(delta * 100) + "%" : "+" + Math.round(delta);
+            this.upgradeQ.push({ icon: META[k][0], text: (pct ? "+" + amt : amt) + " " + META[k][1] });
+          }
+        }
       }
       this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp;
     }
@@ -232,7 +263,8 @@
       this.burnTimer -= dt;
       const expired = this.burnTimer <= 0;
       if (this.burnTickT >= F.burnTickInterval || expired) {
-        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT);
+        // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
+        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
@@ -246,13 +278,35 @@
       this.basePhysics(dt);
       if (this.invulnTimer > 0) this.invulnTimer -= dt;
       if (this.burnGraceT > 0) this.burnGraceT -= dt;
+      if (this.dashGraceT > 0) this.dashGraceT -= dt;
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
+      if (this.spigotT > 0) this.spigotT -= dt;
+      if (this.douseCdT > 0) this.douseCdT -= dt;
+      if (this.freeSprayT > 0) this.freeSprayT -= dt;
+      if (this.stormT > 0) this.stormT -= dt;
+      if (this.vigorT > 0) this.vigorT -= dt;
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
+
+      // Upgrade sequence: pending stat gains play one at a time — chime up a
+      // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
+      if (this.upgradeQ.length) {
+        if (this.upgradeT <= 0) {
+          this.upgradeT = 0.55;
+          this.upgradeIdx++;
+          game.audio.play("upgrade", { pitch: 1 + 0.12 * Math.min(5, this.upgradeIdx) });
+          burst(game, this.x, this.y, this.z + 22, "#ffd23f", 8, { speed: 55, life: 0.4, up: 55, size: 2 });
+        }
+        this.upgradeT -= dt;
+        if (this.upgradeT <= 0) {
+          this.upgradeQ.shift();
+          if (!this.upgradeQ.length) this.upgradeIdx = 0;
+        }
+      }
 
       this.tickBurn(dt, game);
 
@@ -265,6 +319,14 @@
       if (mx !== 0 && !wantSpray) this.facing = mx > 0 ? 1 : -1;
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
 
+      // Standing Stone: stillT counts seconds with no movement input and no
+      // dash in flight; any movement or dash resets it to 0.
+      if (mx !== 0 || my !== 0 || this.dashTimer > 0) this.stillT = 0;
+      else this.stillT += dt;
+      if (this.stillT >= 0.5 && this.beneRank("standing_stone") && Math.random() < 3 * dt)
+        burst(game, this.x + (Math.random() - 0.5) * 8, this.y, 1, JH.PAL.suds, 1,
+          { speed: 10, life: 0.5, up: 22, grav: 40, size: 1 });
+
       // ---- dash boost timer + trailing particles
       if (this.concertaTimer > 0) {
         this.concertaTimer -= dt;
@@ -274,7 +336,16 @@
       }
       if (this.kibbleTimer > 0) {
         this.kibbleTimer -= dt;
+        const before = this.hp;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
+        this.kibbleTickAcc += this.hp - before;
+        this.kibbleTickT -= dt;
+        if (this.kibbleTickT <= 0) {
+          this.kibbleTickT += 0.5;
+          const healed = Math.round(this.kibbleTickAcc);
+          if (healed > 0 && game.float) game.float(this.x, this.y - 30, "+" + healed, "#44ee66");
+          this.kibbleTickAcc = 0;
+        }
       }
       // GUSH milestone water regen — independent of the regular regen delay.
       if (this.gushRegenT > 0) {
@@ -304,17 +375,78 @@
         this.invulnTimer = Math.max(this.invulnTimer, S.dashTime + 0.05);
         this._dashX = (mx || my) ? mx : this.facing;
         this._dashY = my;
+        this._dashTouched = new Set();   // Backdraft: enemies scalded this dash
+        this._gustTouched = new Set();   // Whirlwind Walk: enemies gusted this dash
+        this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
+        // Baptismal Wake: dash leaves an enemy-slowing puddle; rank II also
+        // soaks enemies standing in it (see SlowZone's vsEnemies comment).
+        const wakeRank = this.beneRank("baptismal_wake");
+        if (wakeRank && game.slowZones)
+          game.slowZones.push(new JH.SlowZone(this.x, this.y, 16, 3,
+            { vsEnemies: true, slowMult: 0.7, dmgAmp: wakeRank >= 2 ? 1.1 : 1 }));
       }
       let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
+      if (this.beneRank("tailwind"))
+        speed *= 1 + Math.min(this.beneRank("tailwind") >= 2 ? 0.30 : 0.20, 0.02 * (game.combo || 0));
+      if (this.stormT > 0 && this.beneRank("eye_of_storm") >= 2) speed *= 1.15;
       if (this.dashTimer > 0) {
         this.dashTimer -= dt;
         mx = this._dashX; my = this._dashY; speed = S.dashSpeed;
+        // Backdraft: enemies the dash body overlaps get Scalded, each enemy
+        // only once per dash (tracked by _dashTouched, cleared on the next dash).
+        const bdRank = this.beneRank("backdraft");
+        if (bdRank) {
+          for (const e of game.enemies) {
+            if (e.dead || this._dashTouched.has(e)) continue;
+            if (e.dropping) continue;   // airborne drop-ins can't be hit
+            if (!Geo.bodiesOverlap(this, e)) continue;
+            this._dashTouched.add(e);
+            e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
+            if (bdRank >= 2) e.takeDamage(8, game, this.facing, 60);
+          }
+        }
+        // Whirlwind Walk: the dash body destroys projectiles it touches
+        // (isProjectile whitelist — Ember/Fireball/SmeltBomb/Rock/ShieldLob;
+        // boss patterns, KillPops and other FX riders are never swept) and
+        // gusts overlapping non-boss enemies aside, each once per dash
+        // (own _gustTouched set — independent of Backdraft's).
+        if (this.beneRank("whirlwind_walk")) {
+          for (const em of game.embers) {
+            if (!em.isProjectile || em.dead) continue;
+            if (Math.hypot(em.x - this.x, em.y - this.y) >= 14) continue;
+            em.dead = true;
+            burst(game, em.x, em.y, em.z || 0, "#ffffff", 6, { speed: 60, life: 0.25, up: 20 });
+          }
+          for (const e of game.enemies) {
+            if (e.dead || e.isBoss || e.dropping || this._gustTouched.has(e)) continue;
+            if (!Geo.bodiesOverlap(this, e)) continue;
+            this._gustTouched.add(e);
+            e.applyKnockback(this.facing, 140);
+            e.takeDamage(15, game, this.facing, 0);
+          }
+        }
+        // Dash expiry: post-dash i-frame grace (Pillar of Air III) and
+        // Slipstream's short free-water spray window.
+        if (this.dashTimer <= 0) {
+          this.dashGraceT = S.dashIframeBonus || 0;
+          const ssRank = this.beneRank("slipstream");
+          if (ssRank) this.freeSprayT = ssRank >= 2 ? 0.8 : 0.5;
+        }
+        // Firestorm: dash trail — a friendly (harmless-to-Jon) fire patch
+        // every 24px of dash travel.
+        if (this.beneRank("firestorm")) {
+          this._dashDist = (this._dashDist || 0) + S.dashSpeed * dt;
+          while (this._dashDist >= 24) {
+            this._dashDist -= 24;
+            JH.spawnFirePatch(game, this.x, this.y, 12, 1.0, { friendly: true });
+          }
+        }
       } else if (this.spraying) {
-        speed *= 0.55; // slow while hosing
+        if (!S.noSpraySlow) speed *= 0.55; // slow while hosing (Sure Grip removes this)
       } else if (this.dashBoostTimer > 0 && S.dashBoost > 0) {
         speed += S.dashBoost;
       }
@@ -335,7 +467,27 @@
       // ---- spray hose (held)
       this.spraying = false;
       if (wantSpray) this.doSpray(dt, game);
-      else this.sprayHeldT = 0;   // reset the stream-front timer on release
+      else {
+        // Pressure Sermon: releasing after >=0.8s of continuous full-pressure
+        // spray emits a knockback cone. Checked here, before sprayHeldT is
+        // zeroed below, so it fires exactly once per qualifying hold/release.
+        if (this.beneRank("pressure_sermon") && this.sprayHeldT >= 0.8
+            && this.lastDmgScale >= 1.2 && this.water >= 10) {
+          this.water -= 10;
+          for (const e of game.enemies) {
+            if (e.dead || e.dropping) continue;
+            const dx = e.x - this.x, dy = e.y - this.y;
+            if (Math.hypot(dx, dy) > 70) continue;
+            if (Math.abs(Math.atan2(dy, dx * this.facing)) > 0.6) continue;
+            e.takeDamage(15, game, this.facing, 0);
+            e.applyKnockback(this.facing, 200, (e.y - this.y) * 0.02);
+          }
+          burst(game, this.x + this.facing * 20, this.y, 20, JH.PAL.waterHi, 14,
+            { speed: 140, life: 0.4, up: 40 });
+          game.audio.play("blast");
+        }
+        this.sprayHeldT = 0;   // reset the stream-front timer on release
+      }
 
       // ---- water regen (after a short delay since last spray)
       if (!this.spraying && this.regenLock <= 0 && this.water < S.maxWater) {
@@ -351,6 +503,8 @@
         for (const h of game.hydrants) {
           if (Math.abs(this.x - h.x) < JH.HYDRANT.range && Math.abs(this.y - h.y) < 24) {
             this.nearHydrant = h;
+            // Spigot Key: a hydrant refill grants a brief spray-dmg buff.
+            if (game.relics && game.relics.spigot_key) this.spigotT = 15;
             if (this.water < S.maxWater) {
               this.water = Math.min(S.maxWater, this.water + JH.HYDRANT.refill * dt);
               if (Math.random() < 0.5)
@@ -399,10 +553,18 @@
       let dmgScale, rangeMult;
       if (dry)               { dmgScale = 0.18; rangeMult = 0.35; }
       else if (frac >= 0.80) { dmgScale = 1.20; rangeMult = 1.00; }
-      else if (frac >= 0.25) { dmgScale = 1.00; rangeMult = 1.00; }
+      // pressureFloor (Pillar of Water III): never drop below the mid tier
+      // while any water remains — dry still sputters, 80%+ still gets bonus.
+      else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      if (!dry && this.concertaTimer <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
+      this.lastDmgScale = dmgScale;   // Pressure Sermon: release check reads this
+      if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
+
+      // Standing Stone: braced turret stance while still — bonus damage and a
+      // wider effective stream (particles only; sprayHitBand/stats untouched).
+      const standingStone = this.stillT >= 0.5 && this.beneRank("standing_stone");
+      const sprayWidth = S.sprayWidth + (standingStone ? 4 : 0);
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
@@ -416,6 +578,8 @@
       const pierce = beam >= 3;
       let blocker = null;
       let minFwd = Infinity;   // near-edge distance of the chosen blocker (used below)
+      let shieldFwd = Infinity;     // near edge of the CLOSEST blocking shield/dome in the stream
+      let blockerIsEnemy = false;   // final blocker came from game.enemies (not a shield/dome)
       {
         if (!pierce) {
           for (const e of game.enemies) {
@@ -423,7 +587,7 @@
             if (e.dropping) continue;   // airborne drop-ins can't block or be hit
             if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
-            if (fwd < minFwd) { minFwd = fwd; blocker = e; }
+            if (fwd < minFwd) { minFwd = fwd; blocker = e; blockerIsEnemy = true; }
           }
         }
         for (const s of game.shields) {
@@ -441,12 +605,39 @@
             const half = s.radius * Math.sqrt(1 - (dyS * dyS) / (ry * ry));// x half-width at this depth
             const edgeFwd = (s.x - ox) * this.facing - half;               // near edge along facing
             if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
-            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
+            if (edgeFwd < shieldFwd) shieldFwd = edgeFwd;
+            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; blockerIsEnemy = false; }
           } else {
             if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (s.x - ox) * this.facing;
-            if (fwd < minFwd) { minFwd = fwd; blocker = s; }
+            if (fwd < shieldFwd) shieldFwd = fwd;
+            if (fwd < minFwd) { minFwd = fwd; blocker = s; blockerIsEnemy = false; }
           }
+        }
+      }
+      // Brass Nozzle: the non-pierce stream also catches the next-closest
+      // enemy in arc (a second, independent blocker — not just splash off the
+      // first). Only when the primary blocker is an ENEMY (a shield/dome
+      // blocker means the stream is stopped by a wall — nothing gets promoted
+      // past it), and never a candidate at/past any blocking shield's near
+      // edge or sheltered inside an active dome.
+      let blocker2 = null;
+      if (!pierce && blockerIsEnemy && game.relics && game.relics.brass_nozzle) {
+        let minFwd2 = Infinity;
+        for (const e of game.enemies) {
+          if (e.dead || e.dropping || e === blocker) continue;
+          if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+          const fwd = (e.x - ox) * this.facing;
+          if (fwd >= shieldFwd) continue;   // the stream never reaches past a shield/dome
+          // Dome shelter mirrors the damage loop's rule: don't promote a
+          // target the loop would refuse to hit — pick a reachable one instead.
+          let sheltered = false;
+          for (const s of game.shields) {
+            if (s.dead || !s.radius || !s.active) continue;
+            if (insideDome(s, e.x, e.y) && !insideDome(s, this.x, this.y)) { sheltered = true; break; }
+          }
+          if (sheltered) continue;
+          if (fwd < minFwd2) { minFwd2 = fwd; blocker2 = e; }
         }
       }
       // Particles die at the blocker's near face so the stream visually stops there.
@@ -466,7 +657,7 @@
       this.sprayEmitAcc += (dry ? 70 : 150 * density) * dt;
       while (this.sprayEmitAcc >= 1) {
         this.sprayEmitAcc -= 1;
-        const perpY = (Math.random() - 0.5) * S.sprayWidth * spread;  // depth jitter
+        const perpY = (Math.random() - 0.5) * sprayWidth * spread;  // depth jitter
         const perpZ = (Math.random() - 0.5) * 6 * spread;             // vertical jitter
         game.particles.push(new Particle({
           x: ox + this.facing * Math.random() * 8,
@@ -491,7 +682,7 @@
         for (let i = 0; i < 3; i++) {
           game.particles.push(new Particle({
             x: hx,
-            y: oy + (Math.random() - 0.5) * S.sprayWidth * 0.5,
+            y: oy + (Math.random() - 0.5) * sprayWidth * 0.5,
             z: oz + (Math.random() - 0.5) * 6,
             vx: -this.facing * (50 + Math.random() * 90),   // ricochet back toward the player
             vy: (Math.random() - 0.5) * 130,                // fan out along the dome face
@@ -503,8 +694,9 @@
         }
       }
 
-      // Damage enemies: non-pierce hits only the closest (blocker); pierce
-      // hits everyone EXCEPT anyone standing behind a planted shield's wall.
+      // Damage enemies: non-pierce hits only the closest (blocker) — plus a
+      // second, next-closest target (blocker2) when Brass Nozzle is owned;
+      // pierce hits everyone EXCEPT anyone standing behind a planted shield's wall.
       // (`blocker` can only ever be an enemy in non-pierce mode, or a
       // DeployedShield in pierce mode — see the blocker-finding block above,
       // so `e` here — always drawn from game.enemies — can never equal a
@@ -512,12 +704,23 @@
       let didHit = false;
       const hitEnemies = [];
       let healAmt = 0;
+      const ssRank = this.beneRank("split_stream");
+      const scaldRank = this.beneRank("scalding_faith");
+      // Benediction damage-amp inputs, hoisted: ranks and tank fraction are
+      // loop-invariant (only wet/burning vary per target). All-zero ranks
+      // skip the multiplier (and the fire-patch scan) entirely.
+      const beneRanks = {
+        overflow: this.beneRank("overflow"), baptize: this.beneRank("baptize"),
+        trial: this.beneRank("trial_by_fire"),
+      };
+      const anyBene = beneRanks.overflow || beneRanks.baptize || beneRanks.trial;
+      const waterFrac = this.water / S.maxWater;
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-        if (!pierce && e !== blocker) continue;
+        if (!pierce && e !== blocker && e !== blocker2) continue;
         if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
         // Dome shelter: an enemy inside an active dome is immune while you're
         // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
@@ -532,10 +735,22 @@
         }
         const mult = e.def ? (e.def.waterMult || 1) : 1;
         const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
-        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * dt;
+        const beneMult = anyBene ? JH.Balance.beneDmgMult(beneRanks, {
+          waterFrac, wet: e.wetness || 0,
+          burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
+        }) : 1;
+        const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
+        const spigotMult = this.spigotT > 0 ? 1.1 : 1;   // Spigot Key: post-hydrant dmg window
+        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * ssMult * spigotMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
+        // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
+        // fire pillar's baseline capstone are independent sources — both can land.
+        if (scaldRank && dmgScale >= 1.2) {
+          e.applyScald(...(scaldRank >= 2 ? [JH.SCALD.dps2, JH.SCALD.dur2] : [JH.SCALD.dps, JH.SCALD.dur]));
+        }
+        if (this.stats.baselineScald && dmgScale >= 1.2) e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
         if (e.onSprayHit) e.onSprayHit(dt, game);
-        e.applyKnockback(this.facing, S.knockback * dt * 2.2, (e.y - this.y) * 0.02);
+        e.applyKnockback(this.facing, S.knockback * dt * 2.2 * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
           burst(game, e.x - this.facing * e.bodyW * 0.4, e.y, e.z + 12, JH.PAL.waterHi, 1,
             { speed: 70, life: 0.25, size: 2 });
@@ -560,19 +775,23 @@
         // Vampiric lifesteal at half rate against bosses and elites — their
         // huge HP pools gave full-rate sustain near-permanent uptime.
         if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
-        if (S.splitStream) hitEnemies.push(e);
+        if (ssRank) hitEnemies.push(e);
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
-      // Split Stream: 30% damage arc to all nearby enemies of each hit enemy.
-      if (S.splitStream && hitEnemies.length > 0) {
+      // Split Stream: 50% damage arc from each hit enemy to its closest
+      // nearby enemies — rank I picks 1 secondary, rank II picks 3.
+      if (ssRank && hitEnemies.length > 0) {
+        const maxSecondaries = ssRank >= 2 ? 3 : 1;
         for (const primary of hitEnemies) {
-          for (const e of game.enemies) {
-            if (e.dead || e.dropping || e === primary || hitEnemies.includes(e)) continue;
-            const d = Math.hypot(e.x - primary.x, e.y - primary.y);
-            if (d > 80) continue;
+          const nearby = game.enemies.filter((e) =>
+            !e.dead && !e.dropping && e !== primary && !hitEnemies.includes(e)
+            && Math.hypot(e.x - primary.x, e.y - primary.y) <= 80);
+          nearby.sort((a, b) =>
+            Math.hypot(a.x - primary.x, a.y - primary.y) - Math.hypot(b.x - primary.x, b.y - primary.y));
+          for (const e of nearby.slice(0, maxSecondaries)) {
             const m2 = e.def ? (e.def.waterMult || 1) : 1;
-            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.30, game, this.facing, 0);
+            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.50, game, this.facing, 0);
             // Chain visual: thin stream of particles from primary to secondary.
             const cx = e.x - primary.x, cy = e.y - primary.y;
             const chainLen = Math.hypot(cx, cy) || 1;
@@ -609,13 +828,27 @@
           wall.takeDamage(S.sprayDamage * dmgScale * dt, game);
       }
       // Fire patches: spray aimed at a patch's depth advances its extinguish timer.
+      const steamRank = this.beneRank("steam_sermon");
       if (game.firePatches) {
         for (const fp of game.firePatches) {
           if (fp.dead) continue;
           const fwd = (fp.x - ox) * this.facing;
           if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
-              && Math.abs(fp.y - oy) < S.sprayHitBand)
+              && Math.abs(fp.y - oy) < S.sprayHitBand) {
             fp.sprayProgress += dt;
+            // Steam Sermon: spraying a lit patch also vents a damaging steam
+            // cloud over its footprint, cooking any enemy standing in it.
+            if (steamRank) {
+              for (const e of game.enemies) {
+                if (e.dead) continue;
+                if (Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, fp.footprint().rx + 6))
+                  e.takeDamage(12 * dt, game, 0, 0);
+              }
+              if (Math.random() < 20 * dt)
+                burst(game, fp.x, fp.y, 10, "#ffffff", 1,
+                  { speed: 30, life: 0.4, up: 40, grav: -20, size: 1 });
+            }
+          }
         }
       }
       // Garden boxes: face each box and match its depth to water it.
@@ -639,7 +872,7 @@
         if (e.dead) continue;
         if (Geo.inHitArc(this, e, this.facing, S.meleeRange, 16)) {
           e.takeDamage(S.meleeDamage, game, this.facing, S.meleeKnock);
-          e.applyKnockback(this.facing, S.meleeKnock, (e.y - this.y) * 0.1);
+          e.applyKnockback(this.facing, S.meleeKnock * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.1);
           burst(game, e.x, e.y, e.z + 14, "#fff", 4, { speed: 90, life: 0.2 });
           hit = true;
         }
@@ -656,7 +889,12 @@
     }
 
     takeHit(dmg, game, fromX) {
-      if (this.invulnTimer > 0 || this.dashTimer > 0) return;
+      if (this.invulnTimer > 0 || this.dashTimer > 0 || this.dashGraceT > 0) return;
+      if (this.stormT > 0) {
+        burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
+        this.invulnTimer = 0.3;
+        return;
+      }
       if (this.stats.dodgeChance > 0 && Math.random() < this.stats.dodgeChance) {
         burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
         this.invulnTimer = 0.3;
@@ -665,8 +903,10 @@
       this.hp -= dmg;
       this.invulnTimer = this.stats.invuln;
       this.hurt();
+      if (this.beneRank("bedrock")) this.vigorT = 3;   // Bedrock Vigor: +20% knockback window
       const dir = this.x < fromX ? -1 : 1;
-      this.applyKnockback(dir, 90);
+      // Standing Stone: braced turret stance eats the knockback; damage still lands.
+      if (!(this.stillT >= 0.5 && this.beneRank("standing_stone"))) this.applyKnockback(dir, 90);
       game.audio.play("hurt");
       game.shake(5, dir);                       // kick away from the impact
       game.hitStop(JH.JUICE.hitstop.playerHit);
@@ -677,6 +917,21 @@
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
       const spriteSy = Geo.feetScreenY(this.y, this.z);
+      // Upgrade sequence: the current stat gain rises off Jon's head — icon
+      // + green delta, fading in fast and out at the end of its beat.
+      if (this.upgradeQ.length && this.upgradeT > 0) {
+        const e = this.upgradeQ[0];
+        const k = 1 - this.upgradeT / 0.55;                       // 0 → 1
+        const a = Math.min(1, k / 0.15) * Math.min(1, (1 - k) / 0.25);
+        const iy = spriteSy - this.stats.bodyH - 12 - 10 * k;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, a);
+        Assets.icon(ctx, e.icon, sx - 16, iy, 1);
+        ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+        ctx.fillStyle = "#80ff80";
+        ctx.fillText(e.text, sx - 8, iy + 3);
+        ctx.restore();
+      }
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
       // that — active buffs stack visually instead of overwriting. Burn's
@@ -842,6 +1097,10 @@
     }
   }
   JH.Player = Player;
+  // Rank of an owned benediction (0 if not owned, or module not loaded).
+  Player.prototype.beneRank = function (id) {
+    return JH.Benedictions ? JH.Benedictions.rank(id) : 0;
+  };
 
   // ============================================================ ENEMIES
   class Enemy extends Entity {
@@ -857,6 +1116,20 @@
       this.state = "walk";
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
+      this._puddleSlow = 0;  // vsEnemies SlowZone tag for this frame; see update()
+      this._mudT = 0;        // Mudslide: seconds of lingering slow left after leaving a puddle
+      this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
+      this.scaldDps = 0;
+      this._spreadDone = false;  // Bushfire: contagion fired for the current scald application
+      this.slamCdT = 0;     // Aftershock: per-enemy cooldown between wall-slam hits
+      this._lsCdT = 0;      // Landslide: cooldown before this enemy can be hit again as a victim
+    }
+
+    // Rank-max, not additive: reapplying Scald refreshes to the stronger of
+    // the current and incoming dps/duration rather than stacking.
+    applyScald(dps, dur) {
+      this.scaldDps = Math.max(this.scaldDps, dps);
+      this.scaldT = Math.max(this.scaldT, dur);
     }
 
     takeDamage(dmg, game, dirX, knock) {
@@ -927,6 +1200,22 @@
     // Generic chase toward the player; subclasses override think().
     update(dt, game) {
       this.basePhysics(dt);
+      if (this.slamCdT > 0) this.slamCdT -= dt;
+      if (this._lsCdT > 0) this._lsCdT -= dt;
+      // Landslide: while under strong knockback, this enemy batters other
+      // enemies it overlaps (Earth benediction). Per-victim 0.3s tag so an
+      // overlap doesn't re-hit every frame.
+      const lsRank = game.player.beneRank ? game.player.beneRank("landslide") : 0;
+      if (lsRank && Math.abs(this.knockVX) > 60 && game.enemies) {
+        for (const o of game.enemies) {
+          if (o === this || o.dead || o._lsCdT > 0) continue;
+          if (!Geo.bodiesOverlap(this, o)) continue;
+          o._lsCdT = 0.3;
+          o.takeDamage(lsRank >= 2 ? 14 : 8, game, 0, 0);
+          if (lsRank >= 2)
+            { o.windTimer = 0; o.state = "idle"; o.cdTimer = Math.max(o.cdTimer, 0.6); }
+        }
+      }
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
       // Wetness dries off over time; visibly soaked enemies drip.
@@ -937,12 +1226,67 @@
             6 + Math.random() * (this.bodyH * 0.6), "#00b4ff", 1,
             { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
       }
+      // Scald DoT: raw hp damage + own die() call (not takeDamage) so a
+      // burning tick never triggers knockback or re-wets the enemy.
+      if (this.scaldT > 0) {
+        this.scaldT = Math.max(0, this.scaldT - dt);
+        this.hp -= this.scaldDps * dt;
+        if (Math.random() < 6 * dt) burst(game, this.x, this.y, this.bodyH * 0.6, JH.PAL.firePatchHi, 1, { speed: 20, life: 0.3, up: 30, size: 1 });
+        // Bushfire: once per application, contagion jumps to nearby enemies
+        // at this enemy's dps/dur. Spread targets have their own flag
+        // pre-set so the jump can't chain past depth 1.
+        if (!this._spreadDone) {
+          const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
+          if (bfRank) {
+            this._spreadDone = true;
+            for (const o of game.enemies) {
+              if (o === this || o.dead) continue;
+              if (Math.hypot(o.x - this.x, o.y - this.y) > 40) continue;
+              o._spreadDone = true;
+              o.applyScald(this.scaldDps, this.scaldT);
+            }
+          }
+        }
+        if (this.scaldT <= 0) this._spreadDone = false;
+        if (this.hp <= 0) this.die(game);
+      }
+      // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each
+      // frame the enemy stands inside them; pull the think-driven displacement
+      // back toward the pre-think position by that fraction. One hook here
+      // slows every chaser/charger uniformly without touching per-class
+      // movement code.
+      // Mudslide: lingering slow after leaving the puddle (tag set by
+      // SlowZone.update); reuses the _puddleSlow consume below.
+      if (this._mudT > 0) {
+        this._mudT -= dt;
+        if (!this._puddleSlow) this._puddleSlow = 0.7;
+      }
+      const prePx = this.x, prePy = this.y;
       this.think(dt, game);
+      if (this._puddleSlow) {
+        this.x = prePx + (this.x - prePx) * this._puddleSlow;
+        this.y = prePy + (this.y - prePy) * this._puddleSlow;
+        this._puddleSlow = 0;
+      }
       resolveDebris(this);   // walking enemies bump rubble too (bosses skip this)
       // Arena containment: hose knockback (and charge overshoot) can't shove
       // an enemy past the locked wave bounds where Jon can't follow — waves
       // only clear on kills, so an unreachable enemy would soft-lock the wave.
+      const preClamp = this.x;
       this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
+      // Wall slam: a knocked enemy stopped by the arena edge takes crunch
+      // damage (Aftershock benediction) and staggers (Earth pillar III).
+      if (this.x !== preClamp && Math.abs(this.knockVX || 0) > 60 && this.slamCdT <= 0) {
+        this.slamCdT = 0.5;
+        const asr = game.player.beneRank ? game.player.beneRank("aftershock") : 0;
+        if (asr) {
+          this.takeDamage(asr >= 2 ? 25 : 15, game, 0, 0);
+          game.shake(3); game.audio.play("whack");
+          if (asr >= 2) for (const o of game.enemies || [])
+            if (o !== this && !o.dead && Math.hypot(o.x - this.x, o.y - this.y) < 30) o.takeDamage(8, game, 0, 0);
+        }
+        if (game.player.stats.wallSlamStagger) { this.windTimer = 0; this.state = "idle"; this.cdTimer = Math.max(this.cdTimer, 0.6); }
+      }
       // contact damage
       const pl = game.player;
       if (!this.dead && pl.alive && Geo.bodiesOverlap(this, pl) && this.contactTimer <= 0
@@ -1027,6 +1371,17 @@
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
+      // Scald tint: a pulsing orange ring around the body while the DoT runs.
+      if (this.scaldT > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.4 + 0.2 * Math.sin(this.t * 8);
+        ctx.strokeStyle = "#ff8030";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy - this.bodyH * 0.5, this.bodyW * 0.6, this.bodyH * 0.55, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 4;
@@ -1230,6 +1585,7 @@
       Object.assign(this, { x, y, z, vx, vy, dmg, life: 2.2, t: 0, dead: false });
       // opts.patch = {r, dur}: spawn a FirePatch where the ember expires
       this.patch = (opts && opts.patch) || null;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -1300,6 +1656,7 @@
       this.life = d.lifespan;
       this.t = 0;
       this.dead = false;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -1377,6 +1734,7 @@
       this.slam = null;        // active slam telegraph {range, band, dmg, dur, t}
       this.state = "idle";     // animation state only ("walk"/"idle")
       this.thrownZone = null;  // super only: the SlowZone from its lobbed shield, while live
+      this.lob = null;         // super only: the in-flight ShieldLob (null once landed)
     }
     die(game) {
       if (this.shield) { this.shield.dead = true; this.shield = null; }
@@ -1501,13 +1859,21 @@
       if (this.phase === "throwWind") {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          game.embers.push(new JH.ShieldLob(this.x, this.y, pl.x, pl.y, this));
+          this.lob = new JH.ShieldLob(this.x, this.y, pl.x, pl.y, this);
+          game.embers.push(this.lob);
           this.hasShield = false;
           this.phase = "brawl"; this.cdTimer = 0.6;
         }
         return;
       }
       if (this.phase === "brawl") {
+        // Lob destroyed mid-flight (Whirlwind Walk): no zone/dome ever lands,
+        // so reclaim the shield here or the brawl phase never exits.
+        if (!this.thrownZone && this.lob && this.lob.dead) {
+          this.lob = null; this.hasShield = true;
+          this.phase = "approach"; this.cdTimer = d.redeployCd;
+          return;
+        }
         if (this.thrownZone && this.thrownZone.dead) {
           this.thrownZone = null; this.hasShield = true;
           if (this.shield) { this.shield.dead = true; this.shield = null; }
@@ -1660,10 +2026,12 @@
   // extinguished by spraying directly (tracked in Player.doSpray, not here).
   // See docs/superpowers/specs/2026-06-30-slayer-fire-world-design.md.
   class FirePatch {
-    constructor(x, y, radius, extinguishDur) {
+    constructor(x, y, radius, extinguishDur, opts) {
       this.x = x; this.y = y; this.z = 0;
       this.radius = radius;
       this.extinguishDur = extinguishDur;
+      // Firestorm dash trail: harmless to Jon, cooks enemies instead (see update()).
+      this.friendly = !!(opts && opts.friendly);
       this.sprayProgress = 0;  // accumulated spray time; reaches extinguishDur to die
       this.patchBurnT = 0;     // cooldown between burn-stack applications
       this.sizzled = false;    // first-contact cue fired (once per patch instance)
@@ -1682,6 +2050,21 @@
       this.t += dt;
       if (this.patchBurnT > 0) this.patchBurnT -= dt;
       if (this.rimFlashT > 0) this.rimFlashT -= dt;
+      if (this.friendly) {
+        // Firestorm: skip all player-facing logic (burn/sizzle/ash-walk);
+        // this patch instead cooks enemies standing in it. Nobody sprays a
+        // harmless patch, so it expires on WALL-CLOCK time (extinguishDur
+        // seconds since spawn), not spray progress — otherwise it would live
+        // forever and its footprint would block hostile-patch spawns.
+        if (this.t >= this.extinguishDur) { this.dead = true; return; }
+        const f = this.footprint();
+        for (const e of game.enemies) {
+          if (e.dead) continue;
+          if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
+            e.takeDamage(8 * dt, game, 0, 0);
+        }
+        return;
+      }
       const pl = game.player;
       if (pl && pl.alive) {
         const f = this.footprint();
@@ -1698,11 +2081,37 @@
           this.rimFlashT = 0.2;
           if (game.audio) game.audio.play("sizzle");
         }
-        if (inside && this.patchBurnT <= 0) {
+        // Ash Walk: while fully unburned, this patch's first stack is ignored
+        // outright — but only once per patch, and only on actual CONTACT
+        // (without the `inside` gate the token burned remotely every frame).
+        // Staying in the patch after the free stack burns normally on the
+        // next tick. (.beneRank guard: test stubs use plain player objects.)
+        const aw = pl.beneRank && pl.beneRank("ash_walk");
+        if (aw && inside && pl.burnStacks === 0 && !this._awUsed) {
+          this._awUsed = true;   // immune — no burn application this contact
+        } else if (inside && this.patchBurnT <= 0) {
           // Only consume the tick when the stack actually lands; if the
           // player's burn i-frames blocked it, retry next frame so the next
           // stack arrives AT the i-frame boundary, not interval-aligned after.
           if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
+        }
+        // Ash Walk douse: walking a ready patch snuffs it instantly with a
+        // steam pop that damages enemies caught in the footprint. Rank II:
+        // shorter cooldown AND a bigger pop (more damage, 1.3x reach).
+        if (aw && pl.douseCdT <= 0 && inside) {
+          this.sprayProgress = this.extinguishDur;
+          pl.douseCdT = aw >= 2 ? 6 : 10;
+          const popDmg = aw >= 2 ? 10 : 6;
+          const popRx = aw >= 2 ? f.rx * 1.3 : f.rx;
+          const popRy = aw >= 2 ? f.ry * 1.3 : f.ry;
+          for (const e of game.enemies) {
+            if (e.dead) continue;
+            if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, popRx, popRy))
+              e.takeDamage(popDmg, game, 1, 0);
+          }
+          burst(game, this.x, this.y, 10, "#ffffff", aw >= 2 ? 16 : 10,
+            { speed: 60, life: 0.35, up: 30 });
+          if (game.audio) game.audio.play("sizzle");
         }
       }
       if (this.sprayProgress >= this.extinguishDur) this.dead = true;
@@ -1752,27 +2161,69 @@
   // footprint, no new patch is made (returns null). All patch spawns route
   // through here — deliberate multi-patch patterns (furnace vent ring,
   // slayer trail) space their centers outside each other's footprints.
-  JH.spawnFirePatch = function (game, x, y, radius, dur) {
+  JH.spawnFirePatch = function (game, x, y, radius, dur, opts) {
     for (const fp of game.firePatches) {
       if (fp.dead) continue;
       const f = fp.footprint();
       if (Geo.inGroundEllipse(x, y, fp.x, fp.y, f.rx, f.ry)) return null;
     }
-    const p = new FirePatch(x, y, radius, dur);
+    const p = new FirePatch(x, y, radius, dur, opts);
     game.firePatches.push(p);
     return p;
   };
 
-  // Ground denial left by a super-Bulwark's thrown shield: slows Jon while
-  // he stands inside. Ellipse footprint like every ground zone.
+  // Trial by Fire's "burning" check: is this enemy standing in a live fire
+  // patch's footprint? (Scald/burn-stack burning is checked separately by
+  // the caller — this only covers ground patches.) Friendly patches don't
+  // count as burning the enemy standing in them.
+  function enemyInFire(game, e) {
+    if (!game.firePatches) return false;
+    for (const fp of game.firePatches) {
+      if (fp.dead) continue;
+      if (fp.friendly) continue;
+      const f = fp.footprint();
+      if (Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, f.rx, f.ry)) return true;
+    }
+    return false;
+  }
+
+  // Ground denial: slows whoever stands inside. Default mode (no opts) is
+  // the super-Bulwark's thrown-shield puddle, which slows Jon. `vsEnemies`
+  // mode (Baptismal Wake's dash puddle) inverts that — it tags non-boss
+  // enemies inside with `_puddleSlow` (consumed by Enemy.update, see there)
+  // instead of touching the player. `dmgAmp` > 1 (rank II Wake) doesn't
+  // multiply damage directly here — it soaks tagged enemies' wetness to
+  // >=0.35 instead, which feeds Baptize's wet-damage bonus naturally rather
+  // than stacking a second damage-multiplier path.
   class SlowZone {
-    constructor(x, y, r, dur) {
+    constructor(x, y, r, dur, opts) {
       this.x = x; this.y = y; this.r = r; this.dur = dur;
-      this.t = 0; this.dead = false; this.slowMult = 0.55;
+      this.t = 0; this.dead = false;
+      this.vsEnemies = !!(opts && opts.vsEnemies);
+      this.slowMult = (opts && opts.slowMult) || 0.55;
+      this.dmgAmp = (opts && opts.dmgAmp) || 1;
     }
     update(dt, game) {
       this.t += dt;
       if (this.t >= this.dur) { this.dead = true; return false; }
+      if (this.vsEnemies) {
+        const mudRank = game.player.beneRank ? game.player.beneRank("mudslide") : 0;
+        for (const e of game.enemies) {
+          if (e.dead || e.isBoss) continue;
+          if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, this.r)) continue;
+          e._puddleSlow = this.slowMult;
+          if (this.dmgAmp > 1) e.wetness = Math.max(e.wetness, 0.35);
+          // Mudslide: a knocked-back enemy crossing the puddle gets dragged
+          // harder (knockback amplified while inside), then keeps a lingering
+          // slow for a beat after leaving (_mudT, consumed in Enemy.update
+          // next to the _puddleSlow consume).
+          if (mudRank && Math.abs(e.knockVX) > 60) {
+            e.knockVX *= 1 + 2.5 * dt;
+            e._mudT = 0.8;
+          }
+        }
+        return true;
+      }
       const pl = game.player;
       if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r))
         pl.zoneSlow = this.slowMult;
@@ -1781,22 +2232,28 @@
     draw(ctx, cam) {
       const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
       const k = Math.max(0, 1 - this.t / this.dur);
+      // Baptismal Wake puddles read as water (no planted shield prop); the
+      // Bulwark's ground denial keeps its purple shield look.
+      const fill = this.vsEnemies ? JH.PAL.waterHi : JH.PAL.bulwarkShield;
+      const rim = this.vsEnemies ? JH.PAL.water : JH.PAL.bulwark;
       ctx.save();
       ctx.globalAlpha = 0.28 * k + 0.1;
-      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.fillStyle = fill;
       ctx.beginPath();
       ctx.ellipse(sx, sy, this.r, this.r * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 0.6 * k + 0.2;
-      ctx.strokeStyle = JH.PAL.bulwark;
+      ctx.strokeStyle = rim;
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      // The grounded shield itself, planted in the middle.
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = JH.PAL.bulwarkShield;
-      ctx.fillRect(sx - 5, sy - 16, 10, 16);
-      ctx.strokeStyle = JH.PAL.bulwarkDk;
-      ctx.strokeRect(sx - 5, sy - 16, 10, 16);
+      if (!this.vsEnemies) {
+        // The grounded shield itself, planted in the middle.
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = JH.PAL.bulwarkShield;
+        ctx.fillRect(sx - 5, sy - 16, 10, 16);
+        ctx.strokeStyle = JH.PAL.bulwarkDk;
+        ctx.strokeRect(sx - 5, sy - 16, 10, 16);
+      }
       ctx.restore();
     }
   }
@@ -1811,8 +2268,10 @@
       this.vx = (tx - x) / flightT; this.vy = (ty - y) / flightT;
       this.vz = 0.5 * 300 * flightT - this.z / flightT;
       this.t = 0; this.dead = false;
+      this.isProjectile = true;   // Whirlwind Walk can destroy it mid-flight (counterplay)
     }
     update(dt, game) {
+      if (this.dead) return false;
       this.t += dt;
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.vz -= 300 * dt; this.z += this.vz * dt;
@@ -1825,7 +2284,7 @@
         dome.radius = 34;
         dome.domeDur = dome.domeT = 5;
         game.shields.push(dome);
-        if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; }
+        if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; this.owner.lob = null; }
         game.shake(3); if (game.audio) game.audio.play("whack");
         this.dead = true;
       }
@@ -1935,6 +2394,11 @@
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
       const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+      }
       const spd = enraged ? d.speed * 1.6 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
 
@@ -2066,7 +2530,9 @@
       // the field vacuums to Jon (kills the post-wave coin walk).
       const vac = game.lootVacuumT > 0;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
-      if (vac || dist < 30) {
+      // Dowsing Rod: magnet radius doubles (30 -> 60).
+      const magnetR = (game.relics && game.relics.dowsing_rod) ? 60 : 30;
+      if (vac || dist < magnetR) {
         const pull = vac ? JH.JUICE.vacuumPull : 4;
         this.x += dx * pull * dt; this.y += dy * pull * dt;
       }
@@ -2089,7 +2555,12 @@
         game.audio.play("buy");
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
       }
-      else if (this.kind === "water_can") { pl.water = Math.min(pl.stats.maxWater, pl.water + this.value); game.audio.play("buy"); }
+      else if (this.kind === "water_can") {
+        // Dowsing Rod: water cans refill 50% more.
+        const wcVal = this.value * ((game.relics && game.relics.dowsing_rod) ? 1.5 : 1);
+        pl.water = Math.min(pl.stats.maxWater, pl.water + wcVal);
+        game.audio.play("buy");
+      }
       else if (this.kind === "pill") {
         pl.concertaTimer = Math.max(pl.concertaTimer, JH.CONCERTA.dur);
         game.audio.play("pill");
@@ -2099,6 +2570,7 @@
         if (JH.Church) JH.Church.addEssence(this.value || 1);
         game.audio.play("upgrade");
         burst(game, pl.x, pl.y, pl.z + 12, "#fff7c2", 12, { speed: 80, life: 0.5, up: 70 });
+        if (game.float) game.float(pl.x, pl.y - 30, "+" + (this.value || 1) + " HOLY ESSENCE", "#ffd23f");
       }
       if (this.kind !== "pill" && this.kind !== "health" && this.kind !== "cross")
         burst(game, this.x, this.y, this.z + 6, this.kind === "suds" ? JH.PAL.suds : JH.PAL.water, 6, { speed: 60, life: 0.3 });
@@ -2114,6 +2586,103 @@
     }
   }
   JH.Pickup = Pickup;
+
+  // ================================================== BENEDICTION SIGILS
+  // Post-boss/set-piece walk-up offer: a floating element glyph, picked with
+  // E in range. Proximity + input are ticked game-side (game.tickSigils,
+  // mirrors tickRangeStations); the sigil only exposes near (label range)
+  // and pick(). Picking one offer clears all sigils on the field.
+  const SIGIL_COLORS = { water: "#6cd3ff", fire: "#ff8030", earth: "#c8a050", air: "#bfe8ff" };
+  const SIGIL_COLORS_DK = { water: "#1a5f80", fire: "#8a3810", earth: "#6a4a20", air: "#5a7a90" };
+  JH.SIGIL_COLORS = SIGIL_COLORS;   // shared with the game.js HUD strip / stat panel
+  class Sigil {
+    constructor(x, y, offer) {
+      this.x = x; this.y = y; this.z = 0; this.offer = offer;
+      this.t = 0; this.dead = false; this.near = false;
+      const d = JH.Benedictions.byId(offer.id);
+      this.element = d.element || (d.needs && d.needs[0]) || "water";
+      this.kind = d.kind;
+    }
+    update(dt) { this.t += dt; return !this.dead; }
+    pick(game) {
+      const d = JH.Benedictions.byId(this.offer.id);
+      JH.Benedictions.take(this.offer.id);
+      if (d.kind === "duo" || d.kind === "legendary") game.beneUsedOnce[this.offer.id] = true;
+      const p = game.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      if (p.beneRank("eye_of_storm")) p.stormT = p.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
+      game.audio.play("upgrade", { pitch: 0.9 });
+      burst(game, this.x, this.y, 14, SIGIL_COLORS[this.element], 18, { speed: 100, life: 0.6, up: 80, size: 2 });
+      game.banner(d.name.toUpperCase() + (this.offer.deepen ? " II" : ""), 1.4);
+      if (game.float) game.float(this.x, this.y - 20, d.name, "#80ff80");
+      for (const s of game.sigils) s.dead = true;
+    }
+    draw(ctx, cam) {
+      const d = JH.Benedictions.byId(this.offer.id);
+      const bob = Math.sin(this.t * 2) * 3;
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 14 + bob);
+      const col = SIGIL_COLORS[this.element] || "#ffffff";
+      const dk = SIGIL_COLORS_DK[this.element] || "#333333";
+      Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 6);
+      // Baked element icon; the rotated diamond stays as the streaming fallback.
+      const hasIcon = Assets.icon(ctx, "el_" + this.element, sx, sy, 1);
+      if (!hasIcon) {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(Math.PI / 4);
+        const half = 5;   // 10px diamond
+        if (this.kind === "duo" && d.needs) {
+          // Split two-tone: half in each contributing element's color.
+          ctx.fillStyle = SIGIL_COLORS[d.needs[0]] || col;
+          ctx.fillRect(-half, -half, half, half * 2);
+          ctx.fillStyle = SIGIL_COLORS[d.needs[1]] || col;
+          ctx.fillRect(0, -half, half, half * 2);
+        } else {
+          ctx.fillStyle = col;
+          ctx.fillRect(-half, -half, half * 2, half * 2);
+        }
+        ctx.strokeStyle = dk; ctx.lineWidth = 1;
+        ctx.strokeRect(-half, -half, half * 2, half * 2);
+        ctx.restore();
+      }
+      // Kind frames ring the icon at 1.5x so they read around the glyph.
+      if (this.kind === "duo" && hasIcon && !Assets.icon(ctx, "frame_duo", sx, sy, 1.5)) {
+        // Two-tone diamond ring fallback while frame_duo streams in.
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(Math.PI / 4);
+        const h = 7;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = SIGIL_COLORS[d.needs[0]] || col;
+        ctx.strokeRect(-h, -h, h, h * 2);
+        ctx.strokeStyle = SIGIL_COLORS[d.needs[1]] || col;
+        ctx.strokeRect(0, -h, h, h * 2);
+        ctx.restore();
+      }
+      // Verb corner mark tells same-element boons apart (boons only — the
+      // duo/legendary frames are their distinguisher).
+      if (this.kind === "boon" && d.verb) Assets.verbMark(ctx, d.verb, sx + 6, sy - 6);
+      if (this.kind === "legendary" && !Assets.icon(ctx, "frame_legendary", sx, sy, 1.5)) {
+        // Gold double-ring around legendary sigils (fallback).
+        ctx.save();
+        ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+      if (this.offer.deepen) {
+        ctx.fillStyle = "#fff"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+        ctx.fillText("II", sx, sy - 15);
+        ctx.textAlign = "left";
+      }
+      if (this.near) {
+        ctx.fillStyle = "#eaf6ff"; ctx.font = "6px monospace"; ctx.textAlign = "center";
+        ctx.fillText(d.name, sx, sy - 22);
+        ctx.textAlign = "left";
+      }
+    }
+  }
+  JH.Sigil = Sigil;
 
   // ====================================================== SHOP VENDOR
   // A walk-up merchant ("Old Spigot") that appears between fights. Not an
@@ -2159,6 +2728,11 @@
       this._bounds = game.bounds;
       const pl = game.player, d = this.def;
       const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+      }
       if (this.fireFx > 0) this.fireFx -= dt;
 
       // Hover near the right of the arena, drifting slowly to track depth.
@@ -2683,6 +3257,7 @@
       this.scale = (opt && opt.scale) || 1;
       this.life = m ? m.count / m.fps : 0.5;
       this.t = 0; this.dead = false;
+      this.isFx = true;   // visual-only marker: not in the Whirlwind Walk isProjectile sweep whitelist
     }
     update(dt) {
       this.t += dt;
@@ -2747,6 +3322,11 @@
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+      }
       const spd = enraged ? d.speed * 1.4 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
 
@@ -2932,6 +3512,7 @@
       this.dmg = dmg; this.travelTime = travelTime || 0.7;
       this.variant = Math.floor(Math.random() * 6);
       this.t = 0; this.dead = false; this.hit = false;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -3287,6 +3868,11 @@
       this._bounds = game.bounds;
       const pl = game.player, d = this.def;
       const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+      }
       if (this.fireFx > 0) this.fireFx -= dt;
 
       // Hover right of center
@@ -3486,6 +4072,11 @@
 
       const d = this.def;
       const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+      }
       // Pin to the right edge of the arena; never moves.
       this.x = game.bounds.maxX - 6;
       this.facing = -1;
@@ -3745,6 +4336,9 @@
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.regenTimer > 0) this.regenTimer -= dt;
       else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 500 * dt);
+      // Scald wears off here too — this update() overrides Enemy's, so without
+      // this the dummy's scald tint would stick forever after one dash-through.
+      if (this.scaldT > 0) this.scaldT = Math.max(0, this.scaldT - dt);
       if (game.player) this.facing = game.player.x >= this.x ? 1 : -1;
       this.animate(dt, false);
     }
@@ -3769,6 +4363,7 @@
       this.t = 0;
       this.dead = false;
       this.bounces = (opts && opts.bounces) || 0;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
     }
     update(dt, game) {
       this.t += dt;
@@ -3919,6 +4514,11 @@
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       const enraged = this.hp / this.maxHp < d.enrageAt;
+      // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+      }
       if (this.strikeFx > 0) this.strikeFx -= dt;
       if (this.shootPoseT > 0) this.shootPoseT -= dt;
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }

@@ -7,6 +7,49 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.0 — Benedictions (2026-07-06)
+
+The progression release: levels give numbers, the elements give rules, the
+Church gives favor — and getting stronger finally feels like something.
+
+### XP & levels
+- Kills grant XP; ~13 **level-ups per run** land instantly mid-fight with a
+  flash, a chime, a water/HP top-up, and a fixed stat-gain cycle.
+- Every stat gain (levels, shop, pillars, boons) plays a short **upgrade
+  sequence** — the stat's icon rises off Jon with its +delta, chiming up a
+  pitch ladder when several land at once.
+
+### Benedictions — Hades-style run boons
+- After every boss and set-piece, **three element sigils** appear: pick one
+  by walking up (E). **17 boons, 3 duo boons, 4 legendaries**, all with
+  rank-II Deepens — pull-free chain streams, scalding sprays, wall-slam
+  crunches, turret stances, projectile-eating dashes and more.
+- A bottom info card shows exactly what you're choosing; boon icons carry
+  element + verb marks so your build reads at a glance.
+- Benedictions wash away on death — the death loop's real stake. Everything
+  else (levels, purchases, pillars) survives.
+
+### The Church rebuilt — four element Pillars
+- The Mirror is gone. Four pillars line the nave — Water open from the
+  start, the others sealed behind their nemesis. Ranks are chunky stat
+  packages with rank-3 capstones, and pillar favor **pulls that element's
+  boons to your sigil beats**.
+- Spending Essence rings a church bell; Essence itself is now **pickup-only**
+  — bosses and the pity grant drop real crosses, and none can ever be lost.
+
+### The event shop
+- The vendor appears **every third wave** with three signature builds
+  (Hydro-Dash, Fire-Marshal Spec, Hydro Lance), a rotating **2-of-10 relic
+  stock** (Censer, Punch Card, Dowsing Rod, Sunday Suit...), and lifeline
+  consumables. The stat-node tree is retired — levels carry the numbers.
+
+### Drops & feel
+- Pity timer (6 dry kills → guaranteed drop), need-weighted health/water,
+  kibble that visibly ticks +HP, and a wave-clear bonus drop on tough waves.
+- **Tab** shows your full stat sheet anywhere; 0% stats hide until earned.
+- A baked 27-icon atlas replaces every glyph placeholder, and the Switch +
+  Gateway Krusher wear real baked chassis with live blinking LEDs.
+
 ## v0.26.0 — The Giants (2026-07-06)
 
 The whole game has teeth now: bigger waves that stay readable, a rare apex

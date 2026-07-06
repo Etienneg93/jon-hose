@@ -18,6 +18,7 @@ require("../js/world.js");
 require("../js/upgrades.js");
 require("../js/entities.js");
 require("../js/game.js");
+require("../js/balance.js");   // onEnemyKilled -> grantXp reads JH.Balance.xpForLevel
 const JH = global.window.JH;
 
 test("JH.JUICE: hit-stop tier table and shake constants exist", () => {
@@ -90,11 +91,18 @@ function killStub(waveActive) {
   const g = {
     waveActive: !!waveActive, combo: 0, kills: 0,
     comboTimer: 0, comboFlash: 0,
-    enemies: [], embers: [], particles: [], pickups: [],
-    player: { x: 0, y: 0, alive: true, stats: { maxWater: 100 }, water: 50, regenLock: 1 },
+    enemies: [], embers: [], particles: [], pickups: [], floaters: [],
+    player: {
+      x: 0, y: 0, z: 0, alive: true, hp: 100, water: 50, regenLock: 1,
+      stats: { maxWater: 100, maxHp: 100 },
+      applyStats(s) { this.stats = s; },
+    },
     hitStopTimer: 0, lootVacuumT: 0, trauma: 0, shakeKickX: 0,
+    playerXp: 0, playerLevel: 0,
     audio: { played: [], play(k, o) { this.played.push({ k, o }); } },
     dropLoot() {}, onEnemyKilled(e) { JH.Game.onEnemyKilled.call(this, e); },
+    grantXp(n) { JH.Game.grantXp.call(this, n); },
+    float(x, y, text, color) { JH.Game.float.call(this, x, y, text, color); },
     deferredQueue: [],
     defer(ms, fn) { JH.Game.defer.call(this, ms, fn); },
     tickDeferred(dt) { JH.Game.tickDeferred.call(this, dt); },

@@ -543,18 +543,15 @@ test("neutral dash goes toward facing", () => {
 test("computeStats caps dodgeChance at 25%", () => {
   JH.Upgrades.reset();
   // Force an over-cap contribution through a repeatable-free path: fake a
-  // Mirror application by monkey-patching (Mirror isn't loaded in tests).
-  global.window.JH.Mirror = { apply: (s) => { s.dodgeChance = 0.4; } };
+  // pillar application by monkey-patching Pillars.apply.
+  const prevApply = JH.Pillars.apply;
+  const prevChurch = JH.Church;
+  JH.Pillars.apply = (s) => { s.dodgeChance = 0.4; };
   global.window.JH.Church = { state: {} };
   const s = JH.Upgrades.computeStats({});
   assert.ok(s.dodgeChance <= 0.25, "dodge capped, got " + s.dodgeChance);
-  delete global.window.JH.Mirror; delete global.window.JH.Church;
-});
-
-test("Vampiric Hose (vt3) grants 5% lifesteal", () => {
-  JH.Upgrades.reset();
-  const s = JH.Upgrades.computeStats({ vt1: true, vt2: true, vt3: true });
-  assert.ok(Math.abs(s.vampiricRate - 0.05) < 1e-9);
+  JH.Pillars.apply = prevApply;
+  if (prevChurch === undefined) delete global.window.JH.Church; else global.window.JH.Church = prevChurch;
 });
 
 // ---- attack tickets: cap on simultaneous melee windups ----
@@ -568,6 +565,7 @@ function makeThinkGame(px, py) {
     audio: { play() {} }, shake() {}, hitStop() {}, defer() {},
     killJuice() {}, dropLoot() {}, onEnemyKilled() {}, spawnEnemy() {},
     canAttack() { return this._tickets !== false; }, _tickets: true,
+    sigils: [], banner() {},
   };
 }
 
@@ -587,18 +585,111 @@ test("mook holds its windup when no attack ticket is free", () => {
 
 test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {
   JH.Upgrades.reset();
-  JH.Upgrades.owned = { pw1: true, pw2: true };
   JH.Upgrades.currentActLevel = -1;                     // Act 1
-  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), false);
+  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), false);
   JH.Upgrades.currentActLevel = 0;                      // Act 2 — gate opens here
-  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
   JH.Upgrades.currentActLevel = 1;                      // Act 3 — still available
-  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
   JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
+});
+
+test("Upgrades NODES: exactly three signatures, retired ids gone", () => {
+  const ids = JH.Upgrades.nodes.map((n) => n.id).sort();
+  assert.deepStrictEqual(ids, ["sig_dash", "sig_lance", "sig_marshal"]);
+  assert.deepStrictEqual(JH.Upgrades.branches, ["SIGNATURE"]);
+  assert.strictEqual(JH.Upgrades.repeatables.length, 1);
+  assert.strictEqual(JH.Upgrades.repeatables[0].id, "ov_dmg");
+  ["pw1", "pw2", "pw3", "rc1", "rc2", "rc3", "tk1", "tk2", "tk3",
+   "mb1", "mb2", "mb3", "vt1", "vt2", "vt3", "ov_water", "ov_hp"].forEach((id) => {
+    assert.strictEqual(JH.Upgrades.byId(id), undefined, id + " should be retired");
+  });
+});
+
+test("repCost: Overcharge escalates at 1.8x per prior buy", () => {
+  JH.Upgrades.reset();
+  assert.strictEqual(JH.Upgrades.repCost("ov_dmg"), 60);
+  JH.Upgrades.repCount.ov_dmg = 1;
+  assert.strictEqual(JH.Upgrades.repCost("ov_dmg"), Math.round(60 * 1.8));
+  JH.Upgrades.reset();
+});
+
+test("game.float pools with a 20 cap (oldest dropped) and culls by age", () => {
+  const g = { floaters: [] };
+  for (let i = 0; i < 25; i++) JH.Game.float.call(g, i, 0, "x", "#fff");
+  assert.strictEqual(g.floaters.length, 20, "capped at 20");
+  assert.strictEqual(g.floaters[0].x, 5, "the 5 oldest were dropped");
+  JH.Game.tickFloaters.call(g, 1.0);   // past the ~0.9s life
+  assert.strictEqual(g.floaters.length, 0, "aged-out floaters are culled");
+});
+
+test("sweepCrosses banks live crosses so win/respawn can't lose essence", () => {
+  const prevChurch = JH.Church;
+  JH.Church = { banked: 0, addEssence(n) { this.banked += n; } };
+  const g = { pickups: [
+    { kind: "cross", value: 2, dead: false },
+    { kind: "cross", dead: true },              // already collected — skipped
+    { kind: "health", value: 25, dead: false }, // not a cross — untouched
+  ] };
+  JH.Game.sweepCrosses.call(g);
+  assert.strictEqual(JH.Church.banked, 2, "live cross value banked");
+  assert.strictEqual(g.pickups[0].dead, true, "swept cross is killed");
+  assert.strictEqual(g.pickups[2].dead, false, "non-cross pickups untouched");
+  if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
+});
+
+test("priceOf: Punch Card discounts 20%, rounded; absent relic charges full price", () => {
+  assert.strictEqual(JH.Game.priceOf.call({ relics: {} }, 150), 150);
+  assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 150), 120);
+  assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 155), Math.round(155 * 0.8));
+  assert.strictEqual(JH.Game.priceOf.call({}, 150), 150, "missing relics map never throws");
+});
+
+// Minimal game stub for onEnemyKilled: a real Player (suds/water/gushRegen
+// fields) plus the handful of game-level methods the function calls.
+function makeKillGame() {
+  return {
+    kills: 0, combo: 0, comboTimer: 0, comboFlash: 0,
+    grantXp() {}, audio: { play() {} }, shake() {}, particles: [],
+    pickups: [],
+    spawnPickup(kind, x, y, value) { this.pickups.push({ kind, x, y, value }); },
+    player: makePlayer(),
+    relics: {},
+  };
+}
+
+test("onEnemyKilled: Collection Plate grants +2 bonus suds per kill; absent grants none", () => {
+  const g = makeKillGame();
+  g.relics.collection_plate = true;
+  JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.player.suds, 2);
+  assert.strictEqual(g.player.sudsEarned, 2);
+
+  const g2 = makeKillGame();
+  JH.Game.onEnemyKilled.call(g2, null);
+  assert.strictEqual(g2.player.suds, 0, "no relic, no bonus");
+});
+
+test("onEnemyKilled: boss cross is worth 1, or 2 with Sunday Suit", () => {
+  const prevChurch = JH.Church;
+  JH.Church = { markBossDefeated() {} };
+
+  const g1 = makeKillGame();
+  JH.Game.onEnemyKilled.call(g1, { isBoss: true, type: "boss", x: 10, y: 20 });
+  assert.strictEqual(g1.pickups[0].value, 1);
+
+  const g2 = makeKillGame();
+  g2.relics.sunday_suit = true;
+  JH.Game.onEnemyKilled.call(g2, { isBoss: true, type: "boss", x: 10, y: 20 });
+  assert.strictEqual(g2.pickups[0].value, 2);
+
+  if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
 });
 
 // makeSuper reads JH.Balance.superEliteDef at call time.
 require("../js/balance.js");
+require("../js/pillars.js");
+require("../js/benedictions.js");
 
 test("makeSuper: 7x hp, superElite + elite flags, def untouched globally", () => {
   const m = new JH.Enemy("mook", 0, 0);
@@ -752,6 +843,17 @@ test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () 
   assert.strictEqual(full.maxHp, JH.ENEMIES.mook.hp * 7);
 });
 
+test("computeStats folds levelCount through the gain cycle", () => {
+  JH.Upgrades.reset();
+  const base = JH.Upgrades.computeStats({});
+  JH.Upgrades.levelCount = 2;                        // +3 dmg, +8 water
+  const s = JH.Upgrades.computeStats({});
+  assert.strictEqual(s.sprayDamage, base.sprayDamage + 3);
+  assert.strictEqual(s.maxWater, base.maxWater + 8);
+  JH.Upgrades.reset();
+  assert.strictEqual(JH.Upgrades.levelCount, 0);
+});
+
 test("super bulwark's thrown shield lands as barrier dome + slow zone", () => {
   const g = makeThinkGame(200, 40);
   g.slowZones = [];
@@ -775,4 +877,557 @@ test("super bulwark hp uses its SUPER_TUNE override (2.5x)", () => {
   const b = JH.makeEnemy("bulwark", 0, 0);
   b.makeSuper();
   assert.strictEqual(b.maxHp, Math.round(JH.ENEMIES.bulwark.hp * 2.5));
+});
+
+test("sigil pick: takes the boon, refreshes stats, clears the beat", () => {
+  global.window.JH.Benedictions.reset();
+  const g = makeThinkGame(60, 40);
+  g.sigils = [new JH.Sigil(60, 40, { id: "bedrock", deepen: false }),
+              new JH.Sigil(120, 40, { id: "overflow", deepen: false })];
+  const hpBefore = g.player.stats.maxHp;
+  g.sigils[0].pick(g);
+  assert.strictEqual(global.window.JH.Benedictions.rank("bedrock"), 1);
+  assert.ok(g.player.stats.maxHp > hpBefore, "stat boon applied immediately");
+  assert.ok(g.sigils.every((s) => s.dead), "picking one clears the offer");
+  global.window.JH.Benedictions.reset();
+});
+
+test("waveCleared_: Absolution + sigil beat land before the quake cutscene return", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("absolution");
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  JH.Music = { setTrack() {} };
+  const g = Object.create(JH.Game);
+  g.player = makePlayer(); g.player.hp = 10;
+  g.waveIndex = JH.LEVEL1.waves.findIndex((w) => w.bossType === "quake");
+  g.beneUsedOnce = {}; g.sigils = [];
+  g.waveCleared_();
+  assert.strictEqual(g.state, "cutscene", "quake clear still enters its cutscene");
+  assert.strictEqual(g.player.hp, 35, "rank-I Absolution healed 25 despite the early return");
+  assert.ok(g.sigils.length > 0, "boss beat still offers sigils despite the early return");
+  JH.Music = prevMusic;
+  if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
+  B.reset();
+});
+
+test("waveCleared_: final (Slayer) wave clear keeps its sigil beat — cutscene, not a synchronous win()", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  JH.Music = { setTrack() {} };
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.waveIndex = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+  assert.strictEqual(g.waveIndex, JH.LEVEL1.waves.length - 1, "Slayer is the final wave (premise)");
+  g.beneUsedOnce = {}; g.sigils = [];
+  let won = false;
+  g.win = () => { won = true; };
+  g.waveCleared_();
+  assert.strictEqual(g.state, "cutscene", "slayer clear enters its cutscene");
+  assert.strictEqual(g.cutscene && g.cutscene.who, "slayer");
+  assert.strictEqual(won, false, "win() never fires synchronously on the slayer clear");
+  assert.ok(g.sigils.length > 0, "final boss clear still offers sigils");
+  JH.Music = prevMusic;
+  if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
+  B.reset();
+});
+
+test("waveCleared_: vendor spawns every 3rd tracked clear, resets the counter", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "" }) };
+  JH.Music = { setTrack() {} };
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.banner = () => {}; g.bannerTimer = 0;
+  g.beneUsedOnce = {}; g.sigils = [];
+  g.shopNpc = null;
+  g.clearsSinceVendor = 1;              // matches startGame's seed
+  g.waveIndex = 0;                      // plain "WAVE 1" — not boss/set-piece
+  g.waveCleared_();
+  assert.strictEqual(g.shopNpc, null, "no vendor after the 1st clear");
+  assert.strictEqual(g.clearsSinceVendor, 2);
+
+  g.waveIndex = 1;                      // 2nd clear — counter hits 3, vendor due
+  g.waveCleared_();
+  assert.ok(g.shopNpc, "vendor spawns on the 3rd tracked clear");
+  assert.strictEqual(g.clearsSinceVendor, 0, "counter resets on spawn");
+
+  JH.Music = prevMusic;
+  if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
+  B.reset();
+});
+
+// ---- Scald status ----
+
+test("applyScald ticks damage over its duration and expires", () => {
+  const g = makeThinkGame(400, 40);
+  const m = new JH.Enemy("mook", 100, 40);
+  m.applyScald(4, 2);
+  const hp0 = m.hp;
+  m.update(1, g);
+  assert.ok(m.hp < hp0 && m.hp > hp0 - 6, "roughly 4 dmg over 1s");
+  m.update(1.5, g);
+  assert.strictEqual(m.scaldT, 0);
+});
+
+test("Scalding Faith: full-pressure spray applies scald", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("scalding_faith");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;   // full pressure tier (dmgScale 1.2)
+  p.facing = 1;
+  const e = new JH.Enemy("mook", p.x + 30, p.y);
+  g.enemies = [e];
+  p.doSpray(0.05, g);
+  assert.ok(e.scaldT > 0, "full-pressure hit under Scalding Faith applies scald");
+  B.reset();
+});
+
+// ---- Benedictions: Backdraft + Ash Walk ----
+
+test("Backdraft: dashing through an enemy applies Scald", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("backdraft");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  const e = new JH.Enemy("mook", p.x + 2, p.y);   // overlapping Jon's body
+  g.enemies = [e];
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.ok(e.scaldT > 0, "enemy overlapped by the dash is scalded");
+  B.reset();
+});
+
+test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("ash_walk");
+  const g = makeThinkGame(100, 40);   // player standing at the patch center
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  p.update(1 / 60, g);
+  assert.strictEqual(p.dead, true, "douse extinguishes the patch immediately");
+  assert.ok(g.player.douseCdT > 0, "cooldown armed after the douse");
+  assert.strictEqual(g.player.burnStacks, 0, "first-burn immunity: no stack landed either");
+
+  const p2 = new JH.FirePatch(100, 40, 24, 3);
+  p2.update(1 / 60, g);
+  assert.strictEqual(p2.dead, false, "a second patch within the cooldown is not doused");
+  assert.strictEqual(g.player.burnStacks, 0, "first contact on this fresh patch is still free");
+  p2.update(1 / 60, g);   // still standing in the same patch: the free stack is already spent
+  assert.ok(g.player.burnStacks > 0, "immunity is once per patch — the next tick burns");
+
+  // The free token must NOT burn remotely: a patch ticking while the player
+  // is far away keeps its token for the actual first contact.
+  const gFar = makeThinkGame(400, 40);             // player far from the patch
+  const pFar = new JH.FirePatch(100, 40, 24, 3);
+  gFar.player.douseCdT = 99;                       // isolate the immunity path
+  pFar.update(1 / 60, gFar);                       // remote tick — token unspent
+  gFar.player.x = 100;                             // NOW step in
+  pFar.update(1 / 60, gFar);
+  assert.strictEqual(gFar.player.burnStacks, 0, "first real contact is still free after remote ticks");
+
+  // Rank II: shorter cooldown and a bigger pop (10 dmg vs 6).
+  B.take("ash_walk");                              // rank 2
+  const g2 = makeThinkGame(100, 40);
+  const e = new JH.Enemy("mook", 100, 40);         // standing in the patch
+  g2.enemies = [e];
+  const hp0 = e.hp;
+  const p3 = new JH.FirePatch(100, 40, 24, 3);
+  p3.update(1 / 60, g2);
+  assert.strictEqual(p3.dead, true, "rank-II douse still extinguishes");
+  assert.strictEqual(hp0 - e.hp, 10, "rank-II pop deals 10 to enemies in the footprint");
+  assert.ok(g2.player.douseCdT <= 6, "rank-II cooldown is the shorter 6s");
+  B.reset();
+});
+
+// ---- Benedictions: Earth (Aftershock, Landslide) ----
+
+test("Aftershock: an enemy slammed into the arena wall takes wall-slam damage", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("aftershock");
+  const g = makeThinkGame(1000, 40);   // player far off-screen — chase moves toward the wall, not away
+  const m = new JH.Enemy("mook", g.bounds.maxX - 2, 40);
+  m.spawnGrace = 0;
+  m.knockVX = 200;                     // strong knockback, headed at the wall
+  g.enemies = [m];
+  const hp0 = m.hp;
+  m.update(0.05, g);
+  assert.strictEqual(m.x, g.bounds.maxX, "clamped at the arena edge");
+  assert.ok(m.hp < hp0, "wall slam damage landed");
+  B.reset();
+});
+
+test("Landslide: an overlapping enemy under knockback batters the enemy next to it", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("landslide");
+  const g = makeThinkGame(1000, 40);   // player far off — no melee/contact interference
+  const slammed = new JH.Enemy("mook", 100, 40);
+  const victim = new JH.Enemy("mook", 102, 40);   // overlapping the slammed enemy
+  slammed.spawnGrace = 0; victim.spawnGrace = 0;
+  slammed.knockVX = 200;               // strong knockback triggers the landslide check
+  g.enemies = [slammed, victim];
+  const hp0 = victim.hp;
+  slammed.update(0.016, g);
+  assert.ok(victim.hp < hp0, "overlapping enemy takes landslide damage");
+
+  // Rank II: staggers the victim unconditionally — no wall-slam-stagger
+  // capstone required (that pillar perk is a separate, independently-consumed
+  // effect applied elsewhere).
+  B.take("landslide");   // rank 2
+  assert.ok(!g.player.stats.wallSlamStagger, "capstone not owned in this test");
+  victim._lsCdT = 0;   // clear the per-victim tag set by the first update() above
+  victim.windTimer = 0.5; victim.state = "wind"; victim.cdTimer = 0;
+  slammed.update(0.016, g);
+  assert.strictEqual(victim.windTimer, 0, "windup cancelled by the stagger");
+  assert.strictEqual(victim.state, "idle");
+  assert.ok(victim.cdTimer >= 0.6, "stagger cooldown applied");
+  B.reset();
+});
+
+test("Bedrock Vigor: taking a hit grants a 3s +20% knockback window", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("bedrock");
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  assert.strictEqual(p.vigorT, 0);
+  p.takeHit(10, g, p.x - 10);
+  assert.strictEqual(p.vigorT, 3, "landing a hit arms the vigor window");
+  B.reset();
+});
+
+test("Bedrock Vigor: no window without the benediction", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  p.takeHit(10, g, p.x - 10);
+  assert.strictEqual(p.vigorT, 0, "no bedrock owned — no vigor window");
+});
+
+// ---- Benedictions: Air (Eye of the Storm, Slipstream) ----
+
+test("Eye of the Storm: takeHit no-ops while stormT is active, and consumes no HP", () => {
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  p.stormT = 1;
+  const hp0 = p.hp;
+  p.takeHit(20, g, p.x - 10);
+  assert.strictEqual(p.hp, hp0, "storm window blocks the hit entirely");
+  assert.ok(p.invulnTimer > 0, "a brief invuln follows the storm dodge, like a normal dodge");
+});
+
+test("Slipstream: freeSprayT skips the water drain in doSpray", () => {
+  const g = makeThinkGame(60, 40);
+  const p = makePlayer();
+  p.freeSprayT = 0.5;
+  const water0 = p.water;
+  p.doSpray(0.1, g);
+  assert.strictEqual(p.water, water0, "spray drains no water while freeSprayT is active");
+});
+
+// ---- Benedictions: duos (Steam Sermon, Firestorm) ----
+
+test("Steam Sermon: spraying a fire patch also vents steam damage onto an enemy standing in it", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("steam_sermon");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;
+  p.facing = 1;
+  const fp = new JH.FirePatch(p.x + 30, p.y, 24, 3);
+  g.firePatches = [fp];
+  const e = new JH.Enemy("mook", fp.x, fp.y);   // standing in the patch
+  g.enemies = [e];
+  const hp0 = e.hp;
+  p.doSpray(0.1, g);
+  assert.ok(fp.sprayProgress > 0, "spray still advances the patch's extinguish timer");
+  assert.ok(e.hp < hp0, "steam damage landed on the enemy standing in the sprayed patch");
+  B.reset();
+});
+
+test("Firestorm: a friendly fire patch damages an enemy inside it but never burns the player", () => {
+  const g = makeThinkGame(100, 40);   // player standing at the patch center
+  const fp = new JH.FirePatch(100, 40, 24, 3, { friendly: true });
+  const e = new JH.Enemy("mook", 100, 40);
+  g.enemies = [e];
+  const hp0 = e.hp;
+  fp.update(0.1, g);
+  assert.ok(e.hp < hp0, "enemy standing in the friendly patch takes damage");
+  assert.strictEqual(g.player.burnStacks, 0, "the player standing in the same patch is never burned");
+  assert.strictEqual(fp.sizzled, false, "friendly patches never run the player-facing sizzle/burn logic");
+  // Wall-clock expiry: nobody sprays a harmless patch, so it must die on time.
+  fp.update(3.1, g);                          // pushes fp.t past extinguishDur (3)
+  assert.strictEqual(fp.dead, true, "friendly patch expires on wall-clock time without being sprayed");
+});
+
+// ---- Benedictions: Legendaries ----
+
+test("Standing Stone: braced stance eats knockback but damage still lands", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("standing_stone");
+  const p = makePlayer();
+  p.stillT = 1;   // past the 0.5s stationary threshold
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  const hp0 = p.hp;
+  p.takeHit(20, g, p.x - 10);
+  assert.strictEqual(p.hp, hp0 - 20, "damage still lands");
+  assert.strictEqual(p.knockVX, 0, "no knockback while braced and still");
+  B.reset();
+});
+
+test("Bushfire: scald spreads once to a nearby enemy", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("bushfire");
+  const g = makeThinkGame(400, 40);   // player kept well away from the mooks
+  const m1 = new JH.Enemy("mook", 100, 40);
+  const m2 = new JH.Enemy("mook", 130, 40);   // 30px away — within the 40px spread radius
+  g.enemies = [m1, m2];
+  m1.applyScald(4, 2);
+  m1.update(1 / 60, g);
+  assert.ok(m1.scaldT > 0, "source keeps burning");
+  assert.ok(m2.scaldT > 0, "nearby enemy catches the spread");
+  B.reset();
+});
+
+test("Whirlwind Walk: dashing near a live ember destroys it", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("whirlwind_walk");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  const em = new JH.Ember(p.x + 2, p.y, 10, 0, 0, 10, {});
+  g.embers = [em];
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.strictEqual(em.dead, true, "ember destroyed by the dash sweep");
+  B.reset();
+});
+
+test("Whirlwind Walk: non-projectile embers riders (FireRing) survive the sweep", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("whirlwind_walk");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  const ring = new JH.FireRing(p.x + 2, p.y, { maxR: 60, speed: 40, dmg: 10 });
+  g.embers = [ring];
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.strictEqual(ring.dead, false, "boss pattern untouched — sweep is isProjectile-only");
+  B.reset();
+});
+
+test("super bulwark recovers its shield when the lob dies mid-flight", () => {
+  const g = makeThinkGame(200, 40);
+  const b = JH.makeEnemy("bulwark", 60, 40);
+  b.makeSuper();
+  b.phase = "brawl"; b.hasShield = false;
+  b.lob = { dead: true };   // destroyed before landing — no zone, no dome
+  b.superThink(1 / 60, g);
+  assert.strictEqual(b.hasShield, true, "shield reclaimed despite the lob never landing");
+  assert.strictEqual(b.phase, "approach", "brawl phase exits instead of locking forever");
+  assert.strictEqual(b.lob, null, "stale lob reference cleared");
+});
+
+// ---- Relics: runtime effect hooks ----
+
+test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const near = new JH.Enemy("mook", p.x + 20, p.y);
+  const far  = new JH.Enemy("mook", p.x + 40, p.y);
+  g.enemies = [far, near];   // order shouldn't matter — nearest is still the primary blocker
+
+  // Without the relic: only the closest (blocker) takes damage.
+  const hpNear0 = near.hp, hpFar0 = far.hp;
+  p.doSpray(0.05, g);
+  assert.ok(near.hp < hpNear0, "closest enemy always hit");
+  assert.strictEqual(far.hp, hpFar0, "no relic: second enemy in line is untouched");
+
+  // With the relic: the next-closest also takes damage.
+  g.relics = { brass_nozzle: true };
+  const hpFar1 = far.hp;
+  p.doSpray(0.05, g);
+  assert.ok(far.hp < hpFar1, "Brass Nozzle: second-closest enemy also hit");
+});
+
+test("Brass Nozzle: never promotes a target past an active dome blocker (regression)", () => {
+  const g = makeThinkGame(60, 40);
+  g.relics = { brass_nozzle: true };
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;   // long reach — the arc spans well past the dome
+  // Dome (r 58) between Jon and the mook; Jon outside it, mook beyond its far edge.
+  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];
+  const beyond = new JH.Enemy("mook", p.x + 250, p.y);
+  g.enemies = [beyond];
+  const hp0 = beyond.hp;
+  p.doSpray(0.05, g);
+  assert.strictEqual(beyond.hp, hp0, "dome stops the stream — no second target promoted past it");
+});
+
+test("Brass Nozzle: enemy blocker with a dome behind it — second target can't sit past the dome", () => {
+  const g = makeThinkGame(60, 40);
+  g.relics = { brass_nozzle: true };
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];   // dome near edge ~30px out
+  const near   = new JH.Enemy("mook", p.x + 20, p.y);    // in front of the dome — the blocker
+  const beyond = new JH.Enemy("mook", p.x + 250, p.y);   // past the dome's far edge
+  g.enemies = [near, beyond];
+  const hpNear0 = near.hp, hpBeyond0 = beyond.hp;
+  p.doSpray(0.05, g);
+  assert.ok(near.hp < hpNear0, "enemy in front of the dome still takes the stream");
+  assert.strictEqual(beyond.hp, hpBeyond0, "second target is never promoted past the dome");
+});
+
+test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
+  const pull = new JH.Pickup("water_can", 0, 0, 10);
+  const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60
+  const x0 = pull.x;
+  pull.update(1 / 60, g);
+  assert.strictEqual(pull.x, x0, "outside the base 30px radius: no pull");
+
+  g.relics = { dowsing_rod: true };
+  pull.update(1 / 60, g);
+  assert.notStrictEqual(pull.x, x0, "Dowsing Rod: pulled in from 45px away");
+
+  const p = makePlayer();
+  p.water = 0;
+  const can = new JH.Pickup("water_can", p.x, p.y, 10);
+  can.collect({ player: p, audio: { play() {} }, particles: [], relics: { dowsing_rod: true } });
+  assert.strictEqual(p.water, 15, "Dowsing Rod: water_can value x1.5 (10 -> 15)");
+});
+
+test("Spigot Key: hydrant contact arms a 15s window; doSpray deals +10% while it's live", () => {
+  const p = makePlayer();
+  p.facing = 1;
+  const g = { hydrants: [{ x: p.x, y: p.y, t: 0 }], relics: { spigot_key: true },
+    particles: [], bounds: { minX: 0, maxX: 480 }, input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} } };
+  // Drive just the hydrant-proximity slice of Player.update via a direct call
+  // to the same logic: assert the flag through a real update() tick.
+  p.update(1 / 60, g);
+  assert.strictEqual(p.spigotT, 15, "standing at a hydrant arms Spigot Key's window");
+
+  const g2 = makeThinkGame(60, 40);
+  const e = new JH.Enemy("mook", p.x + 20, p.y);
+  g2.player = p; g2.enemies = [e]; g2.relics = { spigot_key: true };
+  p.water = p.stats.maxWater;
+  const hpBefore = e.hp;
+  p.doSpray(0.05, g2);
+  const dmgWithBuff = hpBefore - e.hp;
+
+  p.spigotT = 0;
+  const e2 = new JH.Enemy("mook", p.x + 20, p.y);
+  g2.enemies = [e2];
+  p.water = p.stats.maxWater;
+  const hpBefore2 = e2.hp;
+  p.doSpray(0.05, g2);
+  const dmgWithoutBuff = hpBefore2 - e2.hp;
+  assert.ok(Math.abs(dmgWithBuff - dmgWithoutBuff * 1.1) < 1e-6, "spigotT active: +10% spray dmg");
+});
+
+test("shopSelectables lists the current relic stock; buyRelic spends suds, flags ownership, and clears stock", () => {
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.player.suds = 300;
+  g.relics = {};
+  g.relicStock = ["brass_nozzle", "spigot_key"];
+  const sel = g.shopSelectables();
+  const relicRows = sel.filter((s) => s.kind === "relic");
+  assert.deepStrictEqual(relicRows.map((r) => r.id), ["brass_nozzle", "spigot_key"]);
+
+  assert.strictEqual(g.buyRelic("dowsing_rod"), false, "not in stock: rejected");
+  const cost = JH.RELICS.find((r) => r.id === "brass_nozzle").cost;
+  const before = g.player.suds;
+  assert.strictEqual(g.buyRelic("brass_nozzle"), true);
+  assert.strictEqual(g.player.suds, before - cost);
+  assert.strictEqual(g.relics.brass_nozzle, true);
+  assert.ok(!g.relicStock.includes("brass_nozzle"), "bought relic leaves the stock");
+  assert.strictEqual(g.buyRelic("brass_nozzle"), false, "already owned: rejected");
+});
+
+test("Punch Card discounts a relic purchase by 20%", () => {
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.relics = { punch_card: true };
+  const def = JH.RELICS.find((r) => r.id === "spigot_key");
+  g.player.suds = Math.round(def.cost * 0.8);   // exactly the discounted price, not the sticker price
+  g.relicStock = ["spigot_key"];
+  assert.strictEqual(g.buyRelic("spigot_key"), true, "discounted price is enough to buy");
+  assert.strictEqual(g.player.suds, 0);
+});
+
+test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly once", () => {
+  const g = makeThinkGame(400, 40);   // far away so the boss doesn't commit to an attack this tick
+  g.relics = { prayer_bead: true };
+  const boss = new JH.Boss(60, 40, Object.assign({}, JH.BOSS, { enrageAt: 0.99 }), "boss");
+  boss.hp = boss.maxHp * 0.5;         // already below the (high) enrageAt threshold
+  g.player.pressureBuffT = 0;
+  boss.think(1 / 60, g);
+  assert.strictEqual(g.player.pressureBuffT, 4, "first enrage tick grants the buff");
+  g.player.pressureBuffT = 0;         // simulate the buff wearing off
+  boss.think(1 / 60, g);
+  assert.strictEqual(g.player.pressureBuffT, 0, "latch prevents re-granting on subsequent enraged frames");
+});
+
+test("dropLoot: dryStreak increments on a null roll and resets once an item drops", () => {
+  const g = Object.create(JH.Game);
+  g.player = makePlayer();
+  g.pickups = []; g.deferredQueue = []; g.dryStreak = 0;
+  const mook = new JH.Enemy("mook", 0, 0);   // dropMult 1 -> t.water = 0.45 cumulative item chance
+
+  const origRandom = Math.random;
+  try {
+    Math.random = () => 0.99;   // above every threshold: no item, streak-only miss
+    g.dropLoot(mook);
+    assert.strictEqual(g.dryStreak, 1);
+    g.dropLoot(mook);
+    assert.strictEqual(g.dryStreak, 2);
+
+    Math.random = () => 0;      // below every threshold: guaranteed health drop
+    g.dropLoot(mook);
+    assert.strictEqual(g.dryStreak, 0, "a landed drop resets the streak");
+    assert.ok(g.pickups.some((p) => p.kind === "health"));
+  } finally {
+    Math.random = origRandom;
+  }
+});
+
+test("death wash: benedictions clear, levels/signatures survive respawn refresh", () => {
+  JH.Upgrades.reset(); JH.Benedictions.reset();
+  JH.Upgrades.owned = { sig_marshal: true };
+  JH.Upgrades.levelCount = 4;
+  JH.Benedictions.take("bedrock");
+  const before = JH.Upgrades.computeStats(JH.Upgrades.owned);
+  JH.Benedictions.reset();                             // what respawnFromChurch does
+  const after = JH.Upgrades.computeStats(JH.Upgrades.owned);
+  assert.strictEqual(before.maxHp - after.maxHp, 40);  // bedrock gone
+  assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // signature survived
+  JH.Upgrades.reset(); JH.Benedictions.reset();
+});
+
+test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {
+  const p = makePlayer();
+  p.upgradeQ.length = 0;
+  const grown = Object.assign({}, p.stats, { sprayDamage: p.stats.sprayDamage + 3 });
+  p.applyStats(grown);
+  assert.strictEqual(p.upgradeQ.length, 1);
+  assert.strictEqual(p.upgradeQ[0].icon, "dmg");
+  assert.strictEqual(p.upgradeQ[0].text, "+3 DMG");
+  p.applyStats(Object.assign({}, p.stats));   // identical rebuild → no entry
+  assert.strictEqual(p.upgradeQ.length, 1);
 });

@@ -30,14 +30,15 @@
     },
 
     // Total player-power count fed to eliteScale/bossHpScale: one-time nodes
-    // + repeatable Overcharge buys + total Mirror ranks. All sources of
+    // + repeatable Overcharge buys + total pillar ranks + XP levels. All sources of
     // permanent stat growth count, so the enemy ramp can see them.
-    powerCount(owned, repCount, churchState) {
+    powerCount(owned, repCount, churchState, levelCount) {
       let n = Object.keys(owned || {}).length;
       const rc = repCount || {};
       for (const k in rc) n += rc[k] || 0;
-      const m = (churchState && churchState.mirror) || {};
-      for (const k in m) n += (m[k] && m[k].rank) || 0;
+      const p = (churchState && churchState.pillars) || {};
+      for (const k in p) n += p[k] | 0;
+      n += levelCount | 0;
       return n;
     },
 
@@ -97,9 +98,10 @@
       return out;
     },
 
-    // Cost of the next purchase of a repeatable node (1.5x per prior buy).
-    repeatableCost(base, timesBought) {
-      return Math.round(base * Math.pow(1.5, timesBought || 0));
+    // Cost of the next purchase of a repeatable node (factor per prior buy,
+    // default 1.5x; Overcharge passes 1.8x for a steeper late-game curve).
+    repeatableCost(base, timesBought, factor) {
+      return Math.round(base * Math.pow(factor || 1.5, timesBought || 0));
     },
 
     // Act-start checkpoint for a wave: largest actStarts entry <= waveIndex
@@ -115,6 +117,21 @@
     // Cost of the next blessing purchase: 1, 2, 3, ... (timesBought + 1). Pure.
     blessingCost(timesBought) {
       return (timesBought || 0) + 1;
+    },
+
+    // Per-visit relic stock: filter already-owned ids out of the pool,
+    // Fisher-Yates shuffle the rest with the injected rng, take the first n.
+    // Pure — never mutates poolIds. May return fewer than n if the pool is
+    // thin (most owned).
+    pickRelics(poolIds, ownedMap, n, rng) {
+      const owned = ownedMap || {};
+      const r = rng || Math.random;
+      const pool = poolIds.filter((id) => !owned[id]);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(r() * (i + 1));
+        const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+      return pool.slice(0, n);
     },
 
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
@@ -204,6 +221,44 @@
         if (heavies.includes(picked)) heavyN++;
       }
       return picks;
+    },
+
+    // XP needed to climb from level n-1 to n.
+    xpForLevel(n) { return 20 + 12 * (n | 0); },
+
+    // Summed stat deltas for `levelCount` level-ups walking the repeating
+    // gain cycle. Returns {statKey: total}.
+    levelGains(levelCount, cycle) {
+      const out = {};
+      for (let i = 0; i < (levelCount | 0); i++) {
+        const step = cycle[i % cycle.length];
+        for (const k in step) out[k] = (out[k] || 0) + step[k];
+      }
+      return out;
+    },
+
+    // One drop decision per kill. Pity: 6+ dry kills guarantees an item.
+    // Need-weighting doubles the low resource's share of the item roll.
+    rollDrop(dropMult, dryStreak, hpFrac, waterFrac, rng) {
+      rng = rng || Math.random;
+      const t = this.dropThresholds(dropMult);
+      const itemChance = (dryStreak >= 6) ? 1 : t.water;   // t.water = cumulative item chance
+      if (rng() >= itemChance) return null;
+      let wh = t.health, ww = t.water - t.health;
+      if (hpFrac < 0.5) wh *= 2;
+      if (waterFrac < 0.3) ww *= 2;
+      return rng() < wh / (wh + ww) ? "health" : "water";
+    },
+
+    // Combined spray-damage multiplier from the water/fire dmg-amp boons.
+    // ranks: {overflow, baptize, trial} boon ranks (0/1/2). t: {waterFrac,
+    // wet, burning} target/attacker state. Stacks multiplicatively. Pure.
+    beneDmgMult(ranks, t) {
+      let m = 1;
+      if (ranks.overflow && t.waterFrac >= (ranks.overflow >= 2 ? 0.7 : 0.8)) m *= ranks.overflow >= 2 ? 1.3 : 1.2;
+      if (ranks.baptize && t.wet > 0.3) m *= ranks.baptize >= 2 ? 1.25 : 1.15;
+      if (ranks.trial && t.burning) m *= ranks.trial >= 2 ? 1.3 : 1.2;
+      return m;
     },
   };
   root.JH = root.JH || {};
