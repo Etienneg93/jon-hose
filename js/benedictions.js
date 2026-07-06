@@ -125,11 +125,36 @@
 
     active: {},
 
+    // Boons lost to death, reclaimable at the Church Reliquary (id → rank).
+    washed: {},
+
     byId(id) { return DEFS.find((d) => d.id === id); },
 
     rank(id) { return this.active[id] | 0; },
 
-    reset() { this.active = {}; },
+    // Full wipe (new run): clears both live boons and the reliquary.
+    reset() { this.active = {}; this.washed = {}; },
+
+    // Death: live boons move to the reliquary instead of vanishing. Dying
+    // again with unreclaimed boons keeps the higher rank of each.
+    wash() {
+      for (const id in this.active)
+        this.washed[id] = Math.max(this.washed[id] | 0, this.active[id]);
+      this.active = {};
+    },
+
+    washedCount() { return Object.keys(this.washed).length; },
+
+    // Reliquary reclaim: restore the next washed boon at its washed rank.
+    // Returns its def (for UI) or null when the reliquary is empty. usedOnce
+    // is untouched — reclaiming never re-opens duo/legendary offer slots.
+    reclaimNext() {
+      const id = Object.keys(this.washed)[0];
+      if (!id) return null;
+      this.active[id] = this.washed[id];
+      delete this.washed[id];
+      return this.byId(id);
+    },
 
     // Rank 1 on first take, rank 2 (capped) on deepen. Returns the new rank.
     take(id) {

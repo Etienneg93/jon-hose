@@ -7,6 +7,33 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.28.0 — Reliquary (2026-07-06)
+
+Live-playtest follow-up to Benedictions: death no longer eats your boons,
+and late waves surge instead of dripping.
+
+### The Reliquary
+- **Washed benedictions are no longer gone.** Death moves them into the
+  Reliquary — a chest in the Church nave with gold motes hovering while it
+  holds boons. Press **E to reclaim the next one for 1 Essence**, rank
+  preserved. Dying again with unreclaimed boons keeps the higher rank.
+  A fresh run still starts clean.
+- **Father Jon's pity Essence is now handed over in the Church** — a cross
+  set down beside him on your first death, collected in-scene — instead of
+  materializing at the respawn point.
+
+### Wave flow
+- **Batch reinforcements:** with 3+ enemies queued, reinforcements hold
+  until the field thins, then **3–5 arrive at once** with a
+  REINFORCEMENTS! banner — a wave within the wave instead of one-for-one
+  replacement. Small remainders still trickle in singly.
+
+### Fixes & feel
+- Buff timers (kibble, GUSH regen, Concerta, Spigot, storm, vigor...) no
+  longer freeze through the Church and resume after respawn.
+- Upgrade stat text lingers longer (0.9s beat, late fade) so it finishes
+  readable.
+
 ## v0.27.0 — Benedictions (2026-07-06)
 
 The progression release: levels give numbers, the elements give rules, the

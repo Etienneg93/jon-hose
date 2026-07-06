@@ -290,9 +290,38 @@
         if (this.pendingPity) {
           this.pendingPity = false;
           lines.unshift("Take this, child — the water keeps what it takes.");
+          // The gift itself: a cross set down beside him, collected in-scene.
+          sc.pityCross = { x: sc.fatherSpawnX - 32, y: sc.fatherY };
         }
         sc.dialogue = { lines: lines, idx: 0 };
         return;
+      }
+
+      // Father Jon's pity cross: walk over it to collect (Essence only ever
+      // enters via cross collection — this one just happens in the nave).
+      if (sc.pityCross &&
+          Math.hypot(sc.jonX - sc.pityCross.x, sc.jonY - sc.pityCross.y) < 14) {
+        this.addEssence(1);
+        game.audio.play("upgrade");
+        sc.buyFloat = { text: "+1 HOLY ESSENCE", x: sc.pityCross.x, color: "#ffd23f", t: 0 };
+        sc.pityCross = null;
+      }
+
+      // Reliquary: benedictions washed away by death wait here; E reclaims
+      // the next one for 1 Essence (rank preserved).
+      const B = root.JH.Benedictions;
+      sc.nearReliquary = !!(B && B.washedCount() > 0 &&
+        Math.abs(sc.jonX - L.reliquaryX) <= L.stationRange);
+      if (sc.nearReliquary && In.pressed("confirm")) {
+        if (this.state.essence >= 1) {
+          this.state.essence -= 1; this.save();
+          const def = B.reclaimNext();
+          game.audio.play("bell");
+          sc.ringFx = { x: L.reliquaryX, color: "#ffd23f", t: 0 };
+          sc.buyFloat = { text: "+" + def.name.toUpperCase(), x: L.reliquaryX, color: "#ffd23f", t: 0 };
+        } else {
+          game.audio.play("hurt");   // can't afford
+        }
       }
 
       // Pillar stations: active when near ANY pillar (locked ones still show
@@ -463,6 +492,36 @@
         if (near) nearStation = { pillar: st.pillar, def, x, unlocked, rank, maxR };
       }
 
+      // Reliquary: a low chest on the nave floor. Washed benedictions hover
+      // above it as gold motes; empty, it sits dark and quiet.
+      {
+        const B = root.JH.Benedictions;
+        const nWashed = B ? B.washedCount() : 0;
+        const rx = Math.round(L.reliquaryX - camX);
+        const ry = VH - 20;
+        ctx.fillStyle = "#1c2130"; ctx.fillRect(rx - 10, ry - 8, 20, 8);   // chest body
+        ctx.fillStyle = nWashed ? "#ffd23f" : "#33384a";
+        ctx.fillRect(rx - 10, ry - 10, 20, 2);                             // lid trim
+        if (nWashed > 0) {
+          ctx.save();
+          for (let i = 0; i < Math.min(nWashed, 5); i++) {
+            const bob = Math.sin(sc.t * 2.2 + i * 1.7);
+            ctx.globalAlpha = 0.55 + 0.35 * Math.sin(sc.t * 3 + i * 2.1);
+            ctx.fillStyle = "#ffe9a8";
+            ctx.fillRect(rx - 8 + i * 4, ry - 18 - i * 3 + bob * 2, 2, 2);
+          }
+          ctx.restore();
+        }
+      }
+
+      // Father Jon's pity cross, waiting on the floor beside him.
+      if (sc.pityCross) {
+        const cx = Math.round(sc.pityCross.x - camX);
+        const cy = Geo ? Geo.feetScreenY(sc.pityCross.y, 0) : floorY;
+        JH.Assets.shadow(ctx, cx, cy, 5);
+        JH.Assets.draw(ctx, "essence_cross", cx, cy, 1, { t: sc.t });
+      }
+
       // Pillar-buy ring burst: an expanding element-color ring at the station.
       if (sc.ringFx) {
         const k = sc.ringFx.t / 0.5;
@@ -582,6 +641,23 @@
             ctx.fillText(root.JH.Pillars.cost(rank) + " Essence · E: raise", x, VH - 84);
           }
         }
+      }
+
+      // Reliquary detail text when near (and holding washed boons).
+      if (sc.nearReliquary) {
+        const B = root.JH.Benedictions;
+        const nWashed = B.washedCount();
+        const nextId = Object.keys(B.washed)[0];
+        const next = nextId && B.byId(nextId);
+        const rx = Math.round(L.reliquaryX - camX);
+        ctx.fillStyle = "#ffe9a8";
+        ctx.fillText("RELIQUARY — " + nWashed + " washed benediction" + (nWashed === 1 ? "" : "s"), rx, VH - 114);
+        if (next) {
+          ctx.fillStyle = "#c8d2e8";
+          ctx.fillText("Next: " + next.name + (B.washed[nextId] >= 2 ? " II" : ""), rx, VH - 104);
+        }
+        ctx.fillStyle = this.state.essence >= 1 ? "#9be8ff" : "#a66";
+        ctx.fillText("1 Essence · E: reclaim", rx, VH - 94);
       }
 
       // Rising "+RANK" float after a buy (church draws its own overlays).
