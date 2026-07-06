@@ -7,6 +7,14 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.5 — Shield Inspection (2026-07-06)
+
+- **Bulwark hp 420 → 300**: its defense is the dome, not the bar — elite
+  ramps were turning it into a ~1,500-hp turtle sponge.
+- **Dome duty cycle 7s up / 1.4s down → 5s up / 2.5s down**: it was
+  sheltered ~80% of the fight; hose windows are now nearly twice as long,
+  and stepping in to force the slam stays the aggressive counter.
+
 ## v0.27.4 — Fire Code (2026-07-06)
 
 ### Fire, regulated

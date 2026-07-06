@@ -187,7 +187,9 @@
     // until it sprints back to reclaim it. See docs/superpowers/specs/
     // 2026-06-30-bulwark-shield-rework-design.md.
     bulwark: {
-      name: "Bulwark", hp: 420, speed: 26, touchDmg: 14, contactCd: 1.0,
+      // Its defense identity is the dome, not raw hp — keep the bar modest
+      // or elite ramps turn it into a turtling sponge.
+      name: "Bulwark", hp: 300, speed: 26, touchDmg: 14, contactCd: 1.0,
       // Dome-shield cycle: approaches, plants a dome barrier centered on itself,
       // shelters inside it (spray is blocked from outside) and big-slams when the
       // player steps in, then retrieves the shield once the dome fades and
@@ -195,8 +197,10 @@
       plantRange: 90,          // approach until within this of the player, then plant
       plantWind: 0.5,          // wind-up before the dome forms
       domeRadius: 58,          // dome radius (world units — x and depth)
-      domeDur: 7.0,            // seconds the barrier holds before fading out
-      redeployCd: 1.4,         // cooldown after retrieving before it can plant again
+      // Duty cycle: 7s dome / 1.4s gap meant ~80% shelter — hose windows were
+      // token. 5s / 2.5s keeps the turtle identity but guarantees real gaps.
+      domeDur: 5.0,            // seconds the barrier holds before fading out
+      redeployCd: 2.5,         // cooldown after retrieving before it can plant again
       retrieveSpeedMult: 1.6, pickupRadius: 16, shieldBodyW: 16,
       // Big slam (à la The Big Drip) when the player is close/inside the dome.
       slamRange: 46, slamWind: 0.65, slamDmg: 22, slamBand: 20,
@@ -301,7 +305,7 @@
   // Balance.superEliteDef). Heavies with big base hp need smaller ones.
   JH.SUPER_TUNE = {
     smelt: { hp: 2 },       // 450 base: x7 was a chore, x3 still lost MELTDOWN playtests
-    bulwark: { hp: 2.5 },   // 420 base + tough-wave elite ramp made 7x unhoseable
+    bulwark: { hp: 2.5 },   // big base + tough-wave elite ramp made 7x unhoseable
     // Per-act hp damp applied on top of the type multiplier, indexed
     // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
     // their whole wave.
