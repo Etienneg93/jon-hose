@@ -7,6 +7,34 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.4 — Fire Code (2026-07-06)
+
+### Fire, regulated
+- **Fire patches burn out on their own after 7s** — full size and full danger
+  for the first ~4.5s, then a 2.5s fizzle where they visibly shrink and die.
+  The shrinking rim is still exactly the hitbox.
+- **Dousing scales with spray damage**: a built-up hose puts fires out far
+  faster than the old flat rate (which remains the floor).
+
+### Smelts, honest
+- **Smelt waterMult 0.5 → 1**: survivability now lives in the health bar you
+  can see (hp 300 → 450, a net ~25% softening). Elite and super smelts
+  inherit the honesty — the super's bar reads true instead of hiding a 2x soak.
+- Super smelt HP tune 3x → 2x; MELTDOWN fields 1 elite smelt + 5 fuses
+  (was 2 + 4). The wave is a fight now, not a coverage lockout.
+
+### Fixes
+- **Switch + Gateway Krusher slam circles hit exactly what they draw** —
+  dodging up/down out of the telegraph ellipse now actually escapes it
+  (the old check ignored depth entirely).
+
+### Progression & church
+- Level-up water gains raised: +20 max water and +5 regen per cycle step —
+  two laps of the cycle now reproduce the retired shop nodes (+40 tank,
+  18→28 regen), with half landing early where the dry tank hurts most.
+- Father Jon's voucher beat moved to the END of his sermon, rewritten to
+  fit, and the ticket only materializes on the line where he offers it.
+
 ## v0.27.3 — Legible Liturgy (2026-07-06)
 
 - All free-floating Church text (pillar details, Reliquary, prompts, rising

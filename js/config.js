@@ -214,8 +214,11 @@
     // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
     // is a curated elite (no `tough` flag in its wave entry).
     smelt: {
-      name: "Smelt", hp: 300, speed: 26, touchDmg: 10, contactCd: 1.0,
-      waterMult: 0.5,          // water flashes off dense/hot material
+      // Survivability lives in hp, not a hidden waterMult soak — the health
+      // bar you see is the fight you get (was 300 hp x 0.5 waterMult = a
+      // dishonest 600 effective).
+      name: "Smelt", hp: 450, speed: 26, touchDmg: 10, contactCd: 1.0,
+      waterMult: 1,
       preferRange: 110,        // standoff distance — backs away if closer, advances if farther
       lobWindup: 0.55,         // telegraph before throw
       lobCd: 3.0,              // cooldown between lobs
@@ -295,10 +298,9 @@
                   batchMin: 3, batchMax: 5, batchPause: 2.0 };
 
   // Per-type super-elite multiplier overrides (default hp x7 in
-  // Balance.superEliteDef). Smelt's 300 base hp + 0.5 waterMult made x7 a
-  // sponge — x3 keeps it a fight, not a chore.
+  // Balance.superEliteDef). Heavies with big base hp need smaller ones.
   JH.SUPER_TUNE = {
-    smelt: { hp: 3 },
+    smelt: { hp: 2 },       // 450 base: x7 was a chore, x3 still lost MELTDOWN playtests
     bulwark: { hp: 2.5 },   // 420 base + tough-wave elite ramp made 7x unhoseable
     // Per-act hp damp applied on top of the type multiplier, indexed
     // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
@@ -354,9 +356,13 @@
   // the next step of this repeating cycle instantly (no pick, no pause).
   JH.LEVELS = {
     setPieceXp: 30,
+    // Water steps lean generous: an empty tank is the early game's harshest
+    // wall, so levels relieve it fastest. Sized against the retired shop
+    // nodes (tier-1 water was +40 tank, regen was +10): two cycle laps
+    // roughly reproduce them, with the first lap landing half of it early.
     cycle: [
-      { sprayDamage: 3 }, { maxWater: 8 }, { maxHp: 8 },
-      { sprayRange: 4 }, { sprayDamage: 3 }, { waterRegen: 2 },
+      { sprayDamage: 3 }, { maxWater: 20 }, { maxHp: 8 },
+      { sprayRange: 4 }, { sprayDamage: 3 }, { waterRegen: 5 },
     ],
   };
 
@@ -367,6 +373,9 @@
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
     burnTickInterval: 0.5,   // seconds between DoT damage beats (flash + ember puff)
+    patchMaxLife: 7,         // hostile patches burn out on their own after this many seconds
+    patchFizzle: 2.5,        // ...staying FULL SIZE until these last seconds, when they fizzle down
+    douseDmgScale: true,     // spray-douse speed scales with spray damage (base dmg = 1x, never slower)
   };
 
   // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
@@ -643,7 +652,7 @@
       { name: "EMBER RUSH", superElite: "fuse", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
       { name: "DOUSE THE FLAMES", douse: true, spawns: [{ type: "smelt", count: 2 }] },
       { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 4 }, { type: "smelt", count: 1 }] },
-      { name: "MELTDOWN", tough: true, superElite: "smelt", spawns: [{ type: "smelt", count: 2 }, { type: "fuse", count: 4 }] },
+      { name: "MELTDOWN", tough: true, superElite: "smelt", spawns: [{ type: "smelt", count: 1 }, { type: "fuse", count: 5 }] },
       { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };

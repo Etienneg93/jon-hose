@@ -828,10 +828,25 @@ test("super smelt lobs ONE bouncing slag, not two", () => {
   assert.strictEqual(g.embers[0].bounces, 1);
 });
 
-test("super smelt hp uses the SUPER_TUNE override (3x, not 7x)", () => {
+test("super smelt uses its SUPER_TUNE hp override; waterMult stays honest (1)", () => {
   const s = JH.makeEnemy("smelt", 0, 0);
   s.makeSuper();
-  assert.strictEqual(s.maxHp, JH.ENEMIES.smelt.hp * 3);
+  assert.strictEqual(s.maxHp, JH.ENEMIES.smelt.hp * JH.SUPER_TUNE.smelt.hp);
+  assert.strictEqual(s.def.waterMult, 1, "survivability lives in hp, not a hidden soak");
+});
+
+test("hostile fire patches hold full size, fizzle only at end of life, then burn out", () => {
+  const g = makeThinkGame(500, 40);   // player far away — no spraying involved
+  const fp = new JH.FirePatch(100, 40, 24, 2.2);
+  const dt = 1 / 60, F = JH.FIRE;
+  const r0 = fp.footprint().r;
+  for (let t = 0; t < F.patchMaxLife - F.patchFizzle - 0.1; t += dt) fp.update(dt, g);
+  assert.strictEqual(fp.footprint().r, r0, "full size until the fizzle window opens");
+  for (let t = 0; t < F.patchFizzle / 2; t += dt) fp.update(dt, g);
+  assert.ok(fp.footprint().r < r0, "shrinking inside the fizzle window");
+  assert.ok(!fp.dead, "still burning mid-fizzle");
+  for (let t = 0; t < F.patchFizzle / 2 + 0.3; t += dt) fp.update(dt, g);
+  assert.ok(fp.dead, "burned out after patchMaxLife");
 });
 
 test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () => {
@@ -846,10 +861,10 @@ test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () 
 test("computeStats folds levelCount through the gain cycle", () => {
   JH.Upgrades.reset();
   const base = JH.Upgrades.computeStats({});
-  JH.Upgrades.levelCount = 2;                        // +3 dmg, +8 water
+  JH.Upgrades.levelCount = 2;                        // first two cycle steps: dmg, water
   const s = JH.Upgrades.computeStats({});
-  assert.strictEqual(s.sprayDamage, base.sprayDamage + 3);
-  assert.strictEqual(s.maxWater, base.maxWater + 8);
+  assert.strictEqual(s.sprayDamage, base.sprayDamage + JH.LEVELS.cycle[0].sprayDamage);
+  assert.strictEqual(s.maxWater, base.maxWater + JH.LEVELS.cycle[1].maxWater);
   JH.Upgrades.reset();
   assert.strictEqual(JH.Upgrades.levelCount, 0);
 });
@@ -1430,4 +1445,41 @@ test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats que
   assert.strictEqual(p.upgradeQ[0].text, "+3 DMG");
   p.applyStats(Object.assign({}, p.stats));   // identical rebuild → no entry
   assert.strictEqual(p.upgradeQ.length, 1);
+});
+
+test("boss line slam hits exactly its telegraph ellipse — dodging in depth escapes", () => {
+  for (const type of ["switch", "gatewaykrusher"]) {
+    const b = JH.makeEnemy(type, 200, 40);
+    const d = b.def, lt = { x: 100, y: 40 };
+    const pl = { x: 100, y: 40, z: 0 };
+    assert.ok(b.lineHits(pl, lt), type + ": dead center hits");
+    pl.y = 40 + d.lineBand + 1;                       // dodged down past the rim
+    assert.ok(!b.lineHits(pl, lt), type + ": outside in depth misses");
+    pl.y = 40 - d.lineBand - 1;                       // dodged up past the rim
+    assert.ok(!b.lineHits(pl, lt), type + ": outside upward misses");
+    pl.y = 40; pl.x = 100 + d.whipBand * 2 + 1;       // outside the drawn rx
+    assert.ok(!b.lineHits(pl, lt), type + ": outside in x misses");
+    pl.x = 100 + d.whipBand * 2 - 2;                  // inside the drawn rx on-axis
+    assert.ok(b.lineHits(pl, lt), type + ": drawn width hits on-axis");
+    pl.x = 100; pl.z = 20;                            // airborne
+    assert.ok(!b.lineHits(pl, lt), type + ": airborne misses");
+  }
+});
+
+test("spray-douse speed scales with spray damage, never below the flat rate", () => {
+  const mkSpray = (dmgMult) => {
+    const g = makeThinkGame(60, 40);
+    const p = g.player;
+    p.water = p.stats.maxWater;
+    p.stats.sprayDamage = JH.PLAYER.sprayDamage * dmgMult;
+    p.facing = 1;
+    const fp = new JH.FirePatch(p.x + 30, p.y, 24, 3);
+    g.firePatches = [fp];
+    p.doSpray(0.1, g);
+    return fp.sprayProgress;
+  };
+  const base = mkSpray(1), twice = mkSpray(2), weak = mkSpray(0.3);
+  assert.ok(twice > base * 1.5, "double damage douses much faster");
+  assert.ok(base >= 0.1 - 1e-9, "base damage is at least the flat rate");
+  assert.ok(Math.abs(weak - 0.1) < 1e-9, "well-below-base damage clamps to exactly the flat rate");
 });

@@ -259,6 +259,12 @@
 
       // Father Jon's dialogue gates movement until he finishes.
       if (sc.dialogue) {
+        // The pity voucher pops into being on the line where he offers it.
+        if (sc.pityLineIdx != null && sc.dialogue.idx >= sc.pityLineIdx) {
+          sc.pityLineIdx = null;
+          sc.pityVoucher = { x: sc.fatherSpawnX - 32, y: sc.fatherY };
+          game.audio.play("buy");
+        }
         if (In.pressed("confirm") && sc.t > 0.25) {
           sc.dialogue.idx++; sc.t = 0;
           if (sc.dialogue.idx >= sc.dialogue.lines.length) {
@@ -301,12 +307,13 @@
           : [JH.CHURCH.sermon.repeat[(Math.random() * JH.CHURCH.sermon.repeat.length) | 0]];
         if (this.pendingPity) {
           this.pendingPity = false;
-          lines.unshift(
-            "The vendor on that street is an old friend of this parish. He appears wherever the faithful struggle.",
-            "Take this voucher, child — half off his next ware. You're a church member now."
+          // Voucher beat comes AFTER the sermon proper — and the ticket only
+          // materializes on the line where he offers it (see dialogue gate).
+          lines.push(
+            "One more thing, child. The vendor on that street — an old friend of this parish. He appears wherever the faithful struggle.",
+            "Present him this voucher: half off his next ware. You are a member of this church now."
           );
-          // The gift itself: a voucher set down beside him, collected in-scene.
-          sc.pityVoucher = { x: sc.fatherSpawnX - 32, y: sc.fatherY };
+          sc.pityLineIdx = lines.length - 1;
         }
         sc.dialogue = { lines: lines, idx: 0 };
         return;

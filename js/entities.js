@@ -847,7 +847,12 @@
           const fwd = (fp.x - ox) * this.facing;
           if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
               && Math.abs(fp.y - oy) < S.sprayHitBand) {
-            fp.sprayProgress += dt;
+            // Douse speed scales with spray damage (built-up hoses put fires
+            // out faster); clamped so a weak/low-pressure stream never douses
+            // slower than the old flat rate.
+            const douseMult = JH.FIRE.douseDmgScale
+              ? Math.max(1, (S.sprayDamage * dmgScale) / JH.PLAYER.sprayDamage) : 1;
+            fp.sprayProgress += dt * douseMult;
             // Steam Sermon: spraying a lit patch also vents a damaging steam
             // cloud over its footprint, cooking any enemy standing in it.
             if (steamRank) {
@@ -2052,11 +2057,20 @@
       this.rimFlashT = 0;      // white rim flash on first contact
       this.dead = false; this.t = 0;
     }
-    // Live footprint (shrinks as spray extinguishes). ONE shape shared by the
+    // How doused the patch reads (0 lit .. 1 out): the larger of spray
+    // progress and the end-of-life fizzle. The fizzle holds at 0 — full
+    // size, full heat — until the last patchFizzle seconds of patchMaxLife.
+    douseFrac() {
+      const sprayed = this.sprayProgress / this.extinguishDur;
+      const F = JH.FIRE, life = this.friendly ? 0 : F.patchMaxLife;
+      if (!life) return Math.min(1, sprayed);
+      const fizzle = (this.t - (life - F.patchFizzle)) / F.patchFizzle;
+      return Math.min(1, Math.max(sprayed, fizzle, 0));
+    }
+    // Live footprint (shrinks as the patch douses). ONE shape shared by the
     // hit test and the drawn scorch/rim — the rim you see is the hitbox.
     footprint() {
-      const prog = this.sprayProgress / this.extinguishDur;
-      const r = Math.max(6, this.radius * (1 - prog * 0.55));
+      const r = Math.max(6, this.radius * (1 - this.douseFrac() * 0.55));
       const rx = r * 0.85;
       return { r, rx, ry: rx * JH.GROUND_RY };
     }
@@ -2128,12 +2142,16 @@
           if (game.audio) game.audio.play("sizzle");
         }
       }
-      if (this.sprayProgress >= this.extinguishDur) this.dead = true;
+      // Death by spraying it out OR by end-of-life burnout (douseFrac's
+      // fizzle window handles the visual wind-down over the last seconds).
+      if (this.sprayProgress >= this.extinguishDur
+          || (JH.FIRE.patchMaxLife && this.t >= JH.FIRE.patchMaxLife))
+        this.dead = true;
     }
     draw(ctx, cam) {
       const sx = Math.round(this.x - cam);
       const sy = Math.round(Geo.feetScreenY(this.y, 0));
-      const prog = this.sprayProgress / this.extinguishDur;
+      const prog = this.douseFrac();
       const f = this.footprint();
       const t = this.t;
       ctx.save();
@@ -2766,9 +2784,11 @@
         }
         if (this.windTimer <= 0) {
           if (this._doLine) {
+            // Rim is hitbox: the slam hits exactly the floor ellipse the
+            // telegraph draws (drawLines: rx = whipBand*2, ry = lineBand) —
+            // dodging in depth escapes it just like dodging in x.
             for (const lt of this.lines)
-              if (Math.abs(pl.x - lt.x) <= d.whipBand && (pl.z || 0) < 18)
-                pl.takeHit(d.lineDmg, game, this.x);
+              if (this.lineHits(pl, lt)) pl.takeHit(d.lineDmg, game, this.x);
           }
           if (this._doWhip) {
             for (const wx of this.whipTargets)
@@ -2848,6 +2868,15 @@
       ctx.restore();
     }
     // Floor-spot slam — tentacle drives to the locked (x,y) position on the ground.
+    // Line-slam hit test — the same ellipse drawLines paints (rx = whipBand*2,
+    // ry = lineBand), plus the shared "on the ground" z gate. Also used by
+    // the Gateway Krusher (inherits).
+    lineHits(pl, lt) {
+      if ((pl.z || 0) >= 18) return false;
+      const ex = (pl.x - lt.x) / (this.def.whipBand * 2);
+      const ey = (pl.y - lt.y) / this.def.lineBand;
+      return ex * ex + ey * ey <= 1;
+    }
     drawLines(ctx, cam) {
       const cx = this.x - cam;
       const cy = Geo.feetScreenY(this.y, this.z) - this.bodyH * 0.5;
@@ -3906,9 +3935,9 @@
         }
         if (this.windTimer <= 0) {
           if (this._doLine) {
+            // Rim is hitbox: exactly the telegraph ellipse (see lineHits).
             for (const lt of this.lines)
-              if (Math.abs(pl.x - lt.x) <= d.whipBand && (pl.z || 0) < 18)
-                pl.takeHit(d.lineDmg, game, this.x);
+              if (this.lineHits(pl, lt)) pl.takeHit(d.lineDmg, game, this.x);
           }
           if (this._doWhip) {
             for (const wx of this.whipTargets)
