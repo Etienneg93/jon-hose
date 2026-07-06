@@ -8,7 +8,7 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 |---|------|--------|
 | 1 | Config block + pure balance helpers | ☑ done (224/224 tests) |
 | 2 | Scene skeleton + state wiring + debug entry | ☑ done (headless-verified) |
-| 3 | Truck hose (big blast, tank, pressure) | ☐ not started |
+| 3 | Truck hose (big blast, tank, pressure) | ☑ done (headless-verified) |
 | 4 | Fire-roster hazards + collisions + honest HP | ☐ not started |
 | 5 | Hydrants (refuel + lane-wash) | ☐ not started |
 | 6 | Collapse-wall pressure loop | ☐ not started |

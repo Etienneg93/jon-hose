@@ -79,7 +79,8 @@
       if (sc.phase !== "intro") sc.scrollX += C.scrollSpeed * sc.speedMult * dt;
 
       this._drive(dt, C, In);
-      // Hazards/hydrants/pickups/furnace/wall are advanced by later tasks.
+      if (sc.phase !== "intro") this._hose(dt, C);
+      // Hydrants/pickups/furnace/wall are advanced by later tasks.
     },
 
     // Truck movement: depth = dodge/aim axis, screen-x = throttle/brake,
@@ -115,6 +116,49 @@
       t.spraying = In.held("spray");
     },
 
+    // Nozzle world-x (front of the truck) in the scroll coordinate space.
+    _nozzleWorldX(sc) { return sc.scrollX + sc.truck.screenX + 20; },
+
+    // The oversized forward hose: hold spray → drain tank, two-tier pressure,
+    // damage every hazard inside the forward swath (ONE shape shared with the
+    // beam render — rim-is-hitbox). Runs dry into a weak sputter, never fully off.
+    _hose(dt, C) {
+      const sc = this.scene, t = sc.truck;
+
+      // Tank: drain while spraying (with regen lock), else passive regen.
+      if (t.spraying && t.water > 0) {
+        t.water = Math.max(0, t.water - C.drain * dt);
+        t.regenLock = C.regenDelay;
+      } else if (t.regenLock > 0) {
+        t.regenLock -= dt;
+      } else {
+        t.water = Math.min(C.tank, t.water + C.regen * dt);
+      }
+
+      if (!t.spraying) { sc.beam = null; return; }
+
+      const pr = JH.TruckBalance.truckPressure(C, t.water / C.tank);
+      const range = C.hoseRange * pr.rangeMult;
+      const dps = C.hoseDps * pr.dmgScale;
+      sc.beam = { range: range, sputter: pr.dmgScale < 1 };  // for render
+
+      const nozzleX = this._nozzleWorldX(sc);
+      for (const h of sc.hazards) {
+        const dx = h.worldX - nozzleX;
+        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, h.depth, dx, range)) {
+          h.hp -= dps * dt;
+          if (h.hp <= 0) h.dead = true;
+        }
+      }
+      sc.hazards = sc.hazards.filter((h) => !h.dead);
+    },
+
+    // Dev/headless: drop a stub target `aheadPx` in front of the truck.
+    _debugSpawnHazard(depth, aheadPx, hp) {
+      const sc = this.scene; if (!sc) return;
+      sc.hazards.push({ worldX: this._nozzleWorldX(sc) + aheadPx, depth: depth, hp: hp, kind: "dummy" });
+    },
+
     _finish(game) {
       this.scene = null;
       JH.Camera.unlock && JH.Camera.unlock();
@@ -146,8 +190,29 @@
         ctx.stroke();
       }
 
+      // Hazards (placeholder blocks; real sprites in Task 9).
+      for (const h of sc.hazards) {
+        const hx = h.worldX - sc.scrollX;
+        if (hx < -40 || hx > JH.VIEW_W + 40) continue;
+        const hy = JH.Geo.feetScreenY(h.depth, 0);
+        ctx.fillStyle = "#8a5a3a";
+        ctx.fillRect(hx - 8, hy - 14, 16, 14);
+      }
+
       // The truck (placeholder rect) + Jon on the running board.
       const ty = JH.Geo.feetScreenY(t.depth, 0);
+
+      // Forward hose swath — ONE shape with the beamCovers hit test.
+      if (sc.beam) {
+        const nx = t.screenX + 20;
+        const y0 = JH.Geo.feetScreenY(t.depth - C.hoseBand, 0);
+        const y1 = JH.Geo.feetScreenY(t.depth + C.hoseBand, 0);
+        const g = ctx.createLinearGradient(nx, 0, nx + sc.beam.range, 0);
+        g.addColorStop(0, sc.beam.sputter ? "rgba(120,180,255,0.55)" : "rgba(150,210,255,0.75)");
+        g.addColorStop(1, "rgba(150,210,255,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(nx, Math.min(y0, y1), sc.beam.range, Math.abs(y1 - y0));
+      }
       ctx.fillStyle = t.invulnT > 0 ? "#ffd27a" : "#c0392b";
       ctx.fillRect(t.screenX - 26, ty - 18, 46, 18);
       ctx.fillStyle = "#e8e8e8";

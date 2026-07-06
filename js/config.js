@@ -629,6 +629,7 @@
     tank: 100,
     drain: 20,           // units/s while spraying (~5s per full tank)
     regen: 6,            // units/s passive
+    regenDelay: 0.35,    // s after spraying before passive regen resumes
     pressureFloor: 0.06, // tank frac at/above which the hose is full power
     dryDpsMult: 0.25,
     dryRangeMult: 0.5,
