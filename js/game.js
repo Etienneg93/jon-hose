@@ -1533,15 +1533,30 @@
             this.waveCleared_();
           }
         } else {
-          // Reinforcement trickle: stream queued spawns in while the field
-          // has room (enemies is already culled to the living this frame).
+          // Reinforcements (enemies is already culled to the living this
+          // frame). With 3+ queued they arrive as a BATCH once the field
+          // thins enough to fit one — a wave-within-a-wave surge instead of
+          // one-for-one replacement. Small remainders trickle in singly.
           if (this.wavePool && this.wavePool.length) {
             this.waveTrickleT -= dt;
+            const W = JH.WAVEFLOW;
             const fieldCap = JH.Balance.ticketBudget(
-              JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), JH.WAVEFLOW.fieldCap);
-            if (this.waveTrickleT <= 0 && this.enemies.length < fieldCap) {
-              this.waveTrickleT = JH.WAVEFLOW.trickle;
-              this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
+              JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), W.fieldCap);
+            const room = fieldCap - this.enemies.length;
+            if (this.waveTrickleT <= 0) {
+              if (this.wavePool.length >= W.batchMin) {
+                if (room >= W.batchMin) {
+                  const n = Math.min(this.wavePool.length, room, W.batchMax);
+                  for (let k = 0; k < n; k++)
+                    this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, k);
+                  this.banner("REINFORCEMENTS!", 1.0);
+                  this.waveTrickleT = W.batchPause;
+                }
+                // No room yet: hold the batch, re-check next frame.
+              } else if (room > 0) {
+                this.waveTrickleT = W.trickle;
+                this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
+              }
             }
           }
           // The wave only clears once the queue has fully emptied onto the field.

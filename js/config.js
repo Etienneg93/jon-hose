@@ -284,12 +284,15 @@
   // mercy rule — ticketless melee enemies hold at approach range instead.
   JH.TICKETS = { budgets: [4, 4, 5, 5, 6] };
 
-  // Wave spawn flow: fieldCap enemies open the wave; the rest queue and
-  // trickle in (one per `trickle` sec) whenever the field has room — big
-  // waves ramp instead of dumping every body at frame one. fieldCap is
+  // Wave spawn flow: fieldCap enemies open the wave; the rest queue. With
+  // batchMin+ queued, reinforcements arrive as a batch (batchMin..batchMax
+  // at once, REINFORCEMENTS! banner, batchPause between surges) once the
+  // field has room for a full batch — a wave-within-a-wave. Smaller
+  // remainders trickle in singly (one per `trickle` sec). fieldCap is
   // indexed by actLevel+1 (like SPRINKLE.counts): Act 1 runs tight because
   // the kit has no AoE yet (pierce/split arrive with later purchases).
-  JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1 };
+  JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1,
+                  batchMin: 3, batchMax: 5, batchPause: 2.0 };
 
   // Per-type super-elite multiplier overrides (default hp x7 in
   // Balance.superEliteDef). Smelt's 300 base hp + 0.5 waterMult made x7 a
