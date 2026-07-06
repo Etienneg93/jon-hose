@@ -610,6 +610,8 @@
     scrollSpeed: 320,    // world px/s the road moves under the truck
     truckScreenX: 140,   // truck's resting screen-x
     throttleBand: 40,    // ± screen-x the throttle/brake nudges within
+    moveSpeed: 120,      // truck depth (up/down) speed, px/s
+    throttleSpeed: 80,   // truck screen-x (throttle/brake) speed, px/s
     lanes: [16, 43, 70], // soft authoring lanes across DEPTH_MIN..DEPTH_MAX
 
     // Truck integrity — VISIBLE bar, non-lethal (feeds shake + wall pressure +

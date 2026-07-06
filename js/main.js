@@ -25,6 +25,10 @@
     JH.Game.init();
     JH.Game.showScreen("screen-title");
 
+    // Dev/headless: ?truck=1 jumps straight into the fire-truck escape.
+    if (new URLSearchParams(window.location.search).get("truck"))
+      setTimeout(() => JH.Game.debugEnterTruck(), 200);
+
     // First key/click also unlocks audio + starts music (autoplay policy).
     const unlock = () => { JH.AudioFX.resume(); JH.Music.start(); window.removeEventListener("keydown", unlock); };
     window.addEventListener("keydown", unlock);

@@ -636,6 +636,21 @@
       this.banner("THE SLAYER JOINS YOUR SIDE!", 2.4);
     },
 
+    // Called by JH.TruckRun when the escape reaches the Air World gate.
+    // Task 8 opens the benediction sigil beat here; for now the air-world
+    // entrance is stubbed to win() (no Ass Man act exists yet).
+    afterTruckRun() {
+      this.state = "play";
+      this.showScreen("hud");
+      this.win();
+    },
+
+    // Dev/headless entry straight into the truck run (see main.js ?truck=1).
+    debugEnterTruck() {
+      if (!this.player) this.startGame();
+      JH.TruckRun.enter(this);
+    },
+
     drawCutscene(ctx) {
       const cs = this.cutscene;
       if (!cs) return;
@@ -1355,6 +1370,12 @@
       }
       if (this.state === "churchPause") return;
 
+      // Fire-truck escape: self-contained scrolling sub-mode (see truck.js).
+      if (this.state === "truck") {
+        if (JH.TruckRun.update) JH.TruckRun.update(dt, this);
+        return;
+      }
+
       if (this.devMenu) return;
 
       // Cutscene: only E (confirm) advances the dialogue.
@@ -1672,6 +1693,15 @@
         ctx.save();
         ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
         JH.Church.renderScene(ctx, this);
+        ctx.restore();
+        if (this.devMenu) this.drawDevMenu(ctx);
+        return;
+      }
+      if (this.state === "truck") {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
+        JH.TruckRun.renderScene(ctx, this);
         ctx.restore();
         if (this.devMenu) this.drawDevMenu(ctx);
         return;
