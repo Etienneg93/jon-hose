@@ -1,8 +1,10 @@
 # Fire Truck Interlude — Between-Worlds Minigame (raw idea)
 
-**Date:** 2026-07-06 · **Status: CONCEPT — brainstorm in progress, decisions
-locking. No spec yet.** Skeleton agreed with the user in a live brainstorm;
-still needs a real spec pass before any build.
+**Date:** 2026-07-06 · **Status: SPEC'd →
+`docs/superpowers/specs/2026-07-06-fire-truck-escape-design.md`.** This note is
+the brainstorm record; the spec is the source of truth. Destination resolved:
+lands at the **Air World entrance** (Ass Man on-ramp), stubbed to `win()` until
+that act exists.
 
 ## The pitch
 
