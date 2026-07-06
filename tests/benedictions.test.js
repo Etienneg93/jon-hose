@@ -74,3 +74,43 @@ test("applyStats folds stat boons only", () => {
   assert.strictEqual(s2.maxHp, 160);
   B.reset();
 });
+
+test("wash moves active boons to the reliquary; second wash keeps the higher rank", () => {
+  B.reset();
+  B.take("bedrock"); B.take("bedrock");               // rank 2
+  B.take("gale_stride");                              // rank 1
+  B.wash();
+  assert.deepStrictEqual(B.active, {}, "death clears live boons");
+  assert.strictEqual(B.washedCount(), 2);
+  assert.strictEqual(B.washed.bedrock, 2, "washed rank preserved");
+  // Reclaim bedrock, take it back down to rank 1 via a fresh take elsewhere,
+  // then die again: the reliquary keeps the max of old and new.
+  B.active.bedrock = 1;
+  B.wash();
+  assert.strictEqual(B.washed.bedrock, 2, "re-wash keeps the higher rank");
+  B.reset();
+});
+
+test("reclaimNext restores one washed boon at its rank, FIFO; empty returns null", () => {
+  B.reset();
+  B.take("bedrock"); B.take("bedrock");
+  B.take("gale_stride");
+  B.wash();
+  const first = B.reclaimNext();
+  assert.strictEqual(first.id, "bedrock");
+  assert.strictEqual(B.rank("bedrock"), 2, "reclaimed at washed rank");
+  assert.strictEqual(B.washedCount(), 1);
+  const second = B.reclaimNext();
+  assert.strictEqual(second.id, "gale_stride");
+  assert.strictEqual(B.reclaimNext(), null, "empty reliquary");
+  B.reset();
+});
+
+test("reset clears both active and washed (new run wipes the reliquary)", () => {
+  B.reset();
+  B.take("bedrock"); B.wash();
+  B.take("tailwind");
+  B.reset();
+  assert.deepStrictEqual(B.active, {});
+  assert.strictEqual(B.washedCount(), 0);
+});

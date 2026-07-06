@@ -1157,9 +1157,9 @@
     respawnFromChurch() {
       const next = Math.max(0, this.diedWave);     // the wave to re-fight
       const p = this.player;
-      // Death wipes in-run benedictions (suds/signatures/relics/pillars survive
-      // elsewhere) — reset before the stat refresh so the wipe takes immediately.
-      if (JH.Benedictions) JH.Benedictions.reset();
+      // Benedictions were washed at the death moment (startPlayerDeathSeq) —
+      // NOT reset here, or Reliquary reclaims made in the Church would be
+      // wiped on the way out. Stat refresh picks up whatever is active now.
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
       const maxX = WAVE_TRIGGERS[next] + 30;
       p.x = clamp(this.lastHydrantX || 60, 12, maxX - 12);
@@ -1167,15 +1167,13 @@
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
       p.clearBurn();
+      p.clearBuffs();   // buff timers freeze through the Church; don't let them resume
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.floaters = [];
-      this.sigils = [];   // usedOnce survives death; the benediction wipe above already reset ranks
-      // First-death pity: banked at the death moment, paid out as a cross now
-      // that the player (and the pickup array) are back in the world.
-      if (this.pendingPityCross) { this.spawnPickup("cross", p.x + 34, p.y, 1); this.pendingPityCross = false; }
+      this.sigils = [];   // usedOnce survives death; active boons are whatever the Reliquary gave back
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
@@ -1258,14 +1256,14 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
-      // First death of the RUN: cue Father Jon's line; the pity Essence pays
-      // out as a cross pickup once respawnFromChurch places Jon back down.
+      // First death of the RUN: cue Father Jon's line; the pity Essence is a
+      // cross he sets down in the church scene itself (church.js pityCross).
       this.deathCount = (this.deathCount || 0) + 1;
-      if (this.deathCount === 1 && JH.Church) {
-        JH.Church.pendingPity = true;
-        this.pendingPityCross = true;
-      }
+      if (this.deathCount === 1 && JH.Church) JH.Church.pendingPity = true;
       this.diedWave = this.waveIndex;        // the wave to re-arm on return
+      // Wash (not wipe) benedictions at the death moment: they move to the
+      // Reliquary, reclaimable in the Church for Essence before respawn.
+      if (JH.Benedictions) JH.Benedictions.wash();
       this.state = "playerDeathSeq";
       this.deathSeqT = 0;
       this.audio.playFile("audio/effects/jon-death.mp3", 0.9);

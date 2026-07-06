@@ -456,7 +456,8 @@
     // Father Jon materializes at fatherX; blessing stations sit along the nave;
     // walking into portalX (within portalReach) returns you to the street.
     layout: {
-      length: 720, spawnX: 28, fatherX: 168, altarX: 300, portalX: 660,
+      length: 720, spawnX: 28, fatherX: 168, altarX: 300, reliquaryX: 336,
+      portalX: 660,
       portalReach: 18, stationRange: 24,
       depthMin: 35, depthMax: 75,
       // Walk-up pillar stations, one per element (JH.PILLARS.defs). Locked
