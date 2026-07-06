@@ -528,7 +528,10 @@
       // cutscene early-return below fires before the win() check, so win()
       // never runs synchronously here and the sigils are pickable in the
       // post-cutscene free-walk.
-      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+      // The Slayer's beat is deferred: the fire-truck escape owns the single
+      // benediction pick at the Air World arrival (see afterTruckRun).
+      if (clearedWave && clearedWave.bossType !== "slayer" &&
+          (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
         const offers = JH.Benedictions.pickOffers({
           active: JH.Benedictions.active,
           pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
@@ -624,25 +627,30 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      // No wave beyond the Slayer (WAVE_TRIGGERS[nextWaveIdx] doesn't exist) —
-      // open the victory portal ahead of Jon instead of a shop corridor.
-      // Placeholder exit to the next world: walk in and confirm to win.
-      this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
-      this.victoryPortal = {
-        x: Math.min(JH.LEVEL_LEN - 60, this.player.x + 150),
-        y: JH.DEPTH_MAX * 0.5, t: 0, near: false,
-      };
-      this.showScreen("hud");
-      this.banner("THE SLAYER JOINS YOUR SIDE!", 2.4);
+      // Fire World is beaten — escape to the Air World gate in the fire truck
+      // (the bridge into the next act; see truck.js). Replaces the old
+      // placeholder victory portal.
+      JH.TruckRun.enter(this);
     },
 
     // Called by JH.TruckRun when the escape reaches the Air World gate.
-    // Task 8 opens the benediction sigil beat here; for now the air-world
-    // entrance is stubbed to win() (no Ass Man act exists yet).
+    // The run's single benediction beat fires here; once chosen, hand off to
+    // the Air World entrance — stubbed to win() until the Ass Man act exists.
     afterTruckRun() {
       this.state = "play";
+      document.getElementById("hud").classList.remove("hidden");
       this.showScreen("hud");
-      this.win();
+      this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
+      const offers = JH.Benedictions.pickOffers({
+        active: JH.Benedictions.active,
+        pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
+        usedOnce: this.beneUsedOnce,
+        censer: !!this.relics && !!this.relics.censer,
+      }, Math.random);
+      this.sigils = offers.map((o, i) => new JH.Sigil(this.player.x + 50 + i * 46, 56, o));
+      this.truckSigilBeat = true;
+      const tally = this.lastTruckEssence ? "  +" + this.lastTruckEssence + " ESSENCE" : "";
+      this.banner("REACHED THE AIR WORLD" + tally + "  —  CHOOSE ONE", 2.6);
     },
 
     // Dev/headless entry straight into the truck run (see main.js ?truck=1).
@@ -1430,6 +1438,13 @@
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.sigils = this.sigils.filter((s) => s.update(dt));
+      // Truck-run arrival: once the benediction is chosen, hand off to the Air
+      // World (stubbed to win() until the Ass Man act exists).
+      if (this.truckSigilBeat && this.sigils.length === 0) {
+        this.truckSigilBeat = false;
+        this.win();
+        return;
+      }
       // Essence-cross event: while a cross is uncollected the world dims.
       const crossOut = this.pickups.some((p) => !p.dead && p.kind === "cross");
       this.essenceDim += ((crossOut ? 1 : 0) - this.essenceDim) * Math.min(1, 3 * dt);

@@ -13,7 +13,7 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 | 5 | Hydrants (refuel + lane-wash) | ☑ done (headless-verified) |
 | 6 | Collapse-wall pressure loop | ☑ done (headless-verified) |
 | 7 | Furnace climax + essence + clean bonus | ☑ done (headless-verified) |
-| 8 | Arrival → benediction beat + Slayer entry + air handoff | ☐ not started |
+| 8 | Arrival → benediction beat + Slayer entry + air handoff | ☑ done (headless-verified) |
 | 9 | Procedural art pass | ☐ not started |
 | 10 | Handoff (test, headless capture, STOP for playtest) | ☐ not started |
 
