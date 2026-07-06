@@ -90,6 +90,7 @@
         if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
         if (sc.shakeT > 0) sc.shakeT -= dt;
         if (sc.washFx && (sc.washFx.t += dt) > 0.4) sc.washFx = null;
+        this._updateWall(dt, C);
       }
       // Hydrants/pickups/furnace/wall are advanced by later tasks.
     },
@@ -284,6 +285,21 @@
       const sc = this.scene;
       sc.speedMult = C.collideSlow;
       sc.slowT = C.collideSlowDur;
+      sc.wallGap = Math.max(0, sc.wallGap - C.wall.creepOnHit);   // wall creeps up
+    },
+
+    // Collapse wall: a non-lethal rubber-band. Clean driving rebuilds the lead;
+    // collisions (via _collide) let it creep up. Contact burns + shoves the
+    // truck forward + blocks backing up, but can never kill or halt progress.
+    _updateWall(dt, C) {
+      const sc = this.scene, W = C.wall, t = sc.truck;
+      if (sc.slowT <= 0) sc.wallGap = Math.min(W.startGap, sc.wallGap + W.recoverRate * dt);
+      if (sc.wallGap <= 4) {
+        sc.wallTouched = true;
+        this._damageTruck(JH.FIRE.burnDpsPerStack * W.contactBurnStacks * dt, true);
+        if (sc.shakeT < 0.15) sc.shakeT = 0.15;
+        t.screenX = Math.max(t.screenX, C.truckScreenX);          // can't brake into it
+      }
     },
 
     // Smashed hydrant: refuel the tank AND wash its lane — kill/soak hazards
@@ -336,6 +352,19 @@
           ctx.moveTo(x, y); ctx.lineTo(x + 20, y);
         }
         ctx.stroke();
+      }
+
+      // Collapse wall — slides in from the left as the gap closes.
+      const wallRight = t.screenX - sc.wallGap;
+      if (wallRight > 0) {
+        const wg = ctx.createLinearGradient(0, 0, wallRight, 0);
+        wg.addColorStop(0, "#ff3a0a"); wg.addColorStop(0.7, "#a51e04"); wg.addColorStop(1, "rgba(120,20,0,0.55)");
+        ctx.fillStyle = wg;
+        ctx.fillRect(0, 0, wallRight, JH.VIEW_H);
+        if (sc.wallGap <= 4) {
+          ctx.fillStyle = "#fff"; ctx.font = "bold 14px monospace"; ctx.textAlign = "center";
+          ctx.fillText("FORWARD!", JH.VIEW_W / 2, 60); ctx.textAlign = "left";
+        }
       }
 
       // Fire patches — ONE ellipse shared with the burn hit test.
