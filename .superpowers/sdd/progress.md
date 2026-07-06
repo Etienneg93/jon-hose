@@ -10,7 +10,7 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 | 2 | Scene skeleton + state wiring + debug entry | ☑ done (headless-verified) |
 | 3 | Truck hose (big blast, tank, pressure) | ☑ done (headless-verified) |
 | 4 | Fire-roster hazards + collisions + honest HP | ☑ done (headless-verified) |
-| 5 | Hydrants (refuel + lane-wash) | ☐ not started |
+| 5 | Hydrants (refuel + lane-wash) | ☑ done (headless-verified) |
 | 6 | Collapse-wall pressure loop | ☐ not started |
 | 7 | Furnace climax + essence + clean bonus | ☐ not started |
 | 8 | Arrival → benediction beat + Slayer entry + air handoff | ☐ not started |

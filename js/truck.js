@@ -89,6 +89,7 @@
         this._updateEmbers(dt, C);
         if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
         if (sc.shakeT > 0) sc.shakeT -= dt;
+        if (sc.washFx && (sc.washFx.t += dt) > 0.4) sc.washFx = null;
       }
       // Hydrants/pickups/furnace/wall are advanced by later tasks.
     },
@@ -157,7 +158,7 @@
         const dx = h.worldX - nozzleX;
         if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, h.depth, dx, range)) {
           h.hp -= dps * dt;
-          if (h.hp <= 0) h.dead = true;
+          if (h.hp <= 0) { if (h.kind === "hydrant") this._popHydrant(h); h.dead = true; }
         }
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
@@ -173,8 +174,9 @@
     _spawnFromTimeline(sc) {
       while (sc.cursor < sc.timeline.length && sc.t >= sc.timeline[sc.cursor].at) {
         const ev = sc.timeline[sc.cursor++];
-        // Combat kinds spawn here; hydrant/cross are wired in Tasks 5/7.
-        if (ev.kind === "wreck" || ev.kind === "fuse" || ev.kind === "smelt" || ev.kind === "pyro")
+        // Combat kinds + hydrants spawn here; cross pickups are wired in Task 7.
+        if (ev.kind === "wreck" || ev.kind === "fuse" || ev.kind === "smelt" ||
+            ev.kind === "pyro" || ev.kind === "hydrant")
           this._spawnHazard(ev);
       }
     },
@@ -189,6 +191,7 @@
       else if (ev.kind === "fuse") { h.hp = E.fuse.hp; h.dmg = E.fuse.blastDmg; h.speed = E.fuse.speed; }
       else if (ev.kind === "smelt") { h.hp = E.smelt.hp; h.dmg = E.smelt.touchDmg; }
       else if (ev.kind === "pyro") { h.hp = E.pyro.hp; h.dmg = E.pyro.touchDmg; }
+      else if (ev.kind === "hydrant") { h.hp = C.hydrantHp; h.dmg = 0; }
       sc.hazards.push(h);
     },
 
@@ -214,10 +217,12 @@
           }
         }
 
-        // Collision with the truck (unless dashing/i-frames). Consumables and
-        // rammed wrecks are destroyed; damage + brief slow.
+        // Collision with the truck. Hydrants pop friendly (refuel, no damage);
+        // other hazards deal damage + a brief slow unless dashing/i-frames.
         if (Math.abs((h.worldX - sc.scrollX) - t.screenX) < 22 && Math.abs(h.depth - t.depth) < 14) {
-          if (t.invulnT <= 0) {
+          if (h.kind === "hydrant") {
+            this._popHydrant(h);
+          } else if (t.invulnT <= 0) {
             this._damageTruck(h.dmg);
             if (h.kind === "fuse") this._spawnPatch(h.worldX, h.depth, E.fuse.blastPatchRadius, E.fuse.blastPatchDur);
             this._collide(C);
@@ -281,6 +286,21 @@
       sc.slowT = C.collideSlowDur;
     },
 
+    // Smashed hydrant: refuel the tank AND wash its lane — kill/soak hazards
+    // and extinguish fire-patches within washRadius (ONE ellipse for draw+hit).
+    _popHydrant(h) {
+      const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck;
+      t.water = Math.min(C.tank, t.water + C.hydrantRefill);
+      const rx = C.washRadius, ry = rx * JH.GROUND_RY;
+      for (const o of sc.hazards) {
+        if (o === h || o.kind === "hydrant") continue;
+        if (JH.Geo.inGroundEllipse(o.worldX, o.depth, h.worldX, h.depth, rx, ry)) o.dead = true;
+      }
+      for (const p of sc.firePatches)
+        if (JH.Geo.inGroundEllipse(p.worldX, p.depth, h.worldX, h.depth, rx, ry)) p.life = 0;
+      sc.washFx = { worldX: h.worldX, depth: h.depth, r: C.washRadius, t: 0 };
+    },
+
     _finish(game) {
       this.scene = null;
       JH.Camera.unlock && JH.Camera.unlock();
@@ -330,7 +350,7 @@
       }
 
       // Hazards (placeholder blocks tinted by kind; real sprites in Task 9).
-      const HCOL = { wreck: "#8a5a3a", fuse: "#ff7a3c", smelt: "#c98a3a", pyro: "#ff5a4a", dummy: "#8a5a3a" };
+      const HCOL = { wreck: "#8a5a3a", fuse: "#ff7a3c", smelt: "#c98a3a", pyro: "#ff5a4a", hydrant: "#3aa6d6", dummy: "#8a5a3a" };
       for (const h of sc.hazards) {
         const hx = h.worldX - sc.scrollX;
         if (hx < -40 || hx > JH.VIEW_W + 40) continue;
@@ -346,6 +366,16 @@
         const ex = e.worldX - sc.scrollX;
         if (ex < -8 || ex > JH.VIEW_W + 8) continue;
         ctx.fillRect(ex - 2, JH.Geo.feetScreenY(e.depth, 0) - 6, 4, 4);
+      }
+
+      // Hydrant lane-wash burst (expanding ring).
+      if (sc.washFx) {
+        const wx = sc.washFx.worldX - sc.scrollX, k = sc.washFx.t / 0.4;
+        ctx.strokeStyle = "rgba(120,210,255," + (0.8 * (1 - k)) + ")";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(wx, JH.Geo.feetScreenY(sc.washFx.depth, 0), sc.washFx.r * (0.4 + k), sc.washFx.r * (0.4 + k) * JH.GROUND_RY, 0, 0, Math.PI * 2);
+        ctx.stroke();
       }
 
       // The truck (placeholder rect) + Jon on the running board.
