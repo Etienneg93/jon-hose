@@ -333,7 +333,7 @@
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
-      this.truckBoard = null; this.worldCrumble = null;
+      this.truckBoard = null; this.worldCrumble = null; this.slayerBeneBeat = false;
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
@@ -529,10 +529,7 @@
       // cutscene early-return below fires before the win() check, so win()
       // never runs synchronously here and the sigils are pickable in the
       // post-cutscene free-walk.
-      // The Slayer's beat is deferred: the fire-truck escape owns the single
-      // benediction pick at the Air World arrival (see afterTruckRun).
-      if (clearedWave && clearedWave.bossType !== "slayer" &&
-          (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
         const offers = JH.Benedictions.pickOffers({
           active: JH.Benedictions.active,
           pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
@@ -628,35 +625,37 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      // Fire World is beaten and now collapses. The truck screeches in from
-      // the right and brakes where the exit was; board it (E) to begin the
-      // escape (see truck.js). Replaces the old placeholder victory portal.
+      // Fire World is beaten. Pick the Slayer's benediction first (spawned by
+      // waveCleared_); choosing it triggers the escape sequence
+      // (startTruckArrival): rumble, dread sting, and the truck driving in.
       this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
-      const stopX = Math.min(JH.LEVEL_LEN - 80, this.player.x + 150);
-      this.truckBoard = { x: stopX + 300, stopX: stopX, y: JH.DEPTH_MAX * 0.5, t: 0, near: false, arrived: false };
-      this.worldCrumble = { t: 0, shakeCd: 0 };
+      this.slayerBeneBeat = true;
       this.showScreen("hud");
-      this.banner("THE FIRE WORLD COLLAPSES — BOARD THE TRUCK!", 2.8);
+      this.banner("THE SLAYER JOINS YOUR SIDE!  —  CHOOSE ONE", 2.6);
     },
 
-    // Called by JH.TruckRun when the escape reaches the Air World gate.
-    // The run's single benediction beat fires here; once chosen, hand off to
-    // the Air World entrance — stubbed to win() until the Ass Man act exists.
+    // Sequence fired once the Slayer benediction is chosen: the Fire World
+    // rumbles, a dread sting hits, and the escape truck drives in and brakes
+    // just at the right edge of the screen. Board it (E) to start the escape.
+    startTruckArrival() {
+      this.worldCrumble = { t: 0, shakeCd: 0 };
+      this.shake(12);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("dread");
+      const stopX = JH.Camera.x + JH.VIEW_W - 42;   // brake at the right screen edge
+      this.truckBoard = { x: stopX + 220, stopX: stopX, y: JH.DEPTH_MAX * 0.5, t: 0, near: false, arrived: false };
+      this.banner("SOMETHING'S COMING — BOARD THE TRUCK!", 2.8);
+    },
+
+    // Called by JH.TruckRun when the escape reaches the Air World gate. The
+    // benediction was already chosen (pre-truck), so this just tallies the
+    // essence banked on the road and hands off to the Air World entrance —
+    // stubbed to win() until the Ass Man act exists.
     afterTruckRun() {
       this.state = "play";
       document.getElementById("hud").classList.remove("hidden");
       this.showScreen("hud");
-      this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
-      const offers = JH.Benedictions.pickOffers({
-        active: JH.Benedictions.active,
-        pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
-        usedOnce: this.beneUsedOnce,
-        censer: !!this.relics && !!this.relics.censer,
-      }, Math.random);
-      this.sigils = offers.map((o, i) => new JH.Sigil(this.player.x + 50 + i * 46, 56, o));
-      this.truckSigilBeat = true;
-      const tally = this.lastTruckEssence ? "  +" + this.lastTruckEssence + " ESSENCE" : "";
-      this.banner("REACHED THE AIR WORLD" + tally + "  —  CHOOSE ONE", 2.6);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("win");
+      this.win();
     },
 
     // Dev/headless entry straight into the truck run (see main.js ?truck=1).
@@ -1444,12 +1443,10 @@
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
       this.sigils = this.sigils.filter((s) => s.update(dt));
-      // Truck-run arrival: once the benediction is chosen, hand off to the Air
-      // World (stubbed to win() until the Ass Man act exists).
-      if (this.truckSigilBeat && this.sigils.length === 0) {
-        this.truckSigilBeat = false;
-        this.win();
-        return;
+      // Choosing the Slayer benediction triggers the escape sequence.
+      if (this.slayerBeneBeat && this.sigils.length === 0) {
+        this.slayerBeneBeat = false;
+        this.startTruckArrival();
       }
       // Essence-cross event: while a cross is uncollected the world dims.
       const crossOut = this.pickups.some((p) => !p.dead && p.kind === "cross");

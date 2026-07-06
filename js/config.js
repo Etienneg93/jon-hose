@@ -741,5 +741,6 @@
     kill:   { type: "square", freq: 320, dur: 0.08, gain: 0.13 },  // combo-pitched kill blip
     dash:   { type: "noise", dur: 0.22, gain: 0.15, attack: 0.02, bpFrom: 450, bpTo: 2600, q: 0.7 },  // rising whoosh
     bell:   { type: "sine", freq: 196, dur: 0.6, gain: 0.16 },  // pillar rank bought
+    dread:  { type: "saw", freq: 44, dur: 1.4, gain: 0.2, attack: 0.2 },  // ominous low rumble (truck arrival)
   };
 })();

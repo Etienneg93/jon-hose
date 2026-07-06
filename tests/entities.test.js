@@ -926,7 +926,7 @@ test("waveCleared_: Absolution + sigil beat land before the quake cutscene retur
   B.reset();
 });
 
-test("waveCleared_: final (Slayer) wave clear enters the cutscene and DEFERS its sigil beat to the truck arrival", () => {
+test("waveCleared_: final (Slayer) wave clear keeps its sigil beat — cutscene, not a synchronous win()", () => {
   const B = global.window.JH.Benedictions;
   B.reset();
   const prevDoc = global.document, prevMusic = JH.Music;
@@ -943,9 +943,9 @@ test("waveCleared_: final (Slayer) wave clear enters the cutscene and DEFERS its
   assert.strictEqual(g.state, "cutscene", "slayer clear enters its cutscene");
   assert.strictEqual(g.cutscene && g.cutscene.who, "slayer");
   assert.strictEqual(won, false, "win() never fires synchronously on the slayer clear");
-  // The Slayer's benediction beat is deferred: the fire-truck escape owns the
-  // single pick at the Air World arrival (afterTruckRun), so none spawn here.
-  assert.strictEqual(g.sigils.length, 0, "slayer clear no longer offers sigils synchronously");
+  // The Slayer's benediction is picked in the post-cutscene free-walk; choosing
+  // it triggers the escape sequence (startTruckArrival), so the sigils spawn here.
+  assert.ok(g.sigils.length > 0, "final boss clear still offers sigils");
   JH.Music = prevMusic;
   if (prevDoc === undefined) delete global.document; else global.document = prevDoc;
   B.reset();
