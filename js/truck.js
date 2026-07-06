@@ -48,6 +48,7 @@
         slowT: 0, shakeT: 0,
         wallGap: C.wall.startGap,
         wallTouched: false,
+        furnaceDone: false,
         essence: 0,
         // Deterministic-enough schedule; consumed from the front in Task 4.
         timeline: JH.TruckBalance.buildTimeline(C, Math.random),
@@ -85,8 +86,10 @@
         this._hose(dt, C);
         this._spawnFromTimeline(sc);
         this._updateHazards(dt, C);
+        this._updateFurnace(dt, C);
         this._updatePatches(dt, C);
         this._updateEmbers(dt, C);
+        this._updatePickups(dt, C);
         if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
         if (sc.shakeT > 0) sc.shakeT -= dt;
         if (sc.washFx && (sc.washFx.t += dt) > 0.4) sc.washFx = null;
@@ -163,6 +166,15 @@
         }
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
+
+      // Furnace douse-race: sustained beam extinguishes the road boss.
+      if (sc.furnace) {
+        const f = sc.furnace, dx = f.worldX - nozzleX;
+        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, f.depth, dx, range)) {
+          f.hp = JH.TruckBalance.douse(f.hp, dps, dt);
+          if (f.hp <= 0) this._extinguishFurnace();
+        }
+      }
     },
 
     // Dev/headless: drop a stub target `aheadPx` in front of the truck.
@@ -179,6 +191,8 @@
         if (ev.kind === "wreck" || ev.kind === "fuse" || ev.kind === "smelt" ||
             ev.kind === "pyro" || ev.kind === "hydrant")
           this._spawnHazard(ev);
+        else if (ev.kind === "cross")
+          this._spawnCross(sc.scrollX + JH.VIEW_W + 24, ev.depth, ev.value);
       }
     },
 
@@ -302,6 +316,58 @@
       }
     },
 
+    _flash(text, dur) { this.scene.banner = text; this.scene.bannerT = dur; },
+
+    // ---- climax: the furnace douse-race ---------------------------------
+    // The forge rolls onto the road as a persistent boss that keeps pace ahead
+    // of the truck and vents fire-patches into the lanes. Hold the beam on it to
+    // extinguish it (TruckBalance.douse) before the gate; breaking it drops a
+    // fat essence cross. Failing just means it falls behind (no penalty).
+    _updateFurnace(dt, C) {
+      const sc = this.scene, t = sc.truck, FU = C.furnace, E = JH.ENEMIES;
+      if (!sc.furnace) {
+        if (!sc.furnaceDone && sc.t >= FU.atSec) {
+          sc.furnace = { worldX: sc.scrollX + t.screenX + 130, depth: C.lanes[1], hp: FU.hp, maxHp: FU.hp, ventT: FU.ventCd };
+          this._flash("THE FURNACE! DOUSE IT!", 2.0);
+        }
+        return;
+      }
+      const f = sc.furnace;
+      f.worldX = sc.scrollX + t.screenX + 130;      // rolls along, staying ahead
+      if ((f.ventT -= dt) <= 0) {
+        f.ventT = FU.ventCd;
+        this._spawnPatch(sc.scrollX + t.screenX + 40 + Math.random() * 90,
+          C.lanes[(Math.random() * C.lanes.length) | 0], E.furnace.ventPatchRadius, FU.ventPatchDur);
+      }
+    },
+
+    _extinguishFurnace() {
+      const sc = this.scene, C = JH.TRUCKRUN, f = sc.furnace;
+      this._spawnCross(f.worldX, f.depth, C.furnace.essence);
+      sc.furnace = null; sc.furnaceDone = true;
+      sc.shakeT = 0.4;
+      this._flash("FORGE EXTINGUISHED!", 2.0);
+    },
+
+    // ---- essence pickups (bank on contact via the Church) ---------------
+    _spawnCross(worldX, depth, value) {
+      this.scene.pickups.push({ worldX: worldX, depth: depth, value: value || 1, bob: 0 });
+    },
+
+    _updatePickups(dt, C) {
+      const sc = this.scene, t = sc.truck;
+      for (const p of sc.pickups) {
+        p.bob += dt;
+        if (Math.abs((p.worldX - sc.scrollX) - t.screenX) < 20 && Math.abs(p.depth - t.depth) < 16) {
+          sc.essence += p.value;
+          if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(p.value);
+          p.dead = true;
+        }
+        if (p.worldX < sc.scrollX - 40) p.dead = true;   // missed — scrolled past
+      }
+      sc.pickups = sc.pickups.filter((p) => !p.dead);
+    },
+
     // Smashed hydrant: refuel the tank AND wash its lane — kill/soak hazards
     // and extinguish fire-patches within washRadius (ONE ellipse for draw+hit).
     _popHydrant(h) {
@@ -318,6 +384,12 @@
     },
 
     _finish(game) {
+      const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck;
+      // Clean-Escape bonus: full HP + no wall touch pays the top tier.
+      const bonus = JH.TruckBalance.cleanBonus(C, t.hp / C.truckHp, sc.wallTouched);
+      if (bonus > 0 && JH.Church && JH.Church.addEssence) JH.Church.addEssence(bonus);
+      sc.essence += bonus;
+      game.lastTruckEssence = sc.essence;   // for the arrival tally (Task 8)
       this.scene = null;
       JH.Camera.unlock && JH.Camera.unlock();
       game.afterTruckRun();
@@ -387,6 +459,28 @@
         const w = h.kind === "smelt" ? 20 : 16;
         ctx.fillStyle = HCOL[h.kind] || "#8a5a3a";
         ctx.fillRect(hx - w / 2, hy - 14, w, 14);
+      }
+
+      // Furnace road-boss + its HP bar.
+      if (sc.furnace) {
+        const f = sc.furnace, fx = f.worldX - sc.scrollX, fy = JH.Geo.feetScreenY(f.depth, 0);
+        ctx.fillStyle = "#e2571a";
+        ctx.fillRect(fx - 16, fy - 28, 32, 28);
+        ctx.fillStyle = "#ffd27a";
+        ctx.fillRect(fx - 10, fy - 20, 20, 10);     // glowing mouth
+        const bw = 40, bf = Math.max(0, f.hp / f.maxHp);
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(fx - bw / 2 - 1, fy - 36, bw + 2, 5);
+        ctx.fillStyle = "#4aa3ff"; ctx.fillRect(fx - bw / 2, fy - 35, bw * bf, 3);
+      }
+
+      // Essence crosses (bank on contact).
+      for (const p of sc.pickups) {
+        const px = p.worldX - sc.scrollX;
+        if (px < -12 || px > JH.VIEW_W + 12) continue;
+        const py = JH.Geo.feetScreenY(p.depth, 0) - 12 - Math.sin(p.bob * 4) * 2;
+        ctx.fillStyle = "#ffe27a";
+        ctx.fillRect(px - 1.5, py - 5, 3, 10);
+        ctx.fillRect(px - 4, py - 2, 8, 3);
       }
 
       // Embers (pyro shots).
