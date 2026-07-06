@@ -188,8 +188,19 @@
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
+      this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
     }
-    applyStats(s) { this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp; }
+    applyStats(s) {
+      // Track which displayed stats changed so the shop panel can flash them.
+      const KEYS = ["sprayDamage", "sprayRange", "maxWater", "waterRegen",
+                    "moveRegen", "moveSpeed", "dodgeChance", "vampiricRate", "maxHp"];
+      if (this.stats) {
+        this.statFlash = this.statFlash || {};
+        for (const k of KEYS)
+          if (s[k] !== this.stats[k]) this.statFlash[k] = 2.0;
+      }
+      this.stats = s; this.bodyW = s.bodyW; if (this.hp > s.maxHp) this.hp = s.maxHp;
+    }
 
     applyBurn(n) {
       // Burn stacks have i-frames like hits: one application, then immune to
@@ -239,6 +250,9 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
+      if (this.statFlash)
+        for (const k in this.statFlash)
+          if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
 
       this.tickBurn(dt, game);
 
@@ -295,7 +309,7 @@
         if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
           burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
       }
-      let speed = S.moveSpeed;
+      let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
       if (this.dashTimer > 0) {
         this.dashTimer -= dt;
         mx = this._dashX; my = this._dashY; speed = S.dashSpeed;
@@ -543,9 +557,9 @@
           }
         }
         didHit = true;
-        // Vampiric lifesteal at half rate against bosses — their huge HP pools
-        // gave full-rate sustain near-permanent uptime, trivializing the fights.
-        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * (e.isBoss ? 0.5 : 1);
+        // Vampiric lifesteal at half rate against bosses and elites — their
+        // huge HP pools gave full-rate sustain near-permanent uptime.
+        if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
         if (S.splitStream) hitEnemies.push(e);
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
@@ -839,6 +853,7 @@
       this.bodyW = this.def.bodyW; this.bodyH = this.def.bodyH;
       this.contactTimer = 0;
       this.windTimer = 0; this.windDur = 0; this.attackTimer = 0; this.cdTimer = 0;
+      this.usingTicket = false;  // holds an attack ticket (game.canAttack) during windup/attack
       this.state = "walk";
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
@@ -893,6 +908,22 @@
       this.bodyH = d.bodyH;
     }
 
+    // Super-elite: rare apex tier above elites — huge stats + a signature
+    // move (subclasses branch on this.superElite). Reuses the elite_ baked
+    // frames at 1.8x draw scale.
+    // `hpScale` (optional, default 1) damps the super hp AFTER the type
+    // multipliers — spawnWave passes the per-act value from SUPER_TUNE.hpByAct
+    // so early-act giants don't outlast the whole wave.
+    makeSuper(hpScale) {
+      this.superElite = true;
+      this.elite = true;
+      this.def = JH.Balance.superEliteDef(this.def, JH.SUPER_TUNE && JH.SUPER_TUNE[this.type]);
+      if (hpScale && hpScale !== 1) this.def.hp = Math.round(this.def.hp * hpScale);
+      this.hp = this.maxHp = this.def.hp;
+      this.bodyW = this.def.bodyW;
+      this.bodyH = this.def.bodyH;
+    }
+
     // Generic chase toward the player; subclasses override think().
     update(dt, game) {
       this.basePhysics(dt);
@@ -931,22 +962,48 @@
       // Point-blank deadzone: with no body collision, chasers with no melee
       // stop (fuse) can sit on Jon's center — per-frame sign(dx) facing +
       // overshoot strobes the sprite left/right. Hold ground and facing.
-      if (dist > 12) this.facing = dx >= 0 ? 1 : -1;
+      // Committed lunge keeps its aim — no re-facing mid-flight.
+      if (dist > 12 && this.state !== "lunge") this.facing = dx >= 0 ? 1 : -1;
       const d = this.def;
+
+      // Super mook: haymaker resolves as a forward LUNGE with a ground-shock
+      // band on landing.
+      if (this.state === "lunge") {
+        this.attackTimer -= dt;
+        this.x += this.facing * 380 * dt;
+        if (!this.lungeHit && Geo.inHitArc(this, pl, this.facing, d.meleeRange + 14, 22)) {
+          pl.takeHit(d.meleeDmg, game, this.x);
+          this.lungeHit = true;
+        }
+        if (this.attackTimer <= 0) {
+          game.shake(4); game.audio.play("whack");
+          if (!this.lungeHit && Geo.inHitArc(this, pl, this.facing, d.meleeRange + 26, 26))
+            pl.takeHit(Math.round(d.meleeDmg * 0.6), game, this.x);  // shock band
+          this.state = "idle"; this.cdTimer = 0.9; this.usingTicket = false;
+        }
+        return;
+      }
 
       if (this.windTimer > 0) {            // winding up an attack
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
+          if (this.superElite) {
+            // Ticket stays held through the lunge; released at lunge end above.
+            this.state = "lunge"; this.attackTimer = 0.16; this.lungeHit = false;
+            return;
+          }
           if (Geo.inHitArc(this, pl, this.facing, d.meleeRange + 6, 16))
             pl.takeHit(d.meleeDmg, game, this.x);
           this.cdTimer = 0.6;
+          this.usingTicket = false;
         }
         return;
       }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
-      if (dist < d.meleeRange && this.spawnGrace <= 0) {
+      if (dist < d.meleeRange && this.spawnGrace <= 0 && game.canAttack()) {
         this.windTimer = d.meleeWind; this.windDur = d.meleeWind; this.state = "wind";
+        this.usingTicket = true;
       } else if (dist > 12) {
         // approach
         const sp = d.speed;
@@ -968,20 +1025,28 @@
         // 0→1 windup progress for multi-frame windup anims (0 when windDur unset)
         windFrac: this.windDur > 0 ? Math.min(1, Math.max(0, 1 - this.windTimer / this.windDur)) : 0,
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
-        scale: this.elite ? 1.08 : 1,
+        scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 4;
         const bx = Math.round(sx - w / 2), by = Math.round(sy - this.bodyH - 8);
         if (this.elite) {
-          ctx.fillStyle = "#f0b830";
+          // Frame color is the tier read: gold = elite, red = super-elite.
+          ctx.fillStyle = this.superElite ? "#ff3a3a" : "#f0b830";
           ctx.fillRect(bx - 1, by - 1, w + 2, 5);
         }
         ctx.fillStyle = "rgba(0,0,0,0.6)";
         ctx.fillRect(bx, by, w, 3);
         ctx.fillStyle = "#ff5a5a";
         ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 3);
+      }
+      if (this.superElite) {
+        const by = Math.round(sy - this.bodyH - 8);
+        ctx.fillStyle = "#ff3a3a";
+        ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+        ctx.fillText(this.def.name.toUpperCase(), Math.round(sx), by - 4);
+        ctx.textAlign = "left";
       }
     }
   }
@@ -996,22 +1061,56 @@
       if (this.state !== "charge") this.facing = dx >= 0 ? 1 : -1;
 
       if (this.state === "charge") {
-        this.attackTimer -= dt; this.x += this.facing * d.chargeSpeed * dt;
-        if (Geo.inHitArc(this, pl, this.facing, 16, 18)) {
-          pl.takeHit(d.chargeDmg, game, this.x); this.attackTimer = 0;
+        this.attackTimer -= dt;
+        if (this.superElite) {
+          // Diagonal charge; ricochets off arena bounds, keeping momentum.
+          this.x += this.chargeVX * dt; this.y += this.chargeVY * dt;
+          this.facing = this.chargeVX >= 0 ? 1 : -1;
+          if ((this.x <= game.bounds.minX + 4 && this.chargeVX < 0) ||
+              (this.x >= game.bounds.maxX - 4 && this.chargeVX > 0)) {
+            if (--this.bounces < 0) this.attackTimer = 0;
+            else { this.chargeVX = -this.chargeVX; game.audio.play("whack"); game.shake(3); }
+          }
+          if ((this.y <= JH.DEPTH_MIN + 2 && this.chargeVY < 0) ||
+              (this.y >= JH.DEPTH_MAX - 2 && this.chargeVY > 0)) this.chargeVY = -this.chargeVY;
+          // Radial contact hit with a per-hit cooldown (the pass-through body IS the hitbox).
+          if (this.chargeHitT > 0) this.chargeHitT -= dt;
+          if ((this.chargeHitT || 0) <= 0 &&
+              Math.hypot(pl.x - this.x, pl.y - this.y) < 18) {
+            pl.takeHit(d.chargeDmg, game, this.x); this.chargeHitT = 0.6;
+          }
+        } else {
+          this.x += this.facing * d.chargeSpeed * dt;
+          if (Geo.inHitArc(this, pl, this.facing, 16, 18)) {
+            pl.takeHit(d.chargeDmg, game, this.x); this.attackTimer = 0;
+          }
         }
-        if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.chargeCd; }
+        if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.chargeCd; this.usingTicket = false; }
         return;
       }
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
-        if (this.windTimer <= 0) { this.state = "charge"; this.attackTimer = d.chargeDur; game.audio.play("whack"); }
+        this.aimAng = Math.atan2(dy, dx);   // tracked through windup; super telegraph rotates by it
+        if (this.windTimer <= 0) {
+          this.state = "charge";
+          if (this.superElite) {
+            const ang = Math.atan2(pl.y - this.y, pl.x - this.x);
+            this.chargeVX = Math.cos(ang) * d.chargeSpeed;
+            this.chargeVY = Math.sin(ang) * d.chargeSpeed * 0.6;
+            this.bounces = 3; this.chargeHitT = 0;
+            this.attackTimer = d.chargeDur * 2.5;
+          } else this.attackTimer = d.chargeDur;
+          game.audio.play("whack");
+        }
         return;
       }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
 
-      if (Math.abs(dy) < 14 && dist < 170 && this.spawnGrace <= 0) {
+      // Supers may open the charge from any angle; regulars need depth alignment.
+      if ((this.superElite ? dist < 210 : (Math.abs(dy) < 14 && dist < 170)) && this.spawnGrace <= 0 && game.canAttack()) {
         this.windTimer = d.chargeWind; this.state = "wind";
+        this.usingTicket = true;
+        this.aimAng = Math.atan2(dy, dx);
       } else {
         this.x += (dx / (dist || 1)) * d.speed * dt;
         this.y += (dy / (dist || 1)) * d.speed * dt * 0.9;
@@ -1022,7 +1121,24 @@
   JH.Charger = Charger;
   // Add draw override to Charger after class definition
   Charger.prototype.draw = function(ctx, cam) {
-    if (this.state === "wind") {
+    if (this.state === "wind" && this.superElite) {
+      // Super telegraph: same band, rotated along the stored aim, extended-charge length.
+      const d = this.def;
+      const range = d.chargeSpeed * d.chargeDur * 2.5;
+      const band  = 18;
+      const sx = this.x - cam;
+      const sy = Geo.feetScreenY(this.y, 0);
+      const flash = (Math.floor(this.t * 10) & 1);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(this.aimAng || 0);
+      ctx.fillStyle = "rgba(160,80,240,0.10)";
+      ctx.fillRect(this.bodyW * 0.5, -band, range, band * 2);
+      ctx.strokeStyle = flash ? "#c080ff" : "rgba(160,80,240,0.30)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(this.bodyW * 0.5, -band, range, band * 2);
+      ctx.restore();
+    } else if (this.state === "wind") {
       const d = this.def;
       const range = d.chargeSpeed * d.chargeDur;
       const band  = 18;
@@ -1062,11 +1178,16 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          // fire an ember toward player's position
+          // fire toward player's position; super-elites lob a 3-ember fan
+          // whose embers gutter into small fire patches where they expire
           const ang = Math.atan2(dy, dx);
-          game.embers.push(new Ember(this.x + this.facing * 8, this.y, this.z + 14,
-            Math.cos(ang) * d.emberSpeed, Math.sin(ang) * d.emberSpeed * 0.6, d.emberDmg));
-          this.cdTimer = d.shootCd;
+          const spreads = this.superElite ? [-0.35, 0, 0.35] : [0];
+          for (const off of spreads)
+            game.embers.push(new Ember(this.x + this.facing * 8, this.y, this.z + 14,
+              Math.cos(ang + off) * d.emberSpeed, Math.sin(ang + off) * d.emberSpeed * 0.6,
+              d.emberDmg,
+              this.superElite ? { patch: { r: 14, dur: 1.2 } } : undefined));
+          this.cdTimer = d.shootCd * (this.superElite ? 1.4 : 1);
         }
         return;
       }
@@ -1105,8 +1226,10 @@
 
   // ---- Ember projectile (enemy → player) ----
   class Ember {
-    constructor(x, y, z, vx, vy, dmg) {
+    constructor(x, y, z, vx, vy, dmg, opts) {
       Object.assign(this, { x, y, z, vx, vy, dmg, life: 2.2, t: 0, dead: false });
+      // opts.patch = {r, dur}: spawn a FirePatch where the ember expires
+      this.patch = (opts && opts.patch) || null;
     }
     update(dt, game) {
       this.t += dt;
@@ -1123,8 +1246,14 @@
       if (pl.alive && Math.abs(pl.x - this.x) < 12 && Math.abs(pl.y - this.y) < 12) {
         pl.takeHit(this.dmg, game, this.x); this.dead = true;
         burst(game, this.x, this.y, this.z, JH.PAL.flame, 5, { speed: 70, life: 0.3 });
+        return false;   // died on impact — no patch (would land under Jon's feet)
       }
-      if (this.t > this.life) this.dead = true;
+      if (this.t > this.life) {
+        this.dead = true;
+        // life expired mid-air: gutter into a fire patch if this ember carries one
+        if (this.patch) game.firePatches.push(
+          new JH.FirePatch(this.x, this.y, this.patch.r, this.patch.dur));
+      }
       // water particles passing could douse embers — handled in game loop
       return !this.dead;
     }
@@ -1203,7 +1332,7 @@
         if (dist < this.radius + pl.bodyW * 0.5) {
           pl.takeHit(this.dmg, game, this.x);
           pl.applyBurn(this.burnStacks);
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, 28, 1.4));
+          JH.spawnFirePatch(game, this.x, this.y, 28, 1.4);
           burst(game, this.x, this.y, this.z, JH.PAL.firePatch, 8, { speed: 90, life: 0.35, up: 50 });
           game.shake(3);
           this.dead = true;
@@ -1241,12 +1370,13 @@
       super(type, x, y);
       this.hasShield = true;   // true: holding the shield; false: deployed/retrieving
       this.shield = null;      // its DeployedShield while deployed
-      this.phase = "approach"; // approach | plant | shelter | slam | retrieve | cooldown
+      this.phase = "approach"; // approach | plant | shelter | slam | retrieve | cooldown (super: approach | throwWind | brawl | slam)
       this.windTimer = 0;
       this.cdTimer = 0;
       this.strikeFx = 0;
       this.slam = null;        // active slam telegraph {range, band, dmg, dur, t}
       this.state = "idle";     // animation state only ("walk"/"idle")
+      this.thrownZone = null;  // super only: the SlowZone from its lobbed shield, while live
     }
     die(game) {
       if (this.shield) { this.shield.dead = true; this.shield = null; }
@@ -1262,6 +1392,7 @@
       } else this.state = "idle";
     }
     think(dt, game) {
+      if (this.superElite) return this.superThink(dt, game);
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
       this.facing = dx >= 0 ? 1 : -1;
@@ -1345,6 +1476,59 @@
       const hasPyros = game.enemies.some((e) => !e.dead && e.type === "pyro");
       if (this.spawnGrace <= 0 && (dist < d.plantRange || hasPyros)) {
         this.windTimer = d.plantWind; this.phase = "plant"; return;
+      }
+      this._chase(dt, dx, dy, dist, 1);
+    }
+
+    // Super: no dome cycle. Lob the shield AT Jon (slow zone), brawl
+    // shieldless while it's down, reclaim it when the zone expires.
+    superThink(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y, dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+
+      if (this.phase === "slam") {          // reuse the standard slam resolve
+        this.slam.t -= dt; this.windTimer = this.slam.t; this.state = "wind";
+        if (this.slam.t <= 0) {
+          if (Geo.inHitArc(this, pl, this.facing, this.slam.range, this.slam.band))
+            pl.takeHit(this.slam.dmg, game, this.x);
+          game.shake(9); game.audio.play("whack");
+          this.strikeFx = 0.2; this.cdTimer = 0.9; this.phase = "brawl";
+        }
+        return;
+      }
+      if (this.phase === "throwWind") {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          game.embers.push(new JH.ShieldLob(this.x, this.y, pl.x, pl.y, this));
+          this.hasShield = false;
+          this.phase = "brawl"; this.cdTimer = 0.6;
+        }
+        return;
+      }
+      if (this.phase === "brawl") {
+        if (this.thrownZone && this.thrownZone.dead) {
+          this.thrownZone = null; this.hasShield = true;
+          if (this.shield) { this.shield.dead = true; this.shield = null; }
+          this.phase = "approach"; this.cdTimer = d.redeployCd;
+          return;
+        }
+        if (this.cdTimer > 0) this.cdTimer -= dt;
+        if (this.cdTimer <= 0 && dist < d.slamRange && this.spawnGrace <= 0) {
+          this.slam = { range: d.slamRange, band: d.slamBand, dmg: d.slamDmg, dur: d.slamWind, t: d.slamWind };
+          this.phase = "slam"; game.audio.play("jump");
+          return;
+        }
+        this._chase(dt, dx, dy, dist, 1.3);
+        return;
+      }
+      // approach: throw when in the lob band and holding the shield
+      if (this.cdTimer > 0) this.cdTimer -= dt;
+      if (this.hasShield && this.cdTimer <= 0 && this.spawnGrace <= 0 &&
+          dist > 50 && dist < 170) {
+        this.windTimer = 0.5; this.phase = "throwWind";
+        return;
       }
       this._chase(dt, dx, dy, dist, 1);
     }
@@ -1564,11 +1748,106 @@
   }
   JH.FirePatch = FirePatch;
 
-  // ---- Stalker: fast "blink harasser" super-elite ----
-  // Chases fast between blinks. On a cooldown: telegraphs (state "wind"),
-  // blinks behind the player's facing, then winds up a strike (state
-  // "strike") that only the player's dash i-frames negate (Player.takeHit
-  // already no-ops while dashTimer > 0 — nothing new needed there).
+  // Fire never stacks: if the spawn point is already inside a live patch's
+  // footprint, no new patch is made (returns null). All patch spawns route
+  // through here — deliberate multi-patch patterns (furnace vent ring,
+  // slayer trail) space their centers outside each other's footprints.
+  JH.spawnFirePatch = function (game, x, y, radius, dur) {
+    for (const fp of game.firePatches) {
+      if (fp.dead) continue;
+      const f = fp.footprint();
+      if (Geo.inGroundEllipse(x, y, fp.x, fp.y, f.rx, f.ry)) return null;
+    }
+    const p = new FirePatch(x, y, radius, dur);
+    game.firePatches.push(p);
+    return p;
+  };
+
+  // Ground denial left by a super-Bulwark's thrown shield: slows Jon while
+  // he stands inside. Ellipse footprint like every ground zone.
+  class SlowZone {
+    constructor(x, y, r, dur) {
+      this.x = x; this.y = y; this.r = r; this.dur = dur;
+      this.t = 0; this.dead = false; this.slowMult = 0.55;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.t >= this.dur) { this.dead = true; return false; }
+      const pl = game.player;
+      if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r))
+        pl.zoneSlow = this.slowMult;
+      return true;
+    }
+    draw(ctx, cam) {
+      const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
+      const k = Math.max(0, 1 - this.t / this.dur);
+      ctx.save();
+      ctx.globalAlpha = 0.28 * k + 0.1;
+      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, this.r, this.r * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.6 * k + 0.2;
+      ctx.strokeStyle = JH.PAL.bulwark;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // The grounded shield itself, planted in the middle.
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.fillRect(sx - 5, sy - 16, 10, 16);
+      ctx.strokeStyle = JH.PAL.bulwarkDk;
+      ctx.strokeRect(sx - 5, sy - 16, 10, 16);
+      ctx.restore();
+    }
+  }
+  JH.SlowZone = SlowZone;
+
+  // Super-Bulwark's thrown shield: smelt-style arc; lands as a SlowZone.
+  class ShieldLob {
+    constructor(x, y, tx, ty, owner) {
+      this.x = x; this.y = y; this.z = 26; this.owner = owner;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      const flightT = Math.max(0.45, dist / 150);
+      this.vx = (tx - x) / flightT; this.vy = (ty - y) / flightT;
+      this.vz = 0.5 * 300 * flightT - this.z / flightT;
+      this.t = 0; this.dead = false;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vz -= 300 * dt; this.z += this.vz * dt;
+      if (this.z <= 0) {
+        const zone = new JH.SlowZone(this.x, this.y, 30, 5);
+        game.slowZones.push(zone);
+        // The landed shield IS a barrier: a half-size dome (blocks spray from
+        // outside, shelters) lasting exactly as long as the slow zone.
+        const dome = new JH.DeployedShield(this.x, this.y, this.owner);
+        dome.radius = 34;
+        dome.domeDur = dome.domeT = 5;
+        game.shields.push(dome);
+        if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; }
+        game.shake(3); if (game.audio) game.audio.play("whack");
+        this.dead = true;
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      ctx.save();
+      ctx.translate(sx, sy); ctx.rotate(this.t * 9);
+      ctx.fillStyle = JH.PAL.bulwarkShield;
+      ctx.fillRect(-6, -8, 12, 16);
+      ctx.strokeStyle = JH.PAL.bulwarkDk; ctx.strokeRect(-6, -8, 12, 16);
+      ctx.restore();
+    }
+  }
+  JH.ShieldLob = ShieldLob;
+
+  // ---- Stalker: fast chaser; regular enemy, has a super-elite variant ----
+  // On cooldown: telegraphs (state "wind"), blinks behind the player, then
+  // strikes (state "strike") in the same beat; only dash i-frames negate it
+  // (Player.takeHit already no-ops while dashTimer > 0).
+  // Super-elite: feints in front first, then blinks behind for the real strike.
   class Stalker extends Enemy {
     think(dt, game) {
       const pl = game.player, d = this.def;
@@ -1576,20 +1855,32 @@
       if (this.state === "strike") {
         this.attackTimer -= dt;
         if (this.attackTimer <= 0) {
-          if (Geo.inHitArc(this, pl, this.facing, d.strikeRange, 16))
+          if (Geo.inHitArc(this, pl, this.facing, d.strikeRange, 20))
             pl.takeHit(d.strikeDmg, game, this.x);
           this.state = "idle";
           this.cdTimer = d.blinkCd;
+          this.usingTicket = false;
         }
         return;
       }
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          const t = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, pl.facing, d.blinkDist, {
-            minX: game.bounds.minX, maxX: game.bounds.maxX,
-            depthMin: JH.DEPTH_MIN, depthMax: JH.DEPTH_MAX,
-          });
+          const bounds = { minX: game.bounds.minX, maxX: game.bounds.maxX,
+                           depthMin: JH.DEPTH_MIN, depthMax: JH.DEPTH_MAX };
+          if (this.superElite && !this.feinted) {
+            // Fakeout: first blink lands IN FRONT (facing side) with no
+            // strike, then immediately re-telegraphs the real one.
+            const f = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, -pl.facing, d.blinkDist, bounds);
+            this.x = f.x; this.y = f.y;
+            this.facing = pl.x >= this.x ? 1 : -1;
+            this.feinted = true;
+            this.windTimer = 0.25;
+            game.audio.play("jump");
+            return;
+          }
+          this.feinted = false;
+          const t = JH.Balance.stalkerBlinkTarget(pl.x, pl.y, pl.facing, d.blinkDist, bounds);
           this.x = t.x; this.y = t.y;
           this.facing = pl.x >= this.x ? 1 : -1;
           this.attackTimer = d.strikeWind;
@@ -1600,8 +1891,10 @@
       }
       if (this.cdTimer > 0) {
         this.cdTimer -= dt;
-      } else if (this.spawnGrace <= 0) {
+      } else if (this.spawnGrace <= 0 && game.canAttack()) {
+        // No ticket → fall through to the chase code below instead of blinking.
         this.windTimer = d.blinkTell; this.state = "wind";
+        this.usingTicket = true;
         return;
       }
       const dx = pl.x - this.x, dy = pl.y - this.y;
@@ -1754,7 +2047,11 @@
     }
     update(dt, game) {
       this.t += dt;
-      if (!this.grounded) {
+      if (this.kind === "cross") {
+        // Essence crosses HOVER: no ground physics, a slow bob.
+        this.grounded = true;
+        this.z = 8 + Math.sin(this.t * 2.2) * 3;
+      } else if (!this.grounded) {
         this.vz -= 360 * dt; this.z += this.vz * dt;
         this.x += this.vx * dt;
         this.y = Math.max(JH.DEPTH_MIN, Math.min(JH.DEPTH_MAX, this.y + this.vy * dt));
@@ -3458,7 +3755,7 @@
   // Arcing projectile (parabolic z). Spawns FirePatch + burst on landing.
   // Pushed into game.embers; update() returns false when dead.
   class SmeltBomb {
-    constructor(x, y, tx, ty, d) {
+    constructor(x, y, tx, ty, d, opts) {
       // Leaves the hands of the overhead hoist (matches the wind-pose art,
       // where the bomb sits ~32 logical px above the feet).
       this.x = x; this.y = y; this.z = 32;
@@ -3471,6 +3768,7 @@
       this.def = d;
       this.t = 0;
       this.dead = false;
+      this.bounces = (opts && opts.bounces) || 0;
     }
     update(dt, game) {
       this.t += dt;
@@ -3488,7 +3786,7 @@
         }));
       if (this.z <= 0) {
         const d = this.def;
-        game.firePatches.push(new JH.FirePatch(this.x, this.y, d.lobBombRadius, d.lobBombDur));
+        JH.spawnFirePatch(game, this.x, this.y, d.lobBombRadius, d.lobBombDur);
         game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.6 }));
         burst(game, this.x, this.y, 4, JH.PAL.smeltGlow, 14, { speed: 115, life: 0.5, up: 60, size: 3 });
         burst(game, this.x, this.y, 2, JH.PAL.firePatchHi, 8, { speed: 65, life: 0.4, up: 18, size: 2 });
@@ -3500,7 +3798,21 @@
         if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y,
             d.lobBombRadius * 0.85 + (pl.bodyW || 12) * 0.25))
           pl.applyBurn(1);
-        this.dead = true;
+        if (this.bounces > 0) {
+          // Bounce: shorter re-arc toward the player's CURRENT position;
+          // every touchdown has already left its patch above.
+          this.bounces--;
+          const hop = Math.max(30, Math.hypot(pl.x - this.x, pl.y - this.y) * 0.7);
+          const ang2 = Math.atan2(pl.y - this.y, pl.x - this.x);
+          const ty2 = Math.max(JH.DEPTH_MIN, Math.min(JH.DEPTH_MAX, this.y + Math.sin(ang2) * hop));
+          const flightT = Math.max(0.35, hop / d.lobBombSpeed);
+          this.vx = Math.cos(ang2) * hop / flightT;
+          this.vy = (ty2 - this.y) / flightT;
+          this.z = 0.01;
+          this.vz = 0.5 * d.lobGravity * flightT;
+        } else {
+          this.dead = true;
+        }
       }
       return !this.dead;
     }
@@ -3527,6 +3839,7 @@
       ctx.restore();
     }
   }
+  JH.SmeltBomb = SmeltBomb;
 
   // Stands back; lobs arcing SmeltBombs at the player on a cooldown.
   // waterMult:0.5 means sustained spray does half damage.
@@ -3540,7 +3853,12 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         if (this.windTimer <= 0) {
-          game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
+          if (this.superElite) {
+            // ONE bouncing slag — twin lobs read as too much on the field.
+            game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d, { bounces: 1 }));
+          } else {
+            game.embers.push(new SmeltBomb(this.x, this.y, pl.x, pl.y, d));
+          }
           this.cdTimer = d.lobCd;
         }
         return;
@@ -3668,7 +3986,7 @@
           burst(game, this.x, this.y, 4, JH.PAL.slayerEmber, 1, { speed: 70, life: 0.15, up: 10 });
         while (this.dashPatchAcc >= d.dashPatchSpacing) {
           this.dashPatchAcc -= d.dashPatchSpacing;
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.dashPatchRadius, d.dashPatchDur));
+          JH.spawnFirePatch(game, this.x, this.y, d.dashPatchRadius, d.dashPatchDur);
         }
         this.facing = tdx >= 0 ? 1 : -1;
         return;
@@ -3861,14 +4179,14 @@
           game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.75 }));
           game.shake(3);
           // Fire zone: venting scorches the ground around it — punishes the trigger.
-          game.firePatches.push(new JH.FirePatch(this.x, this.y, d.ventPatchRadius, d.ventPatchDur));
+          JH.spawnFirePatch(game, this.x, this.y, d.ventPatchRadius, d.ventPatchDur);
           const ringN = 6, ringR = this.bodyW * 1.4;
           for (let i = 0; i < ringN; i++) {
             const a = (i / ringN) * Math.PI * 2;
-            game.firePatches.push(new JH.FirePatch(
+            JH.spawnFirePatch(game,
               this.x + Math.cos(a) * ringR,
               this.y + Math.sin(a) * ringR * JH.GROUND_RY,   // flattened in depth (2.5D)
-              d.ventPatchRadius * 0.8, d.ventPatchDur));
+              d.ventPatchRadius * 0.8, d.ventPatchDur);
           }
           // Same ellipse the wind-up telegraph draws (R, R*GROUND_RY).
           if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.bodyW * 4)) {
@@ -3895,6 +4213,15 @@
         this.y += (dy / (dist || 1)) * sp * dt * 0.7;
         this.state = "walk";
       } else { this.state = "idle"; }
+    }
+    die(game) {
+      // The death explosion hurls one slag at Jon's position — a last spiteful
+      // lob using the smelt-bomb arc (small patch on landing).
+      const pl = game.player;
+      game.embers.push(new JH.SmeltBomb(this.x, this.y, pl.x, pl.y, {
+        lobBombSpeed: 120, lobGravity: 300, lobBombRadius: 24, lobBombDur: 1.8,
+      }));
+      super.die(game);
     }
   }
   JH.Furnace = Furnace;
@@ -3981,6 +4308,21 @@
         }
         return;
       }
+      // Proximity-lit fuse: within igniteRange the wick lights; while lit it
+      // burns the fuse's OWN hp — at 0 (by drain or damage) it self-destructs.
+      const d = this.def, pl = game.player;
+      if (!this.lit && this.spawnGrace <= 0 &&
+          Math.hypot(pl.x - this.x, pl.y - this.y) < d.igniteRange) {
+        this.lit = true;
+        if (game.audio) game.audio.play("sizzle");
+      }
+      if (this.lit && !this.dead) {
+        this.hp -= this.maxHp * d.litDrainFrac * dt;
+        if (Math.random() < 8 * dt)
+          burst(game, this.x, this.y, this.bodyH + 2, JH.PAL.firePatchHi, 1,
+            { speed: 25, life: 0.25, up: 40, size: 1 });
+        if (this.hp <= 0) { this.die(game); return; }
+      }
       super.update(dt, game);
     }
     takeDamage(dmg, game, dirX, knock) {
@@ -3989,12 +4331,33 @@
     }
     die(game) {
       const d = this.def;
-      game.firePatches.push(new JH.FirePatch(this.x, this.y, d.deathPatchRadius, d.deathPatchDur));
-      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
-      burst(game, this.x, this.y, 5, JH.PAL.firePatch,   16, { speed: 130, life: 0.5, up: 70, size: 3 });
-      game.shake(3);
-      if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))
-        game.player.applyBurn(1);
+      if (this.lit) {
+        // Self-destruct: real AoE + a bigger, longer patch.
+        JH.spawnFirePatch(game, this.x, this.y, d.blastPatchRadius, d.blastPatchDur);
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-mid", { scale: 0.55 }));
+        game.shake(5);
+        const pl = game.player;
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.blastRadius)) {
+          pl.takeHit(d.blastDmg, game, this.x);
+          pl.applyBurn(1);
+        }
+      } else {
+        JH.spawnFirePatch(game, this.x, this.y, d.deathPatchRadius, d.deathPatchDur);
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-small", { scale: 1 }));
+        game.shake(3);
+        if (Geo.inGroundEllipse(game.player.x, game.player.y, this.x, this.y, d.deathBurnRange))
+          game.player.applyBurn(1);
+      }
+      burst(game, this.x, this.y, 5, JH.PAL.firePatch, 16, { speed: 130, life: 0.5, up: 70, size: 3 });
+      // Elite: 1 child fuse lobbed out; super: 3 — however it died.
+      const n = this.superElite ? 3 : this.elite ? 1 : 0;
+      for (let i = 0; i < n; i++) {
+        const ang = (i / Math.max(1, n)) * Math.PI * 2 + Math.random();
+        const cx = clamp(this.x + Math.cos(ang) * 26, game.bounds.minX, game.bounds.maxX);
+        const cy = clamp(this.y + Math.sin(ang) * 14, JH.DEPTH_MIN, JH.DEPTH_MAX);
+        const child = game.spawnEnemy("fuse", cx, cy, { infinite: true });
+        if (child) { child.z = 24; child.vz = 90; child.spawnGrace = 0.5; }
+      }
       super.die(game);
     }
   }
@@ -4022,6 +4385,11 @@
       return;
     }
     JH.Enemy.prototype.draw.call(this, ctx, cam);
+    if (this.lit && !this.dead) {
+      const sx = this.x - cam;
+      Assets.drawFx(ctx, "fire-small", sx + this.facing * 2,
+        Geo.feetScreenY(this.y, this.z) - this.bodyH - 3, this.t, { scale: 0.35 });
+    }
   };
 
   JH.makeEnemy = function (type, x, y) {

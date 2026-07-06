@@ -359,7 +359,9 @@ function furnace(g, o, elite) {
   const P = {
     body: lerpHex(BODY0, HOT, heat * 0.85),
     bodyHi: lerpHex(elite ? "#75503a" : "#63432e", HOT, heat * 0.85),
-    bodyDk: "#2a1808",
+    // Same heat lerp as the torso body color — arms/legs are drawn from this
+    // shade too, so they now glow with the torso instead of staying static.
+    bodyDk: lerpHex("#2a1808", "#b83010", heat * 0.7),
     slat: lerpHex("#2a1808", "#ff8030", heat),
     slatHot: lerpHex("#3a2410", "#ffd040", heat),
     plate: "#3a2a1a",
@@ -433,7 +435,19 @@ const ENEMIES = {
   }, variants: [0, 1, 2, 3].map((s) => ({ prefix: "h" + s + "_", o: { heat: s / 3 } })) },
 };
 
+const only = process.argv.slice(2);   // e.g. `node tools/enemy-sprites.mjs furnace`
+const VALID = Object.keys(ENEMIES);
+if (!only.length) {
+  console.log(`Usage: node tools/enemy-sprites.mjs <type...>  (types: ${VALID.join(", ")})`);
+  process.exit(1);
+}
+const unknown = only.filter((n) => !VALID.includes(n));
+if (unknown.length) {
+  console.log(`Unknown type(s): ${unknown.join(", ")}  (valid: ${VALID.join(", ")})`);
+  process.exit(1);
+}
 for (const [name, def] of Object.entries(ENEMIES)) {
+  if (!only.includes(name)) continue;
   console.log(`Baking ${name}:`);
   const variants = def.variants || [{ prefix: "", o: {} }];
   for (const elite of [false, true]) {

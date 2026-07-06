@@ -27,7 +27,7 @@
     { id: "pw2", branch: "PRESSURE", tier: 2, req: ["pw1"], cost: 80,
       name: "Pressure Washer", desc: "+13 dmg, narrower, harder-hitting beam.",
       apply: (s) => { s.sprayDamage += 13; s.beam = Math.max(s.beam, 2); s.sprayWidth -= 2; } },
-    { id: "pw3", branch: "PRESSURE", tier: 3, req: ["pw2"], cost: 140,
+    { id: "pw3", branch: "PRESSURE", tier: 3, req: ["pw2"], cost: 168,
       name: "Hydro Lance", desc: "+18 dmg. A cutting beam that punches through the whole line.",
       apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
 
@@ -38,7 +38,7 @@
     { id: "rc2", branch: "REACH", tier: 2, req: ["rc1"], cost: 85,
       name: "Fire-Marshal Spec", desc: "+30 range, +30 knockback. Blow 'em back.",
       apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
-    { id: "rc3", branch: "REACH", tier: 3, req: ["rc2"], cost: 140,
+    { id: "rc3", branch: "REACH", tier: 3, req: ["rc2"], cost: 168,
       name: "Split Stream", desc: "Hits arc to a nearby enemy for 30% damage.",
       apply: (s) => { s.splitStream = true; } },
 
@@ -49,7 +49,7 @@
     { id: "tk2", branch: "TANK", tier: 2, req: ["tk1"], cost: 55,
       name: "Quick Prime", desc: "+10 regen/sec, faster recovery after spraying.",
       apply: (s) => { s.waterRegen += 10; s.regenDelay = Math.max(0.15, s.regenDelay - 0.3); } },
-    { id: "tk3", branch: "TANK", tier: 3, req: ["tk2"], cost: 95,
+    { id: "tk3", branch: "TANK", tier: 3, req: ["tk2"], cost: 114,
       name: "Closed Loop", desc: "-10 water drain/sec while hosing a target.",
       apply: (s) => { s.waterReturn += 10; } },
 
@@ -60,7 +60,7 @@
     { id: "mb2", branch: "MOBILITY", tier: 2, req: ["mb1"], cost: 85,
       name: "Hydro-Dash", desc: "-0.2s dash cooldown. Dash boosts speed +28 for 3s.",
       apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashPuddle = true; s.dashBoost = 28; s.dashBoostDur = 3; } },
-    { id: "mb3", branch: "MOBILITY", tier: 3, req: ["mb2"], cost: 110,
+    { id: "mb3", branch: "MOBILITY", tier: 3, req: ["mb2"], cost: 132,
       name: "Kinetic Tap", desc: "+10 water/sec regen while moving.",
       apply: (s) => { s.moveRegen += 10; } },
 
@@ -71,9 +71,9 @@
     { id: "vt2", branch: "VITALITY", tier: 2, req: ["vt1"], cost: 60,
       name: "Second Wind", desc: "+30 max HP. 5% chance to dodge incoming damage.",
       apply: (s) => { s.maxHp += 30; s.dodgeChance = Math.max(s.dodgeChance, 0.05); } },
-    { id: "vt3", branch: "VITALITY", tier: 3, req: ["vt2"], cost: 120,
-      name: "Vampiric Hose", desc: "Heal 10% of spray damage dealt.",
-      apply: (s) => { s.vampiricRate += 0.10; } },
+    { id: "vt3", branch: "VITALITY", tier: 3, req: ["vt2"], cost: 144,
+      name: "Vampiric Hose", desc: "Heal 5% of spray damage dealt.",
+      apply: (s) => { s.vampiricRate += 0.05; } },
   ];
 
   // Repeatable "Overcharge" nodes: bought any number of times, cost rises each
@@ -95,6 +95,10 @@
     branches: BRANCHES,
     repeatables: REPEATABLES,
     owned: {},
+    // Elite act tier of the current wave (JH.Balance.actLevelForWave): -1 in
+    // Act 1, 0 after the first boss, 1 after the second, … Game sets it on
+    // every waveIndex change; gates tier-3 nodes below.
+    currentActLevel: -1,
     repCount: {},
 
     reset() { this.owned = {}; this.repCount = {}; },
@@ -107,9 +111,12 @@
     isAvailable(id) {
       const n = this.byId(id);
       if (this.owned[id]) return false;
+      // Tier-3 nodes unlock from Act 2 (actLevel >= 0; Act 1 is -1): the
+      // build finishes against the hard content, not before it.
+      if (n.tier >= 3 && this.currentActLevel < 0) return false;
       return n.req.every((r) => this.owned[r]);
     },
-    // Locked = prerequisites not yet met (shown greyed in the shop).
+    // Locked = prerequisites not yet met, or act-gated (shown greyed in the shop).
     isLocked(id) { return !this.owned[id] && !this.isAvailable(id); },
 
     canBuy(id, suds) { return this.isAvailable(id) && suds >= this.cost(id); },
@@ -136,6 +143,8 @@
       if (JH.Mirror && JH.Church && JH.Church.state && JH.MIRROR) {
         JH.Mirror.apply(s, JH.Church.state, JH.MIRROR.nodes);
       }
+      // Hard cap: dodge never exceeds 25% no matter which sources stack.
+      s.dodgeChance = Math.min(s.dodgeChance, 0.25);
       return s;
     },
 

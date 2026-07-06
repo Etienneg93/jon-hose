@@ -187,13 +187,13 @@
       slamRange: 46, slamWind: 0.65, slamDmg: 22, slamBand: 20,
       suds: 48, waterMult: 1, dropMult: 1.6, bodyW: 22, bodyH: 34, color: "bulwark",
     },
-    // Super-elite: fast "blink harasser" — counters back-pedal kiting. Chases
-    // fast, then on a cooldown telegraphs and blinks to the player's blind
-    // side for a wind-up strike. Only the player's dash i-frames dodge it.
+    // Fast chaser. On cooldown it telegraphs, then blinks behind the player
+    // and strikes in the same beat (0.12s); only dash i-frames dodge it.
+    // Super-elite variant feints in front first, then blinks behind for the real strike.
     stalker: {
       name: "Stalker", hp: 30, speed: 95, touchDmg: 10, contactCd: 0.8,
       blinkCd: 3.2, blinkTell: 0.35, blinkDist: 30,
-      strikeWind: 0.3, strikeDmg: 14, strikeRange: 22,
+      strikeWind: 0.12, strikeDmg: 14, strikeRange: 26,
       suds: 13, waterMult: 1, dropMult: 1.2, bodyW: 14, bodyH: 26, color: "stalker",
     },
     // Fire-world enemies — Smelt/Fuse are regular (elite-scaleable); Furnace
@@ -215,6 +215,11 @@
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
+      igniteRange: 70,       // px from Jon at which the head-fuse lights
+      litDrainFrac: 0.20,    // fraction of maxHp burned off per second while lit
+      blastRadius: 40,       // self-destruct AoE (ground ellipse rx)
+      blastDmg: 18,
+      blastPatchRadius: 26, blastPatchDur: 2.0,
       suds: 7, dropMult: 1.0, bodyW: 14, bodyH: 24, color: "fuse",
     },
     furnace: {
@@ -257,13 +262,37 @@
   JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
 
   // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
-  JH.WAVECAP = { charger: 2 };
+  JH.WAVECAP = { charger: 3 };
+
+  // Attack tickets: max enemies simultaneously in a melee windup/attack,
+  // indexed by actLevel+1 (like SPRINKLE.counts). Readability cap, not a
+  // mercy rule — ticketless melee enemies hold at approach range instead.
+  JH.TICKETS = { budgets: [4, 4, 5, 5, 6] };
+
+  // Wave spawn flow: fieldCap enemies open the wave; the rest queue and
+  // trickle in (one per `trickle` sec) whenever the field has room — big
+  // waves ramp instead of dumping every body at frame one. fieldCap is
+  // indexed by actLevel+1 (like SPRINKLE.counts): Act 1 runs tight because
+  // the kit has no AoE yet (pierce/split arrive with later purchases).
+  JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1 };
+
+  // Per-type super-elite multiplier overrides (default hp x7 in
+  // Balance.superEliteDef). Smelt's 300 base hp + 0.5 waterMult made x7 a
+  // sponge — x3 keeps it a fight, not a chore.
+  JH.SUPER_TUNE = {
+    smelt: { hp: 3 },
+    bulwark: { hp: 2.5 },   // 420 base + tough-wave elite ramp made 7x unhoseable
+    // Per-act hp damp applied on top of the type multiplier, indexed
+    // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
+    // their whole wave.
+    hpByAct: [0.55, 0.75, 0.9, 1, 1],
+  };
 
   // Wave sprinkle: extra enemies drawn from the already-introduced pool,
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
   JH.SPRINKLE = {
-    counts: [0, 1, 2, 2, 2],
+    counts: [1, 2, 3, 3, 4],
     weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
     heavies: ["bulwark", "furnace", "smelt"],
     heavyCap: 1,
@@ -555,40 +584,40 @@
   // open the shop (except before the boss, which is its own finale).
   JH.LEVEL1 = {
     waves: [
-      { name: "WAVE 1", spawns: [{ type: "mook", count: 3 }] },
-      { name: "WAVE 2", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }] },
-      { name: "WAVE 3", spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }] },
-      { name: "WAVE 4", spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 2 }] },
+      { name: "WAVE 1", spawns: [{ type: "mook", count: 4 }] },
+      { name: "WAVE 2", spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
+      { name: "WAVE 3", spawns: [{ type: "mook", count: 4 }, { type: "pyro", count: 1 }] },
+      { name: "WAVE 4", spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
       // ---- Act 2: ELITE ----
-      { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
-      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 4 }, { type: "charger", count: 1 }] },
+      { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
-        spawns: [{ type: "mook", count: 2 }, { type: "charger", count: 1 }] },
-      { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }] },
+        spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
+      { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }] },
       { name: "THE SWITCH", boss: true, bossType: "switch" },
       // ---- Act 3: the ruined district ----
-      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }, { type: "mook", count: 2 }] },
-      { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "mook", count: 2 }] },
+      { name: "RUBBLE ROW", tough: true, spawns: [{ type: "bulwark", count: 1 }, { type: "mook", count: 4 }, { type: "charger", count: 2 }] },
+      { name: "DEBRIS RUN", tough: true, spawns: [{ type: "charger", count: 3 }, { type: "mook", count: 4 }] },
       { name: "HOLD THE LINE", holdout: true, tough: true, holdDur: 22,
-        spawns: [{ type: "mook", count: 2 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
-      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 1 }] },
-      { name: "LAST STAND", tough: true, spawns: [{ type: "pyro", count: 2 }, { type: "mook", count: 2 }, { type: "charger", count: 1 }] },
+        spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }, { type: "bulwark", count: 1 }] },
+      { name: "ASH CHARGE", tough: true, spawns: [{ type: "charger", count: 4 }, { type: "mook", count: 3 }] },
+      { name: "LAST STAND", tough: true, spawns: [{ type: "mook", count: 5 }, { type: "charger", count: 2 }, { type: "bulwark", count: 1 }] },
       { name: "QUAKE WALKER", boss: true, bossType: "quake" },
       // ---- Act 4: the aftermath ----
-      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 3 }] },
-      { name: "STALKER AMBUSH", spawns: [{ type: "stalker", count: 2 }, { type: "charger", count: 1 }] },
-      { name: "WAVE 6", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "pyro", count: 1 }, { type: "charger", count: 1 }] },
+      { name: "THE BULWARK LINE", spawns: [{ type: "bulwark", count: 1 }, { type: "pyro", count: 4 }, { type: "mook", count: 2 }] },
+      { name: "STALKER AMBUSH", superElite: "stalker", spawns: [{ type: "stalker", count: 3 }, { type: "charger", count: 1 }, { type: "mook", count: 2 }] },
+      { name: "WAVE 6", tough: true, superElite: "mook", spawns: [{ type: "mook", count: 5 }, { type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
       { name: "THE GARDEN", garden: true },
-      { name: "WAVE 7", tough: true, spawns: [{ type: "charger", count: 2 }, { type: "pyro", count: 2 }, { type: "mook", count: 1 }] },
-      { name: "OVERRUN", tough: true, spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 1 }, { type: "pyro", count: 1 }] },
+      { name: "WAVE 7", tough: true, superElite: "bulwark", spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 3 }, { type: "mook", count: 3 }] },
+      { name: "OVERRUN", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
       { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
       // ---- Fire World (curated, un-tough) ----
-      { name: "FIRE INTRO", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
-      { name: "EMBER RUSH", spawns: [{ type: "fuse", count: 3 }, { type: "smelt", count: 1 }] },
+      { name: "FIRE INTRO", superElite: "pyro", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
+      { name: "EMBER RUSH", superElite: "fuse", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
       { name: "DOUSE THE FLAMES", douse: true, spawns: [{ type: "smelt", count: 2 }] },
-      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 2 }] },
-      { name: "MELTDOWN", spawns: [{ type: "smelt", count: 1 }, { type: "fuse", count: 3 }] },
+      { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 4 }, { type: "smelt", count: 1 }] },
+      { name: "MELTDOWN", tough: true, superElite: "smelt", spawns: [{ type: "smelt", count: 2 }, { type: "fuse", count: 4 }] },
       { name: "THE SLAYER", boss: true, bossType: "slayer" },
     ],
   };

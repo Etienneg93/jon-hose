@@ -138,6 +138,7 @@ function stubGame(px, py) {
     particles: [], embers: [], firePatches: [], pickups: [],
     bounds: { minX: 0, maxX: 600 },
     shake() {}, hitStop() {}, onEnemyKilled() {}, dropLoot() {}, killJuice() {},
+    canAttack() { return true; },
     defer(ms, fn) { fn(); },   // stub runs deferred work immediately
     audio: { played: [], play(k) { this.played.push(k); } },
   };
@@ -285,6 +286,14 @@ test("SmeltBomb landing burn matches the spawned FirePatch footprint", () => {
   bomb2.x = 100; bomb2.y = 40; bomb2.z = 0.0001; bomb2.vz = -1;
   bomb2.update(0.016, g);
   assert.strictEqual(g.player.burns, 1);
+});
+
+test("SmeltBomb with bounces re-arcs once, leaving a patch at EACH touchdown", () => {
+  const g = makeThinkGame(200, 40);
+  const bomb = new JH.SmeltBomb(100, 40, 140, 40, JH.ENEMIES.smelt, { bounces: 1 });
+  for (let i = 0; i < 400 && !bomb.dead; i++) bomb.update(1 / 60, g);
+  assert.strictEqual(bomb.dead, true);
+  assert.ok(g.firePatches.length >= 2, "patch at first landing AND bounce landing, got " + g.firePatches.length);
 });
 
 test("Fuse drop slam: hit zone matches the landing ring ellipse", () => {
@@ -529,4 +538,241 @@ test("neutral dash goes toward facing", () => {
   assert.ok(p.dashTimer > 0, "neutral press should still dash");
   assert.strictEqual(p._dashX, -1, "dashes toward facing");
   assert.strictEqual(p._dashY, 0);
+});
+
+test("computeStats caps dodgeChance at 25%", () => {
+  JH.Upgrades.reset();
+  // Force an over-cap contribution through a repeatable-free path: fake a
+  // Mirror application by monkey-patching (Mirror isn't loaded in tests).
+  global.window.JH.Mirror = { apply: (s) => { s.dodgeChance = 0.4; } };
+  global.window.JH.Church = { state: {} };
+  const s = JH.Upgrades.computeStats({});
+  assert.ok(s.dodgeChance <= 0.25, "dodge capped, got " + s.dodgeChance);
+  delete global.window.JH.Mirror; delete global.window.JH.Church;
+});
+
+test("Vampiric Hose (vt3) grants 5% lifesteal", () => {
+  JH.Upgrades.reset();
+  const s = JH.Upgrades.computeStats({ vt1: true, vt2: true, vt3: true });
+  assert.ok(Math.abs(s.vampiricRate - 0.05) < 1e-9);
+});
+
+// ---- attack tickets: cap on simultaneous melee windups ----
+
+// Minimal game stub for enemy think() tests.
+function makeThinkGame(px, py) {
+  return {
+    player: Object.assign(makePlayer(), { x: px, y: py }),
+    enemies: [], embers: [], particles: [], firePatches: [], shields: [],
+    bounds: { minX: 0, maxX: 480 },
+    audio: { play() {} }, shake() {}, hitStop() {}, defer() {},
+    killJuice() {}, dropLoot() {}, onEnemyKilled() {}, spawnEnemy() {},
+    canAttack() { return this._tickets !== false; }, _tickets: true,
+  };
+}
+
+test("mook holds its windup when no attack ticket is free", () => {
+  const g = makeThinkGame(60, 40);
+  const m = new JH.Enemy("mook", 62, 40);           // inside meleeRange (20)
+  m.spawnGrace = 0;
+  g._tickets = false;
+  m.think(1 / 60, g);
+  assert.strictEqual(m.windTimer, 0, "no windup without a ticket");
+  assert.notStrictEqual(m.state, "wind");
+  g._tickets = true;
+  m.think(1 / 60, g);
+  assert.ok(m.windTimer > 0, "winds up once a ticket frees");
+  assert.strictEqual(m.usingTicket, true);
+});
+
+test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {
+  JH.Upgrades.reset();
+  JH.Upgrades.owned = { pw1: true, pw2: true };
+  JH.Upgrades.currentActLevel = -1;                     // Act 1
+  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), false);
+  JH.Upgrades.currentActLevel = 0;                      // Act 2 — gate opens here
+  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  JH.Upgrades.currentActLevel = 1;                      // Act 3 — still available
+  assert.strictEqual(JH.Upgrades.isAvailable("pw3"), true);
+  JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
+});
+
+// makeSuper reads JH.Balance.superEliteDef at call time.
+require("../js/balance.js");
+
+test("makeSuper: 7x hp, superElite + elite flags, def untouched globally", () => {
+  const m = new JH.Enemy("mook", 0, 0);
+  const baseHp = JH.ENEMIES.mook.hp;
+  m.makeSuper();
+  assert.strictEqual(m.superElite, true);
+  assert.strictEqual(m.elite, true);          // reuses elite art/palette
+  assert.strictEqual(m.maxHp, baseHp * 7);
+  assert.strictEqual(JH.ENEMIES.mook.hp, baseHp);  // shared def not mutated
+});
+
+test("super mook windup resolves into a forward lunge, not a standing hit", () => {
+  const g = makeThinkGame(120, 40);
+  const m = new JH.Enemy("mook", 60, 40);
+  m.makeSuper(); m.spawnGrace = 0; m.facing = 1;
+  m.windTimer = 0.01; m.state = "wind";
+  const x0 = m.x;
+  m.think(0.02, g);                       // windup expires
+  assert.strictEqual(m.state, "lunge");
+  m.think(0.05, g);                       // lunging
+  assert.ok(m.x > x0, "carries forward during the lunge");
+});
+
+test("lunge commits to its aim: no re-facing mid-flight when Jon is behind", () => {
+  const g = makeThinkGame(20, 40);          // player BEHIND the lunge direction
+  const m = new JH.Enemy("mook", 60, 40);
+  m.makeSuper(); m.spawnGrace = 0; m.facing = 1;
+  m.state = "lunge"; m.attackTimer = 0.16; m.lungeHit = false;
+  const x0 = m.x;
+  m.think(0.05, g);
+  assert.strictEqual(m.facing, 1, "facing stays locked during the lunge");
+  assert.ok(m.x > x0, "still advances along the committed direction");
+});
+
+test("super charger ricochets off the arena x-bounds and keeps momentum", () => {
+  const g = makeThinkGame(200, 80);
+  const c = JH.makeEnemy("charger", 470, 40);
+  c.makeSuper(); c.spawnGrace = 0;
+  c.state = "charge"; c.attackTimer = 2;
+  c.chargeVX = 200; c.chargeVY = 30; c.bounces = 3;
+  c.think(0.1, g);                          // crosses maxX=480 → bounce
+  assert.ok(c.chargeVX < 0, "x velocity reflected");
+  assert.strictEqual(c.state, "charge", "still charging after bounce");
+});
+
+test("super pyro fires a 3-ember fan; embers carry a patch spec", () => {
+  const g = makeThinkGame(150, 40);
+  const p = JH.makeEnemy("pyro", 60, 40);
+  p.makeSuper(); p.spawnGrace = 0;
+  p.windTimer = 0.01; p.state = "wind";
+  p.think(0.02, g);
+  assert.strictEqual(g.embers.length, 3);
+  assert.ok(g.embers.every((e) => e.patch && e.patch.r === 14));
+});
+
+test("super stalker feints in FRONT first, then blinks behind and strikes", () => {
+  const g = makeThinkGame(240, 40);
+  g.player.facing = 1;
+  const s = JH.makeEnemy("stalker", 100, 40);
+  s.makeSuper(); s.spawnGrace = 0;
+  s.windTimer = 0.01; s.state = "wind";
+  s.think(0.02, g);                              // first blink = feint
+  assert.ok(s.x > g.player.x, "feint lands in FRONT of the player (facing side)");
+  assert.notStrictEqual(s.state, "strike", "no strike off the feint");
+  assert.ok(s.windTimer > 0, "re-telegraphs for the real blink");
+  s.windTimer = 0.01;
+  s.think(0.02, g);                              // second blink = real
+  assert.ok(s.x < g.player.x, "real blink lands BEHIND");
+  assert.strictEqual(s.state, "strike");
+});
+
+// ---- fuse: proximity-lit self-destruct + elite/super death-split ----
+
+test("fuse ignites on proximity and drains its own hp while lit", () => {
+  const g = makeThinkGame(60, 40);
+  const f = JH.makeEnemy("fuse", 100, 40);     // 40px away < igniteRange 70
+  f.spawnGrace = 0; f.dropping = false;
+  f.update(1 / 60, g);
+  assert.strictEqual(f.lit, true);
+  const hp0 = f.hp;
+  f.update(0.5, g);
+  assert.ok(f.hp < hp0, "lit fuse burns its own hp");
+});
+
+test("lit fuse reaching 0 hp self-destructs: blast patch + player damage in range", () => {
+  const g = makeThinkGame(110, 40);
+  const f = JH.makeEnemy("fuse", 100, 40);
+  f.spawnGrace = 0; f.dropping = false; f.lit = true; f.hp = 0.01;
+  const hpBefore = g.player.hp;
+  f.update(0.5, g);
+  assert.strictEqual(f.dead, true);
+  assert.ok(g.firePatches.length >= 1, "blast leaves a fire patch");
+  assert.ok(g.player.hp < hpBefore, "player inside blastRadius takes the hit");
+});
+
+test("elite fuse spawns 1 child on death; super spawns 3", () => {
+  const spawned = [];
+  const g = makeThinkGame(400, 40);
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); spawned.push(c); return c; };
+  const e = JH.makeEnemy("fuse", 100, 40); e.makeElite(); e.die(g);
+  assert.strictEqual(spawned.length, 1);
+  const s = JH.makeEnemy("fuse", 100, 40); s.makeSuper(); s.die(g);
+  assert.strictEqual(spawned.length, 4);
+});
+
+// ---- super bulwark: shield lob + slow zone ----
+
+test("SlowZone slows the player inside, expires after dur", () => {
+  const g = makeThinkGame(100, 40);
+  const z = new JH.SlowZone(100, 40, 30, 5);
+  z.update(1 / 60, g);
+  assert.strictEqual(g.player.zoneSlow, 0.55);
+  const z2 = new JH.SlowZone(400, 40, 30, 5);   // far away
+  g.player.zoneSlow = 1; z2.update(1 / 60, g);
+  assert.strictEqual(g.player.zoneSlow, 1);
+  z.t = 99; assert.strictEqual(z.update(1 / 60, g), false);
+});
+
+test("spawnFirePatch: fire never stacks inside a live patch's footprint", () => {
+  const g = makeThinkGame(400, 40);
+  const first = JH.spawnFirePatch(g, 100, 40, 30, 2);
+  assert.ok(first, "first patch spawns");
+  assert.strictEqual(JH.spawnFirePatch(g, 102, 40, 30, 2), null); // on top -> refused
+  assert.strictEqual(g.firePatches.length, 1);
+  assert.ok(JH.spawnFirePatch(g, 200, 40, 30, 2), "well clear -> spawns");
+  assert.strictEqual(g.firePatches.length, 2);
+});
+
+test("super smelt lobs ONE bouncing slag, not two", () => {
+  const g = makeThinkGame(200, 40);
+  const s = JH.makeEnemy("smelt", 60, 40);
+  s.makeSuper(); s.spawnGrace = 0;
+  s.windTimer = 0.01; s.state = "wind";
+  s.think(0.02, g);
+  assert.strictEqual(g.embers.length, 1);
+  assert.strictEqual(g.embers[0].bounces, 1);
+});
+
+test("super smelt hp uses the SUPER_TUNE override (3x, not 7x)", () => {
+  const s = JH.makeEnemy("smelt", 0, 0);
+  s.makeSuper();
+  assert.strictEqual(s.maxHp, JH.ENEMIES.smelt.hp * 3);
+});
+
+test("makeSuper hpScale damps hp after type multipliers (early-act giants)", () => {
+  const m = new JH.Enemy("mook", 0, 0);
+  m.makeSuper(0.55);
+  assert.strictEqual(m.maxHp, Math.round(JH.ENEMIES.mook.hp * 7 * 0.55));   // 154
+  const full = new JH.Enemy("mook", 0, 0);
+  full.makeSuper();                                    // no scale = full 7x
+  assert.strictEqual(full.maxHp, JH.ENEMIES.mook.hp * 7);
+});
+
+test("super bulwark's thrown shield lands as barrier dome + slow zone", () => {
+  const g = makeThinkGame(200, 40);
+  g.slowZones = [];
+  const b = JH.makeEnemy("bulwark", 60, 40);
+  b.makeSuper();
+  const lob = new JH.ShieldLob(60, 40, 120, 40, b);
+  for (let i = 0; i < 200 && !lob.dead; i++) lob.update(1 / 60, g);
+  assert.strictEqual(g.slowZones.length, 1, "slow zone landed");
+  assert.strictEqual(g.shields.length, 1, "barrier dome landed");
+  assert.strictEqual(g.shields[0].radius, 34);
+  assert.strictEqual(b.shield, g.shields[0]);
+  // Reclaim: zone expiry restores the shield and removes the dome.
+  b.phase = "brawl"; b.thrownZone = g.slowZones[0]; b.hasShield = false;
+  g.slowZones[0].dead = true;
+  b.superThink(1 / 60, g);
+  assert.strictEqual(b.hasShield, true);
+  assert.strictEqual(g.shields[0].dead, true);
+});
+
+test("super bulwark hp uses its SUPER_TUNE override (2.5x)", () => {
+  const b = JH.makeEnemy("bulwark", 0, 0);
+  b.makeSuper();
+  assert.strictEqual(b.maxHp, Math.round(JH.ENEMIES.bulwark.hp * 2.5));
 });

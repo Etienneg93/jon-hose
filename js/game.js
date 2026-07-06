@@ -32,6 +32,7 @@
     elapsed: 0, kills: 0,
     trauma: 0, shakeKickX: 0,   // trauma screenshake (see JH.JUICE)
     lootVacuumT: 0,             // wave-ender loot vacuum time remaining
+    essenceDim: 0,              // 0..1 world-darken while a Holy Essence cross is uncollected
     bannerTimer: 0,
     shopCursor: 0,
     acc: 0, lastT: 0, running: false,
@@ -189,6 +190,9 @@
       JH.Camera.locked = false;
       // Use last wave index so checkWaveTrigger never fires in this range.
       this.waveIndex = JH.LEVEL1.waves.length - 1;
+      // No startWave here, so set the act level directly — keeps tier-3
+      // nodes buyable at the range's shop.
+      JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
       this.waveActive = false;
       this.bounds = { minX: 8, maxX: 900 };
       // Buff test stations: walk up + press E (see tickRangeStations).
@@ -305,7 +309,7 @@
       JH.Upgrades.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -316,9 +320,11 @@
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
+      JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
+      this.deathCount = 0;
       this.elapsed = 0; this.kills = 0;
-      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
@@ -339,9 +345,12 @@
 
     startWave(i) {
       this.waveIndex = i;
+      // Shop reads this for the tier-3 act gate.
+      JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
       this.checkpointWave = JH.Balance.actStartForWave(i, JH.ACT_STARTS);
       this.waveActive = true;
       this.waveCleared = false;
+      this.wavePool = [];   // reinforcement queue — only regular waves fill it
       this.shopNpc = null;          // vendor gets left behind once the fight starts
       this.nearShop = false;
       const wave = JH.LEVEL1.waves[i];
@@ -402,7 +411,8 @@
       } else {
         this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
         const actLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
-        const ownedCount = Object.keys(JH.Upgrades.owned).length;
+        const ownedCount = JH.Balance.powerCount(
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state);
         const eliteScale = wave.tough
           ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
         const spawnList = JH.Balance.capEnemyType(
@@ -420,26 +430,50 @@
           typeCaps: { charger: chargerRoom },
         }));
         const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
-        let slot = 0, fuseIdx = 0;
-        types.forEach((type) => {
-          const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
-          if (type === "fuse") {
-            // Fuses drop in at a random arena spot, staggered so they don't
-            // all land at once.
-            const ex = left + 30 + Math.random() * (right - left - 60);
-            this.spawnEnemy(type, ex, ey, {
-              elite: eliteScale, dropIn: true, dropDelay: fuseIdx * JH.FUSE_DROP.stagger,
-            });
-            fuseIdx++;
-          } else {
-            // Enter from a random screen edge at a random depth.
-            const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
-                                             : right - 6 - Math.random() * 10;
-            const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
-            e.spawnGrace = 0.3 + slot * 0.25; // stagger entrances
-          }
+        // Trickle spawning: only the first fieldCap enemies open the wave;
+        // the rest queue and stream in as reinforcements (update loop) so
+        // big waves ramp instead of dumping everything at frame one.
+        // (ticketBudget = generic act-indexed clamped lookup.)
+        const cap = JH.Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
+        let slot = 0;
+        types.slice(0, cap).forEach((type) => {
+          this.spawnWaveEnemy(type, eliteScale, slot);
           slot++;
         });
+        this.wavePool = types.slice(cap);
+        this.waveEliteScale = eliteScale;
+        this.waveTrickleT = JH.WAVEFLOW.trickle;
+        // Rare apex: at most ONE super-elite, spawned by wave data.
+        if (wave.superElite) {
+          const ex = (Math.random() < 0.5) ? left + 24 : right - 24;
+          const ey = JH.DEPTH_MIN + 10 + Math.random() * (depthSpan - 4);
+          const se = this.spawnEnemy(wave.superElite, ex, ey, {
+            elite: eliteScale, super: true,
+            superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
+          });
+          se.spawnGrace = 0.6;
+        }
+      }
+    },
+
+    // One wave enemy at the arena edge (or dropped in, for fuses). Used by
+    // the wave-open batch and by reinforcement trickle.
+    spawnWaveEnemy(type, eliteScale, slot) {
+      const left = this.bounds.minX, right = this.bounds.maxX;
+      const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
+      const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
+      if (type === "fuse") {
+        // Fuses drop in at a random arena spot.
+        const ex = left + 30 + Math.random() * (right - left - 60);
+        this.spawnEnemy(type, ex, ey, {
+          elite: eliteScale, dropIn: true, dropDelay: (slot || 0) * JH.FUSE_DROP.stagger * 0.5,
+        });
+      } else {
+        // Enter from a random screen edge at a random depth.
+        const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
+                                         : right - 6 - Math.random() * 10;
+        const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
+        e.spawnGrace = 0.3 + (slot || 0) * 0.25; // stagger entrances
       }
     },
 
@@ -701,7 +735,15 @@
       if (opts) {
         if (opts.infinite) e.infinite = true;
         if (opts.elite && e.makeElite) e.makeElite(opts.elite === true ? undefined : opts.elite);
+        if (opts.super && e.makeSuper) e.makeSuper(opts.superHpScale);
         if (opts.dropIn && e.beginDrop) e.beginDrop(opts.dropDelay || 0);
+      }
+      // Boss HP respects player power: a maxed build sees all the phases
+      // instead of deleting them.
+      if (e.isBoss) {
+        const pc = JH.Balance.powerCount(
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state);
+        e.hp = e.maxHp = JH.Balance.bossHpScale(e.maxHp, pc);
       }
       this.enemies.push(e);
       return e;
@@ -753,6 +795,8 @@
     // spawns (boss summons + wall-zone reinforcements) share a per-encounter
     // budget, so steady killing is rewarded but idle farming dries up.
     dropLoot(e) {
+      // Super-elite kills pay: guaranteed kibble on top of their 4x suds.
+      if (e.superElite) this.spawnPickup("health", e.x + 8, e.y, 25);
       // Concerta pill: 8% chance from elite enemies once the garden unlocks it
       if (e.elite && !e.isBoss && this.concertaUnlocked && Math.random() < 0.08)
         this.spawnPickup("pill", e.x, e.y, 1);
@@ -961,16 +1005,18 @@
       p.clearBurn();
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
-      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0;
+      this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = next - 1;
+      // Act gate keyed to the wave being re-fought, not the decremented index.
+      JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(next, JH.ACT_STARTS);
       this.waveActive = false; this.waveCleared = false;
       this.bounds = { minX: 8, maxX: maxX };
       // Church-return arrival: hold on black, then a water jet drops Jon from the
@@ -1041,6 +1087,12 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
+      // First death of the RUN: bank a pity Essence and cue Father Jon's line.
+      this.deathCount = (this.deathCount || 0) + 1;
+      if (this.deathCount === 1 && JH.Church) {
+        JH.Church.addEssence(1);
+        JH.Church.pendingPity = true;
+      }
       this.diedWave = this.waveIndex;        // the wave to re-arm on return
       this.state = "playerDeathSeq";
       this.deathSeqT = 0;
@@ -1177,8 +1229,13 @@
       for (const e of this.enemies) e.update(dt, this);
       for (const s of this.shields) s.update(dt);
       for (const fp of this.firePatches) fp.update(dt, this);
+      this.player.zoneSlow = 1;
+      for (const z of this.slowZones) z.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
       this.pickups = this.pickups.filter((p) => p.update(dt, this));
+      // Essence-cross event: while a cross is uncollected the world dims.
+      const crossOut = this.pickups.some((p) => !p.dead && p.kind === "cross");
+      this.essenceDim += ((crossOut ? 1 : 0) - this.essenceDim) * Math.min(1, 3 * dt);
       this.particles = this.particles.filter((p) => p.update(dt));
 
       // --- hydrant timers + walk-up shop vendor
@@ -1225,6 +1282,7 @@
       this.enemies = this.enemies.filter((e) => !e.dead);
       this.shields = this.shields.filter((s) => !s.dead);
       this.firePatches = this.firePatches.filter((fp) => !fp.dead);
+      this.slowZones = this.slowZones.filter((z) => !z.dead);
 
       // --- camera
       JH.Camera.follow(this.player);
@@ -1244,7 +1302,8 @@
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
               const sc = wave.tough
-                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
+                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
+                    JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state))
                 : null;
               const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
               e.spawnGrace = 0.2;
@@ -1259,7 +1318,8 @@
             const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
             const sc = wave.tough
-              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), Object.keys(JH.Upgrades.owned).length)
+              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
+                  JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state))
               : null;
             // Spawn from either edge so pressure comes from ahead AND behind.
             const ex = (Math.random() < 0.5)
@@ -1285,8 +1345,21 @@
             }
             this.waveCleared_();
           }
-        } else if (this.enemies.length === 0) {
-          this.waveCleared_();
+        } else {
+          // Reinforcement trickle: stream queued spawns in while the field
+          // has room (enemies is already culled to the living this frame).
+          if (this.wavePool && this.wavePool.length) {
+            this.waveTrickleT -= dt;
+            const fieldCap = JH.Balance.ticketBudget(
+              JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), JH.WAVEFLOW.fieldCap);
+            if (this.waveTrickleT <= 0 && this.enemies.length < fieldCap) {
+              this.waveTrickleT = JH.WAVEFLOW.trickle;
+              this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
+            }
+          }
+          // The wave only clears once the queue has fully emptied onto the field.
+          if (this.enemies.length === 0 && (!this.wavePool || this.wavePool.length === 0))
+            this.waveCleared_();
         }
       }
 
@@ -1294,6 +1367,17 @@
       if (!this.player.alive && this.state === "play") this.startPlayerDeathSeq();
 
       this.updateHUD();
+    },
+
+    // Attack tickets: cap simultaneous melee windups so crowds stay readable
+    // even at the bigger wave sizes. Enemies flag usingTicket during their
+    // windup/attack; the count is live (dead enemies drop out via the flag
+    // check in their own think/die paths going quiet).
+    canAttack() {
+      let used = 0;
+      for (const e of this.enemies) if (!e.dead && e.usingTicket) used++;
+      const act = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
+      return used < JH.Balance.ticketBudget(act, JH.TICKETS.budgets);
     },
 
     // Soft push-apart to keep a beat-em-up crowd readable.
@@ -1406,6 +1490,9 @@
 
         // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
         for (const fp of this.firePatches) fp.draw(ctx, cam);
+
+        // slow zones (super-Bulwark's landed shield)
+        for (const z of this.slowZones) z.draw(ctx, cam);
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
@@ -1534,6 +1621,26 @@
         }
       }
 
+      // Essence dim: darken the world, then re-draw the cross(es) above the
+      // veil so the beat reads as "something is over there".
+      if (this.essenceDim > 0.02 && this.state === "play") {
+        const cam = JH.Camera.x;
+        ctx.save();
+        ctx.fillStyle = "rgba(8,6,20," + (0.35 * this.essenceDim).toFixed(3) + ")";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        ctx.restore();
+        // Cross redraw uses the same shake offset as the world pass — without
+        // it the overlay copy double-images against the world copy during shake.
+        ctx.save();
+        ctx.translate(so.x, so.y);
+        for (const p of this.pickups) {
+          if (p.dead || p.kind !== "cross") continue;
+          JH.Assets.glow(ctx, p.x - cam, JH.Geo.feetScreenY(p.y, p.z) - 4,
+            18, "#ffd23f", 0.5 * this.essenceDim);
+          p.draw(ctx, cam);
+        }
+        ctx.restore();
+      }
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") this.drawHoverShop(this.ctx);
       // Cutscene overlay (drawn after everything else).
@@ -1735,7 +1842,49 @@
       return true;
     },
 
+    // Slim stat readout beside the hover shop: the numbers the scaling pass
+    // moves, flashing green for 2s after any purchase changes them. Sits at
+    // the top-left — the shop panel occupies PX=280..474, and no other HUD
+    // element claims this corner while the shop is open.
+    drawStatPanel(ctx) {
+      const S = this.player.stats, F = this.player.statFlash || {};
+      const rows = [
+        ["DMG",    Math.round(S.sprayDamage), "sprayDamage"],
+        ["RANGE",  Math.round(S.sprayRange),  "sprayRange"],
+        ["WATER",  Math.round(S.maxWater),    "maxWater"],
+        // REGEN displays the sum of two stats, so it flashes on either key.
+        ["REGEN",  Math.round(S.waterRegen + (S.moveRegen || 0)), ["waterRegen", "moveRegen"]],
+        ["HP",     Math.round(S.maxHp),       "maxHp"],
+        ["SPEED",  Math.round(S.moveSpeed),   "moveSpeed"],
+        ["DODGE",  Math.round(S.dodgeChance * 100) + "%", "dodgeChance"],
+        ["VAMP",   Math.round(S.vampiricRate * 100) + "%", "vampiricRate"],
+      ];
+      const X = 10, Y = 30, ROW = 9, W = 74;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.85)";
+      ctx.fillRect(X - 4, Y - 10, W, rows.length * ROW + 16);
+      ctx.strokeStyle = "#2a3550"; ctx.strokeRect(X - 4, Y - 10, W, rows.length * ROW + 16);
+      ctx.font = "bold 6px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#8fa8c8";
+      ctx.fillText("JON", X, Y - 3);
+      ctx.font = "6px monospace";
+      rows.forEach(([label, val, key], i) => {
+        const y = Y + 6 + i * ROW;
+        // A row may aggregate several stat keys — flash if any of them changed.
+        const live = [].concat(key).some((k) => F[k] > 0);
+        const hot = live && (Math.floor(this.elapsed * 6) & 1) === 0;
+        ctx.fillStyle = "#667788";
+        ctx.fillText(label, X, y);
+        ctx.textAlign = "right";
+        ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
+        ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
+        ctx.textAlign = "left";
+      });
+      ctx.restore();
+    },
+
     drawHoverShop(ctx) {
+      this.drawStatPanel(ctx);
       const U = JH.Upgrades, pl = this.player;
       const selectable = this.shopSelectables();
       if (selectable.length > 0)

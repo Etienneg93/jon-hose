@@ -575,6 +575,7 @@
     // windFrac (0→1 windup progress) steps wind1..wind4 across the haymaker.
     const pose = (opt.state === "wind" || opt.wind)
                ? (opt.elite ? "wind" : "wind" + (1 + Math.min(3, Math.floor((opt.windFrac || 0) * 4))))
+               : (opt.state === "lunge") ? (opt.elite ? "wind" : "wind4")
                : (opt.state === "walk") ? "walk" + (f & 3)
                : "idle" + (Math.floor((opt.t || 0) * 8) % 12);
     const img = _mookImgs[(opt.elite ? "elite_" : "") + pose];
@@ -861,7 +862,7 @@
 
   // ============================ SLAYER (BOSS) ==========================
   // Real sprite sheets — 4 static PNG states (no walk cycle).
-  const SLAYER_H = 58;
+  const SLAYER_H = 68;
   const _slayerImgs = {
     idle:       JH.Loader.img("sprites/slayer/slayer-idle.png"),
     dash:       JH.Loader.img("sprites/slayer/slayer-dash.png"),

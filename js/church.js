@@ -299,6 +299,10 @@
         const lines = sc.firstVisit
           ? JH.CHURCH.sermon.first.slice()
           : [JH.CHURCH.sermon.repeat[(Math.random() * JH.CHURCH.sermon.repeat.length) | 0]];
+        if (this.pendingPity) {
+          this.pendingPity = false;
+          lines.unshift("Take this, child — the water keeps what it takes.");
+        }
         sc.dialogue = { lines: lines, idx: 0 };
         return;
       }
