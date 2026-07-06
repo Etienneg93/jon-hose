@@ -291,7 +291,7 @@
           this.pendingPity = false;
           lines.unshift(
             "The vendor on that street is an old friend of this parish. He appears wherever the faithful struggle.",
-            "Take this voucher, child — half off his next ware. You're a church member now; the sign out front never lied."
+            "Take this voucher, child — half off his next ware. You're a church member now."
           );
           // The gift itself: a voucher set down beside him, collected in-scene.
           sc.pityVoucher = { x: sc.fatherSpawnX - 32, y: sc.fatherY };
