@@ -284,6 +284,11 @@
   // mercy rule — ticketless melee enemies hold at approach range instead.
   JH.TICKETS = { budgets: [4, 4, 5, 5, 6] };
 
+  // Wave spawn flow: fieldCap enemies open the wave; the rest queue and
+  // trickle in (one per `trickle` sec) whenever the field has room — big
+  // waves ramp instead of dumping every body at frame one.
+  JH.WAVEFLOW = { fieldCap: 7, trickle: 1.1 };
+
   // Per-type super-elite multiplier overrides (default hp x7 in
   // Balance.superEliteDef). Smelt's 300 base hp + 0.5 waterMult made x7 a
   // sponge — x3 keeps it a fight, not a chore.

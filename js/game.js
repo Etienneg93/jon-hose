@@ -321,7 +321,7 @@
       if (JH.Benedictions) JH.Benedictions.reset();
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
       this.relics = {}; this.relicStock = [];
@@ -369,6 +369,7 @@
       this.checkpointWave = JH.Balance.actStartForWave(i, JH.ACT_STARTS);
       this.waveActive = true;
       this.waveCleared = false;
+      this.wavePool = [];   // reinforcement queue — only regular waves fill it
       this.shopNpc = null;          // vendor gets left behind once the fight starts
       this.nearShop = false;
       if (this.player.beneRank("eye_of_storm"))
@@ -450,26 +451,18 @@
           typeCaps: { charger: chargerRoom },
         }));
         const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
-        let slot = 0, fuseIdx = 0;
-        types.forEach((type) => {
-          const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
-          if (type === "fuse") {
-            // Fuses drop in at a random arena spot, staggered so they don't
-            // all land at once.
-            const ex = left + 30 + Math.random() * (right - left - 60);
-            this.spawnEnemy(type, ex, ey, {
-              elite: eliteScale, dropIn: true, dropDelay: fuseIdx * JH.FUSE_DROP.stagger,
-            });
-            fuseIdx++;
-          } else {
-            // Enter from a random screen edge at a random depth.
-            const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
-                                             : right - 6 - Math.random() * 10;
-            const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
-            e.spawnGrace = 0.3 + slot * 0.25; // stagger entrances
-          }
+        // Trickle spawning: only the first fieldCap enemies open the wave;
+        // the rest queue and stream in as reinforcements (update loop) so
+        // big waves ramp instead of dumping everything at frame one.
+        const cap = JH.WAVEFLOW.fieldCap;
+        let slot = 0;
+        types.slice(0, cap).forEach((type) => {
+          this.spawnWaveEnemy(type, eliteScale, slot);
           slot++;
         });
+        this.wavePool = types.slice(cap);
+        this.waveEliteScale = eliteScale;
+        this.waveTrickleT = JH.WAVEFLOW.trickle;
         // Rare apex: at most ONE super-elite, spawned by wave data.
         if (wave.superElite) {
           const ex = (Math.random() < 0.5) ? left + 24 : right - 24;
@@ -480,6 +473,27 @@
           });
           se.spawnGrace = 0.6;
         }
+      }
+    },
+
+    // One wave enemy at the arena edge (or dropped in, for fuses). Used by
+    // the wave-open batch and by reinforcement trickle.
+    spawnWaveEnemy(type, eliteScale, slot) {
+      const left = this.bounds.minX, right = this.bounds.maxX;
+      const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
+      const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
+      if (type === "fuse") {
+        // Fuses drop in at a random arena spot.
+        const ex = left + 30 + Math.random() * (right - left - 60);
+        this.spawnEnemy(type, ex, ey, {
+          elite: eliteScale, dropIn: true, dropDelay: (slot || 0) * JH.FUSE_DROP.stagger * 0.5,
+        });
+      } else {
+        // Enter from a random screen edge at a random depth.
+        const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
+                                         : right - 6 - Math.random() * 10;
+        const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
+        e.spawnGrace = 0.3 + (slot || 0) * 0.25; // stagger entrances
       }
     },
 
@@ -1155,7 +1169,7 @@
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
-      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = [];
+      this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.floaters = [];
       this.sigils = [];   // usedOnce survives death; the benediction wipe above already reset ranks
       // First-death pity: banked at the death moment, paid out as a cross now
@@ -1517,8 +1531,19 @@
             }
             this.waveCleared_();
           }
-        } else if (this.enemies.length === 0) {
-          this.waveCleared_();
+        } else {
+          // Reinforcement trickle: stream queued spawns in while the field
+          // has room (enemies is already culled to the living this frame).
+          if (this.wavePool && this.wavePool.length) {
+            this.waveTrickleT -= dt;
+            if (this.waveTrickleT <= 0 && this.enemies.length < JH.WAVEFLOW.fieldCap) {
+              this.waveTrickleT = JH.WAVEFLOW.trickle;
+              this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
+            }
+          }
+          // The wave only clears once the queue has fully emptied onto the field.
+          if (this.enemies.length === 0 && (!this.wavePool || this.wavePool.length === 0))
+            this.waveCleared_();
         }
       }
 
