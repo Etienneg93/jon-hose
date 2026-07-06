@@ -7,6 +7,20 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.6 — The Handbook (2026-07-06)
+
+Docs-only release — no gameplay changes.
+
+- **`docs/HANDBOOK.md`**: the committed project handbook — design
+  principles with their origin stories, a systems map, the v0.27.5
+  balance reference, and the forward vision queue.
+- **Project skills** (`.claude/skills/`): `headless-playtest` (the
+  verified browser-harness recipe and its input gotchas) and `release`
+  (this very ritual, including the patch-vs-minor calibration).
+- **README** refreshed to the v0.27.x state: run economy (levels,
+  benedictions, pillars, Reliquary, voucher), super-elites, wave flow,
+  baked-art pipeline, current file map, roadmap.
+
 ## v0.27.5 — Shield Inspection (2026-07-06)
 
 - **Bulwark hp 420 → 300**: its defense is the dome, not the bar — elite

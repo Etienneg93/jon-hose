@@ -6,16 +6,20 @@ punches, Jon blasts foes with a high-pressure water hose. Water is limited, so y
 tank that drains as you spray and recharges over time — and you spend the cash dropped by
 enemies on upgrades between fights.
 
-> Status: **Playable level — 29 waves across five acts** (4-4-5-6-6 escalation curve),
-> each act capped by a boss with its own distinct dodge: **The Big Drip** (step out of
-> ground slams), **The Switch of Doom** (change depth lane vs. line attacks), **Quake
-> Walker** (dash through stomp shockwaves in the ruined district), **Gateway Krusher
-> 9000**, and **The Slayer** (pool-cue fireballs, in the fire-world Boiler District).
-> Set-pieces along the way: destructible barricade, 22s holdout, douse-the-flames,
-> the Garden, and stalker/bulwark ambushes. Death sends you through the **Church of the
-> Holy Hose** — a walkable interlude with Father Jon — before respawning at your last
-> hydrant checkpoint. Full core loop, skill-tree shop, GUSH kill combos, HUD, win/lose
-> flow. The streamlined kit is move + spray + dash (no jump/melee — by design).
+> Status: **Live for playtesters (v0.27.x) — 29 waves across five elemental acts**
+> (4-4-5-6-6 escalation curve), each capped by a boss with its own distinct dodge:
+> **The Big Drip** (step out of ground slams), **The Switch of Doom** (change depth
+> lane), **Quake Walker** (dash through shockwaves in the earth-themed rubble),
+> **Gateway Krusher 9000**, and **The Slayer** (pool-cue fireballs in the Boiler
+> District). Set-pieces along the way: destructible barricade, holdout,
+> douse-the-flames, the Garden, ambushes. A full **Hades-style run economy** sits on
+> top: XP level-ups, **Benedictions** (24 element boons picked at post-fight sigils),
+> a rotating **event shop** (signature builds + relics), rare **super-elites** with
+> signature moves, and a death loop through the **Church of the Holy Hose** — pillars
+> bought with Holy Essence, a Reliquary that ransoms back your washed boons, and
+> Father Jon. The streamlined kit is move + spray + dash (no jump/melee — by design).
+> All enemies wear baked pixel-art sprites. Every merge to main is a named release —
+> see `CHANGELOG.md`.
 
 ---
 
@@ -103,21 +107,44 @@ There's no jump — your only defensive move is the **dash**, which carries brie
 - **"The Slayer"** (Act 5) — pool-shark pyromancer; cue-launched fireballs that leave
   fire patches, plus a slam. Killing any boss clears its summoned goons.
 
+### Progression — the run economy
+- **XP levels** (~13/run): kills grant XP; each level lands instantly with a chime and
+  the next step of a fixed stat cycle (damage / max water / HP / range / regen —
+  water-weighted, since the dry tank is the early game's wall).
+- **Benedictions**: after bosses and set-pieces, three element **sigils** appear —
+  choose ONE by walking up (E). 17 boons + 3 duos + 4 legendaries with rank-II
+  deepens: scalding sprays, chain streams, projectile-eating dashes, turret stances...
+  Death **washes** them into the Church **Reliquary**, where 1 Essence each buys them
+  back (rank preserved) — the death loop's real stake.
+- **The Church of the Holy Hose**: the walkable death interlude. Four element
+  **pillars** (Water open; Earth/Fire/Air sealed behind their nemesis boss) sell
+  permanent ranks for **Holy Essence**, which only ever enters via cross pickups.
+  Pillar favor pulls that element's boons into your sigil offers. First death per
+  run: Father Jon hands you a **50% shop voucher** (the stall's sign always said
+  "50% off for church members").
+- **Event shop**: Old Spigot appears every third wave with three signature builds
+  (Hydro-Dash, Fire-Marshal Spec, Hydro Lance), a rotating 2-of-10 **relic** stock,
+  and lifeline consumables.
+
 ### Encounters
-- **Elites**: later fights spawn tougher "elite" enemies (more HP, damage and speed; marked with a red aura ring), scaled by act.
+- **Elites**: later fights spawn tougher gold-bar "elite" enemies, scaled by act and
+  by your build. **Super-elites** (late game only, red-framed, ~1.8x giants) each
+  carry a signature move — the mook's lunging haymaker, the charger's wall-ricochet,
+  the fuse splitting into three live fuses...
+- **Wave flow**: a per-act field cap opens each wave; the rest queue and arrive as
+  **batch reinforcement surges** (a wave within the wave). **Attack tickets** cap
+  simultaneous attackers so crowds stay readable at any size.
 - **Set-pieces**: a destructible **barricade** with reinforcements, a 22-second **holdout**, **douse-the-flames** (spray out burning ground), and **the Garden**.
 - **GUSH combos**: chained kills pitch-ladder the kill sound and pay out — x3 arms a water-regen window, every 5th milestone scales it further (uncapped) plus a water refund.
 - **Death loop**: dying takes Jon through the **Church of the Holy Hose** — a walkable nave interlude — then respawns him at the last touched hydrant. Every boot is a deliberately **fresh run** (no persistent meta-progression yet — that's a design decision, not a gap).
 - **Anti-farm**: infinitely-spawning foes (boss summons, barricade reinforcements) share a per-encounter drop budget, so you're rewarded for fighting but can't idle-farm unlimited Suds/health/water.
 
-### Upgrades — a branching skill tree
-Buy one-time nodes from five branches, each gated behind the previous tier:
-**Pressure** (Thumb on the Nozzle → Pressure Washer → Hydro Lance — concentrates the
-beam tighter/brighter and adds pierce), **Reach** (Extension Hose → Fire-Marshal Spec),
-**Tank** (Bladder Pack → Quick Prime → Closed Loop, which siphons water back as you hose
-enemies), **Mobility** (Gripper Soles → Hydro-Dash), and **Vitality** (Wetsuit → Second
-Wind, which heals on a wave clear). The water beam visibly tightens as you climb the
-Pressure branch.
+### Stats & readability
+**Tab** shows the full stat sheet anywhere (icons per stat; zero stats hide until
+earned). Every stat gain — level, shop, pillar, boon — plays a short upgrade sequence
+off Jon with its icon and delta, chiming up a pitch ladder. Fire hazards damage inside
+the **exact ellipse they draw** (rim = hitbox, everywhere), and hostile fire patches
+burn out on their own after ~7s. Dousing scales with your spray damage.
 
 ---
 
@@ -127,23 +154,31 @@ Plain `<script>` files (no modules/bundler) so it runs from `file://` by double-
 still being cleanly separated. Everything hangs off a single global namespace `JH`.
 
 ```
-Jon Hose Beatemup/
+jon-hose/
 ├── index.html          # canvas + UI overlays, script load order
 ├── styles.css          # arcade / CRT styling for shell & overlays
 ├── js/
-│   ├── config.js       # ALL tunables: player, enemies, waves, upgrades, palette
-│   ├── assets.js       # AssetManager: procedural pixel sprites + WebAudio SFX
-│   │                   #   (swap point for real sprite-sheet PNGs — see below)
-│   ├── input.js        # keyboard + gamepad → input state
-│   ├── world.js        # depth math, collision bands, camera, parallax background
-│   ├── entities.js     # Entity base, Player, enemies, Boss, WaterDrop, Pickup, Particle
-│   ├── upgrades.js      # upgrade definitions + apply logic + shop model
-│   ├── game.js         # scene manager, wave spawner, HUD, states, fixed-step loop
+│   ├── config.js       # ALL tunables: player, enemies, waves, boons, palette —
+│   │                   #   nothing else hardcodes a gameplay constant
+│   ├── balance.js      # pure balance math (elite/super scaling, drops) — unit-tested
+│   ├── assets.js       # AssetManager: baked sprites + procedural fallbacks + SFX
+│   ├── loader.js       # asset preloader gate
+│   ├── input.js        # keyboard + gamepad → buffered input state
+│   ├── world.js        # depth math, ground-ellipse hit tests, camera, parallax
+│   ├── entities.js     # Player, enemies, bosses, projectiles, FirePatch, Sigil
+│   ├── benedictions.js # boon defs, offers, wash/reclaim (dual-export for tests)
+│   ├── pillars.js      # Church element pillars
+│   ├── church.js       # Church meta state + the walkable nave scene
+│   ├── upgrades.js     # stat chain: shop → levels → pillars → benedictions
+│   ├── game.js         # scene manager, waves/tickets, shop, XP, HUD, fixed-step loop
 │   └── main.js         # bootstrap / wiring
-└── README.md
+├── sprites/            # baked pixel art (some frames HAND-CLEANED — see docs/HANDBOOK.md)
+├── tools/              # node bakers that generate sprites/ (never rebake hand-cleaned art)
+├── tests/              # node --test suites (npm test)
+└── docs/HANDBOOK.md    # design principles, systems map, future vision — read first
 ```
 
-**Load order** (in `index.html`): `config → assets → input → world → entities → upgrades → game → main`.
+**Load order** is set in `index.html` (config → balance → assets → … → game → main).
 
 ### Rendering
 Internal logical resolution is **480×270** (16:9), scaled up to the window with
@@ -156,33 +191,30 @@ Fixed-timestep accumulator (`config.FIXED_DT`) for deterministic physics, render
 
 ---
 
-## Swapping in real sprite art (later)
+## Art pipeline
 
-Art is intentionally abstracted. Right now `assets.js` registers **procedural** pixel-art
-draw functions keyed by name (`jon_idle`, `mook_walk`, `boss`, `water`, …). To move to real
-sprite sheets:
-
-1. Drop your PNG sheets in `assets/` (e.g. `assets/jon.png`).
-2. In `assets.js`, replace a key's procedural factory with a sheet definition:
-   `{ img: 'assets/jon.png', frameW: 32, frameH: 48, anims: { idle:[0,1], walk:[2,3,4,5] } }`.
-3. Render code already calls `Assets.draw(ctx, key, frame, x, y, facing)` — no entity changes needed.
-
-Frame sizes, anchors (feet-centered), and animation names are documented inline in `assets.js`.
+Jon and **every combat enemy wear baked pixel-art sprites** (`sprites/`), generated by
+the node bakers in `tools/` and wired through `registerBaked()` in `assets.js` — each
+baked key keeps its procedural painter as a loading fallback. Some frames are
+**hand-cleaned and must never be re-baked** (list in `docs/HANDBOOK.md` §5). Bosses:
+Switch + Gateway Krusher use baked chassis with runtime LED overlays; the Firewall is
+still procedural. When generating new art, size it ~4x+ the logical target — the
+480×270 logical space is devicePixelRatio-scaled to the real screen.
 
 ---
 
 ## Roadmap (beyond the slice)
 
-Active planning lives in **`docs/superpowers/plans/`** — executed plans carry STATUS
-banners, and `ideas/INDEX.md` is the prioritized backlog (difficulty curve fixes,
-Bulwark dome-fortress redesign, boss phase language, in-run boons, hose aspects,
-economy/roster passes, settings & accessibility). Longer-term:
+The forward queue lives in **`docs/HANDBOOK.md` §7** (the committed project
+handbook); specs and executed plans live in `docs/superpowers/`. Headlines:
 
-- More levels with new backdrops + a level-select / progression map.
-- Co-op (second player), more enemy archetypes, mini-bosses.
-- Real sprite sheets for the remaining procedural painters (bosses and Jon first).
-- Permanent meta-progression via the Church — **deliberately parked** until the game
-  is long enough that a fresh-run start stops being the better experience.
+- **Areas & World pass**: between-level area choices (Hades room-choice feel) paired
+  with a background/floor art upgrade.
+- **The air world**: the Ass Man boss + a new air-themed enemy roster (each act's
+  enemies match its boss's element).
+- Boss phase language, more levels, co-op — and permanent Church meta-progression,
+  **deliberately parked** until the game is long enough that a fresh-run start stops
+  being the better experience.
 
 ---
 
