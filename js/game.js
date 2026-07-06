@@ -454,7 +454,8 @@
         // Trickle spawning: only the first fieldCap enemies open the wave;
         // the rest queue and stream in as reinforcements (update loop) so
         // big waves ramp instead of dumping everything at frame one.
-        const cap = JH.WAVEFLOW.fieldCap;
+        // (ticketBudget = generic act-indexed clamped lookup.)
+        const cap = JH.Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
         let slot = 0;
         types.slice(0, cap).forEach((type) => {
           this.spawnWaveEnemy(type, eliteScale, slot);
@@ -1536,7 +1537,9 @@
           // has room (enemies is already culled to the living this frame).
           if (this.wavePool && this.wavePool.length) {
             this.waveTrickleT -= dt;
-            if (this.waveTrickleT <= 0 && this.enemies.length < JH.WAVEFLOW.fieldCap) {
+            const fieldCap = JH.Balance.ticketBudget(
+              JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS), JH.WAVEFLOW.fieldCap);
+            if (this.waveTrickleT <= 0 && this.enemies.length < fieldCap) {
               this.waveTrickleT = JH.WAVEFLOW.trickle;
               this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
             }
