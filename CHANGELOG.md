@@ -7,6 +7,53 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.26.0 — The Giants (2026-07-06)
+
+The whole game has teeth now: bigger waves that stay readable, a rare apex
+enemy tier with signature moves, and an enemy ramp that finally sees all
+of your power.
+
+### Super-elites — the new apex tier
+- Seven enemy types have **super-elite** forms: ~1.8x giants with red-framed
+  health bars, big HP/damage, and a **signature move each** — the mook's
+  lunging haymaker, the charger's wall-ricochet diagonal charge, the pyro's
+  triple lob, the stalker's fakeout double-blink, the smelt's bouncing slag,
+  the bulwark's thrown-shield barrier + slow zone, and the fuse splitting
+  into three live fuses on death.
+- Supers are **late-game only** (Act 4 + the Fire World); gold-bar elites
+  remain the Acts 2–4 middle tier; Act 1 is pure regulars.
+
+### Wave flow
+- **Attack tickets**: only a per-act handful of melee enemies can wind up at
+  you simultaneously — crowds stay readable at any size.
+- **Trickle spawning**: a per-act field cap opens each wave (4 in Act 1) and
+  the rest stream in as reinforcements instead of dumping at frame one.
+- Bigger regular counts mid/late, a threat-curve pass over all 29 waves, and
+  **Act 3 is now the earth act** — bulwarks debut in the rubble, pyros went
+  home to the Fire World.
+
+### Enemy reworks
+- **Stalker**: blink and strike land in one beat — the windup after the
+  blink is gone.
+- **Fuse**: its head-fuse lights near Jon and burns its own health down to a
+  real self-destruct — kill it before the bang. Elite fuses lob out a live
+  fuse on death.
+- **Furnace**: heat now glows through its arms and legs, and its death
+  explosion hurls a slag at you.
+
+### Scaling & economy
+- The enemy ramp counts ALL player power (Overcharge, Mirror ranks); boss HP
+  scales with your build so you see every phase.
+- Vampiric heals at half rate vs elites too and its base drops to 5%; dodge
+  caps at 25%.
+- Tier-3 upgrades unlock from Act 2 at +20% price — the build finishes
+  during the hard part.
+
+### Feel
+- Holy Essence crosses hover and **dim the whole world** until collected.
+- Your first death each run banks a pity Essence with a word from Father Jon.
+- A slim stat panel at the vendor shows your numbers and flashes what grew.
+
 ## v0.25.1 — Bake Sale (2026-07-04)
 
 Every enemy on the street is now real baked pixel art, and the renderer got
