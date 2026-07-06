@@ -601,6 +601,65 @@
     igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
   };
 
+  // ---- Fire-truck escape (post-Slayer between-worlds set-piece) --------
+  // Self-contained ~60s scrolling escape; JH.TruckRun scene consumes these.
+  // Depth axis (lanes) is the dodge/aim axis; the hose is a forward swath.
+  // All tunables live here — nothing in truck.js/truckrun.balance.js hardcodes.
+  JH.TRUCKRUN = {
+    runDuration: 60,     // total escape length (s)
+    scrollSpeed: 320,    // world px/s the road moves under the truck
+    truckScreenX: 140,   // truck's resting screen-x
+    throttleBand: 40,    // ± screen-x the throttle/brake nudges within
+    lanes: [16, 43, 70], // soft authoring lanes across DEPTH_MIN..DEPTH_MAX
+
+    // Truck integrity — VISIBLE bar, non-lethal (feeds shake + wall pressure +
+    // clean bonus; never ends the run).
+    truckHp: 200,
+
+    // The oversized hose (vs Jon: 50 dps / 78 range / 18 band).
+    hoseDps: 120,
+    hoseRange: 200,
+    hoseBand: 28,        // depth half-swath centred on the truck (position = aim)
+    knockback: 180,
+
+    // Light tank — generous; hydrants are the real refill. Two-tier pressure:
+    // full at/above pressureFloor, dry sputter below.
+    tank: 100,
+    drain: 20,           // units/s while spraying (~5s per full tank)
+    regen: 6,            // units/s passive
+    pressureFloor: 0.06, // tank frac at/above which the hose is full power
+    dryDpsMult: 0.25,
+    dryRangeMult: 0.5,
+
+    // Hydrants — smash to refuel AND lane-wash.
+    hydrantHp: 30,
+    hydrantRefill: 60,   // water restored on smash
+    washRadius: 40,      // friendly wash AoE (depth-band px)
+    hydrantEverySec: 9,  // spacing along the run
+
+    // Collision hazards.
+    wreckHp: 50,
+    wreckDmg: 15,        // truckHp lost on un-broken wreck contact
+    collideSlow: 0.8,    // scroll-speed mult applied briefly on any collision
+    collideSlowDur: 0.6, // s the slow lasts (lets the wall creep up)
+
+    // Collapse wall — non-lethal rubber-band pressure.
+    wall: {
+      startGap: 220,     // world px behind the truck at start
+      creepOnHit: 60,    // px the wall gains per collision
+      recoverRate: 35,   // px/s the lead rebuilds when driving clean
+      contactBurnStacks: 1,
+    },
+
+    // Furnace douse-race climax.
+    furnace: { atSec: 35, hp: 850, ventCd: 2.4, ventPatchDur: 2.6, essence: 2 },
+
+    // Essence economy (kept in-band with normal run income).
+    crossVal: 1,
+    crossCount: 6,
+    cleanBonusTiers: [1, 2], // [decent run, flawless (full HP + no wall touch)]
+  };
+
   // FX frame animations, curated from the local itch.io packs (sprites/effects/,
   // gitignored) into sprites/fx/<key>/1..count.png by tools/curate-fx.mjs.
   // Re-pick a variant there and rerun it; update count here if it changes.

@@ -6,7 +6,7 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | Config block + pure balance helpers | ☐ not started |
+| 1 | Config block + pure balance helpers | ☑ done (224/224 tests) |
 | 2 | Scene skeleton + state wiring + debug entry | ☐ not started |
 | 3 | Truck hose (big blast, tank, pressure) | ☐ not started |
 | 4 | Fire-roster hazards + collisions + honest HP | ☐ not started |
@@ -19,4 +19,8 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 
 ## Log
 
-- 2026-07-06: plan + spec written, not yet started. Awaiting go / playtest gate.
+- 2026-07-06: plan + spec written.
+- 2026-07-06: Task 1 done — JH.TRUCKRUN config block, js/truckrun.balance.js
+  (truckPressure/douse/cleanBonus/beamCovers/buildTimeline/gapExists, pure +
+  dual-export), tests/truckrun.test.js (10 tests). Full suite 224/224. Committed
+  to feature branch. Next: Task 2 (scene skeleton + state wiring).
