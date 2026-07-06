@@ -1,8 +1,8 @@
 # CLAUDE.md — working notes for this repo
 
-(Gitignored — local only. The committed companion is `docs/HANDBOOK.md`:
-design principles, systems map, and the future vision. Read it once per
-session before touching gameplay code.)
+(Tracked in git. The companion is `docs/HANDBOOK.md`: design principles,
+systems map, and the future vision. Read it once per session before
+touching gameplay code.)
 
 ## The four load-bearing rules
 
