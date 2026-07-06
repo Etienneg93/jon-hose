@@ -333,6 +333,7 @@
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
+      this.truckBoard = null; this.worldCrumble = null;
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
@@ -627,10 +628,15 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      // Fire World is beaten — escape to the Air World gate in the fire truck
-      // (the bridge into the next act; see truck.js). Replaces the old
-      // placeholder victory portal.
-      JH.TruckRun.enter(this);
+      // Fire World is beaten and now collapses. The truck screeches in from
+      // the right and brakes where the exit was; board it (E) to begin the
+      // escape (see truck.js). Replaces the old placeholder victory portal.
+      this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
+      const stopX = Math.min(JH.LEVEL_LEN - 80, this.player.x + 150);
+      this.truckBoard = { x: stopX + 300, stopX: stopX, y: JH.DEPTH_MAX * 0.5, t: 0, near: false, arrived: false };
+      this.worldCrumble = { t: 0, shakeCd: 0 };
+      this.showScreen("hud");
+      this.banner("THE FIRE WORLD COLLAPSES — BOARD THE TRUCK!", 2.8);
     },
 
     // Called by JH.TruckRun when the escape reaches the Air World gate.
@@ -1464,6 +1470,27 @@
         vp.near = Math.abs(this.player.x - vp.x) < 22 && Math.abs(this.player.y - vp.y) < 30;
         if (vp.near && this.input.buffered("confirm")) { this.input.consume("confirm"); this.win(); return; }
       }
+      // Post-Slayer: the fire world crumbles and the escape truck drives in.
+      if (this.worldCrumble) {
+        this.worldCrumble.t += dt;
+        if ((this.worldCrumble.shakeCd -= dt) <= 0) {
+          this.worldCrumble.shakeCd = 0.5 + Math.random() * 0.6;
+          this.shake(3);
+        }
+      }
+      if (this.truckBoard) {
+        const tb = this.truckBoard;
+        tb.t += dt;
+        if (tb.x > tb.stopX) tb.x = Math.max(tb.stopX, tb.x - 200 * dt);  // drive in + brake
+        tb.arrived = tb.x <= tb.stopX + 0.5;
+        tb.near = tb.arrived && Math.abs(this.player.x - tb.x) < 42 && Math.abs(this.player.y - tb.y) < 34;
+        if (tb.near && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          this.truckBoard = null; this.worldCrumble = null;
+          JH.TruckRun.enter(this);
+          return;
+        }
+      }
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
@@ -1737,6 +1764,8 @@
         this.drawHydrants(ctx, cam);
         if (this.rangeStations) this.drawRangeStations(ctx, cam);
         if (this.victoryPortal) this.drawVictoryPortal(ctx, cam);
+        if (this.truckBoard) this.drawTruckBoard(ctx, cam);
+        if (this.worldCrumble) this.drawCrumble(ctx);
 
         // barricade (if a wall encounter is active)
         if (this.wall) this.wall.draw(ctx, cam);
@@ -2077,6 +2106,45 @@
       if (vp.near) {
         ctx.fillStyle = "#0a2a08"; ctx.fillText("PRESS E", sx + 1, sy - 62 + bob + 1);
         ctx.fillStyle = "#7dff5a"; ctx.fillText("PRESS E", sx, sy - 62 + bob);
+      }
+      ctx.restore();
+    },
+
+    // Post-Slayer escape truck driving in to the old exit point. Placeholder
+    // chassis (real sprite lands in the truck art task).
+    drawTruckBoard(ctx, cam) {
+      const tb = this.truckBoard;
+      const sx = tb.x - cam, sy = JH.Geo.feetScreenY(tb.y, 0);
+      if (sx < -80 || sx > JH.VIEW_W + 80) return;
+      JH.Assets.shadow(ctx, sx, sy, 16);
+      ctx.fillStyle = "#c0392b"; ctx.fillRect(sx - 30, sy - 22, 54, 22);
+      ctx.fillStyle = "#8f2a1e"; ctx.fillRect(sx + 6, sy - 30, 18, 12);   // cab
+      ctx.fillStyle = "#111"; ctx.fillRect(sx - 22, sy - 3, 8, 6); ctx.fillRect(sx + 8, sy - 3, 8, 6);
+      ctx.fillStyle = "#cdd6dd"; ctx.fillRect(sx - 34, sy - 16, 6, 10);   // mounted nozzle
+      if (tb.near) {
+        ctx.save();
+        ctx.font = "bold 7px monospace"; ctx.textAlign = "center";
+        const bob = Math.sin(tb.t * 3) * 2;
+        ctx.fillStyle = "#0a2a08"; ctx.fillText("BOARD  (E)", sx + 1, sy - 40 + bob + 1);
+        ctx.fillStyle = "#7dff5a"; ctx.fillText("BOARD  (E)", sx, sy - 40 + bob);
+        ctx.restore();
+      }
+    },
+
+    // Collapsing Fire World: embery haze + falling debris (procedural).
+    drawCrumble(ctx) {
+      const t = this.worldCrumble.t;
+      ctx.save();
+      ctx.fillStyle = "rgba(140,28,0,0.10)";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+      ctx.fillStyle = "#4a3a34";
+      for (let i = 0; i < 16; i++) {
+        const seed = i * 97.13;
+        const x = (seed * 7.7) % JH.VIEW_W;
+        const speed = 40 + (i % 5) * 22;
+        const y = ((t * speed + seed * 13) % (JH.VIEW_H + 20)) - 10;
+        const s = 2 + (i % 3);
+        ctx.fillRect(x, y, s, s);
       }
       ctx.restore();
     },
