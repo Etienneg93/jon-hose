@@ -204,14 +204,22 @@ if (MODE !== "debug") {
 function cleanDarkMatte(img) {
   const { data, W, H } = img;
   const I = (x, y) => (y * W + x) * 4;
-  // (a) drop small connected opaque components (specks) — keeps the truck.
+  // (a) drop connected opaque components that are small specks OR
+  // border-touching all-near-black matte residue (export bars, corner px).
+  // The truck contains bright pixels so it never matches the second rule;
+  // the detached wheel doesn't touch the border.
   const seen = new Uint8Array(W * H);
   for (let y0 = 0; y0 < H; y0++) for (let x0 = 0; x0 < W; x0++) {
     const p0 = y0 * W + x0;
     if (seen[p0] || data[p0 * 4 + 3] < 20) continue;
     const comp = []; const q = [x0, y0]; seen[p0] = 1;
+    let onBorder = false, maxC = 0;
     while (q.length) {
       const y = q.pop(), x = q.pop(); comp.push(x, y);
+      if (x === 0 || y === 0 || x === W - 1 || y === H - 1) onBorder = true;
+      const c = I(x, y);
+      const m = Math.max(data[c], data[c + 1], data[c + 2]);
+      if (m > maxC) maxC = m;
       for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
         const np = ny * W + nx;
@@ -219,7 +227,7 @@ function cleanDarkMatte(img) {
         seen[np] = 1; q.push(nx, ny);
       }
     }
-    if (comp.length / 2 < 60)
+    if (comp.length / 2 < 60 || (onBorder && maxC < 26))
       for (let i = 0; i < comp.length; i += 2) data[I(comp[i], comp[i + 1]) + 3] = 0;
   }
   // (b) two-pass crust defringe: clear near-black EDGE pixels that are thin
