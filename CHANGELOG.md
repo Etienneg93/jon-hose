@@ -7,6 +7,41 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.7 — Weight Class (2026-07-07)
+
+Live-playtest balance pass on the elite tiers and the difficulty curve —
+heavy elites were out-massing the bosses, elites arrived all at once, and
+the per-wave count ramped too hard too early.
+
+**Elite / super-elite HP** — heavies no longer out-HP the bosses.
+- New `JH.ELITE_TUNE` per-type HP damp, applied in `makeElite` after the
+  eliteScale multiplier (smelt ×0.55, bulwark ×0.65). Because `makeSuper`
+  builds on the elite-scaled def, one lever tames both tiers.
+- Elite smelt ~1150–1590 → ~630–870; super smelt ~2290–3170 → ~1260–1750;
+  elite bulwark ~670–930 → ~440–600; super bulwark ~910–1260 → ~590–820.
+  All now sit below the boss of their act (was above The Big Drip / Switch,
+  and every boss at high player power).
+
+**Elite frequency** — elites ramp in instead of flipping on at once.
+- New `JH.ELITE_FRAC` (by act) + `Game.nextEliteScale()`: a `tough` wave now
+  makes only a fraction of its enemies elite, spread evenly by an
+  accumulator across every spawn path (opening batch, reinforcement trickle,
+  wall/holdout streams). ~30% (Act 2, introduced) → ~55% (Act 3, common) →
+  ~75% (Act 4) → ~80% (Fire). Previously every enemy in a tough wave was
+  elite the instant the first boss died. The super-elite still spawns one
+  per wave at full scale.
+
+**Fuse** — a slow stalk that arms and sprints.
+- Base speed 78 → 54; new `litSpeedMult` 1.44 so it only sprints (back to
+  ~78) once the wick lights within range; `litDrainFrac` 0.20 → 0.32 so a
+  lit fuse burns down in ~3.1 s instead of 5 s.
+
+**Per-wave enemy counts** — a smoother early ramp.
+- `SPRINKLE.counts` `[1,2,3,3,4]` → `[1,1,2,3,4]` (delays the sprinkle ramp
+  one act; keeps Act 4 / Fire pressure). STREET SWARM and OVERRUN each shed
+  one mook. Totals now climb ~6→8→9→10→12 instead of leaping to 10 at
+  wave 6 and peaking at 13.
+
 ## v0.27.6 — The Handbook (2026-07-06)
 
 Docs-only release — no gameplay changes.
