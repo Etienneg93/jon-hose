@@ -338,6 +338,7 @@
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
       this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
+      this.waveTriggerX = null;                     // wave 0 uses the base arena anchor
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
       this.deathCount = 0;
@@ -359,7 +360,18 @@
     checkWaveTrigger() {
       const next = this.waveIndex + 1;
       if (this.waveActive || next >= JH.LEVEL1.waves.length) return;
-      if (this.player.x >= WAVE_TRIGGERS[next] - 30) this.startWave(next);
+      const trig = this.waveTriggerX != null ? this.waveTriggerX : WAVE_TRIGGERS[next] - 30;
+      if (this.player.x >= trig) this.startWave(next);
+    },
+
+    // Next-wave trigger X, gated so there's always some corridor past where a
+    // wave was cleared (finishing near the right edge, or holding right while
+    // grabbing a benediction, no longer instantly rolls the next wave). Never
+    // earlier than the arena anchor; capped so it can't drift wave-to-wave.
+    gatedTriggerX(next, clearX) {
+      const G = JH.WAVE_GATE;
+      const gated = Math.max(WAVE_TRIGGERS[next] - 30, Math.round(clearX) + G.minWalk);
+      return Math.min(WAVE_TRIGGERS[next] + G.maxOver, gated);
     },
 
     startWave(i) {
@@ -552,9 +564,17 @@
           usedOnce: this.beneUsedOnce,
           censer: !!this.relics && !!this.relics.censer,
         }, Math.random);
-        // Horizontal row at one depth so the offer reads as a lineup.
-        this.sigils = offers.map((o, i) =>
-          new JH.Sigil(this.player.x + 50 + i * 46, 56, o));
+        // Horizontal row at one depth so the offer reads as a lineup. Keep
+        // the rightmost sigil clear of the next-wave trigger so walking out to
+        // inspect the last option can't roll the wave (shift the row left if
+        // the lineup would otherwise reach it).
+        const nx = this.waveIndex + 1;
+        const trig = nx < WAVE_TRIGGERS.length ? this.gatedTriggerX(nx, this.player.x) : Infinity;
+        let sx0 = this.player.x + 50;
+        const maxRight = trig - JH.WAVE_GATE.sigilGap;
+        if (sx0 + (offers.length - 1) * 46 > maxRight)
+          sx0 = maxRight - (offers.length - 1) * 46;
+        this.sigils = offers.map((o, i) => new JH.Sigil(sx0 + i * 46, 56, o));
         this.banner("BENEDICTION — CHOOSE ONE", 1.6);
       }
 
@@ -599,7 +619,8 @@
       // Free-walk onward; drop a shop vendor every 3rd wave clear (always on
       // a boss clear), tracked by clearsSinceVendor and reset when it spawns.
       const next = this.waveIndex + 1;
-      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[next] + 30 };
+      this.waveTriggerX = this.gatedTriggerX(next, this.player.x);
+      this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = (this.clearsSinceVendor || 0) + 1;
       const isBoss = !!(clearedWave && clearedWave.boss);
       if (this.clearsSinceVendor >= 3 || isBoss) {
@@ -626,7 +647,8 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
+      this.waveTriggerX = this.gatedTriggerX(nextWaveIdx, this.player.x);
+      this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
       this.spawnVendor(WAVE_TRIGGERS[nextWaveIdx] - 150);
       this.showScreen("hud");
       this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
@@ -1208,7 +1230,10 @@
       // Act gate keyed to the wave being re-fought, not the decremented index.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(next, JH.ACT_STARTS);
       this.waveActive = false; this.waveCleared = false;
-      this.bounds = { minX: 8, maxX: maxX };
+      // Re-arm the trigger for the wave being re-fought; player spawns far
+      // left at a hydrant, so this resolves to the normal arena-anchor trigger.
+      this.waveTriggerX = this.gatedTriggerX(next, p.x);
+      this.bounds = { minX: 8, maxX: Math.max(maxX, this.waveTriggerX + 30) };
       // Church-return arrival: hold on black, then a water jet drops Jon from the
       // sky into a splash landing. updateArrival() drives it; player logic is
       // frozen until it finishes. Jon starts high (z) and eases to the ground.

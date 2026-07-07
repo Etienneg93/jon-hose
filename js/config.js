@@ -302,6 +302,15 @@
   JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1,
                   batchMin: 3, batchMax: 5, batchPause: 2.0 };
 
+  // Free-walk gating between waves, so collecting a benediction / drifting
+  // right doesn't accidentally roll the next wave. minWalk: guaranteed px of
+  // corridor past where a wave was cleared before the next can trigger (only
+  // extends the walk when you cleared near the trigger; never triggers
+  // earlier than the arena anchor). maxOver: cap on how far past the anchor
+  // the trigger can slide, so it can't drift wave-to-wave. sigilGap: min px
+  // kept between the rightmost benediction sigil and that trigger.
+  JH.WAVE_GATE = { minWalk: 170, maxOver: 90, sigilGap: 110 };
+
   // Fraction of a `tough` wave's enemies that spawn elite, indexed
   // actLevel+1 (Act1..Fire; actLevelForWave returns -1..3). Elites are
   // INTRODUCED as a minority and grow common across acts, so a tough wave
