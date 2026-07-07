@@ -195,17 +195,18 @@
         }
       }
 
-      // Emit the hose cone — the SAME contained water-droplet stream as Jon's
-      // hose (JH.PAL water colours, cone spread), just longer/denser.
-      const nozY = JH.Geo.feetScreenY(t.depth, 0) - 8;
+      // Emit the hose cone from the TOP-mounted cannon — same water-droplet
+      // stream as Jon's hose (JH.PAL colours, cone spread), arcing forward down
+      // onto the road ahead.
+      const gunX = t.screenX + 12, gunY = JH.Geo.feetScreenY(t.depth, 0) - 21;
       const sputter = pr.dmgScale < 1;
       const spread = sputter ? 0.5 : 1;
       const count = sputter ? 2 : 4;
       for (let i = 0; i < count; i++) {
         const perp = (Math.random() - 0.5) * C.hoseBand * 1.5 * spread;
         sc.spray.push({
-          x: nozzleX - sc.scrollX + Math.random() * 6, y: nozY + perp * 0.35,
-          vx: 210 + Math.random() * 150, vy: perp * 0.9,
+          x: gunX + Math.random() * 4, y: gunY + perp * 0.35,
+          vx: 210 + Math.random() * 150, vy: perp * 0.9 + 18,   // downward bias → arcs onto the lane
           life: range / 260 + Math.random() * 0.05,
           size: Math.random() > 0.5 ? 3 : 2,
           color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
@@ -607,19 +608,17 @@
         ctx.fillStyle = d.color;
         ctx.fillRect(d.x | 0, d.y | 0, d.size, d.size);
       }
-      // Truck chassis (the one asset with no art yet — a nicer placeholder).
+      // Truck chassis with a TOP-MOUNTED water cannon (Jon IS the truck — no
+      // figure). Placeholder until the real truck sprite lands.
       A.shadow(ctx, t.screenX - 2, ty, 16);
       ctx.fillStyle = t.invulnT > 0 ? "#ffd27a" : "#b23324";
       ctx.fillRect(t.screenX - 28, ty - 16, 50, 16);              // tank body
       ctx.fillStyle = "#8f2a1e"; ctx.fillRect(t.screenX + 4, ty - 24, 18, 10); // cab
-      ctx.fillStyle = "#cdd6dd"; ctx.fillRect(t.screenX - 34, ty - 12, 6, 8);  // mounted nozzle
       ctx.fillStyle = "#111";
       ctx.fillRect(t.screenX - 20, ty - 3, 7, 5); ctx.fillRect(t.screenX + 8, ty - 3, 7, 5);
-      // Jon manning the nozzle (real sprite; spray pose while firing).
-      A.draw(ctx, "jon", t.screenX - 12, ty - 14, 1, {
-        state: t.spraying ? "spray" : "idle", frame: 0, t: sc.t, walking: false,
-        waterFrac: t.water / C.tank,
-      });
+      // Top-mounted cannon (barrel points forward; spray emits from its tip).
+      ctx.fillStyle = "#7f8890"; ctx.fillRect(t.screenX - 12, ty - 24, 8, 7);  // turret base
+      ctx.fillStyle = "#cdd6dd"; ctx.fillRect(t.screenX - 4, ty - 23, 16, 4);  // barrel
 
       // HP + water bars (honest, visible).
       this._bar(ctx, 8, 8, 90, t.hp / C.truckHp, "#e74c3c", "HP");

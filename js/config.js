@@ -619,8 +619,9 @@
     truckHp: 200,
 
     // The hose — the SAME cone as Jon's, just more powerful (vs Jon: 50 dps /
-    // 78 range / 18 band). Longer range + more damage, NOT wider.
-    hoseDps: 120,
+    // 78 range / 18 band). Longer range + more damage, NOT wider. High dps so
+    // road enemies die well before they reach the truck.
+    hoseDps: 240,
     hoseRange: 200,
     hoseBand: 18,        // depth half-band — matches Jon's sprayHitBand (not wide)
     knockback: 180,
@@ -660,7 +661,7 @@
     // while OPEN and lane-matched. SURGE bolt rolls down its lane (dodge by
     // lane); PORT SLAM punches forward (don't crowd it).
     firewall: {
-      atSec: 35, hp: 680, essence: 3, screenX: 300, dmgMult: 1.4,
+      atSec: 35, hp: 1360, essence: 3, screenX: 300, dmgMult: 1.4,
       wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8,      // weak-spot cycle (s)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
       surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
