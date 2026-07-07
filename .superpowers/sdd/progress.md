@@ -36,3 +36,10 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
   (chromium /opt/pw-browsers): entry→truck state, phase reaches run, Down moves
   depth 43→86, scroll advances, dash fires, scene end→win, 0 pageerrors.
   Screenshot scratchpad/t2-run.png. Suite 224/224. Next: Task 3 (hose).
+
+## Gate Crash finale (plan: docs/superpowers/plans/2026-07-07-gate-crash-finale.md)
+
+- Task 1: complete (commits b5556d1..53e89c0, review clean). Minor (for final review): finale config lead comment narrates the beat (plan-mandated text); several finale keys unconsumed until Task 3 (by design).
+- Task 2: complete (commits 53e89c0..eb1b694, review clean incl. approved cleanDarkMatte border+maxC extension for a source matte bar). Minor (for final review): border+maxC drop rule is unsafe for future wholly-dark border-touching source art (documented in baker comment); baker comment at ~349 leans rationale-ish.
+- Task 3: complete (working-tree only, playtest-held — js/truck.js finale machine + walkway render; headless: all 5 phases + win reached, 0 pageerrors; review clean). Minor (for final review): banner painted under full-white in road path (cosmetic); reveal→crash has no timeout beyond truck travel; standDelay clocks from crash start not landing.
+- Task 4: complete (docs-only commit; no new game code). Honest end-to-end headless run (msedge): fast-forwarded to the boss (only rig), then really FOUGHT the Firewall with held keys (depth-match the roaming weak spot + spray wind/open windows) — killed in ~10s, hp 1360→0, NO hp-cut needed. Finale played untouched: detonate→whiteout→reveal→crash→walk all in order, essence +3, Jon walked into the gate, scene torn down, Game.state==="win". Zero pageerrors/JS errors; only console noise = known sprites/church/* 404s. npm test 229/229. 8-screenshot pack captured (t4-01..t4-08 in the session scratchpad) + read/described. Docs updated: fire-truck-art-handoff §3 marked done + §5 finale summary. EVERYTHING feel-bearing (js/truck.js, js/assets.js) stays UNCOMMITTED for the user's playtest — do NOT merge/release until they play.

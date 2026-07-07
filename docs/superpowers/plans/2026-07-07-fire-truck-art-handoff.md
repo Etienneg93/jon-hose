@@ -56,10 +56,14 @@ Nothing merges to main until the user plays it. Commit + push to the feature
 branch freely. When it lands it's a **minor** release (full designed pass) — use
 the `release` skill.
 
-## 3. IN-FLIGHT: bake + wire the real truck sprite (Jon in the fire truck)
+## 3. DONE: bake + wire the real truck sprite (Jon in the fire truck)
 
-**This is where we stopped.** The hero sprite art arrived and is baked but **not
-yet wired into the game render** (the truck is still the placeholder red chassis).
+**COMPLETE (2026-07-07).** The hero truck sprite (Jon in the cab, wheel-spin) is
+baked AND wired into `renderScene`; the spray origin sits on the cannon-tip. Steps
+1-5 below are all finished and headless-verified (screenshots in §5's e2e run show
+the truck sprite driving + spraying). The render swap + spray-origin retarget are
+committed on the branch (commits `36d620d`, `fcce553`). What follows preserves the
+original handoff notes for reference.
 
 ### Done
 - Raw art dropped: `sprites/firetruck/jon-truck.png` (Jon in the cab — USE THIS)
@@ -142,3 +146,39 @@ wall**; a **distance-to-gate progress bar**; **hazard telegraphs** (readability 
 speed); the **ass-man arrival teaser** (`sprites/assman/ass-man.png` exists);
 audio (engine loop, hose loop, tire screech, etc.). See
 `docs/superpowers/plans/2026-07-06-fire-truck-assets-and-polish.md`.
+
+## 5. Gate Crash finale — IMPLEMENTED (2026-07-07), held for playtest
+
+The Firewall's old instant despawn is replaced by an authored finale, built per
+`docs/superpowers/plans/2026-07-07-gate-crash-finale.md` +
+`docs/superpowers/specs/2026-07-07-gate-crash-finale-design.md`:
+
+**detonate** (growing chassis booms, road scroll eases to a stop) → **whiteout**
+(white ramp/hold; the road restages into the walkway tableau behind the white) →
+**reveal** (white fades onto a pale dawn sky / cloud-deck walkway; the empty-cab
+truck races the gate while Jon is blast-thrown in a spinning arc) → **crash** (the
+truck rams the Air World gate, becomes the wreck at its foot with fire + portal
+glow, gate blows open) → **walk** (player walks Jon into the gate; enter-fade →
+`afterTruckRun()` win stub).
+
+- **Config:** `JH.TRUCKRUN.finale` block + `JH.TruckBalance` finale helpers
+  (`finaleWhite / boomInterval / boomScale / throwArc / gateReached`) — committed
+  (TDD, 5 new tests; full suite **229/229**).
+- **Art:** `sprites/firetruck/wreck.png` (dark-matte defringe bake) + the
+  `truckWreck` painter — sprite committed; painter lives in `js/assets.js`.
+- **Phase machine + walkway tableau render:** in `js/truck.js`.
+
+> **HELD FOR THE PLAYTEST GATE (uncommitted):** `js/truck.js` (finale phase
+> machine + `_renderWalkway`) and `js/assets.js` (`truckWreck` painter) are
+> feel-bearing and stay UNCOMMITTED until the user plays them, alongside the
+> pre-existing playtest-held `js/game.js` / `js/world.js`. Only config, balance,
+> tests, the baker, the sprites, and docs are committed.
+
+**Honest e2e verification (headless, msedge):** booted `?truck=1`, fast-forwarded
+`scene.t` to the boss (the only rig), then **actually fought the Firewall** by
+matching truck depth to the roaming weak spot and spraying its wind/open windows —
+killed it in **~10s** (hp 1360→0, no hp-cut needed). The finale then played with no
+page-eval interference: all five phases fired in order, essence banked (+3), Jon
+walked into the gate, scene torn down, `Game.state === "win"`. **Zero pageerrors,
+zero JS errors**; the only console 404s are the known pre-existing `sprites/church/*`
+misses. 8-frame screenshot pack captured for the user's playtest review.
