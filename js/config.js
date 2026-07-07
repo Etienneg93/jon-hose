@@ -375,7 +375,7 @@
     { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants a brief pressure buff" },
     { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
     { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
-    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Boss essence crosses are worth double" },
+    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Bosses drop a second Holy Essence cross" },
     { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
     { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
     { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },

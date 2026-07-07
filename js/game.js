@@ -958,9 +958,12 @@
       }
       if (e && e.isBoss && JH.Church) {
         JH.Church.markBossDefeated(e.type);
-        // Sunday Suit: the boss's essence cross is worth double.
-        const crossVal = (this.relics && this.relics.sunday_suit) ? 2 : 1;
-        this.spawnPickup("cross", e.x, e.y, crossVal);
+        this.spawnPickup("cross", e.x, e.y, 1);
+        // Sunday Suit: a whole second essence cross drops (not a doubled
+        // value). The world-dim keys off "any cross out" (single scalar), so
+        // it neither stacks nor lifts until BOTH crosses are collected.
+        if (this.relics && this.relics.sunday_suit)
+          this.spawnPickup("cross", e.x - 26, e.y, 1);
       }
     },
 
