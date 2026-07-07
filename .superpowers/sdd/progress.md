@@ -16,7 +16,8 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 | 8 | Arrival → benediction beat + Slayer entry + air handoff | ☑ done (headless-verified) |
 | 8b | Boarding beat (crumbling world + drive-in truck, press E) | ☑ done (user request, headless-verified) |
 | 8c | Reorder: Slayer benediction FIRST → pick triggers rumble+dread+truck-in (right edge) → board | ☑ done (user request, headless-verified) |
-| 9 | Procedural art pass | ☐ not started |
+| 9 | Procedural art pass | ◐ in progress |
+| 9a | Seamless world backdrop (shared Background) + real sprite swap | ☑ done (user request, headless-verified) |
 | 10 | Handoff (test, headless capture, STOP for playtest) | ☐ not started |
 
 ## Log

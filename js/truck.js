@@ -30,6 +30,7 @@
       this.scene = {
         t: 0,                 // elapsed run time (drives phase + timeline)
         phase: "intro",       // intro → run → arrive
+        camX0: JH.Camera.x,   // boarding camera — the backdrop continues from here
         scrollX: 0,           // world px scrolled (own coordinate space)
         speedMult: 1,         // scroll multiplier (collisions slow it — Task 4)
         truck: {
@@ -80,6 +81,9 @@
 
       // ---- scroll (paused during the intro settle)
       if (sc.phase !== "intro") sc.scrollX += C.scrollSpeed * sc.speedMult * dt;
+      // Drift the shared world camera slowly so the fire-world skyline pans
+      // (seamless with the boarding scene) instead of cutting to a new backdrop.
+      JH.Camera.x = Math.min(JH.LEVEL_LEN - JH.VIEW_W, sc.camX0 + sc.scrollX * 0.12);
 
       this._drive(dt, C, In);
       if (sc.phase !== "intro") {
@@ -398,7 +402,7 @@
     // ------------------------------------------------------------- RENDER
     renderScene(ctx, game) {
       const sc = this.scene; if (!sc) return;
-      const C = JH.TRUCKRUN, t = sc.truck;
+      const C = JH.TRUCKRUN, t = sc.truck, A = JH.Assets;
 
       // Collision shake (small; real trauma model is the play world's).
       if (sc.shakeT > 0) {
@@ -406,25 +410,24 @@
         ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
       }
 
-      // Placeholder art (real chrome is Task 9). Fiery sky + scrolling road.
-      const sky = ctx.createLinearGradient(0, 0, 0, JH.FLOOR_TOP);
-      sky.addColorStop(0, "#2a0d06"); sky.addColorStop(1, "#7a2b0e");
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, JH.VIEW_W, JH.FLOOR_TOP);
-      ctx.fillStyle = "#241a17";
-      ctx.fillRect(0, JH.FLOOR_TOP, JH.VIEW_W, JH.VIEW_H - JH.FLOOR_TOP);
+      // Same fire-world backdrop as the street (seamless with boarding): sky,
+      // skyline, moon. The camera drifts in update so it pans, never clips.
+      JH.Background.draw(ctx);
 
-      // Scrolling lane stripes (parallax by scrollX).
-      ctx.strokeStyle = "rgba(255,180,90,0.35)";
+      // Road over the floor plane: asphalt + scrolling lane dashes + a fast
+      // near strip that sells the speed.
+      ctx.fillStyle = "#20140f";
+      ctx.fillRect(0, JH.FLOOR_TOP, JH.VIEW_W, JH.VIEW_H - JH.FLOOR_TOP);
+      ctx.strokeStyle = "rgba(255,170,90,0.30)";
       ctx.lineWidth = 1;
       for (const d of C.lanes) {
         const y = JH.Geo.feetScreenY(d, 0);
         ctx.beginPath();
-        for (let x = -((sc.scrollX * 0.6) % 40); x < JH.VIEW_W; x += 40) {
-          ctx.moveTo(x, y); ctx.lineTo(x + 20, y);
-        }
+        for (let x = -((sc.scrollX * 0.9) % 42); x < JH.VIEW_W; x += 42) { ctx.moveTo(x, y); ctx.lineTo(x + 22, y); }
         ctx.stroke();
       }
+      ctx.fillStyle = "#3a2418";
+      for (let x = -((sc.scrollX * 1.8) % 36); x < JH.VIEW_W; x += 36) ctx.fillRect(x, JH.VIEW_H - 6, 14, 6);
 
       // Collapse wall — slides in from the left as the gap closes.
       const wallRight = t.screenX - sc.wallGap;
@@ -439,48 +442,47 @@
         }
       }
 
-      // Fire patches — ONE ellipse shared with the burn hit test.
+      // Fire patches → reuse the fire-small FX; the ground-ellipse footprint is
+      // still the burn hit test (the flames just sit on it).
       for (const p of sc.firePatches) {
         const px = p.worldX - sc.scrollX;
         if (px < -40 || px > JH.VIEW_W + 40) continue;
-        const rx = p.r * 0.85, ry = rx * JH.GROUND_RY;
-        ctx.fillStyle = "rgba(255,120,40," + (0.25 + 0.35 * (p.life / p.maxLife)) + ")";
-        ctx.beginPath();
-        ctx.ellipse(px, JH.Geo.feetScreenY(p.depth, 0), rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
+        A.drawFx(ctx, "fire-small", px, JH.Geo.feetScreenY(p.depth, 0), sc.t, { scale: 0.5 * (p.r / 28) });
       }
 
-      // Hazards (placeholder blocks tinted by kind; real sprites in Task 9).
-      const HCOL = { wreck: "#8a5a3a", fuse: "#ff7a3c", smelt: "#c98a3a", pyro: "#ff5a4a", hydrant: "#3aa6d6", dummy: "#8a5a3a" };
+      // Hazards → real fire-roster sprites (fuse/smelt/pyro baked). Wrecks have
+      // no sprite yet → charred block + a lick of fire.
+      const SPR = { fuse: "fuse", smelt: "smelt", pyro: "pyro" };
       for (const h of sc.hazards) {
         const hx = h.worldX - sc.scrollX;
         if (hx < -40 || hx > JH.VIEW_W + 40) continue;
         const hy = JH.Geo.feetScreenY(h.depth, 0);
-        const w = h.kind === "smelt" ? 20 : 16;
-        ctx.fillStyle = HCOL[h.kind] || "#8a5a3a";
-        ctx.fillRect(hx - w / 2, hy - 14, w, 14);
+        if (h.kind === "hydrant") {
+          A.shadow(ctx, hx, hy, 7); A.draw(ctx, "hydrant", hx, hy, 1, {});
+        } else if (SPR[h.kind]) {
+          A.shadow(ctx, hx, hy, 7); A.draw(ctx, SPR[h.kind], hx, hy, -1, { t: sc.t });
+        } else {
+          ctx.fillStyle = "#3a2a24"; ctx.fillRect(hx - 9, hy - 13, 18, 13);
+          A.drawFx(ctx, "fire-small", hx, hy - 2, sc.t, { scale: 0.4 });
+        }
       }
 
-      // Furnace road-boss + its HP bar.
+      // Furnace road-boss → the real furnace sprite + a themed HP bar.
       if (sc.furnace) {
         const f = sc.furnace, fx = f.worldX - sc.scrollX, fy = JH.Geo.feetScreenY(f.depth, 0);
-        ctx.fillStyle = "#e2571a";
-        ctx.fillRect(fx - 16, fy - 28, 32, 28);
-        ctx.fillStyle = "#ffd27a";
-        ctx.fillRect(fx - 10, fy - 20, 20, 10);     // glowing mouth
-        const bw = 40, bf = Math.max(0, f.hp / f.maxHp);
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(fx - bw / 2 - 1, fy - 36, bw + 2, 5);
-        ctx.fillStyle = "#4aa3ff"; ctx.fillRect(fx - bw / 2, fy - 35, bw * bf, 3);
+        A.shadow(ctx, fx, fy, 14);
+        A.draw(ctx, "furnace", fx, fy, -1, { t: sc.t, scale: 1.6 });
+        const bw = 48, bf = Math.max(0, f.hp / f.maxHp);
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(fx - bw / 2 - 1, fy - 54, bw + 2, 5);
+        ctx.fillStyle = "#4aa3ff"; ctx.fillRect(fx - bw / 2, fy - 53, bw * bf, 3);
       }
 
-      // Essence crosses (bank on contact).
+      // Essence crosses → the real essence_cross icon.
       for (const p of sc.pickups) {
         const px = p.worldX - sc.scrollX;
         if (px < -12 || px > JH.VIEW_W + 12) continue;
-        const py = JH.Geo.feetScreenY(p.depth, 0) - 12 - Math.sin(p.bob * 4) * 2;
-        ctx.fillStyle = "#ffe27a";
-        ctx.fillRect(px - 1.5, py - 5, 3, 10);
-        ctx.fillRect(px - 4, py - 2, 8, 3);
+        const py = JH.Geo.feetScreenY(p.depth, 0) - Math.sin(p.bob * 4) * 2;
+        A.draw(ctx, "essence_cross", px, py, 1, { t: p.bob });
       }
 
       // Embers (pyro shots).
@@ -515,13 +517,19 @@
         ctx.fillStyle = g;
         ctx.fillRect(nx, Math.min(y0, y1), sc.beam.range, Math.abs(y1 - y0));
       }
-      ctx.fillStyle = t.invulnT > 0 ? "#ffd27a" : "#c0392b";
-      ctx.fillRect(t.screenX - 26, ty - 18, 46, 18);
-      ctx.fillStyle = "#e8e8e8";
-      ctx.fillRect(t.screenX - 30, ty - 10, 8, 10);   // Jon at the nozzle
-      ctx.fillStyle = "#1a1a1a";
-      ctx.fillRect(t.screenX - 22, ty - 3, 6, 6);
-      ctx.fillRect(t.screenX + 8, ty - 3, 6, 6);
+      // Truck chassis (the one asset with no art yet — a nicer placeholder).
+      A.shadow(ctx, t.screenX - 2, ty, 16);
+      ctx.fillStyle = t.invulnT > 0 ? "#ffd27a" : "#b23324";
+      ctx.fillRect(t.screenX - 28, ty - 16, 50, 16);              // tank body
+      ctx.fillStyle = "#8f2a1e"; ctx.fillRect(t.screenX + 4, ty - 24, 18, 10); // cab
+      ctx.fillStyle = "#cdd6dd"; ctx.fillRect(t.screenX - 34, ty - 12, 6, 8);  // mounted nozzle
+      ctx.fillStyle = "#111";
+      ctx.fillRect(t.screenX - 20, ty - 3, 7, 5); ctx.fillRect(t.screenX + 8, ty - 3, 7, 5);
+      // Jon manning the nozzle (real sprite; spray pose while firing).
+      A.draw(ctx, "jon", t.screenX - 12, ty - 14, 1, {
+        state: t.spraying ? "spray" : "idle", frame: 0, t: sc.t, walking: false,
+        waterFrac: t.water / C.tank,
+      });
 
       // HP + water bars (honest, visible).
       this._bar(ctx, 8, 8, 90, t.hp / C.truckHp, "#e74c3c", "HP");
