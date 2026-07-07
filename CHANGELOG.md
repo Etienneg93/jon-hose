@@ -7,6 +7,35 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.9 — Sermon Notes (2026-07-07)
+
+Live-playtest follow-up: a benediction that never fired, plus readable
+per-tick feedback and a couple of UI fixes.
+
+**Pressure Sermon actually fires now.** It required full pressure (≥80% tank)
+on the exact spray-release frame, but 0.8s of spraying always drains the tank
+below 80% first (100 tank / 36 drain → full pressure lasts ~0.56s), so its
+release check was effectively never true. It now arms for the whole hold the
+moment it reaches full pressure, and the cast VFX is a clear forward water fan
++ shake. (Audit: all 24 benedictions are wired; this was the one real bug.)
+
+**Readable per-tick feedback** — mirrors the kibble `+N` heal floater:
+- GUSH water regen shows a blue `+N` every 0.5s.
+- Burn DoT shows a red `-N` on each 0.5s beat (actual HP lost).
+
+**Sunday Suit** now drops a whole second Holy Essence cross (each worth 1)
+instead of one worth double. The world-dim keys off "any cross out", so it
+neither stacks nor lifts until both are collected.
+
+**Level-up stat text** lingers longer (0.9s → 1.4s beat) and no longer clips
+behind the overhead HP/water bars.
+
+**UI** — the sigil prompt reads `E: CHOOSE BENEDICTION` (the floating
+"CHOOSE ONE" already says the rest fade).
+
+**Dev-only** — the target range now has a benediction-picking section (one
+walk-up sigil per benediction; pick any combo, re-pick to deepen) for testing.
+
 ## v0.27.8 — Shop Class (2026-07-07)
 
 Live-playtest follow-up: guaranteed pre-boss shops, calmer wave transitions,
