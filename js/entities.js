@@ -187,6 +187,8 @@
       this.kibbleTickAcc = 0;      // HP healed since the last floater tick
       this.gushRegenT = 0;         // GUSH milestone: water regen window (sec)
       this.gushRegenRate = 0;      // water/s while the window is live
+      this.gushTickT = 0;          // seconds until the next +N water floater tick
+      this.gushTickAcc = 0;        // water regenerated since the last floater tick
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
       this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
@@ -276,10 +278,14 @@
       const expired = this.burnTimer <= 0;
       if (this.burnTickT >= F.burnTickInterval || expired) {
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
+        const hpBefore = this.hp;
         this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
+        // Red -N floater for the burn tick (mirrors the kibble/gush +N ticks).
+        const lost = Math.round(hpBefore - this.hp);
+        if (lost > 0 && game.float) game.float(this.x, this.y - 30, "-" + lost, "#ff5030");
         if (this.hp <= 0) this.alive = false;
       }
       if (expired) { this.burnTimer = 0; this.burnStacks = 0; this.burnTickT = 0; }
@@ -362,7 +368,17 @@
       // GUSH milestone water regen — independent of the regular regen delay.
       if (this.gushRegenT > 0) {
         this.gushRegenT -= dt;
+        const wBefore = this.water;
         this.water = Math.min(S.maxWater, this.water + this.gushRegenRate * dt);
+        // Blue +N water floater every 0.5s (mirrors the kibble +N heal tick).
+        this.gushTickAcc += this.water - wBefore;
+        this.gushTickT -= dt;
+        if (this.gushTickT <= 0) {
+          this.gushTickT += 0.5;
+          const gained = Math.round(this.gushTickAcc);
+          if (gained > 0 && game.float) game.float(this.x + 10, this.y - 30, "+" + gained, "#55c8ff");
+          this.gushTickAcc = 0;
+        }
         // Rising water motes: visible even when kibble/concerta own the glow,
         // so stacked buffs never hide each other.
         if (Math.random() < 8 * dt)

@@ -2271,7 +2271,7 @@
         ctx.fillText(desc, X + 6, Y + 22);
       }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
-      ctx.fillText("E: TAKE — THE REST FADE", X + W - 6, Y + H - 6);
+      ctx.fillText("E: CHOOSE BENEDICTION", X + W - 6, Y + H - 6);
       ctx.restore();
     },
 
