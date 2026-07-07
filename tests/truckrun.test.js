@@ -101,3 +101,60 @@ test("buildTimeline: never blocks every lane at once (a gap always exists)", () 
     assert.ok(TB.gapExists(ev, CFG.lanes), "seed " + seed + " leaves a passable lane");
   }
 });
+
+// ---- Gate Crash finale (spec: docs/superpowers/specs/2026-07-07-gate-crash-finale-design.md)
+const F = CFG.finale;
+
+test("finale config block is present and shaped", () => {
+  assert.ok(F, "JH.TRUCKRUN.finale exists");
+  assert.ok(F.gate.x > F.throw.landX, "gate sits beyond Jon's landing");
+  assert.ok(F.gate.enterX < F.gate.x, "enter threshold is before the arch centre");
+  assert.ok(F.whiteRamp > 0 && F.whiteHold > 0 && F.whiteFade > 0);
+  assert.ok(F.boomIntEnd < F.boomIntStart, "boom cadence accelerates");
+});
+
+test("finaleWhite: 0 in detonate, ramps to 1 in whiteout, fades in reveal, 0 after", () => {
+  assert.strictEqual(TB.finaleWhite(F, "detonate", 1), 0);
+  assert.strictEqual(TB.finaleWhite(F, "whiteout", 0), 0);
+  assert.strictEqual(TB.finaleWhite(F, "whiteout", F.whiteRamp), 1);
+  assert.strictEqual(TB.finaleWhite(F, "whiteout", F.whiteRamp + F.whiteHold), 1);
+  assert.strictEqual(TB.finaleWhite(F, "reveal", 0), 1);
+  assert.strictEqual(TB.finaleWhite(F, "reveal", F.whiteFade / 2), 0.5);
+  assert.strictEqual(TB.finaleWhite(F, "reveal", F.whiteFade), 0);
+  assert.strictEqual(TB.finaleWhite(F, "crash", 1), 0);
+  assert.strictEqual(TB.finaleWhite(F, "walk", 1), 0);
+});
+
+test("boomInterval / boomScale: ramp with progress, clamped", () => {
+  assert.strictEqual(TB.boomInterval(F, 0), F.boomIntStart);
+  assert.strictEqual(TB.boomInterval(F, 1), F.boomIntEnd);
+  const mid = TB.boomInterval(F, 0.5);
+  assert.ok(mid < F.boomIntStart && mid > F.boomIntEnd);
+  assert.strictEqual(TB.boomInterval(F, 2), F.boomIntEnd, "clamps above 1");
+  assert.strictEqual(TB.boomInterval(F, -1), F.boomIntStart, "clamps below 0");
+  assert.strictEqual(TB.boomScale(F, 0), F.boomScaleStart);
+  assert.strictEqual(TB.boomScale(F, 1), F.boomScaleEnd);
+});
+
+test("throwArc: launches at start, flies above ground, lands + bounces to rest, spins stop at touchdown", () => {
+  const groundY = 200;
+  const a0 = TB.throwArc(F, groundY, 0);
+  assert.strictEqual(a0.x, F.throw.startX);
+  assert.strictEqual(Math.round(a0.y), Math.round(groundY + F.throw.startY));
+  assert.strictEqual(a0.done, false);
+  const mid = TB.throwArc(F, groundY, F.throw.dur / 2);
+  assert.ok(mid.y < groundY, "airborne above the ground line mid-flight");
+  assert.ok(mid.x > F.throw.startX && mid.x < F.throw.landX);
+  const land = TB.throwArc(F, groundY, F.throw.dur);
+  assert.strictEqual(land.x, F.throw.landX);
+  assert.ok(Math.abs(land.rot - F.throw.spins * Math.PI * 2) < 1e-9, "rotation completes at touchdown");
+  const end = TB.throwArc(F, groundY, F.throw.dur + F.throw.bounceDur);
+  assert.strictEqual(end.x, F.throw.landX + F.throw.bounceDX);
+  assert.strictEqual(Math.round(end.y), groundY);
+  assert.strictEqual(end.done, true);
+});
+
+test("gateReached: threshold predicate", () => {
+  assert.strictEqual(TB.gateReached(F, F.gate.enterX - 1), false);
+  assert.strictEqual(TB.gateReached(F, F.gate.enterX), true);
+});

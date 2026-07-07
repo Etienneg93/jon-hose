@@ -114,6 +114,56 @@
       for (const k in byAt) if (byAt[k].size >= lanes.length) return false;
       return true;
     },
+
+    // ---- Gate Crash finale helpers (all numbers from cfg.finale = F) ----
+
+    // Full-screen white alpha across the finale. phase = the scene phase
+    // string; t = seconds into that phase. Ramps up during "whiteout"
+    // (holding at 1 past the ramp), fades down during "reveal", else 0.
+    finaleWhite(F, phase, t) {
+      if (phase === "whiteout") return Math.min(1, t / F.whiteRamp);
+      if (phase === "reveal") return Math.max(0, 1 - t / F.whiteFade);
+      return 0;
+    },
+
+    // Detonation boom cadence/scale, linear in progress (clamped 0..1).
+    boomInterval(F, prog) {
+      const k = Math.max(0, Math.min(1, prog));
+      return F.boomIntStart + (F.boomIntEnd - F.boomIntStart) * k;
+    },
+    boomScale(F, prog) {
+      const k = Math.max(0, Math.min(1, prog));
+      return F.boomScaleStart + (F.boomScaleEnd - F.boomScaleStart) * k;
+    },
+
+    // Jon's blast-throw: a primary ballistic arc (startX/startY-above-ground
+    // → landX on the ground line) then one small bounce hop. Screen coords;
+    // groundY is the walkway ground line (caller passes feetScreenY of the
+    // walk depth). rot spins `spins` full turns over the primary arc, then
+    // holds. Returns { x, y, rot, done }.
+    throwArc(F, groundY, t) {
+      const T = F.throw;
+      const k = Math.min(1, t / T.dur);
+      if (k < 1) {
+        const y0 = groundY + T.startY;
+        return {
+          x: T.startX + (T.landX - T.startX) * k,
+          y: y0 + (groundY - y0) * k - T.apex * 4 * k * (1 - k),
+          rot: T.spins * Math.PI * 2 * k,
+          done: false,
+        };
+      }
+      const kb = Math.min(1, (t - T.dur) / T.bounceDur);
+      return {
+        x: T.landX + T.bounceDX * kb,
+        y: groundY - T.bounceH * 4 * kb * (1 - kb),
+        rot: T.spins * Math.PI * 2,
+        done: kb >= 1,
+      };
+    },
+
+    // Has Jon walked into the gate mouth?
+    gateReached(F, x) { return x >= F.gate.enterX; },
   };
 
   root.JH = root.JH || {};

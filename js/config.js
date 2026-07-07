@@ -673,6 +673,32 @@
     crossVal: 1,
     crossCount: 6,
     cleanBonusTiers: [1, 2], // [decent run, flawless (full HP + no wall touch)]
+
+    // Gate Crash finale — the authored beat after the Firewall breaks:
+    // detonate (growing booms) → whiteout → reveal (cloud walkway) → crash
+    // (the empty truck rams the Air World gate) → walk (Jon enters on foot).
+    // Screen px / seconds. Spec: docs/superpowers/specs/2026-07-07-gate-crash-finale-design.md
+    finale: {
+      detonateT: 1.8,                          // s of growing chassis booms
+      boomIntStart: 0.30, boomIntEnd: 0.10,    // boom cadence ramp (s between)
+      boomScaleStart: 0.5, boomScaleEnd: 1.1,  // boom FX scale ramp
+      scrollEase: 0.8,                         // s for road scroll to ease to 0
+      whiteRamp: 0.5,                          // s white overlay 0→1
+      whiteHold: 0.4,                          // s at full white (restage behind it)
+      whiteFade: 1.2,                          // s white 1→0 onto the walkway
+      truckStartX: 140,                        // runaway truck screen-x at reveal
+      truckSpeed: 200,                         // px/s toward the gate
+      gate: { x: 430, enterX: 412, crashPad: 60 }, // arch centre / walk-in x / nose-impact offset
+      throw: {                                 // Jon's blast-throw arc
+        startX: -16, startY: -30, landX: 110, apex: 70, dur: 1.1,
+        spins: 2, bounceDX: 16, bounceH: 12, bounceDur: 0.35,
+      },
+      standDelay: 0.5,                         // s after the crash before Jon stirs
+      standDur: 0.6,                           // s from stir to standing
+      walkSpeed: 90,                           // px/s Jon walks the walkway
+      walkMinX: 24,                            // left clamp on the walkway
+      enterFade: 0.6,                          // s blue-white fade entering the gate
+    },
   };
 
   // FX frame animations, curated from the local itch.io packs (sprites/effects/,
