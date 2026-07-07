@@ -28,3 +28,8 @@ sprites/effects/
 # editable art sources (Aseprite) — the game loads the exported PNGs, not these
 *.aseprite
 *.ase
+
+# truck-sprite debug artifacts
+sprites/firetruck/_clean.png
+sprites/firetruck/_debug.png
+sprites/firetruck/_drive4x.png
