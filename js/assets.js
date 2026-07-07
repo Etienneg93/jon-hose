@@ -556,6 +556,44 @@
     ctx.restore();
   });
 
+  // ============================ FIRE TRUCK ============================
+  // The truck-run hero sprite: a 5-frame wheel-spin strip drawn at TRUCK_FW×
+  // TRUCK_FH logical. The sheet is baked at 4x (tools/truck-sprite.mjs), so the
+  // SOURCE frame size is read from the image (img.width/frames × img.height).
+  // Faces right (travel dir). opt.frame = wheel phase; opt.hurt = on-hit flash.
+  const _truckImg = JH.Loader.img("sprites/firetruck/drive.png");
+  const TRUCK_FW = 114, TRUCK_FH = 80, TRUCK_FRAMES = 5;
+  const _truckOC = (typeof document !== "undefined") ? document.createElement("canvas") : null;
+  if (_truckOC) { _truckOC.width = TRUCK_FW; _truckOC.height = TRUCK_FH; }
+  const _truckOCtx = _truckOC ? _truckOC.getContext("2d") : null;
+
+  Assets.register("truck", (p, opt, ctx, x, y, facing) => {
+    const img = _truckImg;
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const sfw = img.width / TRUCK_FRAMES, sfh = img.height;   // 4x source frame
+    const f = (opt.frame | 0) % TRUCK_FRAMES;
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, f * sfw, 0, sfw, sfh, -Math.round(TRUCK_FW / 2), -TRUCK_FH, TRUCK_FW, TRUCK_FH);
+    // On-hit white flash: tint the sprite's silhouette via an offscreen.
+    if (opt.hurt && _truckOCtx) {
+      _truckOCtx.globalCompositeOperation = "source-over";
+      _truckOCtx.clearRect(0, 0, TRUCK_FW, TRUCK_FH);
+      _truckOCtx.imageSmoothingEnabled = false;
+      _truckOCtx.drawImage(img, f * sfw, 0, sfw, sfh, 0, 0, TRUCK_FW, TRUCK_FH);
+      _truckOCtx.globalCompositeOperation = "source-atop";
+      _truckOCtx.fillStyle = "#ffffff";
+      _truckOCtx.fillRect(0, 0, TRUCK_FW, TRUCK_FH);
+      _truckOCtx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = Math.max(0, Math.min(1, opt.hurtAlpha || 0.8)) * 0.8;
+      ctx.drawImage(_truckOC, -Math.round(TRUCK_FW / 2), -TRUCK_FH, TRUCK_FW, TRUCK_FH);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  });
+
   // ---- baked-sprite registration -------------------------------------
   // Baked pixel-art frames (tools/*-sprite*.mjs, 4x logical) drawn 1 art px
   // = 1 logical px, feet-anchored at art.feet, mirrored for facing < 0.

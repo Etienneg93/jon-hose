@@ -17,6 +17,12 @@
   const INTRO_T = 1.5;
   const ARRIVE_T = 2.0;
 
+  // Hero truck sprite lives in the "truck" painter (assets.js): a 5-frame
+  // wheel-spin strip. CANNON_* is the spray origin offset from the draw anchor
+  // (horizontal centre, feet on the road) to the roof cannon's barrel tip; the
+  // wheel frame advances every DRIVE_STEP px of scroll.
+  const CANNON_DX = 31, CANNON_DY = -69, DRIVE_STEP = 12;
+
   const TruckRun = {
     enter(game) {
       const C = JH.TRUCKRUN;
@@ -207,7 +213,7 @@
       // Emit the hose cone from the TOP-mounted cannon — same water-droplet
       // stream as Jon's hose (JH.PAL colours, cone spread), arcing forward down
       // onto the road ahead.
-      const gunX = t.screenX + 12, gunY = JH.Geo.feetScreenY(t.depth, 0) - 21;
+      const gunX = t.screenX + CANNON_DX, gunY = JH.Geo.feetScreenY(t.depth, 0) + CANNON_DY;
       const sputter = pr.dmgScale < 1;
       const spread = sputter ? 0.5 : 1;
       const count = sputter ? 2 : 4;
@@ -666,25 +672,14 @@
         ctx.fillStyle = d.color;
         ctx.fillRect(d.x | 0, d.y | 0, d.size, d.size);
       }
-      // Truck chassis with a TOP-MOUNTED water cannon (Jon IS the truck — no
-      // figure). Placeholder until the real truck sprite lands.
-      A.shadow(ctx, t.screenX - 2, ty, 16);
-      ctx.fillStyle = "#b23324";
-      ctx.fillRect(t.screenX - 28, ty - 16, 50, 16);              // tank body
-      ctx.fillStyle = "#8f2a1e"; ctx.fillRect(t.screenX + 4, ty - 24, 18, 10); // cab
-      ctx.fillStyle = "#111";
-      ctx.fillRect(t.screenX - 20, ty - 3, 7, 5); ctx.fillRect(t.screenX + 8, ty - 3, 7, 5);
-      // Top-mounted cannon (barrel points forward; spray emits from its tip).
-      ctx.fillStyle = "#7f8890"; ctx.fillRect(t.screenX - 12, ty - 24, 8, 7);  // turret base
-      ctx.fillStyle = "#cdd6dd"; ctx.fillRect(t.screenX - 4, ty - 23, 16, 4);  // barrel
-      // On-hit white flash (fades over 0.18s) — same read as Jon's hurt flash.
-      if (t.hitFlashT > 0) {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, t.hitFlashT / 0.18) * 0.75;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(t.screenX - 30, ty - 26, 56, 26);
-        ctx.restore();
-      }
+      // The fire-truck hero sprite (Jon + cannon baked in). Wheels spin by
+      // scroll distance; the on-hit white flash rides opt.hurt (silhouette-
+      // accurate, handled by the "truck" painter in assets.js).
+      A.shadow(ctx, t.screenX, ty, 26);
+      A.draw(ctx, "truck", t.screenX, ty, 1, {
+        frame: Math.floor(sc.scrollX / DRIVE_STEP),
+        hurt: t.hitFlashT > 0, hurtAlpha: t.hitFlashT / 0.18,
+      });
 
       // HP + water bars (honest, visible).
       this._bar(ctx, 8, 8, 90, t.hp / C.truckHp, "#e74c3c", "HP");
