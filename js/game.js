@@ -616,19 +616,25 @@
       // The LAST wave (final boss) wins; a mid-boss just continues.
       if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
 
-      // Free-walk onward; drop a shop vendor every 3rd wave clear (always on
-      // a boss clear), tracked by clearsSinceVendor and reset when it spawns.
+      // Free-walk onward. Vendor policy: ALWAYS drop a shop in the corridor
+      // right before a boss (dump suds to gear up), plus the usual post-boss
+      // shop and an every-3rd-clear cadence. Back-to-back guard: skip a
+      // cadence/post-boss shop when the NEXT corridor will already force a
+      // pre-boss one, so the vendor never appears in two corridors in a row.
       const next = this.waveIndex + 1;
       this.waveTriggerX = this.gatedTriggerX(next, this.player.x);
       this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = (this.clearsSinceVendor || 0) + 1;
       const isBoss = !!(clearedWave && clearedWave.boss);
-      if (this.clearsSinceVendor >= 3 || isBoss) {
+      const nextIsBoss = !!(JH.LEVEL1.waves[next] && JH.LEVEL1.waves[next].boss);
+      const afterNextIsBoss = !!(JH.LEVEL1.waves[next + 1] && JH.LEVEL1.waves[next + 1].boss);
+      const cadence = this.clearsSinceVendor >= 3;
+      if (nextIsBoss || ((isBoss || cadence) && !afterNextIsBoss)) {
         this.clearsSinceVendor = 0;
         this.spawnVendor(WAVE_TRIGGERS[next] - 150);
         // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
-        const clearText = isBoss ? "BOSS DOWN!" : "AREA CLEAR!";
-        const clearDur  = isBoss ? 2.0 : 1.6;
+        const clearText = isBoss ? "BOSS DOWN!" : nextIsBoss ? "GEAR UP — BOSS AHEAD!" : "AREA CLEAR!";
+        const clearDur  = (isBoss || nextIsBoss) ? 2.0 : 1.6;
         const delay = Math.max(0, this.bannerTimer - 1.0);
         if (delay > 0) setTimeout(() => this.banner(clearText, clearDur), delay * 1000);
         else this.banner(clearText, clearDur);
@@ -649,6 +655,7 @@
       }
       this.waveTriggerX = this.gatedTriggerX(nextWaveIdx, this.player.x);
       this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
+      this.clearsSinceVendor = 0;   // post-boss shop resets the cadence
       this.spawnVendor(WAVE_TRIGGERS[nextWaveIdx] - 150);
       this.showScreen("hud");
       this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
