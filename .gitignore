@@ -30,6 +30,4 @@ sprites/effects/
 *.ase
 
 # truck-sprite debug artifacts
-sprites/firetruck/_clean.png
-sprites/firetruck/_debug.png
-sprites/firetruck/_drive4x.png
+sprites/firetruck/_*
