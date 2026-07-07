@@ -1185,7 +1185,9 @@
       this.elite = true;
       const s = scale || { hp: 1.7, dmg: 1.3, speed: 1.12 };
       const d = Object.assign({}, this.def);
-      d.hp = Math.round(d.hp * s.hp);
+      // Per-type HP damp keeps heavy elites below boss HP (JH.ELITE_TUNE).
+      const et = JH.ELITE_TUNE && JH.ELITE_TUNE[this.type];
+      d.hp = Math.round(d.hp * s.hp * ((et && et.hp) || 1));
       d.touchDmg = Math.round(d.touchDmg * s.dmg);
       if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * s.dmg);
       if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * s.dmg);
@@ -1369,7 +1371,7 @@
         this.usingTicket = true;
       } else if (dist > 12) {
         // approach
-        const sp = d.speed;
+        const sp = d.speed * (this.speedMult || 1);
         this.x += (dx / (dist || 1)) * sp * dt;
         this.y += (dy / (dist || 1)) * sp * dt * 0.8;
         this.state = "walk";
@@ -4959,6 +4961,8 @@
         this.lit = true;
         if (game.audio) game.audio.play("sizzle");
       }
+      // Slow stalk until the wick lights, then sprint to detonate.
+      this.speedMult = this.lit ? d.litSpeedMult : 1;
       if (this.lit && !this.dead) {
         this.hp -= this.maxHp * d.litDrainFrac * dt;
         if (Math.random() < 8 * dt)

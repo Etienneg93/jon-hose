@@ -233,12 +233,13 @@
       suds: 12, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
     },
     fuse: {
-      name: "Fuse", hp: 65, speed: 78, touchDmg: 8, contactCd: 0.6,
+      name: "Fuse", hp: 65, speed: 54, touchDmg: 8, contactCd: 0.6,
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
       igniteRange: 70,       // px from Jon at which the head-fuse lights
-      litDrainFrac: 0.20,    // fraction of maxHp burned off per second while lit
+      litSpeedMult: 1.7,     // movespeed x while lit — slow stalk, then sprint to detonate
+      litDrainFrac: 0.32,    // fraction of maxHp burned off per second while lit
       blastRadius: 40,       // self-destruct AoE (ground ellipse rx)
       blastDmg: 18,
       blastPatchRadius: 26, blastPatchDur: 2.0,
@@ -300,6 +301,16 @@
   // the kit has no AoE yet (pierce/split arrive with later purchases).
   JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1,
                   batchMin: 3, batchMax: 5, batchPause: 2.0 };
+
+  // Per-type elite HP damp, applied in makeElite AFTER the eliteScale
+  // multiplier. Heavies (big base hp) balloon past boss HP once the act-tier
+  // and player-power ramps stack — this keeps an elite heavy below the act's
+  // boss. Cascades into super-elites (makeSuper builds on the elite-scaled
+  // def), so one lever tames both tiers. Types absent here damp x1.
+  JH.ELITE_TUNE = {
+    smelt: { hp: 0.55 },    // 450 base x elite ramp hit ~1150-1590 (> Big Drip/Switch)
+    bulwark: { hp: 0.65 },  // 300 base x elite ramp hit ~580-930 (> Big Drip)
+  };
 
   // Per-type super-elite multiplier overrides (default hp x7 in
   // Balance.superEliteDef). Heavies with big base hp need smaller ones.
