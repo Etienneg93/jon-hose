@@ -239,6 +239,20 @@
         this.enemies.push(e);
       }
       this.bounds.maxX = Math.max(this.bounds.maxX, gx2 + 80);
+      // Benediction picking section (dev only): one walk-up sigil per
+      // benediction in two rows below the dummies. In the range they DON'T
+      // clear each other (rangeMode), so you can grab any combo to test;
+      // re-picking one deepens it to rank II. The nearest one's name/desc
+      // shows in the bottom card (drawSigilCard).
+      const beneRowY = [58, 80];
+      let beneMaxX = 0;
+      JH.Benedictions.DEFS.forEach((d, i) => {
+        const bxp = 140 + (i % 12) * 46;
+        this.sigils.push(new JH.Sigil(bxp, beneRowY[i < 12 ? 0 : 1], { id: d.id, deepen: false }));
+        beneMaxX = Math.max(beneMaxX, bxp);
+      });
+      this.bounds.maxX = Math.max(this.bounds.maxX, beneMaxX + 50);
+      this.rangeMode = true;
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
     },
@@ -339,6 +353,7 @@
       this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.waveTriggerX = null;                     // wave 0 uses the base arena anchor
+      this.rangeMode = false;                       // set true only by devGotoRange
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
       this.deathCount = 0;
@@ -1761,7 +1776,7 @@
         {
           const live = this.sigils.filter((s) => !s.dead);
           for (const s of live) s.draw(ctx, cam);
-          if (live.length > 1) {
+          if (live.length > 1 && !this.rangeMode) {
             let cx = 0, cy = Infinity;
             for (const s of live) { cx += s.x; cy = Math.min(cy, JH.Geo.feetScreenY(s.y, 0)); }
             cx = cx / live.length - cam;

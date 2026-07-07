@@ -2662,7 +2662,8 @@
       burst(game, this.x, this.y, 14, SIGIL_COLORS[this.element], 18, { speed: 100, life: 0.6, up: 80, size: 2 });
       game.banner(d.name.toUpperCase() + (this.offer.deepen ? " II" : ""), 1.4);
       if (game.float) game.float(this.x, this.y - 20, d.name, "#80ff80");
-      for (const s of game.sigils) s.dead = true;
+      // Dev range: keep every sigil so you can grab combos (re-pick to deepen).
+      if (!game.rangeMode) for (const s of game.sigils) s.dead = true;
     }
     draw(ctx, cam) {
       const d = JH.Benedictions.byId(this.offer.id);
