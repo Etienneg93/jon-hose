@@ -382,6 +382,18 @@
       this.bounds = { minX: left, maxX: right };
       this.dropBudget = { suds: 0, items: 0 };
 
+      // Elite meter for this wave: nextEliteScale() hands out the elite scale
+      // to only ELITE_FRAC of enemies (even-spread accumulator), so tough
+      // waves ramp from "a few elites" to "mostly elite" across acts instead
+      // of every enemy being elite at once. Set for ALL spawn paths (standard
+      // batch/trickle + wall/holdout reinforcement).
+      const actLevel = JH.Balance.actLevelForWave(i, JH.ACT_STARTS);
+      const ownedCount = JH.Balance.powerCount(
+        JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
+      this.waveEliteScale = wave.tough ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
+      this.waveEliteFrac = wave.tough ? (JH.ELITE_FRAC[actLevel + 1] || 0) : 0;
+      this._eliteAcc = 0;
+
       if (wave.garden) {
         // Garden event: 4 planter boxes spread across arena at alternating depths.
         // Player must approach each box's depth to water it. Neighbor throws rocks!
@@ -432,11 +444,6 @@
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
       } else {
         this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
-        const actLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
-        const ownedCount = JH.Balance.powerCount(
-          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
-        const eliteScale = wave.tough
-          ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
         const spawnList = JH.Balance.capEnemyType(
           wave.spawns, "charger", JH.WAVECAP.charger, "mook");
         // Flatten authored spawns, then sprinkle extras from the unlocked pool
@@ -459,18 +466,18 @@
         const cap = JH.Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
         let slot = 0;
         types.slice(0, cap).forEach((type) => {
-          this.spawnWaveEnemy(type, eliteScale, slot);
+          this.spawnWaveEnemy(type, this.nextEliteScale(), slot);
           slot++;
         });
         this.wavePool = types.slice(cap);
-        this.waveEliteScale = eliteScale;
         this.waveTrickleT = JH.WAVEFLOW.trickle;
-        // Rare apex: at most ONE super-elite, spawned by wave data.
+        // Rare apex: at most ONE super-elite, spawned by wave data — always
+        // gets the full elite scale on top of its super tune, not fraction-gated.
         if (wave.superElite) {
           const ex = (Math.random() < 0.5) ? left + 24 : right - 24;
           const ey = JH.DEPTH_MIN + 10 + Math.random() * (depthSpan - 4);
           const se = this.spawnEnemy(wave.superElite, ex, ey, {
-            elite: eliteScale, super: true,
+            elite: this.waveEliteScale, super: true,
             superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
           });
           se.spawnGrace = 0.6;
@@ -480,6 +487,16 @@
 
     // One wave enemy at the arena edge (or dropped in, for fuses). Used by
     // the wave-open batch and by reinforcement trickle.
+    // Hand out the wave's elite scale to only waveEliteFrac of the enemies,
+    // spread evenly (an accumulator, not a coin flip, so small waves still get
+    // ~frac elites with no clumping). Returns the scale or null; every spawn
+    // path routes its per-enemy elite decision through here.
+    nextEliteScale() {
+      if (!this.waveEliteScale || this.waveEliteFrac <= 0) return null;
+      this._eliteAcc += this.waveEliteFrac;
+      if (this._eliteAcc >= 1) { this._eliteAcc -= 1; return this.waveEliteScale; }
+      return null;
+    },
     spawnWaveEnemy(type, eliteScale, slot) {
       const left = this.bounds.minX, right = this.bounds.maxX;
       const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
@@ -1497,11 +1514,7 @@
               this.wallSpawnTimer = JH.WALL.spawnEvery;
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
-              const sc = wave.tough
-                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
-                    JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount))
-                : null;
-              const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
+              const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: this.nextEliteScale() });
               e.spawnGrace = 0.2;
             }
           }
@@ -1513,15 +1526,11 @@
             this.wallSpawnTimer = JH.WALL.spawnEvery;
             const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
-            const sc = wave.tough
-              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
-                  JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount))
-              : null;
             // Spawn from either edge so pressure comes from ahead AND behind.
             const ex = (Math.random() < 0.5)
               ? this.bounds.minX + 10 + Math.random() * 40
               : this.bounds.maxX - 10 - Math.random() * 40;
-            const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: sc });
+            const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: this.nextEliteScale() });
             e.spawnGrace = 0.2;
           }
           if (this.holdoutTimer <= 0) {
@@ -1557,14 +1566,14 @@
                 if (room >= W.batchMin) {
                   const n = Math.min(this.wavePool.length, room, W.batchMax);
                   for (let k = 0; k < n; k++)
-                    this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, k);
+                    this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), k);
                   this.banner("REINFORCEMENTS!", 1.0);
                   this.waveTrickleT = W.batchPause;
                 }
                 // No room yet: hold the batch, re-check next frame.
               } else if (room > 0) {
                 this.waveTrickleT = W.trickle;
-                this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
+                this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), 0);
               }
             }
           }

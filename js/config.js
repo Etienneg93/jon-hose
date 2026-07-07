@@ -238,7 +238,7 @@
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
       igniteRange: 70,       // px from Jon at which the head-fuse lights
-      litSpeedMult: 1.7,     // movespeed x while lit — slow stalk, then sprint to detonate
+      litSpeedMult: 1.44,    // movespeed x while lit — 54 stalk -> ~78 sprint to detonate
       litDrainFrac: 0.32,    // fraction of maxHp burned off per second while lit
       blastRadius: 40,       // self-destruct AoE (ground ellipse rx)
       blastDmg: 18,
@@ -301,6 +301,14 @@
   // the kit has no AoE yet (pierce/split arrive with later purchases).
   JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1,
                   batchMin: 3, batchMax: 5, batchPause: 2.0 };
+
+  // Fraction of a `tough` wave's enemies that spawn elite, indexed
+  // actLevel+1 (Act1..Fire; actLevelForWave returns -1..3). Elites are
+  // INTRODUCED as a minority and grow common across acts, so a tough wave
+  // mixes regular + elite (the gold-bar tier reads by contrast) instead of
+  // every enemy turning elite the instant the first boss dies. Applied via
+  // Game.nextEliteScale's even-spread accumulator, not a per-enemy coin flip.
+  JH.ELITE_FRAC = [0, 0.34, 0.55, 0.75, 0.9];
 
   // Per-type elite HP damp, applied in makeElite AFTER the eliteScale
   // multiplier. Heavies (big base hp) balloon past boss HP once the act-tier
