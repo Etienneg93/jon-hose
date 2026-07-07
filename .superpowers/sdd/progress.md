@@ -18,6 +18,8 @@ Branch: `claude/fire-truck-minigame-concept-2pdlg0`
 | 8c | Reorder: Slayer benediction FIRST → pick triggers rumble+dread+truck-in (right edge) → board | ☑ done (user request, headless-verified) |
 | 9 | Procedural art pass | ◐ in progress |
 | 9a | Seamless world backdrop (shared Background) + real sprite swap | ☑ done (user request, headless-verified) |
+| 9b | Hose-style spray cone, douse fires, big tank + hydrant refill | ☑ done (user request, headless-verified) |
+| 9c | Boss changed Furnace → Firewall (WALLBOSS mechanics on the road) | ☑ done (user request, headless-verified) |
 | 10 | Handoff (test, headless capture, STOP for playtest) | ☐ not started |
 
 ## Log

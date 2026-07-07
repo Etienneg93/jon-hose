@@ -655,8 +655,17 @@
       contactBurnStacks: 1,
     },
 
-    // Furnace douse-race climax.
-    furnace: { atSec: 35, hp: 850, ventCd: 2.4, ventPatchDur: 2.6, essence: 2 },
+    // Climax: The Firewall (JH.WALLBOSS mechanics adapted to the road). Pinned
+    // ahead; armored body — only the roaming WEAK SPOT takes damage, and only
+    // while OPEN and lane-matched. SURGE bolt rolls down its lane (dodge by
+    // lane); PORT SLAM punches forward (don't crowd it).
+    firewall: {
+      atSec: 35, hp: 680, essence: 3, screenX: 300, dmgMult: 1.4,
+      wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8,      // weak-spot cycle (s)
+      wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
+      surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
+      slamCd: 4.2, slamWind: 0.8, slamDmg: 26, slamReach: 150, // PORT SLAM forward zone
+    },
 
     // Essence economy (kept in-band with normal run income).
     crossVal: 1,

@@ -43,13 +43,13 @@
           dashTimer: 0, dashCdTimer: 0, dashDir: 0,
           invulnT: 0, burnT: 0,
         },
-        // Hazards/patches/embers (T4); hydrants (T5); pickups/furnace (T7).
+        // Hazards/patches/embers, hydrants, pickups; firewall is the climax.
         hazards: [], firePatches: [], embers: [], spray: [],
-        hydrants: [], pickups: [], furnace: null,
+        hydrants: [], pickups: [], firewall: null,
         slowT: 0, shakeT: 0,
         wallGap: C.wall.startGap,
         wallTouched: false,
-        furnaceDone: false,
+        firewallDone: false,
         essence: 0,
         // Deterministic-enough schedule; consumed from the front in Task 4.
         timeline: JH.TruckBalance.buildTimeline(C, Math.random),
@@ -70,13 +70,18 @@
       sc.t += dt;
       if (sc.bannerT > 0) sc.bannerT -= dt;
 
-      // ---- phase machine
+      // ---- phase machine: intro → run (hazards) → boss (Firewall) → arrive
       if (sc.phase === "intro") {
         if (sc.t >= INTRO_T) { sc.phase = "run"; this._banner(game, "ESCAPE THE FIRE!", 1.6); }
       } else if (sc.phase === "run") {
-        if (sc.t >= C.runDuration - ARRIVE_T) { sc.phase = "arrive"; this._banner(game, "THE GATE!", 2.0); }
+        if (!sc.firewall && !sc.firewallDone && sc.t >= C.firewall.atSec) {
+          this._spawnFirewall(C);
+          sc.phase = "boss";
+          this._banner(game, "THE FIREWALL BLOCKS THE ROAD!", 2.2);
+        }
       } else if (sc.phase === "arrive") {
-        if (sc.t >= C.runDuration) { this._finish(game); return; }
+        sc.arriveT = (sc.arriveT || 0) + dt;
+        if (sc.arriveT >= ARRIVE_T) { this._finish(game); return; }
       }
 
       // ---- scroll (paused during the intro settle)
@@ -89,18 +94,17 @@
       if (sc.phase !== "intro") {
         this._hose(dt, C);
         this._updateSpray(dt);
-        this._spawnFromTimeline(sc);
+        if (sc.phase === "run") this._spawnFromTimeline(sc);   // no new traffic at the boss
         this._updateHazards(dt, C);
-        this._updateFurnace(dt, C);
+        if (sc.phase === "boss") this._updateFirewall(dt, C);
         this._updatePatches(dt, C);
         this._updateEmbers(dt, C);
         this._updatePickups(dt, C);
         if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
         if (sc.shakeT > 0) sc.shakeT -= dt;
         if (sc.washFx && (sc.washFx.t += dt) > 0.4) sc.washFx = null;
-        this._updateWall(dt, C);
+        if (sc.phase === "run") this._updateWall(dt, C);       // collapse recedes at the boss
       }
-      // Hydrants/pickups/furnace/wall are advanced by later tasks.
     },
 
     // Truck movement: depth = dodge/aim axis, screen-x = throttle/brake,
@@ -179,12 +183,15 @@
           p.life = Math.max(0, p.life - C.douseRate * dt);
       }
 
-      // Boss weak-spot douse handled in _updateFurnace's successor (Pass 2).
-      if (sc.furnace) {
-        const f = sc.furnace, dx = f.worldX - nozzleX;
-        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, f.depth, dx, range)) {
-          f.hp = JH.TruckBalance.douse(f.hp, dps, dt);
-          if (f.hp <= 0) this._extinguishFurnace();
+      // Firewall: the beam only bites the WEAK SPOT, and only while it's OPEN
+      // and lane-matched (armored body is immune). dx in screen space.
+      const fw = sc.firewall;
+      if (fw && fw.wsState === "open") {
+        const dx = fw.screenX - (t.screenX + 20);
+        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, fw.wsDepth, dx, range)) {
+          fw.hp -= dps * C.firewall.dmgMult * dt;
+          fw.hitFlash = 0.1;
+          if (fw.hp <= 0) this._breakFirewall();
         }
       }
 
@@ -353,35 +360,64 @@
 
     _flash(text, dur) { this.scene.banner = text; this.scene.bannerT = dur; },
 
-    // ---- climax: the furnace douse-race ---------------------------------
-    // The forge rolls onto the road as a persistent boss that keeps pace ahead
-    // of the truck and vents fire-patches into the lanes. Hold the beam on it to
-    // extinguish it (TruckBalance.douse) before the gate; breaking it drops a
-    // fat essence cross. Failing just means it falls behind (no penalty).
-    _updateFurnace(dt, C) {
-      const sc = this.scene, t = sc.truck, FU = C.furnace, E = JH.ENEMIES;
-      if (!sc.furnace) {
-        if (!sc.furnaceDone && sc.t >= FU.atSec) {
-          sc.furnace = { worldX: sc.scrollX + t.screenX + 130, depth: C.lanes[1], hp: FU.hp, maxHp: FU.hp, ventT: FU.ventCd };
-          this._flash("THE FURNACE! DOUSE IT!", 2.0);
-        }
-        return;
+    // ---- climax: The Firewall (JH.WALLBOSS mechanics on the road) --------
+    // Armored wall pinned ahead. Only the WEAK SPOT takes damage, and only
+    // while OPEN (it cycles closed→wind→open) and lane-matched (it roams in
+    // depth). SURGE rolls a bolt down its lane (dodge by lane); PORT SLAM
+    // punches the forward zone (don't crowd it). Break it → the road opens.
+    _spawnFirewall(C) {
+      const FW = C.firewall;
+      this.scene.firewall = {
+        hp: FW.hp, maxHp: FW.hp, screenX: FW.screenX,
+        wsDepth: C.lanes[1], wsTarget: C.lanes[1],
+        wsState: "closed", wsT: FW.wsClosed, wsRetargetT: FW.wsRetarget,
+        surgeT: FW.surgeCd, surge: null,
+        slamT: FW.slamCd, slamState: null, slamStateT: 0,
+        hitFlash: 0,
+      };
+    },
+
+    _updateFirewall(dt, C) {
+      const sc = this.scene, t = sc.truck, FW = C.firewall, fw = sc.firewall;
+      if (!fw) return;
+      if (fw.hitFlash > 0) fw.hitFlash -= dt;
+
+      // Weak-spot cycle: closed → wind (opening tell) → open (vulnerable).
+      if ((fw.wsT -= dt) <= 0) {
+        if (fw.wsState === "closed") { fw.wsState = "wind"; fw.wsT = FW.wsWind; }
+        else if (fw.wsState === "wind") { fw.wsState = "open"; fw.wsT = FW.wsOpen; }
+        else { fw.wsState = "closed"; fw.wsT = FW.wsClosed; }
       }
-      const f = sc.furnace;
-      f.worldX = sc.scrollX + t.screenX + 130;      // rolls along, staying ahead
-      if ((f.ventT -= dt) <= 0) {
-        f.ventT = FU.ventCd;
-        this._spawnPatch(sc.scrollX + t.screenX + 40 + Math.random() * 90,
-          C.lanes[(Math.random() * C.lanes.length) | 0], E.furnace.ventPatchRadius, FU.ventPatchDur);
+      // Weak spot roams in depth — line up your lane to hit it.
+      if ((fw.wsRetargetT -= dt) <= 0) { fw.wsRetargetT = FW.wsRetarget; fw.wsTarget = C.lanes[(Math.random() * C.lanes.length) | 0]; }
+      fw.wsDepth += Math.sign(fw.wsTarget - fw.wsDepth) * Math.min(Math.abs(fw.wsTarget - fw.wsDepth), FW.wsRoam * dt);
+
+      // SURGE: a bolt rolls left down the core's lane — dodge by changing lane.
+      if (!fw.surge && (fw.surgeT -= dt) <= 0) { fw.surgeT = FW.surgeCd; fw.surge = { x: fw.screenX, depth: fw.wsDepth }; this._flash("SURGE!", 0.7); }
+      if (fw.surge) {
+        const s = fw.surge; s.x -= FW.surgeSpeed * dt;
+        if (Math.abs(s.x - t.screenX) < 14 && Math.abs(s.depth - t.depth) < 12 && t.invulnT <= 0) {
+          this._damageTruck(FW.surgeDmg); this._collide(C); fw.surge = null;
+        } else if (s.x < -10) fw.surge = null;
+      }
+
+      // PORT SLAM: telegraph → forward slab. Back off the wall to dodge.
+      if (!fw.slamState && (fw.slamT -= dt) <= 0) { fw.slamState = "wind"; fw.slamStateT = FW.slamWind; }
+      if (fw.slamState === "wind" && (fw.slamStateT -= dt) <= 0) {
+        fw.slamState = "strike"; fw.slamStateT = 0.3;
+        if (t.screenX > fw.screenX - FW.slamReach && t.invulnT <= 0) { this._damageTruck(FW.slamDmg); this._collide(C); }
+      } else if (fw.slamState === "strike" && (fw.slamStateT -= dt) <= 0) {
+        fw.slamState = null; fw.slamT = FW.slamCd;
       }
     },
 
-    _extinguishFurnace() {
-      const sc = this.scene, C = JH.TRUCKRUN, f = sc.furnace;
-      this._spawnCross(f.worldX, f.depth, C.furnace.essence);
-      sc.furnace = null; sc.furnaceDone = true;
-      sc.shakeT = 0.4;
-      this._flash("FORGE EXTINGUISHED!", 2.0);
+    _breakFirewall() {
+      const sc = this.scene, C = JH.TRUCKRUN, fw = sc.firewall;
+      this._spawnCross(sc.scrollX + fw.screenX, fw.wsDepth, C.firewall.essence);
+      sc.firewall = null; sc.firewallDone = true;
+      sc.shakeT = 0.5;
+      sc.phase = "arrive"; sc.arriveT = 0;
+      this._flash("FIREWALL DOWN!", 2.0);
     },
 
     // ---- essence pickups (bank on contact via the Church) ---------------
@@ -498,14 +534,43 @@
         }
       }
 
-      // Furnace road-boss → the real furnace sprite + a themed HP bar.
-      if (sc.furnace) {
-        const f = sc.furnace, fx = f.worldX - sc.scrollX, fy = JH.Geo.feetScreenY(f.depth, 0);
-        A.shadow(ctx, fx, fy, 14);
-        A.draw(ctx, "furnace", fx, fy, -1, { t: sc.t, scale: 1.6 });
-        const bw = 48, bf = Math.max(0, f.hp / f.maxHp);
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(fx - bw / 2 - 1, fy - 54, bw + 2, 5);
-        ctx.fillStyle = "#4aa3ff"; ctx.fillRect(fx - bw / 2, fy - 53, bw * bf, 3);
+      // The Firewall — armored wall ahead; only the roaming weak spot is
+      // vulnerable, and only while open. (Procedural placeholder chrome.)
+      if (sc.firewall) {
+        const fw = sc.firewall, FW = C.firewall, wx = fw.screenX;
+        // PORT SLAM telegraph / strike zone (behind the wall face, reaching left).
+        if (fw.slamState === "wind") {
+          ctx.fillStyle = "rgba(255,90,40,0.18)";
+          ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
+        } else if (fw.slamState === "strike") {
+          ctx.fillStyle = "rgba(255,130,50,0.55)";
+          ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
+        }
+        // Wall slab.
+        ctx.fillStyle = "#241a30"; ctx.fillRect(wx, 0, JH.VIEW_W - wx, JH.VIEW_H);
+        ctx.fillStyle = "#3a2c4a"; ctx.fillRect(wx - 6, 0, 8, JH.VIEW_H);
+        // Weak spot (colour by state; flashes white on hit).
+        const wy = JH.Geo.feetScreenY(fw.wsDepth, 0) - 18;
+        let col = fw.wsState === "open" ? "#7dff9a" : fw.wsState === "wind" ? "#ffd23a" : "#4a2f5c";
+        if (fw.hitFlash > 0) col = "#fff";
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(wx, wy, fw.wsState === "open" ? 9 : 6, 0, Math.PI * 2); ctx.fill();
+        if (fw.wsState === "open") { ctx.strokeStyle = "rgba(125,255,154,0.5)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(wx, wy, 13, 0, Math.PI * 2); ctx.stroke(); }
+        // SURGE bolt.
+        if (fw.surge) {
+          const sy = JH.Geo.feetScreenY(fw.surge.depth, 0);
+          ctx.strokeStyle = "#ffe23a"; ctx.lineWidth = 2; ctx.beginPath();
+          ctx.moveTo(fw.surge.x, sy);
+          for (let k = 1; k <= 4; k++) ctx.lineTo(fw.surge.x + k * 8, sy + ((k % 2) ? -4 : 4));
+          ctx.stroke();
+        }
+        // HP bar.
+        const bw = 160, bf = Math.max(0, fw.hp / fw.maxHp);
+        ctx.fillStyle = "#fff"; ctx.font = "6px monospace"; ctx.textAlign = "center";
+        ctx.fillText("THE FIREWALL", JH.VIEW_W / 2, 50);
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2 - 1, 53, bw + 2, 6);
+        ctx.fillStyle = "#c0392b"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2, 54, bw * bf, 4);
+        ctx.textAlign = "left";
       }
 
       // Essence crosses → the real essence_cross icon.
