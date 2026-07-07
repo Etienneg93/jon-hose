@@ -455,7 +455,7 @@
         this.banner(bdef.name.toUpperCase(), 1.8);
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
       } else {
-        this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
+        this.banner(wave.name, 1.3);   // title card only; elite status reads via gold bars
         const spawnList = JH.Balance.capEnemyType(
           wave.spawns, "charger", JH.WAVECAP.charger, "mook");
         // Flatten authored spawns, then sprinkle extras from the unlocked pool
@@ -631,15 +631,9 @@
       const cadence = this.clearsSinceVendor >= 3;
       if (nextIsBoss || ((isBoss || cadence) && !afterNextIsBoss)) {
         this.clearsSinceVendor = 0;
+        // No banner: the vendor is visible up ahead — the player reads
+        // shop = upgrades and walks to it. A clear/"gear up" blurb is noise.
         this.spawnVendor(WAVE_TRIGGERS[next] - 150);
-        // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
-        const clearText = isBoss ? "BOSS DOWN!" : nextIsBoss ? "GEAR UP — BOSS AHEAD!" : "AREA CLEAR!";
-        const clearDur  = (isBoss || nextIsBoss) ? 2.0 : 1.6;
-        const delay = Math.max(0, this.bannerTimer - 1.0);
-        if (delay > 0) setTimeout(() => this.banner(clearText, clearDur), delay * 1000);
-        else this.banner(clearText, clearDur);
-      } else {
-        this.banner("AREA CLEAR!", 1.2);
       }
     },
 
