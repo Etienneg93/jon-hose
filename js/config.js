@@ -618,17 +618,18 @@
     // clean bonus; never ends the run).
     truckHp: 200,
 
-    // The oversized hose (vs Jon: 50 dps / 78 range / 18 band).
+    // The hose — the SAME cone as Jon's, just more powerful (vs Jon: 50 dps /
+    // 78 range / 18 band). Longer range + more damage, NOT wider.
     hoseDps: 120,
     hoseRange: 200,
-    hoseBand: 28,        // depth half-swath centred on the truck (position = aim)
+    hoseBand: 18,        // depth half-band — matches Jon's sprayHitBand (not wide)
     knockback: 180,
+    douseRate: 4.5,      // fire-patch life/s the beam burns off (shoot out fires)
 
-    // Light tank — generous; hydrants are the real refill. Two-tier pressure:
-    // full at/above pressureFloor, dry sputter below.
-    tank: 100,
-    drain: 20,           // units/s while spraying (~5s per full tank)
-    regen: 6,            // units/s passive
+    // Big tank — passive regen is a trickle; HYDRANTS are the real refill.
+    tank: 180,
+    drain: 20,           // units/s while spraying (~9s per full tank)
+    regen: 5,            // units/s passive trickle
     regenDelay: 0.35,    // s after spraying before passive regen resumes
     pressureFloor: 0.06, // tank frac at/above which the hose is full power
     dryDpsMult: 0.25,
@@ -636,7 +637,7 @@
 
     // Hydrants — smash to refuel AND lane-wash.
     hydrantHp: 30,
-    hydrantRefill: 60,   // water restored on smash
+    hydrantRefill: 90,   // water restored on smash (the meaningful refill)
     washRadius: 40,      // friendly wash AoE (depth-band px)
     hydrantEverySec: 9,  // spacing along the run
 

@@ -44,7 +44,7 @@
           invulnT: 0, burnT: 0,
         },
         // Hazards/patches/embers (T4); hydrants (T5); pickups/furnace (T7).
-        hazards: [], firePatches: [], embers: [],
+        hazards: [], firePatches: [], embers: [], spray: [],
         hydrants: [], pickups: [], furnace: null,
         slowT: 0, shakeT: 0,
         wallGap: C.wall.startGap,
@@ -88,6 +88,7 @@
       this._drive(dt, C, In);
       if (sc.phase !== "intro") {
         this._hose(dt, C);
+        this._updateSpray(dt);
         this._spawnFromTimeline(sc);
         this._updateHazards(dt, C);
         this._updateFurnace(dt, C);
@@ -154,14 +155,14 @@
         t.water = Math.min(C.tank, t.water + C.regen * dt);
       }
 
-      if (!t.spraying) { sc.beam = null; return; }
+      if (!t.spraying) return;
 
       const pr = JH.TruckBalance.truckPressure(C, t.water / C.tank);
       const range = C.hoseRange * pr.rangeMult;
       const dps = C.hoseDps * pr.dmgScale;
-      sc.beam = { range: range, sputter: pr.dmgScale < 1 };  // for render
-
       const nozzleX = this._nozzleWorldX(sc);
+
+      // Hazards in the beam take damage (shoot pyros/fuses out of the air).
       for (const h of sc.hazards) {
         const dx = h.worldX - nozzleX;
         if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, h.depth, dx, range)) {
@@ -171,7 +172,14 @@
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
 
-      // Furnace douse-race: sustained beam extinguishes the road boss.
+      // The beam puts out fires it sweeps over (only obstacles must be dodged).
+      for (const p of sc.firePatches) {
+        const dx = p.worldX - nozzleX;
+        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, p.depth, dx, range))
+          p.life = Math.max(0, p.life - C.douseRate * dt);
+      }
+
+      // Boss weak-spot douse handled in _updateFurnace's successor (Pass 2).
       if (sc.furnace) {
         const f = sc.furnace, dx = f.worldX - nozzleX;
         if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, f.depth, dx, range)) {
@@ -179,6 +187,29 @@
           if (f.hp <= 0) this._extinguishFurnace();
         }
       }
+
+      // Emit the hose cone — the SAME contained water-droplet stream as Jon's
+      // hose (JH.PAL water colours, cone spread), just longer/denser.
+      const nozY = JH.Geo.feetScreenY(t.depth, 0) - 8;
+      const sputter = pr.dmgScale < 1;
+      const spread = sputter ? 0.5 : 1;
+      const count = sputter ? 2 : 4;
+      for (let i = 0; i < count; i++) {
+        const perp = (Math.random() - 0.5) * C.hoseBand * 1.5 * spread;
+        sc.spray.push({
+          x: nozzleX - sc.scrollX + Math.random() * 6, y: nozY + perp * 0.35,
+          vx: 210 + Math.random() * 150, vy: perp * 0.9,
+          life: range / 260 + Math.random() * 0.05,
+          size: Math.random() > 0.5 ? 3 : 2,
+          color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
+        });
+      }
+    },
+
+    _updateSpray(dt) {
+      const sc = this.scene;
+      for (const d of sc.spray) { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 60 * dt; d.life -= dt; }
+      sc.spray = sc.spray.filter((d) => d.life > 0);
     },
 
     // Dev/headless: drop a stub target `aheadPx` in front of the truck.
@@ -506,16 +537,10 @@
       // The truck (placeholder rect) + Jon on the running board.
       const ty = JH.Geo.feetScreenY(t.depth, 0);
 
-      // Forward hose swath — ONE shape with the beamCovers hit test.
-      if (sc.beam) {
-        const nx = t.screenX + 20;
-        const y0 = JH.Geo.feetScreenY(t.depth - C.hoseBand, 0);
-        const y1 = JH.Geo.feetScreenY(t.depth + C.hoseBand, 0);
-        const g = ctx.createLinearGradient(nx, 0, nx + sc.beam.range, 0);
-        g.addColorStop(0, sc.beam.sputter ? "rgba(120,180,255,0.55)" : "rgba(150,210,255,0.75)");
-        g.addColorStop(1, "rgba(150,210,255,0)");
-        ctx.fillStyle = g;
-        ctx.fillRect(nx, Math.min(y0, y1), sc.beam.range, Math.abs(y1 - y0));
+      // Hose cone — the same water-droplet stream as Jon's hose.
+      for (const d of sc.spray) {
+        ctx.fillStyle = d.color;
+        ctx.fillRect(d.x | 0, d.y | 0, d.size, d.size);
       }
       // Truck chassis (the one asset with no art yet — a nicer placeholder).
       A.shadow(ctx, t.screenX - 2, ty, 16);
