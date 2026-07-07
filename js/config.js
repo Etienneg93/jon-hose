@@ -335,7 +335,7 @@
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
   JH.SPRINKLE = {
-    counts: [1, 2, 3, 3, 4],
+    counts: [1, 1, 2, 3, 4],
     weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
     heavies: ["bulwark", "furnace", "smelt"],
     heavyCap: 1,
@@ -649,7 +649,7 @@
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
       // ---- Act 2: ELITE ----
       { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "charger", count: 2 }] },
-      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 5 }, { type: "charger", count: 2 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
         spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
       { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }] },
@@ -668,7 +668,7 @@
       { name: "WAVE 6", tough: true, superElite: "mook", spawns: [{ type: "mook", count: 5 }, { type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, superElite: "bulwark", spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 3 }, { type: "mook", count: 3 }] },
-      { name: "OVERRUN", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
+      { name: "OVERRUN", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 5 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
       { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
       // ---- Fire World (curated, un-tough) ----
       { name: "FIRE INTRO", superElite: "pyro", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },
