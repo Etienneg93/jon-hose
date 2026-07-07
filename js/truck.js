@@ -174,6 +174,11 @@
         const dx = h.worldX - nozzleX;
         if (dx >= 0 && dx <= range) {
           h.hp -= dps * dt;
+          // Same feedback as Jon's hose: wetness soak + hurt flash + knockback
+          // (stronger here — truck-mounted cannon). Shoves the enemy forward.
+          h.wet = Math.min(1, h.wet + JH.JUICE.wetPerHit);
+          h.hurtT = 0.18;
+          h.knockVX += C.knockback * dt * 2.2;
           if (h.hp <= 0) h.dead = true;
         }
       }
@@ -247,12 +252,14 @@
       const h = {
         kind: ev.kind, depth: ev.depth, dead: false, cd: 0,
         worldX: sc.scrollX + JH.VIEW_W + 24,   // enters from the right edge
+        wet: 0, knockVX: 0, hurtT: 0,          // normal-game spray feedback
       };
       if (ev.kind === "wreck") { h.hp = C.wreckHp; h.dmg = C.wreckDmg; }
       else if (ev.kind === "fuse") { h.hp = E.fuse.hp; h.dmg = E.fuse.blastDmg; h.speed = E.fuse.speed; }
       else if (ev.kind === "smelt") { h.hp = E.smelt.hp; h.dmg = E.smelt.touchDmg; }
       else if (ev.kind === "pyro") { h.hp = E.pyro.hp; h.dmg = E.pyro.touchDmg; }
       else if (ev.kind === "hydrant") { h.hp = C.hydrantHp; h.dmg = 0; }
+      h.maxHp = h.hp;
       sc.hazards.push(h);
     },
 
@@ -260,6 +267,16 @@
       const sc = this.scene, t = sc.truck, E = JH.ENEMIES;
       const truckWorldX = sc.scrollX + t.screenX;
       for (const h of sc.hazards) {
+        // Spray feedback physics: knockback drift (decays), wetness dries, hurt
+        // flash ticks — same model as the normal game's enemies.
+        if (h.knockVX) {
+          h.worldX += h.knockVX * dt;
+          h.knockVX *= Math.pow(0.0001, dt);
+          if (Math.abs(h.knockVX) < 2) h.knockVX = 0;
+        }
+        if (h.wet > 0) h.wet = Math.max(0, h.wet - JH.JUICE.wetDryPerSec * dt);
+        if (h.hurtT > 0) h.hurtT -= dt;
+
         // Movement: wrecks/smelt/pyro are static in road space (scroll carries
         // them past); fuse chases the windshield.
         if (h.kind === "fuse") {
@@ -521,8 +538,8 @@
         A.drawFx(ctx, "fire-small", px, JH.Geo.feetScreenY(p.depth, 0), sc.t, { scale: 0.5 * (p.r / 28) });
       }
 
-      // Hazards → real fire-roster sprites (fuse/smelt/pyro baked). Wrecks have
-      // no sprite yet → charred block + a lick of fire.
+      // Hazards → real sprites with the normal-game hurt read (wetness tint) +
+      // a health bar when damaged. Wrecks are charred obstacles.
       const SPR = { fuse: "fuse", smelt: "smelt", pyro: "pyro" };
       for (const h of sc.hazards) {
         const hx = h.worldX - sc.scrollX;
@@ -531,26 +548,36 @@
         if (h.kind === "hydrant") {
           A.shadow(ctx, hx, hy, 7); A.draw(ctx, "hydrant", hx, hy, 1, {});
         } else if (SPR[h.kind]) {
-          A.shadow(ctx, hx, hy, 7); A.draw(ctx, SPR[h.kind], hx, hy, -1, { t: sc.t });
+          A.shadow(ctx, hx, hy, 7); A.draw(ctx, SPR[h.kind], hx, hy, -1, { t: sc.t, wet: h.wet });
         } else {
           ctx.fillStyle = "#3a2a24"; ctx.fillRect(hx - 9, hy - 13, 18, 13);
           A.drawFx(ctx, "fire-small", hx, hy - 2, sc.t, { scale: 0.4 });
+        }
+        if (h.hp < h.maxHp && h.kind !== "wreck" && h.kind !== "hydrant") {
+          const w = 18, bx = Math.round(hx - w / 2), by = Math.round(hy - 26);
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, w, 3);
+          ctx.fillStyle = "#ff5a5a"; ctx.fillRect(bx, by, Math.round(w * (h.hp / h.maxHp)), 3);
         }
       }
 
       // The Firewall — the real wallboss chassis + iris core (JH.WALLBOSS art).
       if (sc.firewall) {
         const fw = sc.firewall, FW = C.firewall, wx = fw.screenX, P = JH.PAL;
-        // PORT SLAM telegraph / strike zone (in front of the wall face).
-        if (fw.slamState === "wind") {
-          ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
-        } else if (fw.slamState === "strike") {
-          ctx.fillStyle = "rgba(255,130,50,0.55)"; ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
-        }
-        // Real armored wall chassis (face at wx); dark-fill to the right edge.
         const floorBottom = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0);
+        // PORT SLAM — the boss's own crush telegraph: a red zone punching
+        // forward from the face (back off to dodge).
+        if (fw.slamState === "wind" || fw.slamState === "strike") {
+          const prog = fw.slamState === "strike" ? 1 : Math.max(0, 1 - fw.slamStateT / FW.slamWind);
+          const yT = JH.Geo.feetScreenY(JH.DEPTH_MIN, 0) - 40, yB = floorBottom + 6;
+          ctx.fillStyle = "rgba(255,60,40," + (fw.slamState === "strike" ? 0.5 : 0.12 + 0.30 * prog) + ")";
+          ctx.fillRect(wx - FW.slamReach, yT, FW.slamReach, yB - yT);
+          ctx.strokeStyle = (Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
+          ctx.lineWidth = 1.5; ctx.strokeRect(wx - FW.slamReach, yT, FW.slamReach, yB - yT);
+        }
+        // Real armored wall chassis (face at wx); short dark-fill to the edge.
         A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t });
-        ctx.fillStyle = "#181019"; ctx.fillRect(wx + 84, 0, JH.VIEW_W - (wx + 84), JH.VIEW_H);
+        ctx.fillStyle = P.wallbossDk;
+        ctx.fillRect(wx + 84, floorBottom - 178, JH.VIEW_W - (wx + 84), JH.VIEW_H - (floorBottom - 178));
 
         // Roaming weak-spot core — iris shutters open on the cycle (real palette).
         const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - 30;
@@ -573,13 +600,21 @@
         }
         ctx.restore();
 
-        // SURGE bolt rolling down the core's lane.
+        // SURGE — the boss's own lightning bolt rolling down the core's lane
+        // (cyan/green/white jagged column + glow). Dodge by changing lane.
         if (fw.surge) {
-          const sy = JH.Geo.feetScreenY(fw.surge.depth, 0);
-          ctx.strokeStyle = "#ffe23a"; ctx.lineWidth = 2; ctx.beginPath();
-          ctx.moveTo(fw.surge.x, sy);
-          for (let k = 1; k <= 4; k++) ctx.lineTo(fw.surge.x + k * 8, sy + ((k % 2) ? -4 : 4));
-          ctx.stroke();
+          const sxb = Math.round(fw.surge.x), sy = JH.Geo.feetScreenY(fw.surge.depth, 0), tt = sc.t;
+          const pulse = 0.55 + 0.45 * Math.abs(Math.sin(tt * 22));
+          ctx.save();
+          ctx.globalAlpha = 0.2; ctx.fillStyle = "#00d8ff";
+          ctx.beginPath(); ctx.ellipse(sxb, sy - 8, 9, 24, 0, 0, Math.PI * 2); ctx.fill();
+          const segs = 9, segH = 3, startY = sy - Math.floor(segs * segH * 0.5);
+          ctx.lineCap = "round"; ctx.lineJoin = "round";
+          const bolt = () => { ctx.beginPath(); ctx.moveTo(sxb, startY); for (let i = 1; i <= segs; i++) ctx.lineTo(sxb + Math.sin(tt * 24 + i * 2.3) * 5, startY + i * segH); ctx.stroke(); };
+          ctx.globalAlpha = 0.78 * pulse; ctx.strokeStyle = "#00f0ff"; ctx.lineWidth = 2.5; bolt();
+          ctx.globalAlpha = 0.4 * pulse; ctx.strokeStyle = "#80ff80"; ctx.lineWidth = 1.5; bolt();
+          ctx.globalAlpha = 0.92 * pulse; ctx.strokeStyle = "#e8ffff"; ctx.lineWidth = 0.8; bolt();
+          ctx.restore();
         }
         // HP bar.
         const bw = 160, bf = Math.max(0, fw.hp / fw.maxHp);

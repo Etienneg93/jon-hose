@@ -622,9 +622,9 @@
     // 78 range / 18 band). Longer range + more damage, NOT wider. High dps so
     // road enemies die well before they reach the truck.
     hoseDps: 240,
-    hoseRange: 200,
-    hoseBand: 18,        // depth half-band — matches Jon's sprayHitBand (not wide)
-    knockback: 180,
+    hoseRange: 240,      // reaches the Firewall's weak spot even when braked
+    hoseBand: 18,        // depth half-band (used for the Firewall weak-spot match)
+    knockback: 300,      // strong shove — it's a truck-mounted cannon
     douseRate: 4.5,      // fire-patch life/s the beam burns off (shoot out fires)
 
     // Big tank — passive regen is a trickle; HYDRANTS are the real refill.
@@ -661,7 +661,7 @@
     // while OPEN and lane-matched. SURGE bolt rolls down its lane (dodge by
     // lane); PORT SLAM punches forward (don't crowd it).
     firewall: {
-      atSec: 35, hp: 1360, essence: 3, screenX: 300, dmgMult: 1.4,
+      atSec: 35, hp: 1360, essence: 3, screenX: 355, dmgMult: 1.4,
       wsBand: 16,                                   // strict depth match to hit the core
       wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8,      // weak-spot cycle (s)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence

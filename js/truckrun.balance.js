@@ -63,11 +63,12 @@
         (wreckBucket[k] = wreckBucket[k] || new Set()).add(depth);
       };
 
-      // start, end, hazards/sec, kind bag (weighted by repetition).
+      // start, end, hazards/sec, kind bag (weighted by repetition). Enemies are
+      // fuses only; wrecks are the dodge-obstacles sprinkled in.
       const windows = [
-        { s: 0,  e: 12, rate: 0.5, kinds: ["wreck"] },
-        { s: 12, e: 35, rate: 1.1, kinds: ["wreck", "fuse", "smelt", "pyro"] },
-        { s: 35, e: 52, rate: 1.8, kinds: ["wreck", "fuse", "fuse", "pyro", "smelt"] },
+        { s: 0,  e: 12, rate: 0.6, kinds: ["fuse", "wreck"] },
+        { s: 12, e: 35, rate: 1.1, kinds: ["fuse", "fuse", "wreck"] },
+        { s: 35, e: 52, rate: 1.7, kinds: ["fuse", "fuse", "fuse", "wreck"] },
       ];
       for (const w of windows) {
         let t = w.s;
