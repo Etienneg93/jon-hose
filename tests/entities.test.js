@@ -1006,6 +1006,22 @@ test("Scalding Faith: full-pressure spray applies scald", () => {
   B.reset();
 });
 
+test("Pressure Sermon: arms across a full-pressure hold even after the tank drains below 80%", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("pressure_sermon");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;   // start full → top pressure tier this hold
+  p.facing = 1;
+  for (let i = 0; i < 17; i++) p.doSpray(0.05, g);   // ~0.85s continuous
+  assert.ok(p.sprayHeldT >= 0.8, "held long enough to qualify");
+  assert.ok(p.sermonFullPressure, "armed by hitting full pressure during the hold");
+  // The tank has drained under the 80% full-pressure tier by now — the old
+  // release-frame check (dmgScale >= 1.2 on the last frame) was unreachable.
+  assert.ok(p.water < p.stats.maxWater * 0.8, "tank below 80% (old check would fail here)");
+  B.reset();
+});
+
 // ---- Benedictions: Backdraft + Ash Walk ----
 
 test("Backdraft: dashing through an enemy applies Scald", () => {

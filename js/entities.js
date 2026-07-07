@@ -199,7 +199,7 @@
       this.upgradeT = 0;      // time left on the entry currently showing
       this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
-      this.lastDmgScale = 1;  // Pressure Sermon: most recent doSpray pressure tier
+      this.sermonFullPressure = false;  // Pressure Sermon: hit full pressure during THIS spray hold
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
@@ -484,7 +484,7 @@
         // spray emits a knockback cone. Checked here, before sprayHeldT is
         // zeroed below, so it fires exactly once per qualifying hold/release.
         if (this.beneRank("pressure_sermon") && this.sprayHeldT >= 0.8
-            && this.lastDmgScale >= 1.2 && this.water >= 10) {
+            && this.sermonFullPressure && this.water >= 10) {
           this.water -= 10;
           for (const e of game.enemies) {
             if (e.dead || e.dropping) continue;
@@ -494,11 +494,16 @@
             e.takeDamage(15, game, this.facing, 0);
             e.applyKnockback(this.facing, 200, (e.y - this.y) * 0.02);
           }
-          burst(game, this.x + this.facing * 20, this.y, 20, JH.PAL.waterHi, 14,
-            { speed: 140, life: 0.4, up: 40 });
+          // A clear cone blast so the cast reads: a wide fan of water thrown
+          // forward + a punchy shake. (Polished cone telegraph is a TODO.)
+          const bx = this.x + this.facing * 24;
+          burst(game, bx, this.y, 22, JH.PAL.waterHi, 26, { speed: 175, life: 0.45, up: 55, size: 2 });
+          burst(game, bx, this.y, 8, JH.PAL.water, 14, { speed: 110, life: 0.4, up: 22 });
+          game.shake(4);
           game.audio.play("blast");
         }
         this.sprayHeldT = 0;   // reset the stream-front timer on release
+        this.sermonFullPressure = false;
       }
 
       // ---- water regen (after a short delay since last spray)
@@ -569,7 +574,12 @@
       // while any water remains — dry still sputters, 80%+ still gets bonus.
       else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      this.lastDmgScale = dmgScale;   // Pressure Sermon: release check reads this
+      // Pressure Sermon: once this hold reaches full pressure (top tier) the
+      // sermon is armed for the whole hold — the release check can't require
+      // full pressure ON the release frame, since 0.8s of spraying always
+      // drains the tank below 80% (100 tank / 36 drain → full pressure lasts
+      // ~0.56s), which made the cone effectively never fire.
+      if (dmgScale >= 1.2) this.sermonFullPressure = true;
       if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
 
