@@ -302,11 +302,11 @@
       }
     },
 
-    // Celebratory feedback when an upgrade node is purchased: rising chime,
-    // a name banner, and a suds-coloured sparkle burst at the player.
+    // Celebratory feedback when an upgrade node is purchased: rising chime
+    // and a suds-coloured sparkle burst at the player (no banner — the buy is
+    // a deliberate action with its own local feedback).
     upgradeFx(node) {
       this.audio.play("upgrade");
-      if (node && node.name) this.banner(node.name.toUpperCase() + " ACQUIRED!", 1.3);
       const p = this.player;
       if (p) {
         JH.burst(this, p.x, p.y, 18, JH.PAL.suds,    16, { speed: 70, life: 0.6, up: 70, size: 2 });
@@ -514,18 +514,27 @@
       const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
       const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
       if (type === "fuse") {
-        // Fuses drop in at a random arena spot.
+        // Fuses drop in at a random arena spot (own landing ring telegraphs it).
         const ex = left + 30 + Math.random() * (right - left - 60);
-        this.spawnEnemy(type, ex, ey, {
+        return this.spawnEnemy(type, ex, ey, {
           elite: eliteScale, dropIn: true, dropDelay: (slot || 0) * JH.FUSE_DROP.stagger * 0.5,
         });
-      } else {
-        // Enter from a random screen edge at a random depth.
-        const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
-                                         : right - 6 - Math.random() * 10;
-        const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
-        e.spawnGrace = 0.3 + (slot || 0) * 0.25; // stagger entrances
       }
+      // Enter from a random screen edge at a random depth.
+      const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
+                                       : right - 6 - Math.random() * 10;
+      const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
+      e.spawnGrace = 0.3 + (slot || 0) * 0.25; // stagger entrances
+      return e;
+    },
+
+    // Localized "reinforcement arriving" telegraph — a small dust puff at the
+    // enemy's entry point, replacing the old REINFORCEMENTS! banner. Fuses
+    // already read via their drop-in ring, so skip those.
+    reinforceFx(e) {
+      if (!e || e.dropping) return;
+      JH.burst(this, e.x, e.y, 6, JH.PAL.rock, 8,
+        { speed: 55, life: 0.4, up: 14, grav: 40, size: 2 });
     },
 
     waveCleared_() {
@@ -1244,7 +1253,6 @@
       this.state = "play";
       this.showScreen("hud");
       JH.Music.reset(); JH.Music.start();
-      this.banner("TRY AGAIN!", 1.4);
     },
 
     closeShop() {
@@ -1592,14 +1600,13 @@
                 if (room >= W.batchMin) {
                   const n = Math.min(this.wavePool.length, room, W.batchMax);
                   for (let k = 0; k < n; k++)
-                    this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), k);
-                  this.banner("REINFORCEMENTS!", 1.0);
+                    this.reinforceFx(this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), k));
                   this.waveTrickleT = W.batchPause;
                 }
                 // No room yet: hold the batch, re-check next frame.
               } else if (room > 0) {
                 this.waveTrickleT = W.trickle;
-                this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), 0);
+                this.reinforceFx(this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), 0));
               }
             }
           }
