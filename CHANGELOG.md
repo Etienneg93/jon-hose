@@ -7,6 +7,36 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.27.8 — Shop Class (2026-07-07)
+
+Live-playtest follow-up: guaranteed pre-boss shops, calmer wave transitions,
+and a big banner declutter.
+
+**Shops** — a vendor now always appears in the corridor right before a boss,
+so you can dump Suds to gear up. Guarded so the shop never lands in two
+corridors in a row: a cadence/post-boss shop is skipped when the next
+corridor will already force a pre-boss one.
+
+**Wave transitions** — finishing a fight near the arena's right edge (or
+holding right while grabbing a benediction) no longer instantly rolls the
+next wave. The trigger now guarantees a stretch of corridor past where you
+cleared (`JH.WAVE_GATE`), and the benediction sigil lineup is clamped clear
+of it so walking out to inspect the last option can't cross the trigger.
+
+**Banner declutter** — the banner is for things you can't just see, not
+narration of the obvious:
+- Cut the wave-clear / shop banners (`AREA CLEAR!`, `BOSS DOWN!`).
+- Wave-start banner is now the wave name only (dropped `— FIGHT!` /
+  `— ELITES!`; elite status reads via the gold bars).
+- Cut the upgrade `X ACQUIRED!`, `TRY AGAIN!`, and `REINFORCEMENTS!`
+  banners. Reinforcements now telegraph with a small localized dust puff at
+  each arrival point instead. Kept: objective instructions, boss-name
+  intros, benediction choose/acquire, ally-join beats, CONCERTA unlock,
+  phase transitions.
+
+**Victory screen** — added a Deaths counter to the run stats (a flawless
+clear reads `Deaths: 0`).
+
 ## v0.27.7 — Weight Class (2026-07-07)
 
 Live-playtest balance pass on the elite tiers and the difficulty curve —
