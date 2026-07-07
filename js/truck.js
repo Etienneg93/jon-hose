@@ -538,29 +538,42 @@
         }
       }
 
-      // The Firewall — armored wall ahead; only the roaming weak spot is
-      // vulnerable, and only while open. (Procedural placeholder chrome.)
+      // The Firewall — the real wallboss chassis + iris core (JH.WALLBOSS art).
       if (sc.firewall) {
-        const fw = sc.firewall, FW = C.firewall, wx = fw.screenX;
-        // PORT SLAM telegraph / strike zone (behind the wall face, reaching left).
+        const fw = sc.firewall, FW = C.firewall, wx = fw.screenX, P = JH.PAL;
+        // PORT SLAM telegraph / strike zone (in front of the wall face).
         if (fw.slamState === "wind") {
-          ctx.fillStyle = "rgba(255,90,40,0.18)";
-          ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
+          ctx.fillStyle = "rgba(255,90,40,0.18)"; ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
         } else if (fw.slamState === "strike") {
-          ctx.fillStyle = "rgba(255,130,50,0.55)";
-          ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
+          ctx.fillStyle = "rgba(255,130,50,0.55)"; ctx.fillRect(wx - FW.slamReach, 0, FW.slamReach, JH.VIEW_H);
         }
-        // Wall slab.
-        ctx.fillStyle = "#241a30"; ctx.fillRect(wx, 0, JH.VIEW_W - wx, JH.VIEW_H);
-        ctx.fillStyle = "#3a2c4a"; ctx.fillRect(wx - 6, 0, 8, JH.VIEW_H);
-        // Weak spot (colour by state; flashes white on hit).
-        const wy = JH.Geo.feetScreenY(fw.wsDepth, 0) - 18;
-        let col = fw.wsState === "open" ? "#7dff9a" : fw.wsState === "wind" ? "#ffd23a" : "#4a2f5c";
-        if (fw.hitFlash > 0) col = "#fff";
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.arc(wx, wy, fw.wsState === "open" ? 9 : 6, 0, Math.PI * 2); ctx.fill();
-        if (fw.wsState === "open") { ctx.strokeStyle = "rgba(125,255,154,0.5)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(wx, wy, 13, 0, Math.PI * 2); ctx.stroke(); }
-        // SURGE bolt.
+        // Real armored wall chassis (face at wx); dark-fill to the right edge.
+        const floorBottom = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0);
+        A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t });
+        ctx.fillStyle = "#181019"; ctx.fillRect(wx + 84, 0, JH.VIEW_W - (wx + 84), JH.VIEW_H);
+
+        // Roaming weak-spot core — iris shutters open on the cycle (real palette).
+        const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - 30;
+        const openAmt = fw.wsState === "open" ? 1 : fw.wsState === "wind" ? Math.max(0, 1 - fw.wsT / FW.wsWind) : 0;
+        ctx.save();
+        ctx.fillStyle = "#0d0f15"; ctx.fillRect(coreX - 9, coreY - 11, 18, 22);
+        ctx.fillStyle = P.wallbossHi; ctx.fillRect(coreX - 9, coreY - 11, 18, 1); ctx.fillRect(coreX - 9, coreY + 10, 18, 1);
+        if (openAmt > 0.02) {
+          const pulse = 0.6 + 0.4 * Math.abs(Math.sin(sc.t * 6));
+          ctx.globalAlpha = openAmt * pulse;
+          ctx.fillStyle = P.wallbossCore; ctx.beginPath(); ctx.ellipse(coreX, coreY, 7, 9, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = fw.hitFlash > 0 ? "#ffffff" : P.wallbossCoreHi; ctx.beginPath(); ctx.ellipse(coreX, coreY, 3.5 * openAmt, 5 * openAmt, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        const shut = Math.round(10 * (1 - openAmt));
+        ctx.fillStyle = P.wallbossShut; ctx.fillRect(coreX - 8, coreY - 10, 16, shut); ctx.fillRect(coreX - 8, coreY + 10 - shut, 16, shut);
+        if (fw.wsState === "wind" || fw.wsState === "open") {
+          ctx.strokeStyle = fw.wsState === "open" ? "#ffe6a0" : ((Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f");
+          ctx.lineWidth = 1.5; ctx.strokeRect(coreX - 10, coreY - 12, 20, 24);
+        }
+        ctx.restore();
+
+        // SURGE bolt rolling down the core's lane.
         if (fw.surge) {
           const sy = JH.Geo.feetScreenY(fw.surge.depth, 0);
           ctx.strokeStyle = "#ffe23a"; ctx.lineWidth = 2; ctx.beginPath();
