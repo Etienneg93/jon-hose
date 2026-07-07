@@ -308,7 +308,7 @@
       // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
       if (this.upgradeQ.length) {
         if (this.upgradeT <= 0) {
-          this.upgradeT = 0.9;   // beat length — keep in sync with Player.draw's fade math
+          this.upgradeT = 1.4;   // beat length — keep in sync with Player.draw's fade math
           this.upgradeIdx++;
           game.audio.play("upgrade", { pitch: 1 + 0.12 * Math.min(5, this.upgradeIdx) });
           burst(game, this.x, this.y, this.z + 22, "#ffd23f", 8, { speed: 55, life: 0.4, up: 55, size: 2 });
@@ -938,11 +938,14 @@
       // + green delta, fading in fast and out at the end of its beat.
       if (this.upgradeQ.length && this.upgradeT > 0) {
         const e = this.upgradeQ[0];
-        const k = 1 - this.upgradeT / 0.9;                        // 0 → 1
+        const k = 1 - this.upgradeT / 1.4;                        // 0 → 1
         // Quick fade-in, long readable hold, fade-out only in the last ~15%
         // of the beat so the text finishes before it starts to go.
         const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
-        const iy = spriteSy - this.stats.bodyH - 12 - 10 * k;
+        // Sits in the gap between Jon's head and the overhead HP/H2O bars
+        // (bar bottom at bodyH+22); a short rise kept clear of the bar (12px
+        // icon centered here) so the gain text is never clipped behind it.
+        const iy = spriteSy - this.stats.bodyH - 8 - 4 * k;
         ctx.save();
         ctx.globalAlpha = Math.max(0, a);
         Assets.icon(ctx, e.icon, sx - 16, iy, 1);
