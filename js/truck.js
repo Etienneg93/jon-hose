@@ -166,29 +166,32 @@
       const dps = C.hoseDps * pr.dmgScale;
       const nozzleX = this._nozzleWorldX(sc);
 
-      // Hazards in the beam take damage (shoot pyros/fuses out of the air).
+      // The hose clears the road: any shootable enemy IN FRONT dies, across all
+      // lanes (no lane-match needed). Wrecks are obstacles (dodge them) and
+      // hydrants are positional (pop on contact) — both beam-immune.
       for (const h of sc.hazards) {
+        if (h.kind === "wreck" || h.kind === "hydrant") continue;
         const dx = h.worldX - nozzleX;
-        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, h.depth, dx, range)) {
+        if (dx >= 0 && dx <= range) {
           h.hp -= dps * dt;
-          if (h.hp <= 0) { if (h.kind === "hydrant") this._popHydrant(h); h.dead = true; }
+          if (h.hp <= 0) h.dead = true;
         }
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
 
-      // The beam puts out fires it sweeps over (only obstacles must be dodged).
+      // The beam puts out any fire in front of the truck.
       for (const p of sc.firePatches) {
         const dx = p.worldX - nozzleX;
-        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, p.depth, dx, range))
-          p.life = Math.max(0, p.life - C.douseRate * dt);
+        if (dx >= 0 && dx <= range) p.life = Math.max(0, p.life - C.douseRate * dt);
       }
 
       // Firewall: the beam only bites the WEAK SPOT, and only while it's OPEN
-      // and lane-matched (armored body is immune). dx in screen space.
+      // and lane-matched (armored body is immune) — the boss keeps its strict
+      // depth-match skill. dx in screen space.
       const fw = sc.firewall;
       if (fw && fw.wsState === "open") {
         const dx = fw.screenX - (t.screenX + 20);
-        if (JH.TruckBalance.beamCovers(t.depth, C.hoseBand, fw.wsDepth, dx, range)) {
+        if (JH.TruckBalance.beamCovers(t.depth, C.firewall.wsBand, fw.wsDepth, dx, range)) {
           fw.hp -= dps * C.firewall.dmgMult * dt;
           fw.hitFlash = 0.1;
           if (fw.hp <= 0) this._breakFirewall();
