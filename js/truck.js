@@ -41,7 +41,7 @@
           spraying: false,
           regenLock: 0,
           dashTimer: 0, dashCdTimer: 0, dashDir: 0,
-          invulnT: 0, burnT: 0,
+          invulnT: 0, burnT: 0, hitFlashT: 0,
         },
         // Hazards/patches/embers, hydrants, pickups; firewall is the climax.
         hazards: [], firePatches: [], embers: [], spray: [],
@@ -118,6 +118,7 @@
       if (t.dashCdTimer > 0) t.dashCdTimer -= dt;
       if (t.dashTimer > 0) t.dashTimer -= dt;
       if (t.invulnT > 0) t.invulnT -= dt;
+      if (t.hitFlashT > 0) t.hitFlashT -= dt;
       if (In.buffered("dash") && t.dashCdTimer <= 0) {
         In.consume("dash");
         t.dashTimer = JH.PLAYER.dashTime;
@@ -351,11 +352,17 @@
       sc.embers = sc.embers.filter((e) => e.life > 0);
     },
 
-    // Honest, NON-LETHAL truck HP: clamps at 0, feeds shake, never ends the run.
+    // Honest, NON-LETHAL truck HP: clamps at 0. Real hits get Jon's on-hit
+    // effect — white flash + i-frames + "hurt" sound + screen kick (no hitstop,
+    // same as the player). `quiet` (burn/wall tick) just chips HP.
     _damageTruck(amount, quiet) {
       const t = this.scene.truck;
       t.hp = Math.max(0, t.hp - amount);
-      if (!quiet) this.scene.shakeT = 0.25;
+      if (quiet) return;
+      t.hitFlashT = 0.18;
+      t.invulnT = Math.max(t.invulnT, JH.PLAYER.invuln);
+      this.scene.shakeT = 0.35;
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("hurt");
     },
 
     _collide(C) {
@@ -662,7 +669,7 @@
       // Truck chassis with a TOP-MOUNTED water cannon (Jon IS the truck — no
       // figure). Placeholder until the real truck sprite lands.
       A.shadow(ctx, t.screenX - 2, ty, 16);
-      ctx.fillStyle = t.invulnT > 0 ? "#ffd27a" : "#b23324";
+      ctx.fillStyle = "#b23324";
       ctx.fillRect(t.screenX - 28, ty - 16, 50, 16);              // tank body
       ctx.fillStyle = "#8f2a1e"; ctx.fillRect(t.screenX + 4, ty - 24, 18, 10); // cab
       ctx.fillStyle = "#111";
@@ -670,6 +677,14 @@
       // Top-mounted cannon (barrel points forward; spray emits from its tip).
       ctx.fillStyle = "#7f8890"; ctx.fillRect(t.screenX - 12, ty - 24, 8, 7);  // turret base
       ctx.fillStyle = "#cdd6dd"; ctx.fillRect(t.screenX - 4, ty - 23, 16, 4);  // barrel
+      // On-hit white flash (fades over 0.18s) — same read as Jon's hurt flash.
+      if (t.hitFlashT > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, t.hitFlashT / 0.18) * 0.75;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(t.screenX - 30, ty - 26, 56, 26);
+        ctx.restore();
+      }
 
       // HP + water bars (honest, visible).
       this._bar(ctx, 8, 8, 90, t.hp / C.truckHp, "#e74c3c", "HP");
