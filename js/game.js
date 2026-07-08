@@ -638,7 +638,7 @@
     // rumbles, a dread sting hits, and the escape truck drives in and brakes
     // just at the right edge of the screen. Board it (E) to start the escape.
     startTruckArrival() {
-      this.worldCrumble = { t: 0, shakeCd: 0 };
+      this.worldCrumble = { t: 0, shakeCd: 0, quakeCd: 2.2 };
       this.shake(12);
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("dread");
       const stopX = JH.Camera.x + JH.VIEW_W - 42;   // brake at the right screen edge
@@ -1469,15 +1469,35 @@
       }
       // Post-Slayer: the fire world crumbles and the escape truck drives in.
       if (this.worldCrumble) {
-        this.worldCrumble.t += dt;
-        if ((this.worldCrumble.shakeCd -= dt) <= 0) {
-          this.worldCrumble.shakeCd = 0.5 + Math.random() * 0.6;
+        const wc = this.worldCrumble;
+        wc.t += dt;
+        if ((wc.shakeCd -= dt) <= 0) {
+          wc.shakeCd = 0.5 + Math.random() * 0.6;
           this.shake(3);
+        }
+        // Periodic heavy quake + rumble while the truck waits to be boarded.
+        if ((wc.quakeCd -= dt) <= 0) {
+          wc.quakeCd = 3.0 + Math.random() * 1.2;
+          this.shake(9);
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("dread");
         }
       }
       if (this.truckBoard) {
         const tb = this.truckBoard;
         tb.t += dt;
+        // Departure beat: Jon's aboard — the truck peels out right, the screen
+        // dips to black, then the escape scene takes over (fade-in there).
+        if (tb.departing) {
+          tb.vx += 520 * dt;
+          tb.x += tb.vx * dt;
+          // Fade only once the truck has fully cleared the right screen edge.
+          if (tb.x - JH.Camera.x > JH.VIEW_W + 70) tb.fade = Math.min(1, (tb.fade || 0) + dt / 0.3);
+          if (tb.fade >= 1) {
+            this.truckBoard = null; this.worldCrumble = null;
+            JH.TruckRun.enter(this);
+          }
+          return;
+        }
         if (tb.x > tb.stopX) tb.x = Math.max(tb.stopX, tb.x - 200 * dt);  // drive in + brake
         tb.arrived = tb.x <= tb.stopX + 0.5;
         // Solid body: AABB footprint on the floor plane (chassis span), push
@@ -1494,8 +1514,8 @@
         tb.near = tb.arrived && Math.abs(p.x - tb.x) < 68 && Math.abs(p.y - tb.y) < 34;
         if (tb.near && this.input.buffered("confirm")) {
           this.input.consume("confirm");
-          this.truckBoard = null; this.worldCrumble = null;
-          JH.TruckRun.enter(this);
+          tb.departing = true; tb.vx = 40; tb.near = false;
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("dash");
           return;
         }
       }
@@ -1812,7 +1832,8 @@
 
         // depth-sort actors (enemies + player + vendor) by world Y
         const actors = this.enemies.slice();
-        actors.push(this.player);
+        // Jon rides in the cab during the departure beat — don't double-draw him.
+        if (!(this.truckBoard && this.truckBoard.departing)) actors.push(this.player);
         if (this.shopNpc) actors.push(this.shopNpc);
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
@@ -1901,6 +1922,13 @@
           ctx2.save(); ctx2.globalAlpha = fadeAlpha; ctx2.fillStyle = "#000";
           ctx2.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx2.restore();
         }
+      }
+
+      // Truck departure: screen dips to black as the truck exits right; the
+      // escape scene continues the fade on its side (TruckRun fadeIn).
+      if (this.truckBoard && this.truckBoard.fade > 0) {
+        ctx.save(); ctx.globalAlpha = Math.min(1, this.truckBoard.fade); ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); ctx.restore();
       }
 
       // Returning from the Church: Mega Man-style warp beam at Jon, then the
@@ -2126,7 +2154,21 @@
       const sx = tb.x - cam, sy = JH.Geo.feetScreenY(tb.y, 0);
       if (sx < -80 || sx > JH.VIEW_W + 80) return;
       JH.Assets.shadow(ctx, sx, sy, 26);
-      JH.Assets.draw(ctx, "truckBoard", sx, sy, 1, { frame: Math.floor(tb.x / 12) });
+      // Empty cab while waiting; Jon-in-cab sprite once the departure starts.
+      JH.Assets.draw(ctx, tb.departing ? "truck" : "truckBoard", sx, sy, 1, { frame: Math.floor(tb.x / 12) });
+      if (tb.departing) {
+        // Peel-out dust behind the rear wheels.
+        for (let i = 0; i < 3; i++) {
+          const k = ((tb.t * 2.2 + i * 0.33) % 1);
+          ctx.save();
+          ctx.globalAlpha = 0.35 * (1 - k);
+          ctx.fillStyle = "#8a8378";
+          ctx.beginPath();
+          ctx.ellipse(sx - 48 - k * 26, sy - 3 - k * 8, 5 + k * 8, 3 + k * 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
       if (tb.near) {
         ctx.save();
         ctx.font = "bold 7px monospace"; ctx.textAlign = "center";

@@ -39,12 +39,13 @@
       this.scene = {
         t: 0,                 // elapsed run time (drives phase + timeline)
         phase: "intro",       // intro → run → boss → finale (Gate Crash)
+        fadeIn: 0.35,         // s of black-in continuing the boarding fade-out
         camX0: JH.Camera.x,   // boarding camera — the backdrop continues from here
         scrollX: 0,           // world px scrolled (own coordinate space)
         speedMult: 1,         // scroll multiplier (collisions slow it — Task 4)
         truck: {
           depth: JH.DEPTH_MAX * 0.5,
-          screenX: C.truckScreenX,
+          screenX: -70,       // slides in from off-screen left during the intro
           hp: C.truckHp,
           water: C.tank,
           spraying: false,
@@ -78,12 +79,16 @@
       const C = JH.TRUCKRUN, In = JH.Input;
       sc.t += dt;
       if (sc.bannerT > 0) sc.bannerT -= dt;
+      if (sc.fadeIn > 0) sc.fadeIn -= dt;
 
       // ---- Gate Crash finale: its own update; road sim + input are off.
       if (FINALE_PHASES[sc.phase]) { this._updateFinale(dt, game, C); return; }
 
       // ---- phase machine: intro → run (hazards) → boss (Firewall) → finale (Gate Crash)
       if (sc.phase === "intro") {
+        // Ease the truck in from off-screen left to its resting screen-x.
+        const k = Math.min(1, sc.t / INTRO_T);
+        sc.truck.screenX = -70 + (C.truckScreenX + 70) * (k * (2 - k));
         if (sc.t >= INTRO_T) { sc.phase = "run"; this._banner(game, "ESCAPE THE FIRE!", 1.6); }
       } else if (sc.phase === "run") {
         if (!sc.firewall && !sc.firewallDone && sc.t >= C.firewall.atSec) {
@@ -99,7 +104,7 @@
       // (seamless with the boarding scene) instead of cutting to a new backdrop.
       JH.Camera.x = Math.min(JH.LEVEL_LEN - JH.VIEW_W, sc.camX0 + sc.scrollX * 0.12);
 
-      this._drive(dt, C, In);
+      if (sc.phase !== "intro") this._drive(dt, C, In);   // intro owns screenX (slide-in)
       if (sc.phase !== "intro") {
         this._hose(dt, C);
         this._updateSpray(dt);
@@ -701,6 +706,23 @@
           ctx.fillText("FORWARD!", JH.VIEW_W / 2, 60); ctx.textAlign = "left";
         }
       }
+      // The world coming down behind you: ember haze + falling debris on the
+      // left edge (always), spreading across the wall face when it's on screen
+      // — same crumble language as the overworld's drawCrumble.
+      {
+        const crumbleW = Math.max(28, wallRight + 16);
+        ctx.fillStyle = "rgba(140,28,0,0.10)";
+        ctx.fillRect(0, 0, Math.min(crumbleW, 90), JH.VIEW_H);
+        ctx.fillStyle = "#4a3a34";
+        for (let i = 0; i < 14; i++) {
+          const seed = i * 97.13;
+          const x = (seed * 7.7) % crumbleW;
+          const speed = 60 + (i % 5) * 26;
+          const y = ((sc.t * speed + seed * 13) % (JH.VIEW_H + 20)) - 10;
+          const s = 2 + (i % 3);
+          ctx.fillRect(x, y, s, s);
+        }
+      }
 
       // Fire patches → reuse the fire-small FX; the ground-ellipse footprint is
       // still the burn hit test (the flames just sit on it).
@@ -843,7 +865,8 @@
       // accurate, handled by the "truck" painter in assets.js).
       A.shadow(ctx, t.screenX, ty, 26);
       A.draw(ctx, "truck", t.screenX, ty, 1, {
-        frame: Math.floor(sc.scrollX / DRIVE_STEP),
+        // screenX term keeps the wheels turning through the intro slide-in.
+        frame: Math.floor((sc.scrollX + t.screenX + 70) / DRIVE_STEP),
         hurt: t.hitFlashT > 0, hurtAlpha: t.hitFlashT / 0.18,
       });
 
@@ -867,6 +890,12 @@
       if (sc.finale) {
         const wA = JH.TruckBalance.finaleWhite(C.finale, sc.phase, sc.finale.t);
         if (wA > 0) { ctx.fillStyle = "rgba(255,255,255," + wA + ")"; ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); }
+      }
+
+      // Black-in at scene start — continues the boarding fade-out seamlessly.
+      if (sc.fadeIn > 0) {
+        ctx.fillStyle = "rgba(0,0,0," + Math.min(1, sc.fadeIn / 0.35) + ")";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
       }
     },
 

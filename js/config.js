@@ -644,7 +644,7 @@
 
     // Collision hazards.
     wreckHp: 50,
-    wreckDmg: 15,        // truckHp lost on un-broken wreck contact
+    wreckDmg: 10,        // truckHp lost on un-broken wreck contact
     collideSlow: 0.8,    // scroll-speed mult applied briefly on any collision
     collideSlowDur: 0.6, // s the slow lasts (lets the wall creep up)
 
