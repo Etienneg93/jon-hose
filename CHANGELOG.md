@@ -7,6 +7,33 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.28.0 — Fire Drill (2026-07-08)
+
+The Fire-Truck Escape — a full designed interlude that plays after the
+Slayer falls: pick his benediction, the world starts collapsing, and Jon
+boards the rig for a scrolling getaway that ends by smashing into the Air
+World. (Spec: `docs/superpowers/specs/2026-07-06-fire-truck-escape-design.md`.)
+
+- **The escape run**: a scrolling drive out of the burning Fire World —
+  weave lanes, dodge wrecks and telegraphed debris drops, smash hydrants
+  to refuel, and work a top-mounted cannon that hoses fuses across every
+  lane. Honest collision HP; a low-water hydrant lifeline; a collapse wall
+  that rubber-bands the pressure behind you.
+- **The Firewall boss**: the real wallboss chassis + roaming weak-spot
+  iris core, with a swept PORT SLAM crush, a full-lane SURGE bolt, and an
+  HP-scaled tentacle slam (more cables the more hurt it is).
+- **Gate Crash finale**: the Firewall doesn't despawn — it detonates and
+  **splits along a horizontal seam**, the halves parting up and down so the
+  rig barrels through into a whiteout. Behind the white: a cloud walkway to
+  the Air World marble gate, the Firewall crashed in two flaming halves,
+  Jon blast-thrown out, the empty rig ramming the gate, and Jon walking in
+  on foot.
+- **Presentation**: baked hero-truck sprite (wheel-spin), engine-loop
+  audio, speed lines + exhaust fire trail, a dedicated escape soundtrack,
+  and a seamless world backdrop continuing from the boarding beat.
+- **Dev**: backtick dev menu gains **POST-FIREWALL**, jumping straight into
+  the Gate Crash finale for iteration.
+
 ## v0.27.9 — Sermon Notes (2026-07-07)
 
 Live-playtest follow-up: a benediction that never fired, plus readable
