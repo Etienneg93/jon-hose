@@ -572,15 +572,14 @@
       }
     },
 
-    // The kill: the Firewall doesn't despawn — it detonates. Essence banks
-    // immediately (the truck never drives past the kill point), input locks,
-    // and the finale chain starts: detonate → whiteout → reveal → crash → walk.
+    // The kill: the Firewall doesn't despawn — it detonates. Input locks and
+    // the finale chain starts: detonate → whiteout → reveal → crash → walk.
+    // No kill bounty — essence comes only from the road crosses you grabbed.
     _breakFirewall() {
-      const sc = this.scene, C = JH.TRUCKRUN, fw = sc.firewall;
+      const sc = this.scene, fw = sc.firewall;
       fw.dying = true; fw.surge = null; fw.slam = null; fw.tsl = null; fw.wsState = "closed";
       sc.spray = [];   // in-flight droplets would hang frozen (finale skips _updateSpray)
-      sc.essence += C.firewall.essence;
-      if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(C.firewall.essence);
+      // No kill bounty — essence is earned only from the road crosses.
       sc.firewallDone = true;
       sc.shakeT = 0.5;
       sc.phase = "detonate";
