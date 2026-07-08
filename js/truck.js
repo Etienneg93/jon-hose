@@ -590,7 +590,6 @@
         jon: null, jonT: 0, standT: 0, enterT: 0,
         walkFrame: 0, walkDist: 0, facing: 1,
       };
-      this._flash("FIREWALL DOWN!  +" + C.firewall.essence + " ESSENCE", 2.0);
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
     },
 
@@ -941,34 +940,56 @@
       ctx.fillStyle = "#3a4154";
       for (let x = -((sc.scrollX * 1.8) % 36); x < JH.VIEW_W; x += 36) ctx.fillRect(x, JH.VIEW_H - 6, 14, 6);
 
-      // Collapse wall — slides in from the left as the gap closes.
-      const wallRight = t.screenX - sc.wallGap;
-      if (wallRight > 0) {
-        const wg = ctx.createLinearGradient(0, 0, wallRight, 0);
-        wg.addColorStop(0, "#ff3a0a"); wg.addColorStop(0.7, "#a51e04"); wg.addColorStop(1, "rgba(120,20,0,0.55)");
-        ctx.fillStyle = wg;
-        ctx.fillRect(0, 0, wallRight, JH.VIEW_H);
+      // The road crumbling BEHIND you: a burning collapse front chewing in from
+      // the left. Anchored to the truck's RESTING screen-x (not the live
+      // throttle position) so braking/accelerating never makes it lunge or the
+      // debris slide sideways — only the closing gap (wallGap) advances it.
+      // Everything is fixed in screen space (the road falls INTO it); the
+      // fixed-x debris just tumbles down. `zone` keeps a thin ambient sliver
+      // even when the wall is far, so it always reads as "the world's ending
+      // behind you."
+      {
+        const front = C.truckScreenX - sc.wallGap;   // collapse-front screen-x
+        const zone = Math.max(30, front);             // consumed width (throttle-independent)
+        const heat = Math.max(0.18, Math.min(1, (front + 24) / (C.truckScreenX + 24)));  // fire intensity by closeness
+        ctx.save();
+        // Charred consumed base + fiery overlay (fades out to the right edge).
+        ctx.fillStyle = "rgba(26,10,6,0.72)"; ctx.fillRect(0, 0, zone, JH.VIEW_H);
+        const wg = ctx.createLinearGradient(0, 0, zone, 0);
+        wg.addColorStop(0, "rgba(255,96,26," + (0.75 * heat).toFixed(2) + ")");
+        wg.addColorStop(0.6, "rgba(150,26,4," + (0.55 * heat).toFixed(2) + ")");
+        wg.addColorStop(1, "rgba(60,10,0,0)");
+        ctx.fillStyle = wg; ctx.fillRect(0, 0, zone, JH.VIEW_H);
+        // Jagged molten FRONT — torn road teeth with a bright rim, flickering.
+        for (let y = 0; y < JH.VIEW_H; y += 8) {
+          const tooth = Math.sin(y * 0.19 + sc.t * 6) * 6 + Math.sin(y * 0.71 + sc.t * 11) * 3;
+          const ex = zone + tooth;
+          ctx.fillStyle = "#2a1410"; ctx.fillRect(ex - 9, y, 9, 8);            // crumbling body
+          ctx.fillStyle = ((Math.floor(sc.t * 10) + y) & 3) ? "#ff7a2a" : "#ffd23f";
+          ctx.fillRect(ex - 2, y, 3, 8);                                        // molten rim
+        }
+        // Rising embers out of the collapse (fixed x, drift up).
+        for (let i = 0; i < 14; i++) {
+          const seed = i * 53.3, ex = seed % zone;
+          const ey = JH.VIEW_H - ((sc.t * (42 + (i % 4) * 30) + seed * 7) % (JH.VIEW_H + 20));
+          ctx.globalAlpha = (0.4 + 0.5 * Math.abs(Math.sin(sc.t * 7 + i))) * heat;
+          ctx.fillStyle = (i % 3) ? "#ffb14a" : "#ff6a2a";
+          ctx.fillRect(ex, ey, (i % 3) ? 1 : 2, (i % 3) ? 1 : 2);
+        }
+        ctx.globalAlpha = 1;
+        // Tumbling asphalt chunks breaking off the front and falling in.
+        for (let i = 0; i < 9; i++) {
+          const seed = i * 91.7, cx = zone - 5 - (seed % 26);
+          const cy = ((sc.t * (68 + (i % 5) * 22) + seed * 13) % (JH.VIEW_H + 24)) - 12;
+          const s = 2 + (i % 3);
+          ctx.fillStyle = "#3a3f4a"; ctx.fillRect(cx, cy, s, s);
+          ctx.fillStyle = "#20242c"; ctx.fillRect(cx, cy + s - 1, s, 1);       // shaded underside
+        }
+        ctx.restore();
         if (sc.wallGap <= 4) {
           ctx.fillStyle = (Math.floor(sc.t * 8) & 1) ? "#ff5a5a" : "#fff";
           ctx.font = "bold 11px monospace"; ctx.textAlign = "center";
           ctx.fillText("FORWARD!", JH.VIEW_W / 2, JH.VIEW_H - 24); ctx.textAlign = "left";
-        }
-      }
-      // The world coming down behind you: ember haze + falling debris on the
-      // left edge (always), spreading across the wall face when it's on screen
-      // — same crumble language as the overworld's drawCrumble.
-      {
-        const crumbleW = Math.max(28, wallRight + 16);
-        ctx.fillStyle = "rgba(140,28,0,0.10)";
-        ctx.fillRect(0, 0, Math.min(crumbleW, 90), JH.VIEW_H);
-        ctx.fillStyle = "#4a3a34";
-        for (let i = 0; i < 14; i++) {
-          const seed = i * 97.13;
-          const x = (seed * 7.7) % crumbleW;
-          const speed = 60 + (i % 5) * 26;
-          const y = ((sc.t * speed + seed * 13) % (JH.VIEW_H + 20)) - 10;
-          const s = 2 + (i % 3);
-          ctx.fillRect(x, y, s, s);
         }
       }
 
