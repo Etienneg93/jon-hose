@@ -1377,17 +1377,33 @@
         ctx.fill();
       }
 
-      // Firewall rubble — charred chassis chunks (wallboss palette) + smoke.
-      ctx.fillStyle = P.wallbossDk;
-      ctx.fillRect(0, gy - 34, 26, 48); ctx.fillRect(14, gy - 12, 30, 26);
-      ctx.fillStyle = P.wallboss;
-      ctx.fillRect(4, gy - 28, 14, 10); ctx.fillRect(24, gy - 6, 16, 8);
-      ctx.fillStyle = P.wallbossHi; ctx.fillRect(6, gy - 30, 10, 2);
-      for (let i = 0; i < 3; i++) {
-        const k = (sc.t * 0.35 + i * 0.33) % 1;
-        ctx.fillStyle = "rgba(90,90,100," + (0.35 * (1 - k)) + ")";
-        ctx.beginPath(); ctx.ellipse(18 + i * 9, gy - 30 - k * 34, 5 + k * 7, 4 + k * 5, 0, 0, Math.PI * 2); ctx.fill();
-      }
+      // Firewall wreckage — the two split halves crashed onto the deck, charred
+      // and on fire: broken LED grid, flame + smoke, scattered debris.
+      const drawChunk = (cx, w, h, tilt, seed) => {
+        ctx.save();
+        ctx.translate(cx, gy); ctx.rotate(tilt);
+        ctx.fillStyle = P.wallbossDk; ctx.fillRect(-w / 2, -h, w, h);                    // charred body
+        ctx.fillStyle = P.wallboss;   ctx.fillRect(-w / 2 + 3, -h + 4, w - 6, h * 0.42); // panel
+        ctx.fillStyle = P.wallbossHi;  ctx.fillRect(-w / 2, -h, w, 2);                    // bent top rim
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {                         // dead/flickering LEDs
+          const lit = ((r * 3 + c + seed) % 5 === 0) && (Math.floor(sc.t * 4 + r + c) & 1);
+          ctx.fillStyle = lit ? "#ff5a4a" : "#141018";
+          ctx.fillRect(-w / 2 + 6 + c * (w - 12) / 3, -h + 8 + r * (h - 12) / 3, 3, 3);
+        }
+        ctx.fillStyle = "rgba(8,6,10,0.5)"; ctx.fillRect(-w / 2 + 2, -h * 0.5, w * 0.55, h * 0.4);  // scorch
+        ctx.restore();
+        A.drawFx(ctx, "fire-small", cx - w * 0.15, gy - h * 0.85, sc.t + seed, { scale: h / 70 });
+        A.drawFx(ctx, "fire-small", cx + w * 0.22, gy - h * 0.55, sc.t * 1.1 + seed, { scale: h / 95 });
+        for (let i = 0; i < 2; i++) {
+          const k = (sc.t * 0.3 + i * 0.5 + seed) % 1;
+          ctx.fillStyle = "rgba(64,64,74," + (0.42 * (1 - k)) + ")";
+          ctx.beginPath(); ctx.ellipse(cx + i * 8 - 4, gy - h - k * 42, 6 + k * 9, 5 + k * 6, 0, 0, Math.PI * 2); ctx.fill();
+        }
+      };
+      drawChunk(28, 50, 44, -0.13, 0);   // left half — bigger, leaning back
+      drawChunk(78, 36, 30, 0.20, 2);    // right half — smaller, toppled forward
+      ctx.fillStyle = P.wallbossDk;      // debris strewn on the deck between them
+      for (const [dx, dw] of [[52, 7], [63, 5], [46, 4], [90, 6]]) ctx.fillRect(dx, gy + 2, dw, 4);
 
       // The Air World gate — marble arch + doors; blown open after the crash.
       const gx = F.gate.x;
