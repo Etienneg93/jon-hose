@@ -150,7 +150,7 @@
           return;
         }
         if (!this.devMenu) return;
-        const count = JH.LEVEL1.waves.length + 3;  // +1 cutscene, +1 target range, +1 wall boss
+        const count = JH.LEVEL1.waves.length + 4;  // +1 cutscene, +1 target range, +1 wall boss, +1 post-firewall
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
         if (e.code === "Enter" || e.code === "NumpadEnter") {
@@ -158,6 +158,7 @@
           if (this.devCursor === JH.LEVEL1.waves.length) this.devTriggerCutscene();
           else if (this.devCursor === JH.LEVEL1.waves.length + 1) this.devGotoRange();
           else if (this.devCursor === JH.LEVEL1.waves.length + 2) this.devGotoWallBoss();
+          else if (this.devCursor === JH.LEVEL1.waves.length + 3) this.devGotoPostFirewall();
           else this.devGotoWave(this.devCursor);
         }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
@@ -261,6 +262,23 @@
       JH.Music.setTrack("boss");
       this.banner(JH.WALLBOSS.name.toUpperCase(), 1.8);
       this.spawnEnemy("wallboss", right - 20, JH.DEPTH_MAX - 30);
+      this.devMenu = false;
+    },
+
+    // Jump straight into the Gate Crash finale: enter the truck run with the
+    // Firewall already breaking, so the split-through + Air World wreckage/
+    // walkway tableau play without driving the whole escape.
+    devGotoPostFirewall() {
+      this.debugEnterTruck();
+      const T = JH.TruckRun, C = JH.TRUCKRUN, sc = T.scene;
+      sc.t = 3;                                    // past the intro slide-in
+      sc.fadeIn = 0; sc.speedMult = 1;
+      sc.truck.screenX = C.truckScreenX;           // resting x, so the drive-through reads right
+      sc.cursor = sc.timeline.length;              // no more road traffic queued
+      sc.hazards.length = 0; sc.firePatches.length = 0; sc.embers.length = 0;
+      sc.phase = "boss";
+      T._spawnFirewall(C);
+      T._breakFirewall();                          // detonate → split → whiteout → reveal → crash → walk
       this.devMenu = false;
     },
 
@@ -2030,7 +2048,7 @@
 
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
-      const count = waves.length + 3;          // +cutscene +range +firewall
+      const count = waves.length + 4;          // +cutscene +range +firewall +post-firewall
       const W = 224, ROW = 11, PAD = 14;
       // Fit inside the canvas: cap the visible rows and scroll so the cursor
       // stays shown. maxRows is how many ROW-tall lines fit between the header
@@ -2117,6 +2135,18 @@
         ctx.fillText("▮  FIREWALL", PX + 8, wbRy + ROW - 3);
         ctx.fillStyle = wbSel ? "#ff8a4a" : "#445566"; ctx.textAlign = "right";
         ctx.fillText("DEV", PX + W - 6, wbRy + ROW - 3);
+      }
+
+      // Post-Firewall entry (Gate Crash finale — split-through + Air World tableau)
+      const pfRy = rowY(waves.length + 3);
+      if (pfRy !== null) {
+        const pfSel = this.devCursor === waves.length + 3;
+        if (pfSel) { ctx.fillStyle = "rgba(120,200,255,0.18)"; ctx.fillRect(PX + 3, pfRy, W - 6, ROW - 1); }
+        ctx.fillStyle = pfSel ? "#8ac8ff" : "#667788";
+        ctx.font = (pfSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("☁  POST-FIREWALL", PX + 8, pfRy + ROW - 3);
+        ctx.fillStyle = pfSel ? "#8ac8ff" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, pfRy + ROW - 3);
       }
 
       // Scroll indicators when the list overflows the window (right edge, clear
