@@ -643,7 +643,7 @@
       sc.shakeT = 0.5;
       sc.phase = "detonate";
       sc.finale = {
-        t: 0, nextBoom: 0, booms: [], staged: false,
+        t: 0, nextBoom: 0, booms: [], staged: false, splitSep: 0,
         truckX: 0, crashed: false, gateOpen: false,
         jon: null, jonT: 0, standT: 0, enterT: 0,
         walkFrame: 0, walkDist: 0, facing: 1,
@@ -662,10 +662,13 @@
       if (fin.flashT > 0) fin.flashT -= dt;
 
       if (sc.phase === "detonate") {
-        // Road scroll eases to a stop while the chassis cooks off.
+        // Road scroll eases to a stop while the chassis cooks off; meanwhile the
+        // WALL SPLITS in two and the rig guns it forward through the opening.
         sc.speedMult = Math.max(0, 1 - fin.t / F.scrollEase);
         sc.scrollX += C.scrollSpeed * sc.speedMult * dt;
         JH.Camera.x = Math.min(JH.LEVEL_LEN - JH.VIEW_W, sc.camX0 + sc.scrollX * 0.12);
+        fin.splitSep = Math.min(1, fin.t / F.splitOpenT) * F.splitMax;   // halves part
+        if (fin.t >= F.driveDelay) sc.truck.screenX += F.driveThroughSpeed * dt;  // drive through
         const prog = fin.t / F.detonateT;
         if ((fin.nextBoom -= dt) <= 0) {
           fin.nextBoom = TB.boomInterval(F, prog);
@@ -1109,18 +1112,37 @@
         const floorBottom = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0);
         // PORT SLAM — the crush sweep (per-band telegraph + slam flash).
         if (fw.slam) this._drawFirewallSlam(ctx, fw, wx, floorBottom, sc, C);
-        // Real armored wall chassis (face at wx); short dark-fill to the edge.
-        A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t });
-        ctx.fillStyle = P.wallbossDk;
-        ctx.fillRect(wx + 84, floorBottom - 178, JH.VIEW_W - (wx + 84), JH.VIEW_H - (floorBottom - 178));
+        // Real armored wall chassis (face at wx). On death it SPLITS down the
+        // middle and the halves slide apart so the rig barrels through the gap.
+        const darkFill = () => {
+          ctx.fillStyle = P.wallbossDk;
+          ctx.fillRect(wx + 84, floorBottom - 178, JH.VIEW_W - (wx + 84), JH.VIEW_H - (floorBottom - 178));
+        };
+        if (fw.dying && sc.finale) {
+          const sep = sc.finale.splitSep, splitX = wx + 42;
+          if (sep > 1) {   // whiteout light spilling through the widening seam
+            const g = ctx.createLinearGradient(splitX - sep, 0, splitX + sep, 0);
+            g.addColorStop(0, "rgba(255,244,214,0)");
+            g.addColorStop(0.5, "rgba(255,250,236,0.92)");
+            g.addColorStop(1, "rgba(255,244,214,0)");
+            ctx.fillStyle = g; ctx.fillRect(splitX - sep, 0, sep * 2, JH.VIEW_H);
+          }
+          ctx.save(); ctx.beginPath(); ctx.rect(0, 0, splitX, JH.VIEW_H); ctx.clip();
+          ctx.translate(-sep, 0); A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t }); ctx.restore();
+          ctx.save(); ctx.beginPath(); ctx.rect(splitX, 0, JH.VIEW_W - splitX, JH.VIEW_H); ctx.clip();
+          ctx.translate(sep, 0); A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t }); darkFill(); ctx.restore();
+        } else {
+          A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t });
+          darkFill();
+        }
 
         // Doc-Ock cables writhing out of the chassis — more of them the lower
         // its HP (dressing; the TENTACLE SLAM is the one that bites).
         if (!fw.dying) this._drawFirewallCables(ctx, fw, wx, floorBottom, sc, C);
 
-        // Roaming weak-spot EYE — the shared boss reactor-core glyph (matches
-        // Switch/GK so it reads consistently). Iris shutters slide over it
-        // off-cycle; only OPEN exposes the weak point.
+        // Roaming weak-spot EYE — the shared boss reactor-core glyph. Hidden
+        // once the wall is dying (it's splitting apart, not staring).
+        if (!fw.dying) {
         const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - 30;
         const openAmt = fw.wsState === "open" ? 1
           : fw.wsState === "wind" ? Math.max(0, 1 - fw.wsT / FW.wsWind)   // 0→1 opening
@@ -1139,6 +1161,7 @@
           ctx.lineWidth = 1.5; ctx.strokeRect(coreX - 10, coreY - 13, 20, 26);
         }
         ctx.restore();
+        }
 
         // TENTACLE SLAM telegraph + animated arm(s).
         if (fw.tsl) this._drawFirewallTentacle(ctx, fw, wx, floorBottom, sc, C);

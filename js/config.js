@@ -714,6 +714,10 @@
       boomIntStart: 0.30, boomIntEnd: 0.10,    // boom cadence ramp (s between)
       boomScaleStart: 0.5, boomScaleEnd: 1.1,  // boom FX scale ramp
       scrollEase: 0.8,                         // s for road scroll to ease to 0
+      splitMax: 82,                            // px each wall half slides apart on death (gap = 2×)
+      splitOpenT: 0.7,                         // s for the wall to fully part
+      driveThroughSpeed: 250,                  // px/s the rig accelerates through the opening
+      driveDelay: 0.3,                         // s beat before the rig lunges through
       whiteRamp: 0.5,                          // s white overlay 0→1
       whiteHold: 0.4,                          // s at full white (restage behind it)
       whiteFade: 1.2,                          // s white 1→0 onto the walkway
