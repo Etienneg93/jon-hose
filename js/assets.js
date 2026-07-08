@@ -174,10 +174,14 @@
       const to = this.tracks[name];
       this.current = name;
       if (this._timer) { clearInterval(this._timer); this._timer = null; }
+      // Fade from the outgoing track's CURRENT gain, not from 1 — otherwise a
+      // track already faded down (e.g. by fadeOut on the truck arrival) jumps
+      // back to full for this fade's duration (an audible blip).
+      const g0 = from ? from.gain : 0;
       const t0 = performance.now();
       this._timer = setInterval(() => {
         const k = Math.min(1, (performance.now() - t0) / (this.fadeDur * 1000));
-        if (from) from.gain = 1 - k;
+        if (from) from.gain = g0 * (1 - k);
         this.apply();
         if (k >= 1) {
           clearInterval(this._timer); this._timer = null;
