@@ -1112,25 +1112,29 @@
         const floorBottom = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0);
         // PORT SLAM — the crush sweep (per-band telegraph + slam flash).
         if (fw.slam) this._drawFirewallSlam(ctx, fw, wx, floorBottom, sc, C);
-        // Real armored wall chassis (face at wx). On death it SPLITS down the
-        // middle and the halves slide apart so the rig barrels through the gap.
+        // Real armored wall chassis (face at wx). On death it SPLITS along a
+        // HORIZONTAL seam and the halves part up/down so the rig barrels
+        // through the widening gap (the Air World background shows through it).
+        const wallTop = floorBottom - 178;
         const darkFill = () => {
           ctx.fillStyle = P.wallbossDk;
-          ctx.fillRect(wx + 84, floorBottom - 178, JH.VIEW_W - (wx + 84), JH.VIEW_H - (floorBottom - 178));
+          ctx.fillRect(wx + 84, wallTop, JH.VIEW_W - (wx + 84), JH.VIEW_H - wallTop);
         };
         if (fw.dying && sc.finale) {
-          const sep = sc.finale.splitSep, splitX = wx + 42;
+          const sep = sc.finale.splitSep, splitY = floorBottom - 96;   // horizontal seam ~mid-wall
           if (sep > 1) {   // whiteout light spilling through the widening seam
-            const g = ctx.createLinearGradient(splitX - sep, 0, splitX + sep, 0);
+            const g = ctx.createLinearGradient(0, splitY - sep, 0, splitY + sep);
             g.addColorStop(0, "rgba(255,244,214,0)");
             g.addColorStop(0.5, "rgba(255,250,236,0.92)");
             g.addColorStop(1, "rgba(255,244,214,0)");
-            ctx.fillStyle = g; ctx.fillRect(splitX - sep, 0, sep * 2, JH.VIEW_H);
+            ctx.fillStyle = g; ctx.fillRect(wx - 12, splitY - sep, JH.VIEW_W - (wx - 12), sep * 2);
           }
-          ctx.save(); ctx.beginPath(); ctx.rect(0, 0, splitX, JH.VIEW_H); ctx.clip();
-          ctx.translate(-sep, 0); A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t }); ctx.restore();
-          ctx.save(); ctx.beginPath(); ctx.rect(splitX, 0, JH.VIEW_W - splitX, JH.VIEW_H); ctx.clip();
-          ctx.translate(sep, 0); A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t }); darkFill(); ctx.restore();
+          // Top piece lifts up; clip + content both shift by -sep so a real gap opens.
+          ctx.save(); ctx.beginPath(); ctx.rect(0, 0, JH.VIEW_W, splitY - sep); ctx.clip();
+          ctx.translate(0, -sep); A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t }); darkFill(); ctx.restore();
+          // Bottom piece drops down.
+          ctx.save(); ctx.beginPath(); ctx.rect(0, splitY + sep, JH.VIEW_W, JH.VIEW_H - (splitY + sep)); ctx.clip();
+          ctx.translate(0, sep); A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t }); darkFill(); ctx.restore();
         } else {
           A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t });
           darkFill();
