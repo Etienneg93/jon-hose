@@ -227,30 +227,7 @@
       }
 
       // Street floor (perspective bands)
-      ctx.fillStyle = "#2a2f3d";
-      ctx.fillRect(0, top, W, H - top);
-      ctx.fillStyle = "#222633";
-      ctx.fillRect(0, top, W, 4);
-      // Lane lines scrolling with camera (full parallax = 1.0)
-      ctx.fillStyle = "#3a4154";
-      const lane = top + (H - top) * 0.55;
-      for (let x = -((cam) % 40); x < W; x += 40) {
-        ctx.fillRect(Math.round(x), Math.round(lane), 18, 3);
-      }
-      // Sidewalk edge at the back
-      ctx.fillStyle = "#39405440";
-      ctx.fillRect(0, top + 2, W, 6);
-
-      // Ruined-district floor: dust tint + scattered debris piles.
-      if (zoneT > 0) {
-        ctx.fillStyle = "rgba(74,64,50," + (0.5 * zoneT).toFixed(3) + ")";
-        ctx.fillRect(0, top, W, H - top);
-      }
-      // Boiler District floor: scorched warm tint.
-      if (fireT > 0) {
-        ctx.fillStyle = "rgba(120,40,10," + (0.5 * fireT).toFixed(3) + ")";
-        ctx.fillRect(0, top, W, H - top);
-      }
+      this.drawFloor(ctx, cam);
       if (this.debris) {
         for (const d of this.debris) {
           const dx = d.x - cam;
@@ -265,6 +242,40 @@
         if (sx < -20 || sx > W + 20) continue;
         JH.Assets.shadow(ctx, sx, Geo.feetScreenY(pr.y, 0), 8);
         JH.Assets.draw(ctx, pr.key, sx, Geo.feetScreenY(pr.y, 0), 1, {});
+      }
+    },
+
+    // Street floor only (base bands + lane dashes + sidewalk + zone tints).
+    // `cam` anchors the dash scroll and the zone tints; the truck run repaints
+    // this over its scene with a fast-moving anchor so the boarding transition
+    // is seamless (identical pixels at scroll 0).
+    drawFloor(ctx, cam) {
+      const W = JH.VIEW_W, H = JH.VIEW_H, top = JH.FLOOR_TOP;
+      ctx.fillStyle = "#2a2f3d";
+      ctx.fillRect(0, top, W, H - top);
+      ctx.fillStyle = "#222633";
+      ctx.fillRect(0, top, W, 4);
+      // Lane lines scrolling with camera (full parallax = 1.0)
+      ctx.fillStyle = "#3a4154";
+      const lane = top + (H - top) * 0.55;
+      for (let x = -((cam) % 40); x < W; x += 40) {
+        ctx.fillRect(Math.round(x), Math.round(lane), 18, 3);
+      }
+      // Sidewalk edge at the back
+      ctx.fillStyle = "#39405440";
+      ctx.fillRect(0, top + 2, W, 6);
+
+      // Ruined-district floor: dust tint.
+      const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500));
+      if (zoneT > 0) {
+        ctx.fillStyle = "rgba(74,64,50," + (0.5 * zoneT).toFixed(3) + ")";
+        ctx.fillRect(0, top, W, H - top);
+      }
+      // Boiler District floor: scorched warm tint.
+      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500));
+      if (fireT > 0) {
+        ctx.fillStyle = "rgba(120,40,10," + (0.5 * fireT).toFixed(3) + ")";
+        ctx.fillRect(0, top, W, H - top);
       }
     },
 

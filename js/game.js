@@ -1480,7 +1480,18 @@
         tb.t += dt;
         if (tb.x > tb.stopX) tb.x = Math.max(tb.stopX, tb.x - 200 * dt);  // drive in + brake
         tb.arrived = tb.x <= tb.stopX + 0.5;
-        tb.near = tb.arrived && Math.abs(this.player.x - tb.x) < 42 && Math.abs(this.player.y - tb.y) < 34;
+        // Solid body: AABB footprint on the floor plane (chassis span), push
+        // the player out along the shallower axis, re-clamp to the field.
+        // The board box (68/34) wraps outside it, so E reaches from any side.
+        const p = this.player, HW = 50, HD = 12;
+        const pdx = p.x - tb.x, pdy = p.y - tb.y;
+        if (Math.abs(pdx) < HW && Math.abs(pdy) < HD) {
+          if (HW - Math.abs(pdx) < HD - Math.abs(pdy)) p.x = tb.x + (pdx < 0 ? -HW : HW);
+          else p.y = tb.y + (pdy < 0 ? -HD : HD);
+          p.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, p.x));
+          p.y = JH.Geo.clampDepth(p.y);
+        }
+        tb.near = tb.arrived && Math.abs(p.x - tb.x) < 68 && Math.abs(p.y - tb.y) < 34;
         if (tb.near && this.input.buffered("confirm")) {
           this.input.consume("confirm");
           this.truckBoard = null; this.worldCrumble = null;
@@ -2107,23 +2118,21 @@
       ctx.restore();
     },
 
-    // Post-Slayer escape truck driving in to the old exit point. Placeholder
-    // chassis (real sprite lands in the truck art task).
+    // Post-Slayer escape truck driving in to the old exit point. Empty-cab
+    // sprite ("truckBoard", board.png); wheel frame tracks tb.x so the wheels
+    // spin while it rolls in (leftward → frame decreases) and stop when it does.
     drawTruckBoard(ctx, cam) {
       const tb = this.truckBoard;
       const sx = tb.x - cam, sy = JH.Geo.feetScreenY(tb.y, 0);
       if (sx < -80 || sx > JH.VIEW_W + 80) return;
-      JH.Assets.shadow(ctx, sx, sy, 16);
-      ctx.fillStyle = "#c0392b"; ctx.fillRect(sx - 30, sy - 22, 54, 22);
-      ctx.fillStyle = "#8f2a1e"; ctx.fillRect(sx + 6, sy - 30, 18, 12);   // cab
-      ctx.fillStyle = "#111"; ctx.fillRect(sx - 22, sy - 3, 8, 6); ctx.fillRect(sx + 8, sy - 3, 8, 6);
-      ctx.fillStyle = "#cdd6dd"; ctx.fillRect(sx - 34, sy - 16, 6, 10);   // mounted nozzle
+      JH.Assets.shadow(ctx, sx, sy, 26);
+      JH.Assets.draw(ctx, "truckBoard", sx, sy, 1, { frame: Math.floor(tb.x / 12) });
       if (tb.near) {
         ctx.save();
         ctx.font = "bold 7px monospace"; ctx.textAlign = "center";
         const bob = Math.sin(tb.t * 3) * 2;
-        ctx.fillStyle = "#0a2a08"; ctx.fillText("BOARD  (E)", sx + 1, sy - 40 + bob + 1);
-        ctx.fillStyle = "#7dff5a"; ctx.fillText("BOARD  (E)", sx, sy - 40 + bob);
+        ctx.fillStyle = "#0a2a08"; ctx.fillText("BOARD  (E)", sx + 1, sy - 88 + bob + 1);
+        ctx.fillStyle = "#7dff5a"; ctx.fillText("BOARD  (E)", sx, sy - 88 + bob);
         ctx.restore();
       }
     },

@@ -13,15 +13,18 @@
   "use strict";
   const JH = root.JH;
 
-  // Phase timing (seconds). intro settle → run (hazards) → arrive (gate).
+  // Phase timing (seconds). intro settle → run (hazards) → boss (Firewall).
   const INTRO_T = 1.5;
-  const ARRIVE_T = 2.0;
+
+  // Gate Crash finale phases (after the Firewall breaks). The road sim is
+  // fully off during these; JH.TRUCKRUN.finale carries every number.
+  const FINALE_PHASES = { detonate: 1, whiteout: 1, reveal: 1, crash: 1, walk: 1 };
 
   // Hero truck sprite lives in the "truck" painter (assets.js): a 5-frame
   // wheel-spin strip. CANNON_* is the spray origin offset from the draw anchor
   // (horizontal centre, feet on the road) to the roof cannon's barrel tip; the
   // wheel frame advances every DRIVE_STEP px of scroll.
-  const CANNON_DX = 31, CANNON_DY = -69, DRIVE_STEP = 12;
+  const CANNON_DX = 32, CANNON_DY = -69, DRIVE_STEP = 12;
 
   const TruckRun = {
     enter(game) {
@@ -35,7 +38,7 @@
 
       this.scene = {
         t: 0,                 // elapsed run time (drives phase + timeline)
-        phase: "intro",       // intro → run → arrive
+        phase: "intro",       // intro → run → boss → finale (Gate Crash)
         camX0: JH.Camera.x,   // boarding camera — the backdrop continues from here
         scrollX: 0,           // world px scrolled (own coordinate space)
         speedMult: 1,         // scroll multiplier (collisions slow it — Task 4)
@@ -76,7 +79,10 @@
       sc.t += dt;
       if (sc.bannerT > 0) sc.bannerT -= dt;
 
-      // ---- phase machine: intro → run (hazards) → boss (Firewall) → arrive
+      // ---- Gate Crash finale: its own update; road sim + input are off.
+      if (FINALE_PHASES[sc.phase]) { this._updateFinale(dt, game, C); return; }
+
+      // ---- phase machine: intro → run (hazards) → boss (Firewall) → finale (Gate Crash)
       if (sc.phase === "intro") {
         if (sc.t >= INTRO_T) { sc.phase = "run"; this._banner(game, "ESCAPE THE FIRE!", 1.6); }
       } else if (sc.phase === "run") {
@@ -85,9 +91,6 @@
           sc.phase = "boss";
           this._banner(game, "THE FIREWALL BLOCKS THE ROAD!", 2.2);
         }
-      } else if (sc.phase === "arrive") {
-        sc.arriveT = (sc.arriveT || 0) + dt;
-        if (sc.arriveT >= ARRIVE_T) { this._finish(game); return; }
       }
 
       // ---- scroll (paused during the intro settle)
@@ -206,7 +209,9 @@
         if (JH.TruckBalance.beamCovers(t.depth, C.firewall.wsBand, fw.wsDepth, dx, range)) {
           fw.hp -= dps * C.firewall.dmgMult * dt;
           fw.hitFlash = 0.1;
-          if (fw.hp <= 0) this._breakFirewall();
+          // Kill → finale starts; skip this frame's droplet emission (they'd
+          // hang frozen — the finale update doesn't tick spray).
+          if (fw.hp <= 0) { this._breakFirewall(); return; }
         }
       }
 
@@ -445,13 +450,148 @@
       }
     },
 
+    // The kill: the Firewall doesn't despawn — it detonates. Essence banks
+    // immediately (the truck never drives past the kill point), input locks,
+    // and the finale chain starts: detonate → whiteout → reveal → crash → walk.
     _breakFirewall() {
       const sc = this.scene, C = JH.TRUCKRUN, fw = sc.firewall;
-      this._spawnCross(sc.scrollX + fw.screenX, fw.wsDepth, C.firewall.essence);
-      sc.firewall = null; sc.firewallDone = true;
+      fw.dying = true; fw.surge = null; fw.slamState = null; fw.wsState = "closed";
+      sc.spray = [];   // in-flight droplets would hang frozen (finale skips _updateSpray)
+      sc.essence += C.firewall.essence;
+      if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(C.firewall.essence);
+      sc.firewallDone = true;
       sc.shakeT = 0.5;
-      sc.phase = "arrive"; sc.arriveT = 0;
-      this._flash("FIREWALL DOWN!", 2.0);
+      sc.phase = "detonate";
+      sc.finale = {
+        t: 0, nextBoom: 0, booms: [], staged: false,
+        truckX: 0, crashed: false, gateOpen: false,
+        jon: null, jonT: 0, standT: 0, enterT: 0,
+        walkFrame: 0, walkDist: 0, facing: 1,
+      };
+      this._flash("FIREWALL DOWN!  +" + C.firewall.essence + " ESSENCE", 2.0);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
+    },
+
+    // ---- Gate Crash finale update -----------------------------------------
+    _walkGroundY() { return JH.Geo.feetScreenY(JH.DEPTH_MAX * 0.5, 0); },
+
+    _updateFinale(dt, game, C) {
+      const sc = this.scene, F = C.finale, fin = sc.finale, TB = JH.TruckBalance;
+      fin.t += dt;
+      if (sc.shakeT > 0) sc.shakeT -= dt;
+      if (fin.landPoofT != null) fin.landPoofT += dt;
+      if (fin.flashT > 0) fin.flashT -= dt;
+
+      if (sc.phase === "detonate") {
+        // Road scroll eases to a stop while the chassis cooks off.
+        sc.speedMult = Math.max(0, 1 - fin.t / F.scrollEase);
+        sc.scrollX += C.scrollSpeed * sc.speedMult * dt;
+        JH.Camera.x = Math.min(JH.LEVEL_LEN - JH.VIEW_W, sc.camX0 + sc.scrollX * 0.12);
+        const prog = fin.t / F.detonateT;
+        if ((fin.nextBoom -= dt) <= 0) {
+          fin.nextBoom = TB.boomInterval(F, prog);
+          fin.booms.push({
+            x: sc.firewall.screenX + Math.random() * 70,
+            y: JH.Geo.feetScreenY(JH.DEPTH_MAX, 0) - Math.random() * 150,
+            born: sc.t, kind: "boom-mid", scale: TB.boomScale(F, prog),
+          });
+          sc.shakeT = Math.max(sc.shakeT, 0.15 + 0.3 * prog);
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
+        }
+        if (fin.t >= F.detonateT) {
+          sc.phase = "whiteout"; fin.t = 0;
+          fin.booms.push({
+            x: sc.firewall.screenX + 30, y: this._walkGroundY() - 60,
+            born: sc.t, kind: "boom-big", scale: 1.6,
+          });
+          sc.shakeT = 0.6;
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
+        }
+      } else if (sc.phase === "whiteout") {
+        if (!fin.staged && fin.t >= F.whiteRamp) this._stageWalkway(C);
+        if (fin.t >= F.whiteRamp + F.whiteHold) { sc.phase = "reveal"; fin.t = 0; }
+      } else if (sc.phase === "reveal") {
+        this._advanceWalkwayActors(dt, C);
+      } else if (sc.phase === "crash") {
+        this._advanceWalkwayActors(dt, C);   // Jon may still be bouncing in
+        if (fin.jon.state === "down" && fin.t >= F.standDelay) {
+          fin.standT += dt;
+          if (fin.standT >= F.standDur) {
+            fin.jon.state = "stand";
+            sc.phase = "walk"; fin.t = 0;
+            this._flash("WALK ON →", 3.0);
+          }
+        }
+      } else if (sc.phase === "walk") {
+        this._walkJon(dt, game, C);
+        if (!this.scene) return;             // _finish() tears the scene down
+      }
+
+      fin.booms = fin.booms.filter((b) => sc.t - b.born < 0.9);
+    },
+
+    // Restaged behind the full white: the road becomes the walkway tableau.
+    _stageWalkway(C) {
+      const sc = this.scene, F = C.finale, fin = sc.finale;
+      fin.staged = true;
+      sc.hazards = []; sc.firePatches = []; sc.embers = []; sc.spray = [];
+      sc.pickups = []; sc.washFx = null; sc.firewall = null;
+      fin.truckX = F.truckStartX;
+      fin.jon = { state: "air", x: F.throw.startX, y: 0, rot: 0 };
+      fin.jonT = 0;
+    },
+
+    // Reveal/crash actors: Jon's blast-throw arc + the runaway truck.
+    _advanceWalkwayActors(dt, C) {
+      const sc = this.scene, F = C.finale, fin = sc.finale, TB = JH.TruckBalance;
+      if (fin.jon.state === "air") {
+        fin.jonT += dt;
+        const a = TB.throwArc(F, this._walkGroundY(), fin.jonT);
+        fin.jon.x = a.x; fin.jon.y = a.y; fin.jon.rot = a.rot;
+        if (a.done) {
+          fin.jon.state = "down"; fin.jon.rot = 0;
+          fin.landPoofT = 0;   // landing cloud poof timer
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
+        }
+      }
+      if (!fin.crashed) {
+        fin.truckX += F.truckSpeed * dt;
+        if (fin.truckX >= F.gate.x - F.gate.crashPad) {
+          fin.crashed = true; fin.gateOpen = true;
+          sc.phase = "crash"; fin.t = 0; fin.standT = 0;
+          fin.flashT = 0.12;   // impact micro-flash
+          const gy = this._walkGroundY();
+          for (let i = 0; i < 3; i++) fin.booms.push({
+            x: F.gate.x - F.gate.crashPad + 10 + Math.random() * 40,
+            y: gy - 20 - Math.random() * 60,
+            born: sc.t + i * 0.08, kind: "boom-big", scale: 1 + Math.random() * 0.4,
+          });
+          sc.shakeT = 0.6;
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
+        }
+      }
+    },
+
+    // Player-controlled walk to the gate; contact with the gate mouth enters.
+    _walkJon(dt, game, C) {
+      const sc = this.scene, F = C.finale, fin = sc.finale, In = JH.Input;
+      if (fin.enterT > 0) {
+        fin.enterT += dt;
+        if (fin.enterT >= F.enterFade) this._finish(game);
+        return;
+      }
+      const mx = (In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0);
+      if (mx !== 0) {
+        fin.jon.x = Math.max(F.walkMinX, fin.jon.x + mx * F.walkSpeed * dt);
+        fin.facing = mx;
+        fin.walkDist += Math.abs(mx) * F.walkSpeed * dt;
+        fin.walkFrame = Math.floor(fin.walkDist / 8);
+        fin.jon.state = "walk";
+      } else fin.jon.state = "stand";
+      if (JH.TruckBalance.gateReached(F, fin.jon.x)) {
+        fin.enterT = 0.0001;
+        if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("upgrade");
+      }
     },
 
     // ---- essence pickups (bank on contact via the Church) ---------------
@@ -511,14 +651,33 @@
         ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
       }
 
+      // ---- Gate Crash walkway phases render their own tableau.
+      if (sc.phase === "reveal" || sc.phase === "crash" || sc.phase === "walk") {
+        this._renderWalkway(ctx, sc, C);
+        // Enter-the-gate fade (blue-white) rides on top of the tableau.
+        if (sc.finale.enterT > 0) {
+          const k = Math.min(1, sc.finale.enterT / C.finale.enterFade);
+          ctx.fillStyle = "rgba(214,235,255," + k + ")";
+          ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        }
+        // White-in: the whiteout keeps fading as the reveal starts.
+        const wA = JH.TruckBalance.finaleWhite(C.finale, sc.phase, sc.finale.t);
+        if (wA > 0) { ctx.fillStyle = "rgba(255,255,255," + wA + ")"; ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); }
+        if (sc.bannerT > 0 && sc.banner) {
+          ctx.fillStyle = "#fff"; ctx.font = "bold 16px monospace"; ctx.textAlign = "center";
+          ctx.fillText(sc.banner, JH.VIEW_W / 2, 40); ctx.textAlign = "left";
+        }
+        return;
+      }
+
       // Same fire-world backdrop as the street (seamless with boarding): sky,
       // skyline, moon. The camera drifts in update so it pans, never clips.
       JH.Background.draw(ctx);
 
-      // Road over the floor plane: asphalt + scrolling lane dashes + a fast
-      // near strip that sells the speed.
-      ctx.fillStyle = "#20140f";
-      ctx.fillRect(0, JH.FLOOR_TOP, JH.VIEW_W, JH.VIEW_H - JH.FLOOR_TOP);
+      // Same street floor as the overworld, anchored to the road scroll: at
+      // scrollX 0 it matches the boarding street pixel-for-pixel, then races.
+      // Drive-lane guides + a fast near strip sell the speed on top.
+      JH.Background.drawFloor(ctx, sc.camX0 + sc.scrollX * 0.9);
       ctx.strokeStyle = "rgba(255,170,90,0.30)";
       ctx.lineWidth = 1;
       for (const d of C.lanes) {
@@ -527,7 +686,7 @@
         for (let x = -((sc.scrollX * 0.9) % 42); x < JH.VIEW_W; x += 42) { ctx.moveTo(x, y); ctx.lineTo(x + 22, y); }
         ctx.stroke();
       }
-      ctx.fillStyle = "#3a2418";
+      ctx.fillStyle = "#3a4154";
       for (let x = -((sc.scrollX * 1.8) % 36); x < JH.VIEW_W; x += 36) ctx.fillRect(x, JH.VIEW_H - 6, 14, 6);
 
       // Collapse wall — slides in from the left as the gap closes.
@@ -629,14 +788,21 @@
           ctx.globalAlpha = 0.92 * pulse; ctx.strokeStyle = "#e8ffff"; ctx.lineWidth = 0.8; bolt();
           ctx.restore();
         }
-        // HP bar.
-        const bw = 160, bf = Math.max(0, fw.hp / fw.maxHp);
-        ctx.fillStyle = "#fff"; ctx.font = "6px monospace"; ctx.textAlign = "center";
-        ctx.fillText("THE FIREWALL", JH.VIEW_W / 2, 50);
-        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2 - 1, 53, bw + 2, 6);
-        ctx.fillStyle = "#c0392b"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2, 54, bw * bf, 4);
-        ctx.textAlign = "left";
+        // HP bar (hidden once the boss is detonating).
+        if (!fw.dying) {
+          const bw = 160, bf = Math.max(0, fw.hp / fw.maxHp);
+          ctx.fillStyle = "#fff"; ctx.font = "6px monospace"; ctx.textAlign = "center";
+          ctx.fillText("THE FIREWALL", JH.VIEW_W / 2, 50);
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2 - 1, 53, bw + 2, 6);
+          ctx.fillStyle = "#c0392b"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2, 54, bw * bf, 4);
+          ctx.textAlign = "left";
+        }
       }
+
+      // Gate Crash detonation booms — one-shot FX strips at screen points.
+      if (sc.finale) for (const b of sc.finale.booms)
+        if (sc.t - b.born >= 0)
+          A.drawFx(ctx, b.kind, b.x, b.y, sc.t - b.born, { scale: b.scale, loop: false });
 
       // Essence crosses → the real essence_cross icon.
       for (const p of sc.pickups) {
@@ -681,9 +847,11 @@
         hurt: t.hitFlashT > 0, hurtAlpha: t.hitFlashT / 0.18,
       });
 
-      // HP + water bars (honest, visible).
-      this._bar(ctx, 8, 8, 90, t.hp / C.truckHp, "#e74c3c", "HP");
-      this._bar(ctx, 8, 20, 90, t.water / C.tank, "#4aa3ff", "H2O");
+      // HP + water bars (honest, visible) — hidden once the whiteout begins.
+      if (sc.phase !== "whiteout") {
+        this._bar(ctx, 8, 8, 90, t.hp / C.truckHp, "#e74c3c", "HP");
+        this._bar(ctx, 8, 20, 90, t.water / C.tank, "#4aa3ff", "H2O");
+      }
 
       // Phase banner.
       if (sc.bannerT > 0 && sc.banner) {
@@ -692,6 +860,142 @@
         ctx.textAlign = "center";
         ctx.fillText(sc.banner, JH.VIEW_W / 2, 40);
         ctx.textAlign = "left";
+      }
+
+      // Full-screen white — the explosion whiteout (road phases only; the
+      // walkway fork above handles its own white-in).
+      if (sc.finale) {
+        const wA = JH.TruckBalance.finaleWhite(C.finale, sc.phase, sc.finale.t);
+        if (wA > 0) { ctx.fillStyle = "rgba(255,255,255," + wA + ")"; ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); }
+      }
+    },
+
+    // ---- the Gate Crash tableau: pale Air World sky, cloud-lined walkway,
+    // Firewall rubble (left), the Air World gate (right). One 480px screen;
+    // everything anchors to the walk ground line (former truck lane).
+    _renderWalkway(ctx, sc, C) {
+      const F = C.finale, fin = sc.finale, A = JH.Assets, P = JH.PAL;
+      const W = JH.VIEW_W, H = JH.VIEW_H, gy = this._walkGroundY();
+
+      // Sky — soft dawn gradient + sun glow. Deliberately NOT the fire world.
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "#8fb8e8"); sky.addColorStop(0.55, "#cfe0f2"); sky.addColorStop(1, "#f2ead8");
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+      const sun = ctx.createRadialGradient(W * 0.78, 40, 4, W * 0.78, 40, 90);
+      sun.addColorStop(0, "rgba(255,244,214,0.9)"); sun.addColorStop(1, "rgba(255,244,214,0)");
+      ctx.fillStyle = sun; ctx.fillRect(0, 0, W, H);
+
+      // Distant cloud banks, drifting slowly.
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      for (let i = 0; i < 5; i++) {
+        const cx = ((i * 113 + sc.t * 3) % (W + 120)) - 60, cy = 60 + (i % 3) * 26;
+        ctx.beginPath(); ctx.ellipse(cx, cy, 46, 10, 0, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // The walkway: a bright cloud deck where the road was; haze below.
+      ctx.fillStyle = "#b8cbe0"; ctx.fillRect(0, gy + 18, W, H - gy - 18);
+      ctx.fillStyle = "#eef3fa"; ctx.fillRect(0, gy - 26, W, 44);
+      ctx.fillStyle = "rgba(160,180,205,0.5)"; ctx.fillRect(0, gy + 14, W, 4);
+
+      // Cloud puffs lining both edges (deterministic per index, gentle bob).
+      for (let i = 0; i < 16; i++) {
+        const px = (i * 63 + 17) % (W + 40) - 20;
+        const top = i % 2 === 0;
+        const py = (top ? gy - 26 : gy + 20) + Math.sin(sc.t * 0.8 + i * 1.7) * 1.5;
+        const r = 10 + (i * 7) % 9;
+        ctx.fillStyle = top ? "rgba(255,255,255,0.92)" : "rgba(244,248,255,0.95)";
+        ctx.beginPath();
+        ctx.ellipse(px, py, r, r * 0.55, 0, 0, Math.PI * 2);
+        ctx.ellipse(px + r * 0.7, py + 2, r * 0.7, r * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Firewall rubble — charred chassis chunks (wallboss palette) + smoke.
+      ctx.fillStyle = P.wallbossDk;
+      ctx.fillRect(0, gy - 34, 26, 48); ctx.fillRect(14, gy - 12, 30, 26);
+      ctx.fillStyle = P.wallboss;
+      ctx.fillRect(4, gy - 28, 14, 10); ctx.fillRect(24, gy - 6, 16, 8);
+      ctx.fillStyle = P.wallbossHi; ctx.fillRect(6, gy - 30, 10, 2);
+      for (let i = 0; i < 3; i++) {
+        const k = (sc.t * 0.35 + i * 0.33) % 1;
+        ctx.fillStyle = "rgba(90,90,100," + (0.35 * (1 - k)) + ")";
+        ctx.beginPath(); ctx.ellipse(18 + i * 9, gy - 30 - k * 34, 5 + k * 7, 4 + k * 5, 0, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // The Air World gate — marble arch + doors; blown open after the crash.
+      const gx = F.gate.x;
+      ctx.fillStyle = "#dfe6f0";
+      ctx.fillRect(gx - 34, gy - 96, 12, 100); ctx.fillRect(gx + 22, gy - 96, 12, 100);
+      ctx.fillStyle = "#c8d2e2";
+      ctx.fillRect(gx - 34, gy - 96, 12, 4); ctx.fillRect(gx + 22, gy - 96, 12, 4);
+      ctx.beginPath(); ctx.arc(gx, gy - 92, 34, Math.PI, 0);
+      ctx.lineWidth = 10; ctx.strokeStyle = "#dfe6f0"; ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = "#aab6c8"; ctx.stroke();
+      if (!fin.gateOpen) {
+        ctx.fillStyle = "#9fb3cc";
+        ctx.fillRect(gx - 22, gy - 88, 21, 92); ctx.fillRect(gx + 1, gy - 88, 21, 92);
+        ctx.fillStyle = "#8aa0bc"; ctx.fillRect(gx - 3, gy - 88, 2, 92);
+      } else {
+        // Portal glow inside + the doors blown flat onto the deck.
+        A.drawFx(ctx, "portal", gx, gy + 2, sc.t, { scale: 1.4 });
+        ctx.fillStyle = "#9fb3cc";
+        ctx.fillRect(gx - 60, gy - 2, 24, 6); ctx.fillRect(gx + 38, gy, 22, 5);
+      }
+
+      // The runaway truck (empty cab), or its wreck at the gate's foot.
+      if (!fin.crashed) {
+        A.shadow(ctx, fin.truckX, gy, 26);
+        A.draw(ctx, "truckBoard", fin.truckX, gy, 1, { frame: Math.floor(fin.truckX / DRIVE_STEP) });
+      } else {
+        const wx = F.gate.x - F.gate.crashPad;
+        A.shadow(ctx, wx, gy, 26);
+        A.draw(ctx, "truckWreck", wx, gy, 1, {});
+        A.drawFx(ctx, "fire-small", wx - 18, gy - 30, sc.t, { scale: 0.4 });
+        A.drawFx(ctx, "fire-small", wx + 22, gy - 44, sc.t + 0.4, { scale: 0.35 });
+        for (let i = 0; i < 3; i++) {
+          const k = (sc.t * 0.3 + i * 0.33) % 1;
+          ctx.fillStyle = "rgba(70,70,80," + (0.4 * (1 - k)) + ")";
+          ctx.beginPath(); ctx.ellipse(wx + 8 + i * 7, gy - 60 - k * 40, 6 + k * 8, 5 + k * 6, 0, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      // Jon: blast-thrown (spinning), face-down (death sheet frame 7; the
+      // stand-up plays it BACKWARD), standing, or walking.
+      const j = fin.jon;
+      if (j) {
+        if (j.state === "air") {
+          ctx.save(); ctx.translate(j.x, j.y - 26); ctx.rotate(j.rot);
+          A.draw(ctx, "jon", 0, 26, 1, { state: "idle" });
+          ctx.restore();
+        } else if (j.state === "down") {
+          const df = fin.standT > 0
+            ? Math.max(0, Math.round(7 * (1 - fin.standT / F.standDur))) : 7;
+          A.draw(ctx, "jon", j.x, gy, 1, { state: "death", frame: df });
+        } else {
+          A.shadow(ctx, j.x, gy, 10);
+          A.draw(ctx, "jon", j.x, gy, fin.facing, j.state === "walk"
+            ? { state: "walk", frame: fin.walkFrame } : { state: "idle" });
+        }
+        // Landing cloud poof — expanding, fading puffs at the touchdown point.
+        if (fin.landPoofT != null && fin.landPoofT < 0.4) {
+          const k = fin.landPoofT / 0.4, pr = 8 + k * 14;
+          ctx.fillStyle = "rgba(255,255,255," + (0.7 * (1 - k)) + ")";
+          ctx.beginPath();
+          ctx.ellipse(j.x - 4, gy, pr, pr * 0.45, 0, 0, Math.PI * 2);
+          ctx.ellipse(j.x + 6, gy + 1, pr * 0.8, pr * 0.45 * 0.8, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Crash booms ride on the tableau.
+      for (const b of fin.booms)
+        if (sc.t - b.born >= 0)
+          A.drawFx(ctx, b.kind, b.x, b.y, sc.t - b.born, { scale: b.scale, loop: false });
+
+      // Crash impact micro-flash (covers the tableau; phase white-in rides above).
+      if (fin.flashT > 0) {
+        ctx.fillStyle = "rgba(255,255,255," + (0.55 * fin.flashT / 0.12) + ")";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
       }
     },
 

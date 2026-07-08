@@ -562,7 +562,7 @@
   // SOURCE frame size is read from the image (img.width/frames × img.height).
   // Faces right (travel dir). opt.frame = wheel phase; opt.hurt = on-hit flash.
   const _truckImg = JH.Loader.img("sprites/firetruck/drive.png");
-  const TRUCK_FW = 114, TRUCK_FH = 80, TRUCK_FRAMES = 5;
+  const TRUCK_FW = 117, TRUCK_FH = 80, TRUCK_FRAMES = 5;
   const _truckOC = (typeof document !== "undefined") ? document.createElement("canvas") : null;
   if (_truckOC) { _truckOC.width = TRUCK_FW; _truckOC.height = TRUCK_FH; }
   const _truckOCtx = _truckOC ? _truckOC.getContext("2d") : null;
@@ -591,6 +591,37 @@
       ctx.drawImage(_truckOC, -Math.round(TRUCK_FW / 2), -TRUCK_FH, TRUCK_FW, TRUCK_FH);
       ctx.globalAlpha = 1;
     }
+    ctx.restore();
+  });
+
+  // Empty-cab variant (board.png, same bake/frame geometry): the overworld
+  // drive-in truck before Jon boards. opt.frame = wheel phase; no hurt flash.
+  const _truckBoardImg = JH.Loader.img("sprites/firetruck/board.png");
+  Assets.register("truckBoard", (p, opt, ctx, x, y, facing) => {
+    const img = _truckBoardImg;
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const sfw = img.width / TRUCK_FRAMES, sfh = img.height;
+    const f = ((opt.frame | 0) % TRUCK_FRAMES + TRUCK_FRAMES) % TRUCK_FRAMES;
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, f * sfw, 0, sfw, sfh, -Math.round(TRUCK_FW / 2), -TRUCK_FH, TRUCK_FW, TRUCK_FH);
+    ctx.restore();
+  });
+
+  // Crashed-truck wreck (Gate Crash finale): single frame, baked at 4x by
+  // tools/truck-sprite.mjs at the SAME scale as drive/board. Centered-bottom.
+  const _truckWreckImg = JH.Loader.img("sprites/firetruck/wreck.png");
+  Assets.register("truckWreck", (p, opt, ctx, x, y, facing) => {
+    const img = _truckWreckImg;
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const dw = Math.round(img.naturalWidth / 4), dh = Math.round(img.naturalHeight / 4);
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -dh, dw, dh);
     ctx.restore();
   });
 
