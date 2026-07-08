@@ -60,6 +60,7 @@
         hazards: [], firePatches: [], embers: [], spray: [],
         hydrants: [], pickups: [], firewall: null,
         waves: [], floaters: [],   // hydrant water waves + floating popups
+        lowWaterCd: 0,             // low-tank hydrant-lifeline cooldown
         slowT: 0, shakeT: 0,
         wallGap: C.wall.startGap,
         wallTouched: false,
@@ -128,6 +129,7 @@
         this._updatePickups(dt, C);
         this._updateWaves(dt, C);
         this._updateFloaters(dt);
+        this._lowWaterHydrant(dt, C);
         if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
         if (sc.shakeT > 0) sc.shakeT -= dt;
         if (sc.phase === "run") this._updateWall(dt, C);       // collapse recedes at the boss
@@ -311,7 +313,15 @@
         worldX: sc.scrollX + JH.VIEW_W + 24,   // enters from the right edge
         wet: 0, knockVX: 0, hurtT: 0,          // normal-game spray feedback
       };
-      if (ev.kind === "wreck") { h.hp = C.wreckHp; h.dmg = C.wreckDmg; }
+      if (ev.kind === "wreck") {
+        // Debris drops in ahead of the truck (telegraphed), then lands solid.
+        h.hp = C.wreckHp; h.dmg = C.wreckDmg;
+        const D = C.debris;
+        h.dropScreenX = C.truckScreenX + D.dropAhead;
+        h.worldX = sc.scrollX + h.dropScreenX;
+        h.z = D.dropHeight; h.dropT = D.fallDur; h.landed = false;
+        h.spin = (Math.random() - 0.5) * 2.4;
+      }
       else if (ev.kind === "fuse") { h.hp = E.fuse.hp; h.dmg = E.fuse.blastDmg; h.speed = E.fuse.speed; }
       else if (ev.kind === "smelt") { h.hp = E.smelt.hp; h.dmg = E.smelt.touchDmg; }
       else if (ev.kind === "pyro") { h.hp = E.pyro.hp; h.dmg = E.pyro.touchDmg; }
@@ -333,6 +343,23 @@
         }
         if (h.wet > 0) h.wet = Math.max(0, h.wet - JH.JUICE.wetDryPerSec * dt);
         if (h.hurtT > 0) h.hurtT -= dt;
+
+        // Debris still falling in: hold its telegraphed screen-x ahead of the
+        // truck, accelerate down, land solid (shake + thud). No collision while
+        // airborne — the shadow is the "get out of this lane" tell.
+        if (h.kind === "wreck" && !h.landed) {
+          h.dropT -= dt;
+          const k = Math.max(0, h.dropT / C.debris.fallDur);
+          h.z = C.debris.dropHeight * k * k;
+          h.worldX = sc.scrollX + h.dropScreenX;
+          h.spin *= Math.pow(0.02, dt);
+          if (h.dropT <= 0) {
+            h.landed = true; h.z = 0; h.spin = 0;
+            sc.shakeT = Math.max(sc.shakeT, 0.26);
+            if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
+          }
+          continue;
+        }
 
         // Movement: wrecks/smelt/pyro are static in road space (scroll carries
         // them past); fuse chases the windshield.
@@ -367,6 +394,19 @@
         if (h.worldX < sc.scrollX - 60) h.dead = true;    // passed behind
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
+    },
+
+    // Low-water lifeline: while the tank is under lowWaterFrac, drop extra
+    // hydrants on a cooldown — in the run AND the boss, so you can always find
+    // water when you need it.
+    _lowWaterHydrant(dt, C) {
+      const sc = this.scene, t = sc.truck;
+      if (sc.phase !== "run" && sc.phase !== "boss") return;
+      sc.lowWaterCd -= dt;
+      if (t.water / C.tank < C.lowWaterFrac && sc.lowWaterCd <= 0) {
+        sc.lowWaterCd = C.lowWaterCd * (0.8 + Math.random() * 0.4);
+        this._spawnHazard({ kind: "hydrant", depth: C.lanes[(Math.random() * C.lanes.length) | 0] });
+      }
     },
 
     _spawnPatch(worldX, depth, r, dur) {
@@ -1008,12 +1048,15 @@
         if (hx < -40 || hx > JH.VIEW_W + 40) continue;
         const hy = JH.Geo.feetScreenY(h.depth, 0);
         if (h.kind === "hydrant") {
-          A.shadow(ctx, hx, hy, 7); A.draw(ctx, "hydrant", hx, hy, 1, {});
+          A.shadow(ctx, hx, hy, 10); A.draw(ctx, "hydrant", hx, hy, 1, { scale: 1.5 });
         } else if (SPR[h.kind]) {
           A.shadow(ctx, hx, hy, 7); A.draw(ctx, SPR[h.kind], hx, hy, -1, { t: sc.t, wet: h.wet });
         } else {
-          ctx.fillStyle = "#3a2a24"; ctx.fillRect(hx - 9, hy - 13, 18, 13);
-          A.drawFx(ctx, "fire-small", hx, hy - 2, sc.t, { scale: 0.4 });
+          // Debris (wreck): real sprite. Falling → growing ground shadow + a
+          // lifted, tumbling chunk; landed → a solid obstacle on the road.
+          const gsh = h.landed ? 9 : 5 + (1 - h.z / C.debris.dropHeight) * 7;
+          A.shadow(ctx, hx, hy, gsh);
+          A.draw(ctx, "debris", hx, hy, 1, { z: h.z || 0, rot: h.landed ? 0 : h.spin });
         }
         if (h.hp < h.maxHp && h.kind !== "wreck" && h.kind !== "hydrant") {
           const w = 18, bx = Math.round(hx - w / 2), by = Math.round(hy - 26);

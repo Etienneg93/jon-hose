@@ -648,10 +648,16 @@
     hydrantRefill: 90,   // water restored on smash (the meaningful refill)
     hydrantEverySec: 9,  // spacing along the run
     wave: { speed: 540, band: 24, range: 360 },  // px/s, front half-width, travel
+    // Low-water lifeline: extra hydrants spawn on this cooldown while the tank
+    // is under lowWaterFrac — in the run AND the boss, so you can always refuel.
+    lowWaterFrac: 0.30, lowWaterCd: 4.0,
 
-    // Collision hazards.
+    // Collision hazards. Debris DROPS in ahead of the truck, telegraphed
+    // (growing shadow + tumbling fall), then becomes a solid obstacle that
+    // scrolls past — dodge its lane. Uses sprites/environment/debris.png.
     wreckHp: 50,
     wreckDmg: 10,        // truckHp lost on un-broken wreck contact
+    debris: { dropAhead: 96, dropHeight: 140, fallDur: 0.6 },
     collideSlow: 0.8,    // scroll-speed mult applied briefly on any collision
     collideSlowDur: 0.6, // s the slow lasts (lets the wall creep up)
 

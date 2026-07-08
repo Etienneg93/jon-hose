@@ -1648,6 +1648,22 @@
     p(-5, 7, 2, 2, dk);
     p(3, 7, 2, 2, dk);
   });
+  // Road debris (truck-escape obstacle). Single transparent sprite; opt.z
+  // lifts it while falling, opt.rot tumbles it, opt.scale sizes it.
+  const _debrisImg = JH.Loader.img("sprites/environment/debris.png");
+  const DEBRIS_H = 26;   // logical draw height
+  Assets.register("debris", (p, opt, ctx, x, y) => {
+    const img = _debrisImg;
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const scale = (opt.scale || 1) * (DEBRIS_H / img.naturalHeight);
+    const dw = Math.round(img.naturalWidth * scale), dh = Math.round(img.naturalHeight * scale);
+    ctx.save();
+    ctx.translate(x, y - (opt.z || 0));
+    if (opt.rot) ctx.rotate(opt.rot);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -dh, dw, dh);
+    ctx.restore();
+  });
   // =================== QUAKE WALKER CUTSCENE PORTRAIT ================
   // Pre-load both mouth-closed and mouth-open JPGs immediately.
   {
