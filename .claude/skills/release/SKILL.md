@@ -50,8 +50,9 @@ git checkout main && git merge <branch> && git push
 git checkout <branch> && git merge main && git push      # re-sync
 ```
 
-Commits end with:
-`Co-Authored-By: <the assisting model's attribution line>`
+Commit messages carry NO `Co-Authored-By:` / model-attribution trailer and
+no `Claude-Session:` line — this repo ships under the owner's name only.
+Strip any such trailer before committing or merging.
 
 ## Hard rules
 
