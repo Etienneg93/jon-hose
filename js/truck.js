@@ -82,6 +82,14 @@
       if (sc.bannerT > 0) sc.bannerT -= dt;
       if (sc.fadeIn > 0) sc.fadeIn -= dt;
 
+      // ---- Wrecked: blast beat + fade, then a fresh run (never the Church).
+      if (sc.phase === "wrecked") {
+        sc.wreckedT += dt;
+        if (sc.shakeT > 0) sc.shakeT -= dt;
+        if (sc.wreckedT >= C.deathBeat) { this.enter(game); }
+        return;
+      }
+
       // ---- Gate Crash finale: its own update; road sim + input are off.
       if (FINALE_PHASES[sc.phase]) { this._updateFinale(dt, game, C); return; }
 
@@ -369,17 +377,33 @@
       sc.embers = sc.embers.filter((e) => e.life > 0);
     },
 
-    // Honest, NON-LETHAL truck HP: clamps at 0. Real hits get Jon's on-hit
-    // effect — white flash + i-frames + "hurt" sound + screen kick (no hitstop,
-    // same as the player). `quiet` (burn/wall tick) just chips HP.
+    // Honest truck HP: clamps at 0, and 0 WRECKS the truck (run restarts —
+    // see _wreckTruck). Real hits get Jon's on-hit effect — white flash +
+    // i-frames + "hurt" sound + screen kick (no hitstop, same as the player).
+    // `quiet` (burn/wall tick) just chips HP but can still wreck.
     _damageTruck(amount, quiet) {
-      const t = this.scene.truck;
+      const sc = this.scene, t = sc.truck;
       t.hp = Math.max(0, t.hp - amount);
+      if (t.hp <= 0 && sc.phase !== "wrecked") { this._wreckTruck(); return; }
       if (quiet) return;
       t.hitFlashT = 0.18;
       t.invulnT = Math.max(t.invulnT, JH.PLAYER.invuln);
-      this.scene.shakeT = 0.35;
+      sc.shakeT = 0.35;
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("hurt");
+    },
+
+    // hp 0: blast beat + fade to black, then the escape restarts fresh via
+    // enter() — no Church during the truck level. Banked essence stays banked
+    // (crosses pay on contact, same as the road fiction).
+    _wreckTruck() {
+      const sc = this.scene;
+      sc.phase = "wrecked";
+      sc.wreckedT = 0;
+      sc.speedMult = 0;
+      sc.truck.hitFlashT = 0.4;
+      sc.shakeT = 0.6;
+      this._flash("WRECKED!", 1.4);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("die");
     },
 
     _collide(C) {
@@ -891,6 +915,17 @@
       if (sc.finale) {
         const wA = JH.TruckBalance.finaleWhite(C.finale, sc.phase, sc.finale.t);
         if (wA > 0) { ctx.fillStyle = "rgba(255,255,255," + wA + ")"; ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); }
+      }
+
+      // Wrecked beat: staggered booms on the truck, then fade to black (the
+      // restarted scene's fadeIn picks up from full black).
+      if (sc.phase === "wrecked") {
+        const w = sc.wreckedT, gy = JH.Geo.feetScreenY(t.depth, 0);
+        const B = [[0, -18, 0], [-26, -40, 0.2], [24, -30, 0.42]];
+        for (const [bx, by, b0] of B)
+          if (w >= b0) A.drawFx(ctx, "boom-mid", t.screenX + bx, gy + by, w - b0, { scale: 1.0, loop: false });
+        const k = Math.min(1, Math.max(0, (w - 0.8) / 0.6));
+        if (k > 0) { ctx.fillStyle = "rgba(0,0,0," + k + ")"; ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H); }
       }
 
       // Black-in at scene start — continues the boarding fade-out seamlessly.

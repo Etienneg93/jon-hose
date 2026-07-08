@@ -614,9 +614,11 @@
     throttleSpeed: 80,   // truck screen-x (throttle/brake) speed, px/s
     lanes: [16, 43, 70], // soft authoring lanes across DEPTH_MIN..DEPTH_MAX
 
-    // Truck integrity — VISIBLE bar, non-lethal (feeds shake + wall pressure +
-    // clean bonus; never ends the run).
+    // Truck integrity — VISIBLE bar. hp 0 wrecks the truck: short blast beat,
+    // fade out, and the run restarts fresh (the escape never routes to the
+    // Church — that loop resumes only after the truck level).
     truckHp: 200,
+    deathBeat: 1.6,      // s of wreck beat (booms + fade to black) before the restart
 
     // The hose — the SAME cone as Jon's, just more powerful (vs Jon: 50 dps /
     // 78 range / 18 band). Longer range + more damage, NOT wider. High dps so
