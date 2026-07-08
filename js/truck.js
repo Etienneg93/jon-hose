@@ -38,7 +38,7 @@
       if (banner) banner.classList.add("hidden");
       JH.Camera.lock && JH.Camera.lock();
       if (JH.Music && JH.Music.setTrack) JH.Music.setTrack("escape");   // win() hands back to "level"
-      if (JH.AudioFX && JH.AudioFX.startLoop) JH.AudioFX.startLoop("truckEngine", { freq: 66, amp: 0.5, cutoff: 300 });
+      if (JH.AudioFX && JH.AudioFX.startLoop) JH.AudioFX.startLoop("truckEngine", { freq: 66, amp: 0.32, cutoff: 300 });
 
       this.scene = {
         t: 0,                 // elapsed run time (drives phase + timeline)
@@ -54,7 +54,7 @@
           water: C.tank,
           spraying: false, sprayTick: 0,
           regenLock: 0,
-          dashTimer: 0, dashCdTimer: 0, dashDir: 0,
+          dashTimer: 0, dashCdTimer: 0, dashDir: 0, slideVel: 0,
           invulnT: 0, burnT: 0, hitFlashT: 0,
         },
         // Hazards/patches/embers, hydrants, pickups; firewall is the climax.
@@ -162,12 +162,20 @@
         t.dashCdTimer = JH.PLAYER.dashCd;
         t.invulnT = Math.max(t.invulnT, JH.PLAYER.dashTime + 0.05);
         t.dashDir = my || (t.depth < JH.DEPTH_MAX * 0.5 ? 1 : -1);
+        t.slideVel = t.dashDir * JH.PLAYER.dashSpeed;   // momentum → coasts to a slide
       }
 
       if (t.dashTimer > 0) {
         t.depth += t.dashDir * JH.PLAYER.dashSpeed * dt;
       } else {
         t.depth += my * C.moveSpeed * dt;
+        // Slide: after the dash burst the truck keeps drifting, decaying to a
+        // stop (a skid) rather than snapping still.
+        if (t.slideVel) {
+          t.depth += t.slideVel * dt;
+          t.slideVel *= Math.pow(C.slideFriction, dt);
+          if (Math.abs(t.slideVel) < 6 || my) t.slideVel = 0;   // steering cancels the coast
+        }
       }
       t.depth = JH.Geo.clampDepth(t.depth);
 
@@ -1236,14 +1244,33 @@
         ctx.fillStyle = d.color;
         ctx.fillRect(d.x | 0, d.y | 0, d.size, d.size);
       }
+      // Dash slide: the truck leans into the swerve and kicks up skid dust
+      // while dashing or coasting the slide tail.
+      const sliding = t.dashTimer > 0 || Math.abs(t.slideVel || 0) > 20;
+      if (sliding) {
+        ctx.fillStyle = "#8a8378";
+        for (let i = 0; i < 5; i++) {
+          const k = (sc.t * 3.5 + i * 0.2) % 1;
+          ctx.globalAlpha = 0.4 * (1 - k);
+          ctx.beginPath();
+          ctx.ellipse(t.screenX - 26 + (Math.random() - 0.5) * 14, ty - 1 - t.dashDir * k * 16,
+            4 + k * 6, 3 + k * 3, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
       // The fire-truck hero sprite (Jon + cannon baked in). No ground shadow
       // (sits on the road art); nudged down a touch so the wheels meet the
       // road. Wheels spin by scroll distance; on-hit white flash rides opt.hurt.
+      // A dash tilts the whole rig into the slide.
+      if (sliding) { ctx.save(); ctx.translate(t.screenX, ty); ctx.rotate(t.dashDir * 0.11); ctx.translate(-t.screenX, -ty); }
       A.draw(ctx, "truck", t.screenX, ty + TRUCK_DRAW_DY, 1, {
         // screenX term keeps the wheels turning through the intro slide-in.
         frame: Math.floor((sc.scrollX + t.screenX + 70) / DRIVE_STEP),
         hurt: t.hitFlashT > 0, hurtAlpha: t.hitFlashT / 0.18,
       });
+      if (sliding) ctx.restore();
 
       // HP + water bars (honest, visible) — hidden once the whiteout begins.
       if (sc.phase !== "whiteout") {

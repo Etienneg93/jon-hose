@@ -612,6 +612,7 @@
     throttleBand: 40,    // ± screen-x the throttle/brake nudges within
     moveSpeed: 120,      // truck depth (up/down) speed, px/s
     throttleSpeed: 80,   // truck screen-x (throttle/brake) speed, px/s
+    slideFriction: 0.0003, // dash-slide momentum decay per second (lower = longer skid)
     lanes: [16, 43, 70], // soft authoring lanes across DEPTH_MIN..DEPTH_MAX
     // Truck collision footprint (screen-x half, depth half). Widened to the
     // sprite's chassis so hazards hit when they visibly touch the truck; depth
