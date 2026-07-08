@@ -35,6 +35,7 @@
       const banner = document.getElementById("banner");
       if (banner) banner.classList.add("hidden");
       JH.Camera.lock && JH.Camera.lock();
+      if (JH.Music && JH.Music.setTrack) JH.Music.setTrack("escape");   // win() hands back to "level"
 
       this.scene = {
         t: 0,                 // elapsed run time (drives phase + timeline)

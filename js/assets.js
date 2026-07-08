@@ -127,6 +127,7 @@
       level:  { src: "audio/jon-hose-main.mp3", el: null, gain: 1 },
       boss:   { src: "audio/jon-hose-rush.mp3", el: null, gain: 0 },
       church: { src: "audio/church-of-the-holy-hose.mp3", el: null, gain: 0 },
+      escape: { src: "audio/truck-escape.mp3", el: null, gain: 0 },
     },
 
     init() {
