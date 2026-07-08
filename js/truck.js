@@ -38,6 +38,7 @@
       if (banner) banner.classList.add("hidden");
       JH.Camera.lock && JH.Camera.lock();
       if (JH.Music && JH.Music.setTrack) JH.Music.setTrack("escape");   // win() hands back to "level"
+      if (JH.AudioFX && JH.AudioFX.startLoop) JH.AudioFX.startLoop("truckEngine", { freq: 66, amp: 0.5, cutoff: 300 });
 
       this.scene = {
         t: 0,                 // elapsed run time (drives phase + timeline)
@@ -85,6 +86,13 @@
       sc.t += dt;
       if (sc.bannerT > 0) sc.bannerT -= dt;
       if (sc.fadeIn > 0) sc.fadeIn -= dt;
+
+      // Engine rumble: full while driving, revving in over the intro; a
+      // collision-slow dips the rpm. Stopped at wreck/kill/finish.
+      if (JH.AudioFX && JH.AudioFX.setLoop) {
+        if (sc.phase === "run" || sc.phase === "boss") JH.AudioFX.setLoop("truckEngine", 0.6, 0.78 + 0.42 * sc.speedMult);
+        else if (sc.phase === "intro") { const k = Math.min(1, sc.t / INTRO_T); JH.AudioFX.setLoop("truckEngine", 0.3 + 0.3 * k, 0.65 + 0.28 * k); }
+      }
 
       // ---- Wrecked: blast beat + fade, then a fresh run (never the Church).
       if (sc.phase === "wrecked") {
@@ -474,6 +482,7 @@
       sc.truck.hitFlashT = 0.4;
       sc.shakeT = 0.6;
       this._flash("WRECKED!", 1.4);
+      if (JH.AudioFX && JH.AudioFX.stopLoop) JH.AudioFX.stopLoop("truckEngine");
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("die");
     },
 
@@ -620,6 +629,7 @@
       const sc = this.scene, fw = sc.firewall;
       fw.dying = true; fw.surge = null; fw.slam = null; fw.tsl = null; fw.wsState = "closed";
       sc.spray = [];   // in-flight droplets would hang frozen (finale skips _updateSpray)
+      if (JH.AudioFX && JH.AudioFX.stopLoop) JH.AudioFX.stopLoop("truckEngine");   // road's over
       // No kill bounty — essence is earned only from the road crosses.
       sc.firewallDone = true;
       sc.shakeT = 0.5;
@@ -820,6 +830,7 @@
       if (bonus > 0 && JH.Church && JH.Church.addEssence) JH.Church.addEssence(bonus);
       sc.essence += bonus;
       game.lastTruckEssence = sc.essence;   // for the arrival tally (Task 8)
+      if (JH.AudioFX && JH.AudioFX.stopLoop) JH.AudioFX.stopLoop("truckEngine");
       this.scene = null;
       JH.Camera.unlock && JH.Camera.unlock();
       game.afterTruckRun();
@@ -979,6 +990,24 @@
       }
       ctx.fillStyle = "#3a4154";
       for (let x = -((sc.scrollX * 1.8) % 36); x < JH.VIEW_W; x += 36) ctx.fillRect(x, JH.VIEW_H - 6, 14, 6);
+
+      // Speed streaks — fast warm motion lines tearing leftward past the truck,
+      // biased to the lower/near band so the sky stays clean (run + boss only).
+      if (sc.phase === "run" || sc.phase === "boss") {
+        ctx.save();
+        ctx.strokeStyle = "#ffdca8"; ctx.lineWidth = 1;
+        const y0 = JH.VIEW_H * 0.34;
+        for (let i = 0; i < 12; i++) {
+          const seed = i * 61.7;
+          const y = y0 + (seed * 3.7) % (JH.VIEW_H - y0);
+          const spd = 920 + (i % 4) * 340;
+          const x = JH.VIEW_W - ((sc.t * spd + seed * 50) % (JH.VIEW_W + 150));
+          const len = 22 + (i % 3) * 20;
+          ctx.globalAlpha = 0.09 + 0.06 * (i % 3);
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len, y); ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       // The road crumbling BEHIND you: a burning collapse front chewing in from
       // the left. Anchored to the truck's RESTING screen-x (not the live
@@ -1187,6 +1216,20 @@
 
       // The hero truck (Jon baked into the cab) — feet-anchored on the road.
       const ty = JH.Geo.feetScreenY(t.depth, 0);
+
+      // Exhaust fire trail behind the truck (sells speed + power) — a flicker of
+      // flame at the rear with embers streaking back. Rolling phases only.
+      if (sc.phase === "run" || sc.phase === "boss" || sc.phase === "intro") {
+        const ex = t.screenX - 44, ey = ty - 6;
+        A.drawFx(ctx, "fire-small", ex, ey, sc.t, { scale: 0.3 });
+        ctx.fillStyle = "#ffb14a";
+        for (let i = 0; i < 6; i++) {
+          const seed = i * 37.3, k = ((sc.t * 2.4 + seed) % 1);
+          ctx.globalAlpha = 0.6 * (1 - k);
+          ctx.fillRect(ex - k * 46, ey - 3 + Math.sin(seed + sc.t * 6) * 3, 2, 2);
+        }
+        ctx.globalAlpha = 1;
+      }
 
       // Hose cone — the same water-droplet stream as Jon's hose.
       for (const d of sc.spray) {

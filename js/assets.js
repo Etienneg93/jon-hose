@@ -30,6 +30,7 @@
     volume: 1,    // SFX channel level — independent of the music slider
     _files: {},   // cached <audio> elements, keyed by src, for playFile()
     _lastAt: {},  // per-sound last-trigger time, for the anti-stack throttle
+    _loops: {},   // sustained loops (engine rumble), keyed by name
     setVolume(v) {
       this.volume = Math.max(0, Math.min(1, v));
       if (JH.Music) JH.Music.save();   // persists alongside the music settings
@@ -110,6 +111,35 @@
       node.volume = Math.max(0, Math.min(1, (gain == null ? 1 : gain) * vol));
       const p = node.play();
       if (p && p.catch) p.catch(() => {});
+    },
+
+    // Sustained loop (e.g. the truck engine): a lowpassed sawtooth kept running
+    // with live level + rpm (pitch) control, keyed by name. Respects the FX
+    // volume. startLoop is idempotent; drive it each frame with setLoop.
+    startLoop(name, opt) {
+      if (!this.enabled) return;
+      this.init(); this.resume();
+      if (!this.ctx || this._loops[name]) return;
+      const o = opt || {};
+      const g = this.ctx.createGain(); g.gain.value = 0; g.connect(this.ctx.destination);
+      const lp = this.ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = o.cutoff || 300;
+      const osc = this.ctx.createOscillator(); osc.type = o.type || "sawtooth";
+      const base = o.freq || 68; osc.frequency.value = base;
+      osc.connect(lp); lp.connect(g);
+      try { osc.start(); } catch (e) {}
+      this._loops[name] = { g: g, osc: osc, base: base, amp: o.amp || 0.5 };
+    },
+    setLoop(name, level, rpm) {
+      const L = this._loops[name]; if (!L || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      L.g.gain.setTargetAtTime(this.volume * L.amp * Math.max(0, Math.min(1, level)), t, 0.05);
+      L.osc.frequency.setTargetAtTime(L.base * (rpm || 1), t, 0.08);
+    },
+    stopLoop(name) {
+      const L = this._loops[name]; if (!L || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      try { L.g.gain.setTargetAtTime(0, t, 0.06); L.osc.stop(t + 0.25); } catch (e) {}
+      delete this._loops[name];
     },
   };
   JH.AudioFX = AudioFX;

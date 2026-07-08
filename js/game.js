@@ -1276,7 +1276,8 @@
       document.getElementById("win-stats").textContent =
         "Suds banked: " + Math.floor(this.player.sudsEarned) +
         "\nEnemies hosed: " + this.kills +
-        "\nTime: " + this.elapsed.toFixed(1) + "s";
+        "\nTime: " + this.elapsed.toFixed(1) + "s" +
+        "\nVisits to Father Jon: " + (this.deathCount || 0);
       this.showScreen("screen-win");
     },
     // Retired from the death path (death now routes to the Church via
