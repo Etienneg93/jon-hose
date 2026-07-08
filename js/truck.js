@@ -464,7 +464,7 @@
         wsState: "closed", wsT: FW.wsClosed, wsRetargetT: FW.wsRetarget,
         surgeT: FW.surgeCd, surge: null,
         slamT: FW.slamCd, slamState: null, slamStateT: 0,
-        tslT: FW.tslCd, tslState: null, tslStateT: 0, tslHit: 0, tslDepth: 0, tslX: 0,
+        tslT: FW.tslCd, tsl: null, cableN: 2,
         hitFlash: 0,
       };
     },
@@ -473,6 +473,11 @@
       const sc = this.scene, t = sc.truck, FW = C.firewall, fw = sc.firewall;
       if (!fw) return;
       if (fw.hitFlash > 0) fw.hitFlash -= dt;
+
+      // Cables grow OUT as HP falls (eased count) — he sprouts more tentacles
+      // the more hurt he is, rather than snapping to a count at thresholds.
+      const targetN = 2 + (FW.cableMax - 2) * (1 - Math.max(0, fw.hp / fw.maxHp));
+      fw.cableN += Math.sign(targetN - fw.cableN) * Math.min(Math.abs(targetN - fw.cableN), FW.cableGrow * dt);
 
       // Weak-spot cycle: closed → wind (opening tell) → open (vulnerable).
       if ((fw.wsT -= dt) <= 0) {
@@ -502,28 +507,37 @@
         fw.slamState = null; fw.slamT = FW.slamCd;
       }
 
-      // TENTACLE SLAM: a triple overhead spot-slam (callback to the Switch/GK
-      // cable slam), unlocked once the Firewall is weakened. Locks a spot,
-      // telegraphs, strikes ×3 with a gap between — leave the spot each time.
-      if (fw.tslState == null && fw.hp <= fw.maxHp * FW.tslHpFrac && (fw.tslT -= dt) <= 0) {
-        fw.tslState = "wind"; fw.tslStateT = FW.tslWind; fw.tslHit = 0;
-        fw.tslDepth = t.depth; fw.tslX = t.screenX;
-        this._flash("TENTACLE SLAM!", 0.7);
-      }
-      if (fw.tslState === "wind" && (fw.tslStateT -= dt) <= 0) {
-        fw.tslState = "strike"; fw.tslStateT = FW.tslStrike;
-        if (Math.abs(t.screenX - fw.tslX) < FW.tslBand * 1.6 &&
-            Math.abs(t.depth - fw.tslDepth) < FW.tslBand && t.invulnT <= 0) {
-          this._damageTruck(FW.tslDmg); this._collide(C);
+      // TENTACLE SLAM: a cable emerges, rears back, and slams a locked spot
+      // (animation in _drawFirewallTentacle). Enraged (low HP) it's a TRIPLE —
+      // three lane danger zones, each striking on its own delay (tslGap apart).
+      if (!fw.tsl && fw.hp <= fw.maxHp * FW.tslHpFrac && (fw.tslT -= dt) <= 0) {
+        const enraged = fw.hp <= fw.maxHp * FW.enrageFrac;
+        const strikes = [];
+        if (enraged) {
+          for (let i = 0; i < 3; i++)
+            strikes.push({ x: t.screenX, depth: C.lanes[i % C.lanes.length], at: FW.tslWind + i * FW.tslGap, hit: false });
+          this._flash("TENTACLE FRENZY!", 0.9);
+        } else {
+          strikes.push({ x: t.screenX, depth: t.depth, at: FW.tslWind, hit: false });
+          this._flash("TENTACLE SLAM!", 0.7);
         }
-        sc.shakeT = Math.max(sc.shakeT, 0.3);
-        if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
-      } else if (fw.tslState === "strike" && (fw.tslStateT -= dt) <= 0) {
-        if (++fw.tslHit >= 3) { fw.tslState = null; fw.tslT = FW.tslCd; }
-        else { fw.tslState = "gap"; fw.tslStateT = FW.tslGap; }
-      } else if (fw.tslState === "gap" && (fw.tslStateT -= dt) <= 0) {
-        fw.tslState = "wind"; fw.tslStateT = FW.tslWind;
-        fw.tslDepth = t.depth; fw.tslX = t.screenX;   // retarget the spot each hit
+        fw.tsl = { t: 0, strikes: strikes, done: 0 };
+      }
+      if (fw.tsl) {
+        const TS = fw.tsl; TS.t += dt;
+        for (const s of TS.strikes) {
+          if (!s.hit && TS.t >= s.at) {
+            s.hit = true; TS.done++;
+            if (Math.abs(t.screenX - s.x) < FW.tslBand * 1.6 &&
+                Math.abs(t.depth - s.depth) < FW.tslBand && t.invulnT <= 0) {
+              this._damageTruck(FW.tslDmg); this._collide(C);
+            }
+            sc.shakeT = Math.max(sc.shakeT, 0.3);
+            if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
+          }
+        }
+        const lastAt = TS.strikes[TS.strikes.length - 1].at;
+        if (TS.done >= TS.strikes.length && TS.t >= lastAt + FW.tslRecover) { fw.tsl = null; fw.tslT = FW.tslCd; }
       }
     },
 
@@ -532,7 +546,7 @@
     // and the finale chain starts: detonate → whiteout → reveal → crash → walk.
     _breakFirewall() {
       const sc = this.scene, C = JH.TRUCKRUN, fw = sc.firewall;
-      fw.dying = true; fw.surge = null; fw.slamState = null; fw.tslState = null; fw.wsState = "closed";
+      fw.dying = true; fw.surge = null; fw.slamState = null; fw.tsl = null; fw.wsState = "closed";
       sc.spray = [];   // in-flight droplets would hang frozen (finale skips _updateSpray)
       sc.essence += C.firewall.essence;
       if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(C.firewall.essence);
@@ -717,66 +731,80 @@
       game.afterTruckRun();
     },
 
-    // Doc-Ock cables fanning off the wall over the road; count grows as HP
-    // falls (2 → cableMax). Idle dressing — the TENTACLE SLAM is the threat.
+    // Doc-Ock cables fanning off the wall over the road. Count is the EASED
+    // fw.cableN (grows as HP falls); the newest one draws at partial reach so
+    // it visibly extends out. Idle dressing — the TENTACLE SLAM is the threat.
     _drawFirewallCables(ctx, fw, wx, floorBottom, sc, C) {
       const P = JH.PAL;
-      const hpFrac = Math.max(0, fw.hp / fw.maxHp);
-      const n = Math.min(C.firewall.cableMax, 2 + Math.round((C.firewall.cableMax - 2) * (1 - hpFrac)));
+      const nf = fw.cableN || 2, full = Math.floor(nf), frac = nf - full;
       ctx.save();
       ctx.strokeStyle = P.cable; ctx.lineWidth = 2; ctx.lineCap = "round";
-      for (let i = 0; i < n; i++) {
+      const draw = (i, grow) => {
         const ph = sc.t * 3 + i * 1.3;
         const baseX = wx + 8, baseY = floorBottom - 26 - (i % 5) * 30;
-        const reach = 26 + (i % 3) * 16;
-        const ex = baseX - reach - Math.sin(ph) * 7;      // wave out LEFT, over the road
-        const ey = baseY + Math.cos(ph) * 12;
+        const reach = (26 + (i % 3) * 16) * grow;
+        const ex = baseX - reach - Math.sin(ph) * 7 * grow;   // wave out LEFT, over the road
+        const ey = baseY + Math.cos(ph) * 12 * grow;
         ctx.beginPath();
         ctx.moveTo(baseX, baseY);
-        ctx.quadraticCurveTo(baseX - reach * 0.5, baseY + Math.sin(ph) * 14, ex, ey);
+        ctx.quadraticCurveTo(baseX - reach * 0.5, baseY + Math.sin(ph) * 14 * grow, ex, ey);
         ctx.stroke();
+        ctx.globalAlpha = grow;
         ctx.fillStyle = (Math.floor(sc.t * 6 + i) % 2) ? "#ff5a5a" : P.wallbossCoreHi;
         ctx.fillRect(Math.round(ex - 1.5), Math.round(ey - 1.5), 3, 3);
-      }
+        ctx.globalAlpha = 1;
+      };
+      for (let i = 0; i < full; i++) draw(i, 1);
+      if (frac > 0.03) draw(full, frac);   // the newest tentacle growing out
       ctx.restore();
     },
 
-    // TENTACLE SLAM: a thick cable raised over a locked floor spot (wind) that
-    // drives down onto it (strike). The floor ellipse IS the hit region.
+    // TENTACLE SLAM: for each strike, a cable emerges from the chassis, rears
+    // back to a peak, holds, then whips DOWN onto its locked floor spot — same
+    // raise→hold→slam motion as the Switch's cable slam. The floor ellipse IS
+    // the hit region; it fills as its impact nears (staggered in the triple).
     _drawFirewallTentacle(ctx, fw, wx, floorBottom, sc, C) {
-      const FW = C.firewall, P = JH.PAL;
-      const sx = fw.tslX, sy = JH.Geo.feetScreenY(fw.tslDepth, 0);
-      const rx = FW.tslBand * 1.6, ry = FW.tslBand * JH.GROUND_RY * 1.2;
-      const strike = fw.tslState === "strike";
-      ctx.save();
-      if (strike) {
-        ctx.fillStyle = "rgba(120,240,255,0.65)";
-        ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = "#dffaff"; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
-      } else if (fw.tslState === "wind") {
-        const prog = 1 - fw.tslStateT / FW.tslWind;
-        ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = (Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f"; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
-        ctx.globalAlpha = 0.12 + 0.3 * prog;
-        ctx.fillStyle = "#ff5a5a";
-        ctx.beginPath(); ctx.ellipse(sx, sy, rx * prog, ry * prog, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
+      const FW = C.firewall, P = JH.PAL, TS = fw.tsl;
+      const baseX = wx + 10, baseY = floorBottom - 118;
+      for (const s of TS.strikes) {
+        const sx = s.x, sy = JH.Geo.feetScreenY(s.depth, 0);
+        const rx = FW.tslBand * 1.6, ry = FW.tslBand * JH.GROUND_RY * 1.2;
+        const p = TS.t / s.at;                 // 1.0 at impact; >1 = recoil
+        const freshHit = s.hit && TS.t < s.at + 0.18;
+        ctx.save();
+        // Floor danger zone: telegraph fills toward impact; bright flash on hit.
+        if (!s.hit) {
+          const prog = Math.min(1, p);
+          ctx.globalAlpha = 0.55;
+          ctx.strokeStyle = (Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.globalAlpha = 0.12 + 0.32 * prog; ctx.fillStyle = "#ff5a5a";
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx * prog, ry * prog, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1;
+        } else if (freshHit) {
+          ctx.fillStyle = "rgba(120,240,255,0.7)";
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = "#dffaff"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        }
+        // The arm: raise (0–0.20) → hold reared (0.20–0.55) → slam (0.55–1.0)
+        // → recoil (>1.0). Retracts once well past impact.
+        if (p < 1.6) {
+          const peakX = baseX - 26, peakY = baseY - 52;
+          let tipX, tipY, thick = 4;
+          if (p < 0.20) { const k = p / 0.20; tipX = baseX + (peakX - baseX) * k; tipY = baseY + (peakY - baseY) * k; }
+          else if (p < 0.55) { tipX = peakX + Math.sin(sc.t * 9) * 4; tipY = peakY; }
+          else if (p <= 1) { const k = (p - 0.55) / 0.45; tipX = peakX + (sx - peakX) * k; tipY = peakY + (sy - peakY) * k; thick = 5; }
+          else { const k = Math.min(1, (p - 1) / 0.6); tipX = sx + (peakX - sx) * 0.35 * k; tipY = sy + (peakY - sy) * 0.2 * k; }
+          const ctrlX = (baseX + tipX) / 2 + Math.sin(sc.t * 8 + s.depth) * 6;
+          const ctrlY = Math.min(baseY, tipY) - 22;   // elbow arcs upward → whip read
+          ctx.strokeStyle = P.cable; ctx.lineWidth = thick; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY); ctx.stroke();
+          ctx.fillStyle = (p > 0.55 && p <= 1) || freshHit ? "#dffaff" : "#ff5a5a";
+          ctx.beginPath(); ctx.ellipse(tipX, tipY, 4, 4, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
       }
-      if (fw.tslState !== "gap") {
-        const baseX = wx + 10, baseY = floorBottom - 120;
-        const prog = strike ? 1 : 1 - fw.tslStateT / FW.tslWind;
-        const tipY = strike ? sy : baseY + (sy - baseY) * (0.12 + 0.18 * prog);
-        ctx.strokeStyle = P.cable; ctx.lineWidth = strike ? 5 : 4; ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(baseX, baseY);
-        ctx.quadraticCurveTo((baseX + sx) / 2 + Math.sin(sc.t * 8) * 6, (baseY + tipY) / 2, sx, tipY);
-        ctx.stroke();
-        ctx.fillStyle = strike ? "#dffaff" : "#ff5a5a";
-        ctx.beginPath(); ctx.ellipse(sx, tipY, 4, 4, 0, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.restore();
     },
 
     // ------------------------------------------------------------- RENDER
@@ -930,8 +958,8 @@
         }
         ctx.restore();
 
-        // TENTACLE SLAM telegraph + strike (floor spot in front of the wall).
-        if (fw.tslState) this._drawFirewallTentacle(ctx, fw, wx, floorBottom, sc, C);
+        // TENTACLE SLAM telegraph + animated arm(s).
+        if (fw.tsl) this._drawFirewallTentacle(ctx, fw, wx, floorBottom, sc, C);
 
         // SURGE — the boss's own lightning bolt rolling down the core's lane
         // (cyan/green/white jagged column + glow). Dodge by changing lane.

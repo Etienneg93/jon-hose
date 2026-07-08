@@ -672,12 +672,15 @@
       // Body-as-boundary: the chassis face is the truck's right limit (no
       // invisible wall). Crowding it chips a little HP on a contact cooldown.
       bodyFront: 70, bodyDmg: 4, bodyContactCd: 0.5,
-      // Doc-Ock cables: 2 at full HP → cableMax near death (dressing only).
-      cableMax: 9,
-      // TENTACLE SLAM: a triple overhead spot-slam (callback to Switch/GK),
-      // unlocked below tslHpFrac. Locks a spot, telegraphs, strikes ×3 with a
-      // gap between — dodge each hit by leaving the spot.
-      tslHpFrac: 0.7, tslCd: 6.5, tslWind: 0.6, tslStrike: 0.2, tslGap: 0.42,
+      // Doc-Ock cables: 2 at full HP → cableMax near death; they GROW out
+      // (cableGrow tentacles/sec ease) as HP falls, not pop in.
+      cableMax: 9, cableGrow: 1.6,
+      // TENTACLE SLAM: one cable emerges, rears back, and slams a locked spot
+      // (animated like the Switch's cable slam). Unlocked below tslHpFrac.
+      // ENRAGED (below enrageFrac): a TRIPLE — three danger zones, each with a
+      // delayed hit (tslGap apart) — weave to a safe lane for each.
+      tslHpFrac: 0.7, enrageFrac: 0.35,
+      tslCd: 6.5, tslWind: 0.75, tslGap: 0.45, tslRecover: 0.5,
       tslDmg: 16, tslBand: 16,
     },
 

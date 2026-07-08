@@ -193,6 +193,22 @@
       }, 16);
     },
 
+    // Slow fade of the CURRENT track to silence over `secs` (e.g. the escape
+    // truck rolls in). Does not switch tracks — a later setTrack() starts the
+    // next one and supersedes this fade.
+    fadeOut(secs) {
+      const from = this.tracks[this.current];
+      if (!from) return;
+      if (this._timer) { clearInterval(this._timer); this._timer = null; }
+      const g0 = from.gain, t0 = performance.now(), dur = Math.max(100, secs * 1000);
+      this._timer = setInterval(() => {
+        const k = Math.min(1, (performance.now() - t0) / dur);
+        from.gain = g0 * (1 - k);
+        this.apply();
+        if (k >= 1) { clearInterval(this._timer); this._timer = null; }
+      }, 16);
+    },
+
     // Back to the level theme at full gain; stop/rewind every other track; cancel fades.
     reset() {
       if (this._timer) { clearInterval(this._timer); this._timer = null; }
