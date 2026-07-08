@@ -187,6 +187,8 @@
       this.kibbleTickAcc = 0;      // HP healed since the last floater tick
       this.gushRegenT = 0;         // GUSH milestone: water regen window (sec)
       this.gushRegenRate = 0;      // water/s while the window is live
+      this.gushTickT = 0;          // seconds until the next +N water floater tick
+      this.gushTickAcc = 0;        // water regenerated since the last floater tick
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
       this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
@@ -199,7 +201,7 @@
       this.upgradeT = 0;      // time left on the entry currently showing
       this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
-      this.lastDmgScale = 1;  // Pressure Sermon: most recent doSpray pressure tier
+      this.sermonFullPressure = false;  // Pressure Sermon: hit full pressure during THIS spray hold
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
@@ -276,10 +278,14 @@
       const expired = this.burnTimer <= 0;
       if (this.burnTickT >= F.burnTickInterval || expired) {
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
+        const hpBefore = this.hp;
         this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
+        // Red -N floater for the burn tick (mirrors the kibble/gush +N ticks).
+        const lost = Math.round(hpBefore - this.hp);
+        if (lost > 0 && game.float) game.float(this.x, this.y - 30, "-" + lost, "#ff5030");
         if (this.hp <= 0) this.alive = false;
       }
       if (expired) { this.burnTimer = 0; this.burnStacks = 0; this.burnTickT = 0; }
@@ -308,7 +314,7 @@
       // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
       if (this.upgradeQ.length) {
         if (this.upgradeT <= 0) {
-          this.upgradeT = 0.9;   // beat length — keep in sync with Player.draw's fade math
+          this.upgradeT = 1.4;   // beat length — keep in sync with Player.draw's fade math
           this.upgradeIdx++;
           game.audio.play("upgrade", { pitch: 1 + 0.12 * Math.min(5, this.upgradeIdx) });
           burst(game, this.x, this.y, this.z + 22, "#ffd23f", 8, { speed: 55, life: 0.4, up: 55, size: 2 });
@@ -362,7 +368,17 @@
       // GUSH milestone water regen — independent of the regular regen delay.
       if (this.gushRegenT > 0) {
         this.gushRegenT -= dt;
+        const wBefore = this.water;
         this.water = Math.min(S.maxWater, this.water + this.gushRegenRate * dt);
+        // Blue +N water floater every 0.5s (mirrors the kibble +N heal tick).
+        this.gushTickAcc += this.water - wBefore;
+        this.gushTickT -= dt;
+        if (this.gushTickT <= 0) {
+          this.gushTickT += 0.5;
+          const gained = Math.round(this.gushTickAcc);
+          if (gained > 0 && game.float) game.float(this.x + 10, this.y - 30, "+" + gained, "#55c8ff");
+          this.gushTickAcc = 0;
+        }
         // Rising water motes: visible even when kibble/concerta own the glow,
         // so stacked buffs never hide each other.
         if (Math.random() < 8 * dt)
@@ -484,7 +500,7 @@
         // spray emits a knockback cone. Checked here, before sprayHeldT is
         // zeroed below, so it fires exactly once per qualifying hold/release.
         if (this.beneRank("pressure_sermon") && this.sprayHeldT >= 0.8
-            && this.lastDmgScale >= 1.2 && this.water >= 10) {
+            && this.sermonFullPressure && this.water >= 10) {
           this.water -= 10;
           for (const e of game.enemies) {
             if (e.dead || e.dropping) continue;
@@ -494,11 +510,16 @@
             e.takeDamage(15, game, this.facing, 0);
             e.applyKnockback(this.facing, 200, (e.y - this.y) * 0.02);
           }
-          burst(game, this.x + this.facing * 20, this.y, 20, JH.PAL.waterHi, 14,
-            { speed: 140, life: 0.4, up: 40 });
+          // A clear cone blast so the cast reads: a wide fan of water thrown
+          // forward + a punchy shake. (Polished cone telegraph is a TODO.)
+          const bx = this.x + this.facing * 24;
+          burst(game, bx, this.y, 22, JH.PAL.waterHi, 26, { speed: 175, life: 0.45, up: 55, size: 2 });
+          burst(game, bx, this.y, 8, JH.PAL.water, 14, { speed: 110, life: 0.4, up: 22 });
+          game.shake(4);
           game.audio.play("blast");
         }
         this.sprayHeldT = 0;   // reset the stream-front timer on release
+        this.sermonFullPressure = false;
       }
 
       // ---- water regen (after a short delay since last spray)
@@ -569,7 +590,12 @@
       // while any water remains — dry still sputters, 80%+ still gets bonus.
       else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      this.lastDmgScale = dmgScale;   // Pressure Sermon: release check reads this
+      // Pressure Sermon: once this hold reaches full pressure (top tier) the
+      // sermon is armed for the whole hold — the release check can't require
+      // full pressure ON the release frame, since 0.8s of spraying always
+      // drains the tank below 80% (100 tank / 36 drain → full pressure lasts
+      // ~0.56s), which made the cone effectively never fire.
+      if (dmgScale >= 1.2) this.sermonFullPressure = true;
       if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
 
@@ -938,11 +964,14 @@
       // + green delta, fading in fast and out at the end of its beat.
       if (this.upgradeQ.length && this.upgradeT > 0) {
         const e = this.upgradeQ[0];
-        const k = 1 - this.upgradeT / 0.9;                        // 0 → 1
+        const k = 1 - this.upgradeT / 1.4;                        // 0 → 1
         // Quick fade-in, long readable hold, fade-out only in the last ~15%
         // of the beat so the text finishes before it starts to go.
         const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
-        const iy = spriteSy - this.stats.bodyH - 12 - 10 * k;
+        // Sits in the gap between Jon's head and the overhead HP/H2O bars
+        // (bar bottom at bodyH+22); a short rise kept clear of the bar (12px
+        // icon centered here) so the gain text is never clipped behind it.
+        const iy = spriteSy - this.stats.bodyH - 8 - 4 * k;
         ctx.save();
         ctx.globalAlpha = Math.max(0, a);
         Assets.icon(ctx, e.icon, sx - 16, iy, 1);
@@ -1185,7 +1214,9 @@
       this.elite = true;
       const s = scale || { hp: 1.7, dmg: 1.3, speed: 1.12 };
       const d = Object.assign({}, this.def);
-      d.hp = Math.round(d.hp * s.hp);
+      // Per-type HP damp keeps heavy elites below boss HP (JH.ELITE_TUNE).
+      const et = JH.ELITE_TUNE && JH.ELITE_TUNE[this.type];
+      d.hp = Math.round(d.hp * s.hp * ((et && et.hp) || 1));
       d.touchDmg = Math.round(d.touchDmg * s.dmg);
       if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * s.dmg);
       if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * s.dmg);
@@ -1369,7 +1400,7 @@
         this.usingTicket = true;
       } else if (dist > 12) {
         // approach
-        const sp = d.speed;
+        const sp = d.speed * (this.speedMult || 1);
         this.x += (dx / (dist || 1)) * sp * dt;
         this.y += (dy / (dist || 1)) * sp * dt * 0.8;
         this.state = "walk";
@@ -2647,7 +2678,8 @@
       burst(game, this.x, this.y, 14, SIGIL_COLORS[this.element], 18, { speed: 100, life: 0.6, up: 80, size: 2 });
       game.banner(d.name.toUpperCase() + (this.offer.deepen ? " II" : ""), 1.4);
       if (game.float) game.float(this.x, this.y - 20, d.name, "#80ff80");
-      for (const s of game.sigils) s.dead = true;
+      // Dev range: keep every sigil so you can grab combos (re-pick to deepen).
+      if (!game.rangeMode) for (const s of game.sigils) s.dead = true;
     }
     draw(ctx, cam) {
       const d = JH.Benedictions.byId(this.offer.id);
@@ -4959,6 +4991,8 @@
         this.lit = true;
         if (game.audio) game.audio.play("sizzle");
       }
+      // Slow stalk until the wick lights, then sprint to detonate.
+      this.speedMult = this.lit ? d.litSpeedMult : 1;
       if (this.lit && !this.dead) {
         this.hp -= this.maxHp * d.litDrainFrac * dt;
         if (Math.random() < 8 * dt)

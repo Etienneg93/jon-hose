@@ -21,6 +21,40 @@ Deferred items accumulated during the wall-boss / lineage ideas session.
       but "…THE CORE SURVIVES" and "CORE DESTROYED!" were kept as victory beats.
       Keep or remove?
 
+## Presentation / juice
+- [ ] **Boss intro sequence** (user ask, 2026-07-07) — bosses currently just
+      spawn at the right edge under a name banner (`spawnWave` boss branch,
+      `game.js`). Want a proper dramatic entrance: camera punch-in / pan to the
+      boss, an entrance pose/animation, the name card, then hand control back
+      and start the fight. Expands the existing juice line "Camera punch-in on
+      boss intros" (`docs/superpowers/specs/2026-06-30-next-level-vision.md`,
+      juice item 5) into a full sequence. Likely wants its own brainstorm/spec
+      (per the big-pass workflow) — covers all 5 bosses, needs a skippable/
+      fast path so replays and the dev menu don't drag, and should reuse the
+      lock/unlock + `state` machinery the ally cutscenes already use
+      (`afterCutscene`). Pairs naturally with the slow-mo-on-final-blow item.
+
+### Benediction VFX polish (user asks, 2026-07-07)
+All 24 benedictions are logically WIRED (audited); these are visual gaps, not
+missing logic. Best done at the desk with eyes-on iteration.
+- [ ] **Scalding Faith — scald effect is a placeholder.** The scald status
+      draws a single pulsing orange ellipse ring (`entities.js` ~1398, the
+      `if (this.scaldT > 0)` block). Replace with a proper read: heat-shimmer /
+      rising steam wisps / ember flecks off the enemy. Shared by Backdraft,
+      Bushfire, and the fire-pillar capstone (all apply Scald), so one good
+      effect covers them all.
+- [ ] **Steam Sermon — steam cloud barely visible.** The duo vents a damaging
+      steam cloud over a sprayed FirePatch but only puffs one faint white
+      particle at ~20/s (`entities.js` ~864). Wants an actual billowing steam
+      cloud over the patch footprint (`fp.footprint().rx`) for the ~1.5s vent —
+      layered semi-transparent puffs, not single specks.
+- [ ] **Pressure Sermon — cone telegraph + primed cue.** Trigger bug fixed
+      2026-07-07 (it now actually fires; blast VFX beefed to a wide water fan +
+      shake). Still wants: (a) a "primed" indicator while holding (glow at the
+      nozzle once `sermonFullPressure && sprayHeldT >= 0.8`) so the player
+      learns the release timing, and (b) a proper cone-shaped shockwave matching
+      the 70px / ±0.6rad hit arc rather than a radial burst.
+
 ## Lineage (Switch of Doom → Firewall → Gateway Krusher 9000)
 - [ ] **Escalating-designation naming** — left unpicked. Tie the three forms'
       names together to show progression (shared Mk./version designation), or

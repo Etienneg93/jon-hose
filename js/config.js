@@ -233,12 +233,13 @@
       suds: 12, dropMult: 1.4, bodyW: 22, bodyH: 34, color: "smelt",
     },
     fuse: {
-      name: "Fuse", hp: 65, speed: 78, touchDmg: 8, contactCd: 0.6,
+      name: "Fuse", hp: 65, speed: 54, touchDmg: 8, contactCd: 0.6,
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
       igniteRange: 70,       // px from Jon at which the head-fuse lights
-      litDrainFrac: 0.20,    // fraction of maxHp burned off per second while lit
+      litSpeedMult: 1.44,    // movespeed x while lit — 54 stalk -> ~78 sprint to detonate
+      litDrainFrac: 0.32,    // fraction of maxHp burned off per second while lit
       blastRadius: 40,       // self-destruct AoE (ground ellipse rx)
       blastDmg: 18,
       blastPatchRadius: 26, blastPatchDur: 2.0,
@@ -301,6 +302,33 @@
   JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1,
                   batchMin: 3, batchMax: 5, batchPause: 2.0 };
 
+  // Free-walk gating between waves, so collecting a benediction / drifting
+  // right doesn't accidentally roll the next wave. minWalk: guaranteed px of
+  // corridor past where a wave was cleared before the next can trigger (only
+  // extends the walk when you cleared near the trigger; never triggers
+  // earlier than the arena anchor). maxOver: cap on how far past the anchor
+  // the trigger can slide, so it can't drift wave-to-wave. sigilGap: min px
+  // kept between the rightmost benediction sigil and that trigger.
+  JH.WAVE_GATE = { minWalk: 170, maxOver: 90, sigilGap: 110 };
+
+  // Fraction of a `tough` wave's enemies that spawn elite, indexed
+  // actLevel+1 (Act1..Fire; actLevelForWave returns -1..3). Elites are
+  // INTRODUCED as a minority and grow common across acts, so a tough wave
+  // mixes regular + elite (the gold-bar tier reads by contrast) instead of
+  // every enemy turning elite the instant the first boss dies. Applied via
+  // Game.nextEliteScale's even-spread accumulator, not a per-enemy coin flip.
+  JH.ELITE_FRAC = [0, 0.34, 0.55, 0.75, 0.9];
+
+  // Per-type elite HP damp, applied in makeElite AFTER the eliteScale
+  // multiplier. Heavies (big base hp) balloon past boss HP once the act-tier
+  // and player-power ramps stack — this keeps an elite heavy below the act's
+  // boss. Cascades into super-elites (makeSuper builds on the elite-scaled
+  // def), so one lever tames both tiers. Types absent here damp x1.
+  JH.ELITE_TUNE = {
+    smelt: { hp: 0.55 },    // 450 base x elite ramp hit ~1150-1590 (> Big Drip/Switch)
+    bulwark: { hp: 0.65 },  // 300 base x elite ramp hit ~580-930 (> Big Drip)
+  };
+
   // Per-type super-elite multiplier overrides (default hp x7 in
   // Balance.superEliteDef). Heavies with big base hp need smaller ones.
   JH.SUPER_TUNE = {
@@ -316,7 +344,7 @@
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
   JH.SPRINKLE = {
-    counts: [1, 2, 3, 3, 4],
+    counts: [1, 1, 2, 3, 4],
     weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
     heavies: ["bulwark", "furnace", "smelt"],
     heavyCap: 1,
@@ -347,7 +375,7 @@
     { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants a brief pressure buff" },
     { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
     { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
-    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Boss essence crosses are worth double" },
+    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Bosses drop a second Holy Essence cross" },
     { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
     { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
     { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },
@@ -765,7 +793,7 @@
       { name: "BOSS", boss: true },                          // mid-boss: The Big Drip
       // ---- Act 2: ELITE ----
       { name: "WAVE 5", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "charger", count: 2 }] },
-      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }] },
+      { name: "STREET SWARM", tough: true, spawns: [{ type: "mook", count: 5 }, { type: "charger", count: 2 }] },
       { name: "BARRICADE", wall: true, tough: true, wallHp: 360,
         spawns: [{ type: "mook", count: 3 }, { type: "charger", count: 2 }] },
       { name: "CROSSFIRE", tough: true, spawns: [{ type: "pyro", count: 3 }, { type: "mook", count: 4 }] },
@@ -784,7 +812,7 @@
       { name: "WAVE 6", tough: true, superElite: "mook", spawns: [{ type: "mook", count: 5 }, { type: "pyro", count: 2 }, { type: "charger", count: 2 }] },
       { name: "THE GARDEN", garden: true },
       { name: "WAVE 7", tough: true, superElite: "bulwark", spawns: [{ type: "charger", count: 3 }, { type: "pyro", count: 3 }, { type: "mook", count: 3 }] },
-      { name: "OVERRUN", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 6 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
+      { name: "OVERRUN", tough: true, superElite: "charger", spawns: [{ type: "mook", count: 5 }, { type: "charger", count: 2 }, { type: "pyro", count: 2 }] },
       { name: "GATEWAY KRUSHER 9000", boss: true, bossType: "gatewaykrusher" },
       // ---- Fire World (curated, un-tough) ----
       { name: "FIRE INTRO", superElite: "pyro", spawns: [{ type: "fuse", count: 5 }, { type: "smelt", count: 2 }] },

@@ -240,6 +240,20 @@
         this.enemies.push(e);
       }
       this.bounds.maxX = Math.max(this.bounds.maxX, gx2 + 80);
+      // Benediction picking section (dev only): one walk-up sigil per
+      // benediction in two rows below the dummies. In the range they DON'T
+      // clear each other (rangeMode), so you can grab any combo to test;
+      // re-picking one deepens it to rank II. The nearest one's name/desc
+      // shows in the bottom card (drawSigilCard).
+      const beneRowY = [58, 80];
+      let beneMaxX = 0;
+      JH.Benedictions.DEFS.forEach((d, i) => {
+        const bxp = 140 + (i % 12) * 46;
+        this.sigils.push(new JH.Sigil(bxp, beneRowY[i < 12 ? 0 : 1], { id: d.id, deepen: false }));
+        beneMaxX = Math.max(beneMaxX, bxp);
+      });
+      this.bounds.maxX = Math.max(this.bounds.maxX, beneMaxX + 50);
+      this.rangeMode = true;
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
     },
@@ -320,11 +334,11 @@
       }
     },
 
-    // Celebratory feedback when an upgrade node is purchased: rising chime,
-    // a name banner, and a suds-coloured sparkle burst at the player.
+    // Celebratory feedback when an upgrade node is purchased: rising chime
+    // and a suds-coloured sparkle burst at the player (no banner — the buy is
+    // a deliberate action with its own local feedback).
     upgradeFx(node) {
       this.audio.play("upgrade");
-      if (node && node.name) this.banner(node.name.toUpperCase() + " ACQUIRED!", 1.3);
       const p = this.player;
       if (p) {
         JH.burst(this, p.x, p.y, 18, JH.PAL.suds,    16, { speed: 70, life: 0.6, up: 70, size: 2 });
@@ -357,6 +371,8 @@
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
       this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
+      this.waveTriggerX = null;                     // wave 0 uses the base arena anchor
+      this.rangeMode = false;                       // set true only by devGotoRange
       JH.Upgrades.currentActLevel = -1;             // fresh run starts in Act 1
       this.checkpointWave = 0;
       this.deathCount = 0;
@@ -378,7 +394,18 @@
     checkWaveTrigger() {
       const next = this.waveIndex + 1;
       if (this.waveActive || next >= JH.LEVEL1.waves.length) return;
-      if (this.player.x >= WAVE_TRIGGERS[next] - 30) this.startWave(next);
+      const trig = this.waveTriggerX != null ? this.waveTriggerX : WAVE_TRIGGERS[next] - 30;
+      if (this.player.x >= trig) this.startWave(next);
+    },
+
+    // Next-wave trigger X, gated so there's always some corridor past where a
+    // wave was cleared (finishing near the right edge, or holding right while
+    // grabbing a benediction, no longer instantly rolls the next wave). Never
+    // earlier than the arena anchor; capped so it can't drift wave-to-wave.
+    gatedTriggerX(next, clearX) {
+      const G = JH.WAVE_GATE;
+      const gated = Math.max(WAVE_TRIGGERS[next] - 30, Math.round(clearX) + G.minWalk);
+      return Math.min(WAVE_TRIGGERS[next] + G.maxOver, gated);
     },
 
     startWave(i) {
@@ -400,6 +427,18 @@
       const left = JH.Camera.x + 20, right = JH.Camera.x + JH.VIEW_W - 20;
       this.bounds = { minX: left, maxX: right };
       this.dropBudget = { suds: 0, items: 0 };
+
+      // Elite meter for this wave: nextEliteScale() hands out the elite scale
+      // to only ELITE_FRAC of enemies (even-spread accumulator), so tough
+      // waves ramp from "a few elites" to "mostly elite" across acts instead
+      // of every enemy being elite at once. Set for ALL spawn paths (standard
+      // batch/trickle + wall/holdout reinforcement).
+      const actLevel = JH.Balance.actLevelForWave(i, JH.ACT_STARTS);
+      const ownedCount = JH.Balance.powerCount(
+        JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
+      this.waveEliteScale = wave.tough ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
+      this.waveEliteFrac = wave.tough ? (JH.ELITE_FRAC[actLevel + 1] || 0) : 0;
+      this._eliteAcc = 0;
 
       if (wave.garden) {
         // Garden event: 4 planter boxes spread across arena at alternating depths.
@@ -450,12 +489,7 @@
         this.banner(bdef.name.toUpperCase(), 1.8);
         this.spawnEnemy(bt, right - 20, JH.DEPTH_MAX - 30);
       } else {
-        this.banner(wave.name + (wave.tough ? " — ELITES!" : " — FIGHT!"), 1.3);
-        const actLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
-        const ownedCount = JH.Balance.powerCount(
-          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
-        const eliteScale = wave.tough
-          ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
+        this.banner(wave.name, 1.3);   // title card only; elite status reads via gold bars
         const spawnList = JH.Balance.capEnemyType(
           wave.spawns, "charger", JH.WAVECAP.charger, "mook");
         // Flatten authored spawns, then sprinkle extras from the unlocked pool
@@ -478,18 +512,18 @@
         const cap = JH.Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
         let slot = 0;
         types.slice(0, cap).forEach((type) => {
-          this.spawnWaveEnemy(type, eliteScale, slot);
+          this.spawnWaveEnemy(type, this.nextEliteScale(), slot);
           slot++;
         });
         this.wavePool = types.slice(cap);
-        this.waveEliteScale = eliteScale;
         this.waveTrickleT = JH.WAVEFLOW.trickle;
-        // Rare apex: at most ONE super-elite, spawned by wave data.
+        // Rare apex: at most ONE super-elite, spawned by wave data — always
+        // gets the full elite scale on top of its super tune, not fraction-gated.
         if (wave.superElite) {
           const ex = (Math.random() < 0.5) ? left + 24 : right - 24;
           const ey = JH.DEPTH_MIN + 10 + Math.random() * (depthSpan - 4);
           const se = this.spawnEnemy(wave.superElite, ex, ey, {
-            elite: eliteScale, super: true,
+            elite: this.waveEliteScale, super: true,
             superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
           });
           se.spawnGrace = 0.6;
@@ -499,23 +533,42 @@
 
     // One wave enemy at the arena edge (or dropped in, for fuses). Used by
     // the wave-open batch and by reinforcement trickle.
+    // Hand out the wave's elite scale to only waveEliteFrac of the enemies,
+    // spread evenly (an accumulator, not a coin flip, so small waves still get
+    // ~frac elites with no clumping). Returns the scale or null; every spawn
+    // path routes its per-enemy elite decision through here.
+    nextEliteScale() {
+      if (!this.waveEliteScale || this.waveEliteFrac <= 0) return null;
+      this._eliteAcc += this.waveEliteFrac;
+      if (this._eliteAcc >= 1) { this._eliteAcc -= 1; return this.waveEliteScale; }
+      return null;
+    },
     spawnWaveEnemy(type, eliteScale, slot) {
       const left = this.bounds.minX, right = this.bounds.maxX;
       const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
       const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
       if (type === "fuse") {
-        // Fuses drop in at a random arena spot.
+        // Fuses drop in at a random arena spot (own landing ring telegraphs it).
         const ex = left + 30 + Math.random() * (right - left - 60);
-        this.spawnEnemy(type, ex, ey, {
+        return this.spawnEnemy(type, ex, ey, {
           elite: eliteScale, dropIn: true, dropDelay: (slot || 0) * JH.FUSE_DROP.stagger * 0.5,
         });
-      } else {
-        // Enter from a random screen edge at a random depth.
-        const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
-                                         : right - 6 - Math.random() * 10;
-        const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
-        e.spawnGrace = 0.3 + (slot || 0) * 0.25; // stagger entrances
       }
+      // Enter from a random screen edge at a random depth.
+      const ex = (Math.random() < 0.5) ? left + 6 + Math.random() * 10
+                                       : right - 6 - Math.random() * 10;
+      const e = this.spawnEnemy(type, ex, ey, { elite: eliteScale });
+      e.spawnGrace = 0.3 + (slot || 0) * 0.25; // stagger entrances
+      return e;
+    },
+
+    // Localized "reinforcement arriving" telegraph — a small dust puff at the
+    // enemy's entry point, replacing the old REINFORCEMENTS! banner. Fuses
+    // already read via their drop-in ring, so skip those.
+    reinforceFx(e) {
+      if (!e || e.dropping) return;
+      JH.burst(this, e.x, e.y, 6, JH.PAL.rock, 8,
+        { speed: 55, life: 0.4, up: 14, grav: 40, size: 2 });
     },
 
     waveCleared_() {
@@ -554,9 +607,17 @@
           usedOnce: this.beneUsedOnce,
           censer: !!this.relics && !!this.relics.censer,
         }, Math.random);
-        // Horizontal row at one depth so the offer reads as a lineup.
-        this.sigils = offers.map((o, i) =>
-          new JH.Sigil(this.player.x + 50 + i * 46, 56, o));
+        // Horizontal row at one depth so the offer reads as a lineup. Keep
+        // the rightmost sigil clear of the next-wave trigger so walking out to
+        // inspect the last option can't roll the wave (shift the row left if
+        // the lineup would otherwise reach it).
+        const nx = this.waveIndex + 1;
+        const trig = nx < WAVE_TRIGGERS.length ? this.gatedTriggerX(nx, this.player.x) : Infinity;
+        let sx0 = this.player.x + 50;
+        const maxRight = trig - JH.WAVE_GATE.sigilGap;
+        if (sx0 + (offers.length - 1) * 46 > maxRight)
+          sx0 = maxRight - (offers.length - 1) * 46;
+        this.sigils = offers.map((o, i) => new JH.Sigil(sx0 + i * 46, 56, o));
         this.banner("BENEDICTION — CHOOSE ONE", 1.6);
       }
 
@@ -598,23 +659,24 @@
       // The LAST wave (final boss) wins; a mid-boss just continues.
       if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
 
-      // Free-walk onward; drop a shop vendor every 3rd wave clear (always on
-      // a boss clear), tracked by clearsSinceVendor and reset when it spawns.
+      // Free-walk onward. Vendor policy: ALWAYS drop a shop in the corridor
+      // right before a boss (dump suds to gear up), plus the usual post-boss
+      // shop and an every-3rd-clear cadence. Back-to-back guard: skip a
+      // cadence/post-boss shop when the NEXT corridor will already force a
+      // pre-boss one, so the vendor never appears in two corridors in a row.
       const next = this.waveIndex + 1;
-      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[next] + 30 };
+      this.waveTriggerX = this.gatedTriggerX(next, this.player.x);
+      this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = (this.clearsSinceVendor || 0) + 1;
       const isBoss = !!(clearedWave && clearedWave.boss);
-      if (this.clearsSinceVendor >= 3 || isBoss) {
+      const nextIsBoss = !!(JH.LEVEL1.waves[next] && JH.LEVEL1.waves[next].boss);
+      const afterNextIsBoss = !!(JH.LEVEL1.waves[next + 1] && JH.LEVEL1.waves[next + 1].boss);
+      const cadence = this.clearsSinceVendor >= 3;
+      if (nextIsBoss || ((isBoss || cadence) && !afterNextIsBoss)) {
         this.clearsSinceVendor = 0;
+        // No banner: the vendor is visible up ahead — the player reads
+        // shop = upgrades and walks to it. A clear/"gear up" blurb is noise.
         this.spawnVendor(WAVE_TRIGGERS[next] - 150);
-        // Don't clobber a high-priority banner (e.g. CONCERTA UNLOCKED) that's still showing
-        const clearText = isBoss ? "BOSS DOWN!" : "AREA CLEAR!";
-        const clearDur  = isBoss ? 2.0 : 1.6;
-        const delay = Math.max(0, this.bannerTimer - 1.0);
-        if (delay > 0) setTimeout(() => this.banner(clearText, clearDur), delay * 1000);
-        else this.banner(clearText, clearDur);
-      } else {
-        this.banner("AREA CLEAR!", 1.2);
       }
     },
 
@@ -628,7 +690,9 @@
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
       }
-      this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[nextWaveIdx] + 30 };
+      this.waveTriggerX = this.gatedTriggerX(nextWaveIdx, this.player.x);
+      this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
+      this.clearsSinceVendor = 0;   // post-boss shop resets the cadence
       this.spawnVendor(WAVE_TRIGGERS[nextWaveIdx] - 150);
       this.showScreen("hud");
       this.banner("QUAKE WALKER JOINS YOUR SIDE!", 2.4);
@@ -956,9 +1020,12 @@
       }
       if (e && e.isBoss && JH.Church) {
         JH.Church.markBossDefeated(e.type);
-        // Sunday Suit: the boss's essence cross is worth double.
-        const crossVal = (this.relics && this.relics.sunday_suit) ? 2 : 1;
-        this.spawnPickup("cross", e.x, e.y, crossVal);
+        this.spawnPickup("cross", e.x, e.y, 1);
+        // Sunday Suit: a whole second essence cross drops (not a doubled
+        // value). The world-dim keys off "any cross out" (single scalar), so
+        // it neither stacks nor lifts until BOTH crosses are collected.
+        if (this.relics && this.relics.sunday_suit)
+          this.spawnPickup("cross", e.x - 26, e.y, 1);
       }
     },
 
@@ -1238,7 +1305,10 @@
       // Act gate keyed to the wave being re-fought, not the decremented index.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(next, JH.ACT_STARTS);
       this.waveActive = false; this.waveCleared = false;
-      this.bounds = { minX: 8, maxX: maxX };
+      // Re-arm the trigger for the wave being re-fought; player spawns far
+      // left at a hydrant, so this resolves to the normal arena-anchor trigger.
+      this.waveTriggerX = this.gatedTriggerX(next, p.x);
+      this.bounds = { minX: 8, maxX: Math.max(maxX, this.waveTriggerX + 30) };
       // Church-return arrival: hold on black, then a water jet drops Jon from the
       // sky into a splash landing. updateArrival() drives it; player logic is
       // frozen until it finishes. Jon starts high (z) and eases to the ground.
@@ -1248,7 +1318,6 @@
       this.state = "play";
       this.showScreen("hud");
       JH.Music.reset(); JH.Music.start();
-      this.banner("TRY AGAIN!", 1.4);
     },
 
     closeShop() {
@@ -1295,7 +1364,7 @@
         "Suds banked: " + Math.floor(this.player.sudsEarned) +
         "\nEnemies hosed: " + this.kills +
         "\nTime: " + this.elapsed.toFixed(1) + "s" +
-        "\nVisits to Father Jon: " + (this.deathCount || 0);
+        "\nDeaths: " + (this.deathCount || 0);
       this.showScreen("screen-win");
     },
     // Retired from the death path (death now routes to the Church via
@@ -1615,11 +1684,7 @@
               this.wallSpawnTimer = JH.WALL.spawnEvery;
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
-              const sc = wave.tough
-                ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
-                    JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount))
-                : null;
-              const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: sc });
+              const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: this.nextEliteScale() });
               e.spawnGrace = 0.2;
             }
           }
@@ -1631,15 +1696,11 @@
             this.wallSpawnTimer = JH.WALL.spawnEvery;
             const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
-            const sc = wave.tough
-              ? JH.Balance.eliteScale(JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS),
-                  JH.Balance.powerCount(JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount))
-              : null;
             // Spawn from either edge so pressure comes from ahead AND behind.
             const ex = (Math.random() < 0.5)
               ? this.bounds.minX + 10 + Math.random() * 40
               : this.bounds.maxX - 10 - Math.random() * 40;
-            const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: sc });
+            const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: this.nextEliteScale() });
             e.spawnGrace = 0.2;
           }
           if (this.holdoutTimer <= 0) {
@@ -1675,14 +1736,13 @@
                 if (room >= W.batchMin) {
                   const n = Math.min(this.wavePool.length, room, W.batchMax);
                   for (let k = 0; k < n; k++)
-                    this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, k);
-                  this.banner("REINFORCEMENTS!", 1.0);
+                    this.reinforceFx(this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), k));
                   this.waveTrickleT = W.batchPause;
                 }
                 // No room yet: hold the batch, re-check next frame.
               } else if (room > 0) {
                 this.waveTrickleT = W.trickle;
-                this.spawnWaveEnemy(this.wavePool.shift(), this.waveEliteScale, 0);
+                this.reinforceFx(this.spawnWaveEnemy(this.wavePool.shift(), this.nextEliteScale(), 0));
               }
             }
           }
@@ -1844,7 +1904,7 @@
         {
           const live = this.sigils.filter((s) => !s.dead);
           for (const s of live) s.draw(ctx, cam);
-          if (live.length > 1) {
+          if (live.length > 1 && !this.rangeMode) {
             let cx = 0, cy = Infinity;
             for (const s of live) { cx += s.x; cy = Math.min(cy, JH.Geo.feetScreenY(s.y, 0)); }
             cx = cx / live.length - cam;
@@ -2410,7 +2470,7 @@
         ctx.fillText(desc, X + 6, Y + 22);
       }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
-      ctx.fillText("E: TAKE — THE REST FADE", X + W - 6, Y + H - 6);
+      ctx.fillText("E: CHOOSE BENEDICTION", X + W - 6, Y + H - 6);
       ctx.restore();
     },
 

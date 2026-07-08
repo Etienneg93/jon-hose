@@ -670,18 +670,21 @@ test("onEnemyKilled: Collection Plate grants +2 bonus suds per kill; absent gran
   assert.strictEqual(g2.player.suds, 0, "no relic, no bonus");
 });
 
-test("onEnemyKilled: boss cross is worth 1, or 2 with Sunday Suit", () => {
+test("onEnemyKilled: boss drops one cross, or two (each worth 1) with Sunday Suit", () => {
   const prevChurch = JH.Church;
   JH.Church = { markBossDefeated() {} };
 
   const g1 = makeKillGame();
   JH.Game.onEnemyKilled.call(g1, { isBoss: true, type: "boss", x: 10, y: 20 });
+  assert.strictEqual(g1.pickups.length, 1);
   assert.strictEqual(g1.pickups[0].value, 1);
 
   const g2 = makeKillGame();
   g2.relics.sunday_suit = true;
   JH.Game.onEnemyKilled.call(g2, { isBoss: true, type: "boss", x: 10, y: 20 });
-  assert.strictEqual(g2.pickups[0].value, 2);
+  assert.strictEqual(g2.pickups.length, 2, "Sunday Suit drops a second cross");
+  assert.strictEqual(g2.pickups[0].value, 1);
+  assert.strictEqual(g2.pickups[1].value, 1);
 
   if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
 });
@@ -1002,6 +1005,22 @@ test("Scalding Faith: full-pressure spray applies scald", () => {
   g.enemies = [e];
   p.doSpray(0.05, g);
   assert.ok(e.scaldT > 0, "full-pressure hit under Scalding Faith applies scald");
+  B.reset();
+});
+
+test("Pressure Sermon: arms across a full-pressure hold even after the tank drains below 80%", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("pressure_sermon");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;   // start full → top pressure tier this hold
+  p.facing = 1;
+  for (let i = 0; i < 17; i++) p.doSpray(0.05, g);   // ~0.85s continuous
+  assert.ok(p.sprayHeldT >= 0.8, "held long enough to qualify");
+  assert.ok(p.sermonFullPressure, "armed by hitting full pressure during the hold");
+  // The tank has drained under the 80% full-pressure tier by now — the old
+  // release-frame check (dmgScale >= 1.2 on the last frame) was unreachable.
+  assert.ok(p.water < p.stats.maxWater * 0.8, "tank below 80% (old check would fail here)");
   B.reset();
 });
 
