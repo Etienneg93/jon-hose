@@ -668,7 +668,11 @@
       wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8,      // weak-spot cycle (s)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
       surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
-      slamCd: 4.2, slamWind: 0.8, slamDmg: 26, slamReach: 150, // PORT SLAM forward zone
+      // PORT SLAM: a forward crush that SWEEPS across depth — the zone splits
+      // into slamSections bands that slam one after another (slamSweepGap
+      // apart). Be on a band that already fired (or hasn't yet) when each lands.
+      slamCd: 4.2, slamWind: 0.8, slamDmg: 26, slamReach: 150,
+      slamSections: 3, slamSweepGap: 0.22, slamActive: 0.16, slamRecover: 0.4,
       // Body-as-boundary: the chassis face is the truck's right limit (no
       // invisible wall). Crowding it chips a little HP on a contact cooldown.
       bodyFront: 70, bodyDmg: 4, bodyContactCd: 0.5,

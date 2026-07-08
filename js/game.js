@@ -1329,6 +1329,11 @@
         this.state = "church";
         document.getElementById("screen-pause").classList.add("hidden");
       }
+      else if (this.state === "truck") { this.state = "truckPause"; this.showScreen("screen-pause"); }
+      else if (this.state === "truckPause") {
+        this.state = "truck";
+        document.getElementById("screen-pause").classList.add("hidden");
+      }
     },
 
     // ============================================================ LOOP
@@ -1351,9 +1356,10 @@
     update(dt) {
       this.input.poll();
 
-      // pause toggle works in play/pause and church/churchPause
+      // pause toggle works in play/pause, church/churchPause, and truck/truckPause
       if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"
-        || this.state === "church" || this.state === "churchPause"))
+        || this.state === "church" || this.state === "churchPause"
+        || this.state === "truck" || this.state === "truckPause"))
         this.togglePause();
 
       if (this.bannerTimer > 0) {
@@ -1385,6 +1391,7 @@
       if (this.state === "churchPause") return;
 
       // Fire-truck escape: self-contained scrolling sub-mode (see truck.js).
+      if (this.state === "truckPause") return;        // frozen; pause menu is up
       if (this.state === "truck") {
         if (JH.TruckRun.update) JH.TruckRun.update(dt, this);
         return;
@@ -1768,11 +1775,11 @@
         if (this.devMenu) this.drawDevMenu(ctx);
         return;
       }
-      if (this.state === "truck") {
+      if (this.state === "truck" || this.state === "truckPause") {
         const ctx = this.ctx;
         ctx.save();
         ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
-        JH.TruckRun.renderScene(ctx, this);
+        JH.TruckRun.renderScene(ctx, this);   // frozen scene shows behind the pause menu
         ctx.restore();
         if (this.devMenu) this.drawDevMenu(ctx);
         return;

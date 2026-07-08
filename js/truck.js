@@ -24,7 +24,9 @@
   // wheel-spin strip. CANNON_* is the spray origin offset from the draw anchor
   // (horizontal centre, feet on the road) to the roof cannon's barrel tip; the
   // wheel frame advances every DRIVE_STEP px of scroll.
-  const CANNON_DX = 32, CANNON_DY = -69, DRIVE_STEP = 12;
+  const CANNON_DX = 26, CANNON_DY = -69, DRIVE_STEP = 12;
+  // Visual-only downward nudge for the hero sprite (no shadow now anchors it).
+  const TRUCK_DRAW_DY = 5;
 
   const TruckRun = {
     enter(game) {
@@ -463,7 +465,7 @@
         wsDepth: C.lanes[1], wsTarget: C.lanes[1],
         wsState: "closed", wsT: FW.wsClosed, wsRetargetT: FW.wsRetarget,
         surgeT: FW.surgeCd, surge: null,
-        slamT: FW.slamCd, slamState: null, slamStateT: 0,
+        slamT: FW.slamCd, slam: null,
         tslT: FW.tslCd, tsl: null, cableN: 2,
         hitFlash: 0,
       };
@@ -498,13 +500,35 @@
         } else if (s.x < -10) fw.surge = null;
       }
 
-      // PORT SLAM: telegraph → forward slab. Back off the wall to dodge.
-      if (!fw.slamState && (fw.slamT -= dt) <= 0) { fw.slamState = "wind"; fw.slamStateT = FW.slamWind; }
-      if (fw.slamState === "wind" && (fw.slamStateT -= dt) <= 0) {
-        fw.slamState = "strike"; fw.slamStateT = 0.3;
-        if (t.screenX > fw.screenX - FW.slamReach && t.invulnT <= 0) { this._damageTruck(FW.slamDmg); this._collide(C); }
-      } else if (fw.slamState === "strike" && (fw.slamStateT -= dt) <= 0) {
-        fw.slamState = null; fw.slamT = FW.slamCd;
+      // PORT SLAM: a forward crush that SWEEPS across depth — the zone is split
+      // into bands that slam one after another (top↔bottom, random dir). Only
+      // bites if the truck is near the wall AND in the band as it fires.
+      if (!fw.slam && (fw.slamT -= dt) <= 0) {
+        const n = FW.slamSections, dir = Math.random() < 0.5 ? 1 : -1;
+        const span = (JH.DEPTH_MAX - JH.DEPTH_MIN) / n, secs = [];
+        for (let i = 0; i < n; i++) {
+          const idx = dir > 0 ? i : (n - 1 - i);
+          secs.push({ d0: JH.DEPTH_MIN + idx * span, d1: JH.DEPTH_MIN + (idx + 1) * span,
+                      at: FW.slamWind + i * FW.slamSweepGap, hit: false, flashT: 0 });
+        }
+        fw.slam = { t: 0, sections: secs, done: 0 };
+        this._flash("PORT SLAM!", 0.7);
+      }
+      if (fw.slam) {
+        const SL = fw.slam; SL.t += dt;
+        for (const s of SL.sections) {
+          if (s.flashT > 0) s.flashT -= dt;
+          if (!s.hit && SL.t >= s.at) {
+            s.hit = true; SL.done++; s.flashT = FW.slamActive;
+            if (t.screenX > fw.screenX - FW.slamReach && t.depth >= s.d0 && t.depth < s.d1 && t.invulnT <= 0) {
+              this._damageTruck(FW.slamDmg); this._collide(C);
+            }
+            sc.shakeT = Math.max(sc.shakeT, 0.28);
+            if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
+          }
+        }
+        const lastAt = SL.sections[SL.sections.length - 1].at;
+        if (SL.done >= SL.sections.length && SL.t >= lastAt + FW.slamRecover) { fw.slam = null; fw.slamT = FW.slamCd; }
       }
 
       // TENTACLE SLAM: a cable emerges, rears back, and slams a locked spot
@@ -546,7 +570,7 @@
     // and the finale chain starts: detonate → whiteout → reveal → crash → walk.
     _breakFirewall() {
       const sc = this.scene, C = JH.TRUCKRUN, fw = sc.firewall;
-      fw.dying = true; fw.surge = null; fw.slamState = null; fw.tsl = null; fw.wsState = "closed";
+      fw.dying = true; fw.surge = null; fw.slam = null; fw.tsl = null; fw.wsState = "closed";
       sc.spray = [];   // in-flight droplets would hang frozen (finale skips _updateSpray)
       sc.essence += C.firewall.essence;
       if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(C.firewall.essence);
@@ -759,6 +783,36 @@
       ctx.restore();
     },
 
+    // PORT SLAM sweep: the forward crush zone split into depth bands. Each
+    // band telegraphs (filling red) toward its slam time, then flashes bright
+    // with a forward ram edge on impact — reads as a wave rolling across depth.
+    _drawFirewallSlam(ctx, fw, wx, floorBottom, sc, C) {
+      const FW = C.firewall, SL = fw.slam;
+      const zoneL = wx - FW.slamReach, zoneW = FW.slamReach;
+      ctx.save();
+      for (const s of SL.sections) {
+        const yTop = JH.Geo.feetScreenY(s.d0, 0) - 6, yBot = JH.Geo.feetScreenY(s.d1, 0) + 6;
+        const h = yBot - yTop;
+        if (!s.hit) {
+          const prog = Math.min(1, SL.t / s.at);
+          ctx.globalAlpha = 0.10 + 0.32 * prog;                 // fills as its slam nears
+          ctx.fillStyle = "#ff3a0a";
+          ctx.fillRect(zoneL + zoneW * (1 - prog), yTop, zoneW * prog, h);
+          ctx.globalAlpha = 0.5;
+          ctx.strokeStyle = (Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f"; ctx.lineWidth = 1.5;
+          ctx.strokeRect(zoneL, yTop, zoneW, h);
+          ctx.globalAlpha = 1;
+        } else if (s.flashT > 0) {
+          const k = s.flashT / FW.slamActive;                   // impact flash + forward ram edge
+          ctx.globalAlpha = 0.35 + 0.45 * k;
+          ctx.fillStyle = "#ffd9c0"; ctx.fillRect(zoneL, yTop, zoneW, h);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(zoneL - 2, yTop, 4, h);   // leading crush edge
+        }
+      }
+      ctx.restore();
+    },
+
     // TENTACLE SLAM: for each strike, a cable emerges from the chassis, rears
     // back to a peak, holds, then whips DOWN onto its locked floor spot — same
     // raise→hold→slam motion as the Switch's cable slam. The floor ellipse IS
@@ -920,16 +974,8 @@
       if (sc.firewall) {
         const fw = sc.firewall, FW = C.firewall, wx = fw.screenX, P = JH.PAL;
         const floorBottom = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0);
-        // PORT SLAM — the boss's own crush telegraph: a red zone punching
-        // forward from the face (back off to dodge).
-        if (fw.slamState === "wind" || fw.slamState === "strike") {
-          const prog = fw.slamState === "strike" ? 1 : Math.max(0, 1 - fw.slamStateT / FW.slamWind);
-          const yT = JH.Geo.feetScreenY(JH.DEPTH_MIN, 0) - 40, yB = floorBottom + 6;
-          ctx.fillStyle = "rgba(255,60,40," + (fw.slamState === "strike" ? 0.5 : 0.12 + 0.30 * prog) + ")";
-          ctx.fillRect(wx - FW.slamReach, yT, FW.slamReach, yB - yT);
-          ctx.strokeStyle = (Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
-          ctx.lineWidth = 1.5; ctx.strokeRect(wx - FW.slamReach, yT, FW.slamReach, yB - yT);
-        }
+        // PORT SLAM — the crush sweep (per-band telegraph + slam flash).
+        if (fw.slam) this._drawFirewallSlam(ctx, fw, wx, floorBottom, sc, C);
         // Real armored wall chassis (face at wx); short dark-fill to the edge.
         A.draw(ctx, "wallboss", wx + 42, floorBottom, 1, { t: sc.t });
         ctx.fillStyle = P.wallbossDk;
@@ -967,9 +1013,11 @@
           const sxb = Math.round(fw.surge.x), sy = JH.Geo.feetScreenY(fw.surge.depth, 0), tt = sc.t;
           const pulse = 0.55 + 0.45 * Math.abs(Math.sin(tt * 22));
           ctx.save();
+          const glowCY = sy - 8, glowH = 24;   // the glow ellipse's vertical half-extent
           ctx.globalAlpha = 0.2; ctx.fillStyle = "#00d8ff";
-          ctx.beginPath(); ctx.ellipse(sxb, sy - 8, 9, 24, 0, 0, Math.PI * 2); ctx.fill();
-          const segs = 9, segH = 3, startY = sy - Math.floor(segs * segH * 0.5);
+          ctx.beginPath(); ctx.ellipse(sxb, glowCY, 9, glowH, 0, 0, Math.PI * 2); ctx.fill();
+          // Bolt spans the FULL glow (top to bottom), not just the lower half.
+          const segH = 3, segs = Math.round((glowH * 2) / segH), startY = glowCY - glowH;
           ctx.lineCap = "round"; ctx.lineJoin = "round";
           const bolt = () => { ctx.beginPath(); ctx.moveTo(sxb, startY); for (let i = 1; i <= segs; i++) ctx.lineTo(sxb + Math.sin(tt * 24 + i * 2.3) * 5, startY + i * segH); ctx.stroke(); };
           ctx.globalAlpha = 0.78 * pulse; ctx.strokeStyle = "#00f0ff"; ctx.lineWidth = 2.5; bolt();
@@ -1027,11 +1075,10 @@
         ctx.fillStyle = d.color;
         ctx.fillRect(d.x | 0, d.y | 0, d.size, d.size);
       }
-      // The fire-truck hero sprite (Jon + cannon baked in). Wheels spin by
-      // scroll distance; the on-hit white flash rides opt.hurt (silhouette-
-      // accurate, handled by the "truck" painter in assets.js).
-      A.shadow(ctx, t.screenX, ty, 26);
-      A.draw(ctx, "truck", t.screenX, ty, 1, {
+      // The fire-truck hero sprite (Jon + cannon baked in). No ground shadow
+      // (sits on the road art); nudged down a touch so the wheels meet the
+      // road. Wheels spin by scroll distance; on-hit white flash rides opt.hurt.
+      A.draw(ctx, "truck", t.screenX, ty + TRUCK_DRAW_DY, 1, {
         // screenX term keeps the wheels turning through the intro slide-in.
         frame: Math.floor((sc.scrollX + t.screenX + 70) / DRIVE_STEP),
         hurt: t.hitFlashT > 0, hurtAlpha: t.hitFlashT / 0.18,
