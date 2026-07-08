@@ -669,6 +669,16 @@
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
       surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
       slamCd: 4.2, slamWind: 0.8, slamDmg: 26, slamReach: 150, // PORT SLAM forward zone
+      // Body-as-boundary: the chassis face is the truck's right limit (no
+      // invisible wall). Crowding it chips a little HP on a contact cooldown.
+      bodyFront: 70, bodyDmg: 4, bodyContactCd: 0.5,
+      // Doc-Ock cables: 2 at full HP → cableMax near death (dressing only).
+      cableMax: 9,
+      // TENTACLE SLAM: a triple overhead spot-slam (callback to Switch/GK),
+      // unlocked below tslHpFrac. Locks a spot, telegraphs, strikes ×3 with a
+      // gap between — dodge each hit by leaving the spot.
+      tslHpFrac: 0.7, tslCd: 6.5, tslWind: 0.6, tslStrike: 0.2, tslGap: 0.42,
+      tslDmg: 16, tslBand: 16,
     },
 
     // Essence economy (kept in-band with normal run income).

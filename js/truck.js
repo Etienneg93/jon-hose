@@ -133,7 +133,7 @@
     // Truck movement: depth = dodge/aim axis, screen-x = throttle/brake,
     // dash = swerve (buffered edge + i-frames), spray = hold (used in Task 3).
     _drive(dt, C, In) {
-      const t = this.scene.truck;
+      const sc = this.scene, t = sc.truck;
       const mx = (In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0);
       const my = (In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0);
 
@@ -158,10 +158,32 @@
       t.depth = JH.Geo.clampDepth(t.depth);
 
       t.screenX += mx * C.throttleSpeed * dt;
-      t.screenX = Math.max(C.truckScreenX - C.throttleBand,
-                    Math.min(C.truckScreenX + C.throttleBand, t.screenX));
+      // Left/right limits. The right limit is normally the throttle band, but
+      // during the Firewall it becomes the boss's BODY (its chassis face) —
+      // no invisible wall. Crowding the body chips HP on a contact cooldown.
+      const leftLim = C.truckScreenX - C.throttleBand;
+      const fw = sc.firewall;
+      let rightLim = C.truckScreenX + C.throttleBand;
+      if (fw && !fw.dying) rightLim = fw.screenX - C.firewall.bodyFront;
+      t.screenX = Math.max(leftLim, Math.min(rightLim, t.screenX));
+      if (t.bodyCd > 0) t.bodyCd -= dt;
+      if (fw && !fw.dying && t.screenX >= rightLim - 0.5 && (t.bodyCd || 0) <= 0) {
+        t.bodyCd = C.firewall.bodyContactCd;
+        this._bodyBump(C);
+      }
 
       t.spraying = In.held("spray");
+    },
+
+    // Small chip for grinding the Firewall's body. No i-frames (unlike a real
+    // hit) so it can't be used to tank SLAM/SURGE — it's a nudge, not a shield.
+    _bodyBump(C) {
+      const sc = this.scene, t = sc.truck;
+      t.hp = Math.max(0, t.hp - C.firewall.bodyDmg);
+      if (t.hp <= 0 && sc.phase !== "wrecked") { this._wreckTruck(); return; }
+      t.hitFlashT = Math.max(t.hitFlashT, 0.12);
+      sc.shakeT = Math.max(sc.shakeT, 0.12);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
     },
 
     // Nozzle world-x (front of the truck) in the scroll coordinate space.
@@ -442,6 +464,7 @@
         wsState: "closed", wsT: FW.wsClosed, wsRetargetT: FW.wsRetarget,
         surgeT: FW.surgeCd, surge: null,
         slamT: FW.slamCd, slamState: null, slamStateT: 0,
+        tslT: FW.tslCd, tslState: null, tslStateT: 0, tslHit: 0, tslDepth: 0, tslX: 0,
         hitFlash: 0,
       };
     },
@@ -478,6 +501,30 @@
       } else if (fw.slamState === "strike" && (fw.slamStateT -= dt) <= 0) {
         fw.slamState = null; fw.slamT = FW.slamCd;
       }
+
+      // TENTACLE SLAM: a triple overhead spot-slam (callback to the Switch/GK
+      // cable slam), unlocked once the Firewall is weakened. Locks a spot,
+      // telegraphs, strikes ×3 with a gap between — leave the spot each time.
+      if (fw.tslState == null && fw.hp <= fw.maxHp * FW.tslHpFrac && (fw.tslT -= dt) <= 0) {
+        fw.tslState = "wind"; fw.tslStateT = FW.tslWind; fw.tslHit = 0;
+        fw.tslDepth = t.depth; fw.tslX = t.screenX;
+        this._flash("TENTACLE SLAM!", 0.7);
+      }
+      if (fw.tslState === "wind" && (fw.tslStateT -= dt) <= 0) {
+        fw.tslState = "strike"; fw.tslStateT = FW.tslStrike;
+        if (Math.abs(t.screenX - fw.tslX) < FW.tslBand * 1.6 &&
+            Math.abs(t.depth - fw.tslDepth) < FW.tslBand && t.invulnT <= 0) {
+          this._damageTruck(FW.tslDmg); this._collide(C);
+        }
+        sc.shakeT = Math.max(sc.shakeT, 0.3);
+        if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
+      } else if (fw.tslState === "strike" && (fw.tslStateT -= dt) <= 0) {
+        if (++fw.tslHit >= 3) { fw.tslState = null; fw.tslT = FW.tslCd; }
+        else { fw.tslState = "gap"; fw.tslStateT = FW.tslGap; }
+      } else if (fw.tslState === "gap" && (fw.tslStateT -= dt) <= 0) {
+        fw.tslState = "wind"; fw.tslStateT = FW.tslWind;
+        fw.tslDepth = t.depth; fw.tslX = t.screenX;   // retarget the spot each hit
+      }
     },
 
     // The kill: the Firewall doesn't despawn — it detonates. Essence banks
@@ -485,7 +532,7 @@
     // and the finale chain starts: detonate → whiteout → reveal → crash → walk.
     _breakFirewall() {
       const sc = this.scene, C = JH.TRUCKRUN, fw = sc.firewall;
-      fw.dying = true; fw.surge = null; fw.slamState = null; fw.wsState = "closed";
+      fw.dying = true; fw.surge = null; fw.slamState = null; fw.tslState = null; fw.wsState = "closed";
       sc.spray = [];   // in-flight droplets would hang frozen (finale skips _updateSpray)
       sc.essence += C.firewall.essence;
       if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(C.firewall.essence);
@@ -670,6 +717,68 @@
       game.afterTruckRun();
     },
 
+    // Doc-Ock cables fanning off the wall over the road; count grows as HP
+    // falls (2 → cableMax). Idle dressing — the TENTACLE SLAM is the threat.
+    _drawFirewallCables(ctx, fw, wx, floorBottom, sc, C) {
+      const P = JH.PAL;
+      const hpFrac = Math.max(0, fw.hp / fw.maxHp);
+      const n = Math.min(C.firewall.cableMax, 2 + Math.round((C.firewall.cableMax - 2) * (1 - hpFrac)));
+      ctx.save();
+      ctx.strokeStyle = P.cable; ctx.lineWidth = 2; ctx.lineCap = "round";
+      for (let i = 0; i < n; i++) {
+        const ph = sc.t * 3 + i * 1.3;
+        const baseX = wx + 8, baseY = floorBottom - 26 - (i % 5) * 30;
+        const reach = 26 + (i % 3) * 16;
+        const ex = baseX - reach - Math.sin(ph) * 7;      // wave out LEFT, over the road
+        const ey = baseY + Math.cos(ph) * 12;
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.quadraticCurveTo(baseX - reach * 0.5, baseY + Math.sin(ph) * 14, ex, ey);
+        ctx.stroke();
+        ctx.fillStyle = (Math.floor(sc.t * 6 + i) % 2) ? "#ff5a5a" : P.wallbossCoreHi;
+        ctx.fillRect(Math.round(ex - 1.5), Math.round(ey - 1.5), 3, 3);
+      }
+      ctx.restore();
+    },
+
+    // TENTACLE SLAM: a thick cable raised over a locked floor spot (wind) that
+    // drives down onto it (strike). The floor ellipse IS the hit region.
+    _drawFirewallTentacle(ctx, fw, wx, floorBottom, sc, C) {
+      const FW = C.firewall, P = JH.PAL;
+      const sx = fw.tslX, sy = JH.Geo.feetScreenY(fw.tslDepth, 0);
+      const rx = FW.tslBand * 1.6, ry = FW.tslBand * JH.GROUND_RY * 1.2;
+      const strike = fw.tslState === "strike";
+      ctx.save();
+      if (strike) {
+        ctx.fillStyle = "rgba(120,240,255,0.65)";
+        ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#dffaff"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (fw.tslState === "wind") {
+        const prog = 1 - fw.tslStateT / FW.tslWind;
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = (Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 0.12 + 0.3 * prog;
+        ctx.fillStyle = "#ff5a5a";
+        ctx.beginPath(); ctx.ellipse(sx, sy, rx * prog, ry * prog, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (fw.tslState !== "gap") {
+        const baseX = wx + 10, baseY = floorBottom - 120;
+        const prog = strike ? 1 : 1 - fw.tslStateT / FW.tslWind;
+        const tipY = strike ? sy : baseY + (sy - baseY) * (0.12 + 0.18 * prog);
+        ctx.strokeStyle = P.cable; ctx.lineWidth = strike ? 5 : 4; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(baseX, baseY);
+        ctx.quadraticCurveTo((baseX + sx) / 2 + Math.sin(sc.t * 8) * 6, (baseY + tipY) / 2, sx, tipY);
+        ctx.stroke();
+        ctx.fillStyle = strike ? "#dffaff" : "#ff5a5a";
+        ctx.beginPath(); ctx.ellipse(sx, tipY, 4, 4, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    },
+
     // ------------------------------------------------------------- RENDER
     renderScene(ctx, game) {
       const sc = this.scene; if (!sc) return;
@@ -798,26 +907,31 @@
         ctx.fillStyle = P.wallbossDk;
         ctx.fillRect(wx + 84, floorBottom - 178, JH.VIEW_W - (wx + 84), JH.VIEW_H - (floorBottom - 178));
 
-        // Roaming weak-spot core — iris shutters open on the cycle (real palette).
+        // Doc-Ock cables writhing out of the chassis — more of them the lower
+        // its HP (dressing; the TENTACLE SLAM is the one that bites).
+        if (!fw.dying) this._drawFirewallCables(ctx, fw, wx, floorBottom, sc, C);
+
+        // Roaming weak-spot EYE — the shared boss reactor-core glyph (matches
+        // Switch/GK so it reads consistently). Iris shutters slide over it
+        // off-cycle; only OPEN exposes the weak point.
         const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - 30;
         const openAmt = fw.wsState === "open" ? 1 : fw.wsState === "wind" ? Math.max(0, 1 - fw.wsT / FW.wsWind) : 0;
         ctx.save();
-        ctx.fillStyle = "#0d0f15"; ctx.fillRect(coreX - 9, coreY - 11, 18, 22);
-        ctx.fillStyle = P.wallbossHi; ctx.fillRect(coreX - 9, coreY - 11, 18, 1); ctx.fillRect(coreX - 9, coreY + 10, 18, 1);
-        if (openAmt > 0.02) {
-          const pulse = 0.6 + 0.4 * Math.abs(Math.sin(sc.t * 6));
-          ctx.globalAlpha = openAmt * pulse;
-          ctx.fillStyle = P.wallbossCore; ctx.beginPath(); ctx.ellipse(coreX, coreY, 7, 9, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = fw.hitFlash > 0 ? "#ffffff" : P.wallbossCoreHi; ctx.beginPath(); ctx.ellipse(coreX, coreY, 3.5 * openAmt, 5 * openAmt, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.globalAlpha = 1;
-        }
-        const shut = Math.round(10 * (1 - openAmt));
-        ctx.fillStyle = P.wallbossShut; ctx.fillRect(coreX - 8, coreY - 10, 16, shut); ctx.fillRect(coreX - 8, coreY + 10 - shut, 16, shut);
+        ctx.fillStyle = "#0d0f15"; ctx.fillRect(coreX - 9, coreY - 12, 18, 24);      // eye backplate
+        A.bossCore(ctx, coreX, coreY, 5, sc.t, { flash: fw.hitFlash > 0 });
+        const shut = Math.round(12 * (1 - openAmt));                                  // iris lids
+        ctx.fillStyle = P.wallbossShut;
+        ctx.fillRect(coreX - 9, coreY - 12, 18, shut);
+        ctx.fillRect(coreX - 9, coreY + 12 - shut, 18, shut);
+        ctx.fillStyle = P.wallbossHi; ctx.fillRect(coreX - 9, coreY - 12, 18, 1); ctx.fillRect(coreX - 9, coreY + 11, 18, 1);
         if (fw.wsState === "wind" || fw.wsState === "open") {
           ctx.strokeStyle = fw.wsState === "open" ? "#ffe6a0" : ((Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f");
-          ctx.lineWidth = 1.5; ctx.strokeRect(coreX - 10, coreY - 12, 20, 24);
+          ctx.lineWidth = 1.5; ctx.strokeRect(coreX - 10, coreY - 13, 20, 26);
         }
         ctx.restore();
+
+        // TENTACLE SLAM telegraph + strike (floor spot in front of the wall).
+        if (fw.tslState) this._drawFirewallTentacle(ctx, fw, wx, floorBottom, sc, C);
 
         // SURGE — the boss's own lightning bolt rolling down the core's lane
         // (cyan/green/white jagged column + glow). Dodge by changing lane.
