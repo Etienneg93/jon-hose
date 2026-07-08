@@ -51,7 +51,7 @@
           screenX: -70,       // slides in from off-screen left during the intro
           hp: C.truckHp,
           water: C.tank,
-          spraying: false,
+          spraying: false, sprayTick: 0,
           regenLock: 0,
           dashTimer: 0, dashCdTimer: 0, dashDir: 0,
           invulnT: 0, burnT: 0, hitFlashT: 0,
@@ -201,6 +201,10 @@
       if (t.spraying && t.water > 0) {
         t.water = Math.max(0, t.water - C.drain * dt);
         t.regenLock = C.regenDelay;
+        // Hose hiss — same ~20Hz tick as Jon's hose (entities.js), so the
+        // truck's spray is audible, not silent.
+        t.sprayTick = (t.sprayTick || 0) + dt;
+        if (t.sprayTick > 0.05) { t.sprayTick = 0; if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("spray"); }
       } else if (t.regenLock > 0) {
         t.regenLock -= dt;
       } else {
@@ -227,7 +231,7 @@
           h.wet = Math.min(1, h.wet + JH.JUICE.wetPerHit);
           h.hurtT = 0.18;
           h.knockVX += C.knockback * dt * 2.2;
-          if (h.hp <= 0) h.dead = true;
+          if (h.hp <= 0) { h.dead = true; if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("kill"); }
         }
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
@@ -247,6 +251,7 @@
         if (JH.TruckBalance.beamCovers(t.depth, C.firewall.wsBand, fw.wsDepth, dx, range)) {
           fw.hp -= dps * C.firewall.dmgMult * dt;
           fw.hitFlash = 0.1;
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("hit");   // throttled by the anti-stack guard
           // Kill → finale starts; skip this frame's droplet emission (they'd
           // hang frozen — the finale update doesn't tick spray).
           if (fw.hp <= 0) { this._breakFirewall(); return; }
@@ -733,6 +738,7 @@
     _popHydrant(h) {
       const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck;
       t.water = Math.min(C.tank, t.water + C.hydrantRefill);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin");   // refuel/wash pop
       const rx = C.washRadius, ry = rx * JH.GROUND_RY;
       for (const o of sc.hazards) {
         if (o === h || o.kind === "hydrant") continue;
