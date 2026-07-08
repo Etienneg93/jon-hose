@@ -613,6 +613,10 @@
     moveSpeed: 120,      // truck depth (up/down) speed, px/s
     throttleSpeed: 80,   // truck screen-x (throttle/brake) speed, px/s
     lanes: [16, 43, 70], // soft authoring lanes across DEPTH_MIN..DEPTH_MAX
+    // Truck collision footprint (screen-x half, depth half). Widened to the
+    // sprite's chassis so hazards hit when they visibly touch the truck; depth
+    // stays under the ~27px lane spacing so a lane change still dodges.
+    hitHX: 42, hitHD: 13,
 
     // Truck integrity — VISIBLE bar. hp 0 wrecks the truck: short blast beat,
     // fade out, and the run restarts fresh (the escape never routes to the
@@ -638,11 +642,12 @@
     dryDpsMult: 0.25,
     dryRangeMult: 0.5,
 
-    // Hydrants — smash to refuel AND lane-wash.
+    // Hydrants — smash to refuel AND send a forward WATER WAVE that shoots
+    // down the road clearing debris + enemies and dousing fire in its path.
     hydrantHp: 30,
     hydrantRefill: 90,   // water restored on smash (the meaningful refill)
-    washRadius: 40,      // friendly wash AoE (depth-band px)
     hydrantEverySec: 9,  // spacing along the run
+    wave: { speed: 540, band: 24, range: 360 },  // px/s, front half-width, travel
 
     // Collision hazards.
     wreckHp: 50,

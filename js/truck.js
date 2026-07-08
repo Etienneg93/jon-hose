@@ -59,6 +59,7 @@
         // Hazards/patches/embers, hydrants, pickups; firewall is the climax.
         hazards: [], firePatches: [], embers: [], spray: [],
         hydrants: [], pickups: [], firewall: null,
+        waves: [], floaters: [],   // hydrant water waves + floating popups
         slowT: 0, shakeT: 0,
         wallGap: C.wall.startGap,
         wallTouched: false,
@@ -125,9 +126,10 @@
         this._updatePatches(dt, C);
         this._updateEmbers(dt, C);
         this._updatePickups(dt, C);
+        this._updateWaves(dt, C);
+        this._updateFloaters(dt);
         if (sc.slowT > 0 && (sc.slowT -= dt) <= 0) sc.speedMult = 1;
         if (sc.shakeT > 0) sc.shakeT -= dt;
-        if (sc.washFx && (sc.washFx.t += dt) > 0.4) sc.washFx = null;
         if (sc.phase === "run") this._updateWall(dt, C);       // collapse recedes at the boss
       }
     },
@@ -352,7 +354,7 @@
 
         // Collision with the truck. Hydrants pop friendly (refuel, no damage);
         // other hazards deal damage + a brief slow unless dashing/i-frames.
-        if (Math.abs((h.worldX - sc.scrollX) - t.screenX) < 22 && Math.abs(h.depth - t.depth) < 14) {
+        if (Math.abs((h.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(h.depth - t.depth) < C.hitHD) {
           if (h.kind === "hydrant") {
             this._popHydrant(h);
           } else if (t.invulnT <= 0) {
@@ -397,7 +399,7 @@
       const sc = this.scene, t = sc.truck;
       for (const e of sc.embers) {
         e.worldX += e.vx * dt; e.depth += e.vy * dt; e.life -= dt;
-        if (Math.abs((e.worldX - sc.scrollX) - t.screenX) < 12 && Math.abs(e.depth - t.depth) < 10) {
+        if (Math.abs((e.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(e.depth - t.depth) < C.hitHD) {
           if (t.invulnT <= 0) this._damageTruck(e.dmg);
           e.life = 0;
         }
@@ -655,7 +657,7 @@
       const sc = this.scene, F = C.finale, fin = sc.finale;
       fin.staged = true;
       sc.hazards = []; sc.firePatches = []; sc.embers = []; sc.spray = [];
-      sc.pickups = []; sc.washFx = null; sc.firewall = null;
+      sc.pickups = []; sc.waves = []; sc.floaters = []; sc.firewall = null;
       fin.truckX = F.truckStartX;
       fin.jon = { state: "air", x: F.throw.startX, y: 0, rot: 0 };
       fin.jonT = 0;
@@ -726,6 +728,7 @@
         if (Math.abs((p.worldX - sc.scrollX) - t.screenX) < 20 && Math.abs(p.depth - t.depth) < 16) {
           sc.essence += p.value;
           if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(p.value);
+          if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin", { pitch: 1.5 });   // Holy Essence pickup
           p.dead = true;
         }
         if (p.worldX < sc.scrollX - 40) p.dead = true;   // missed — scrolled past
@@ -733,20 +736,42 @@
       sc.pickups = sc.pickups.filter((p) => !p.dead);
     },
 
-    // Smashed hydrant: refuel the tank AND wash its lane — kill/soak hazards
-    // and extinguish fire-patches within washRadius (ONE ellipse for draw+hit).
+    // Smashed hydrant: refuel the tank AND launch a forward WATER WAVE that
+    // shoots down the road, clearing debris + enemies and dousing fire in its
+    // path (see _updateWaves). Shows a +WATER popup.
     _popHydrant(h) {
       const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck;
       t.water = Math.min(C.tank, t.water + C.hydrantRefill);
-      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin");   // refuel/wash pop
-      const rx = C.washRadius, ry = rx * JH.GROUND_RY;
-      for (const o of sc.hazards) {
-        if (o === h || o.kind === "hydrant") continue;
-        if (JH.Geo.inGroundEllipse(o.worldX, o.depth, h.worldX, h.depth, rx, ry)) o.dead = true;
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin");
+      sc.waves.push({ worldX: h.worldX, startX: h.worldX, t: 0 });
+      this._floater("+WATER", h.worldX, h.depth, "#9be8ff");
+    },
+
+    // Floating popup text (rises + fades over ~1s), anchored in world-x/depth.
+    _floater(text, worldX, depth, color) {
+      this.scene.floaters.push({ text: text, worldX: worldX, depth: depth, color: color || "#fff", t: 0 });
+    },
+    _updateFloaters(dt) {
+      const sc = this.scene;
+      for (const f of sc.floaters) f.t += dt;
+      sc.floaters = sc.floaters.filter((f) => f.t < 1.0);
+    },
+
+    // Forward water waves: each front advances down the road; anything it
+    // reaches (wrecks/debris + fuse/smelt/pyro) is cleared and fire is doused.
+    _updateWaves(dt, C) {
+      const sc = this.scene, W = C.wave;
+      for (const wv of sc.waves) {
+        wv.worldX += W.speed * dt; wv.t += dt;
+        for (const h of sc.hazards) {
+          if (h.kind === "hydrant") continue;
+          if (Math.abs(h.worldX - wv.worldX) < W.band) h.dead = true;   // debris + enemies washed
+        }
+        for (const p of sc.firePatches)
+          if (Math.abs(p.worldX - wv.worldX) < W.band) p.life = 0;      // fire doused
       }
-      for (const p of sc.firePatches)
-        if (JH.Geo.inGroundEllipse(p.worldX, p.depth, h.worldX, h.depth, rx, ry)) p.life = 0;
-      sc.washFx = { worldX: h.worldX, depth: h.depth, r: C.washRadius, t: 0 };
+      sc.hazards = sc.hazards.filter((h) => !h.dead);
+      sc.waves = sc.waves.filter((wv) => wv.worldX - wv.startX < W.range);
     },
 
     _finish(game) {
@@ -924,8 +949,9 @@
         ctx.fillStyle = wg;
         ctx.fillRect(0, 0, wallRight, JH.VIEW_H);
         if (sc.wallGap <= 4) {
-          ctx.fillStyle = "#fff"; ctx.font = "bold 14px monospace"; ctx.textAlign = "center";
-          ctx.fillText("FORWARD!", JH.VIEW_W / 2, 60); ctx.textAlign = "left";
+          ctx.fillStyle = (Math.floor(sc.t * 8) & 1) ? "#ff5a5a" : "#fff";
+          ctx.font = "bold 11px monospace"; ctx.textAlign = "center";
+          ctx.fillText("FORWARD!", JH.VIEW_W / 2, JH.VIEW_H - 24); ctx.textAlign = "left";
         }
       }
       // The world coming down behind you: ember haze + falling debris on the
@@ -1031,13 +1057,14 @@
           ctx.globalAlpha = 0.92 * pulse; ctx.strokeStyle = "#e8ffff"; ctx.lineWidth = 0.8; bolt();
           ctx.restore();
         }
-        // HP bar (hidden once the boss is detonating).
+        // Boss name + HP bar, pinned to the TOP so transient banners (SURGE!,
+        // PORT SLAM!) have the mid-screen to themselves — no stacked clutter.
         if (!fw.dying) {
-          const bw = 160, bf = Math.max(0, fw.hp / fw.maxHp);
+          const bw = 160, bf = Math.max(0, fw.hp / fw.maxHp), cx = JH.VIEW_W / 2;
           ctx.fillStyle = "#fff"; ctx.font = "6px monospace"; ctx.textAlign = "center";
-          ctx.fillText("THE FIREWALL", JH.VIEW_W / 2, 50);
-          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2 - 1, 53, bw + 2, 6);
-          ctx.fillStyle = "#c0392b"; ctx.fillRect(JH.VIEW_W / 2 - bw / 2, 54, bw * bf, 4);
+          ctx.fillText("THE FIREWALL", cx, 12);
+          ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(cx - bw / 2 - 1, 15, bw + 2, 6);
+          ctx.fillStyle = "#c0392b"; ctx.fillRect(cx - bw / 2, 16, bw * bf, 4);
           ctx.textAlign = "left";
         }
       }
@@ -1063,14 +1090,32 @@
         ctx.fillRect(ex - 2, JH.Geo.feetScreenY(e.depth, 0) - 6, 4, 4);
       }
 
-      // Hydrant lane-wash burst (expanding ring).
-      if (sc.washFx) {
-        const wx = sc.washFx.worldX - sc.scrollX, k = sc.washFx.t / 0.4;
-        ctx.strokeStyle = "rgba(120,210,255," + (0.8 * (1 - k)) + ")";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(wx, JH.Geo.feetScreenY(sc.washFx.depth, 0), sc.washFx.r * (0.4 + k), sc.washFx.r * (0.4 + k) * JH.GROUND_RY, 0, 0, Math.PI * 2);
-        ctx.stroke();
+      // Hydrant water waves — a bright crest sweeping forward down the road.
+      for (const wv of sc.waves) {
+        const wx = wv.worldX - sc.scrollX;
+        if (wx < -20 || wx > JH.VIEW_W + 24) continue;
+        const yT = JH.Geo.feetScreenY(JH.DEPTH_MIN, 0) - 18, yB = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0) + 6;
+        const fade = Math.max(0, 1 - (wv.worldX - wv.startX) / C.wave.range);
+        ctx.save();
+        ctx.globalAlpha = 0.45 * fade; ctx.fillStyle = "#4aa3ff";
+        for (let y = yT; y < yB; y += 4) { const off = Math.sin(y * 0.25 + wv.t * 18) * 3; ctx.fillRect(wx - 11 + off, y, 12, 4); }
+        ctx.globalAlpha = 0.9 * fade; ctx.fillStyle = "#cde9ff";   // bright crest
+        for (let y = yT; y < yB; y += 4) { const off = Math.sin(y * 0.25 + wv.t * 18) * 3; ctx.fillRect(wx + 2 + off, y, 3, 4); }
+        ctx.fillStyle = "#eaf6ff";
+        for (let i = 0; i < 7; i++) ctx.fillRect(wx + 5 + Math.random() * 10, yT + Math.random() * (yB - yT), 2, 2);
+        ctx.restore();
+      }
+
+      // Floating popups (+WATER etc.) — rise + fade.
+      for (const f of sc.floaters) {
+        const fx = f.worldX - sc.scrollX, fy = JH.Geo.feetScreenY(f.depth, 0) - 24 - f.t * 28;
+        if (fx < -30 || fx > JH.VIEW_W + 30) continue;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - f.t);
+        ctx.font = "bold 9px monospace"; ctx.textAlign = "center";
+        ctx.fillStyle = "#06263a"; ctx.fillText(f.text, fx + 1, fy + 1);
+        ctx.fillStyle = f.color; ctx.fillText(f.text, fx, fy);
+        ctx.textAlign = "left"; ctx.restore();
       }
 
       // The truck (placeholder rect) + Jon on the running board.
@@ -1096,13 +1141,15 @@
         this._bar(ctx, 8, 20, 90, t.water / C.tank, "#4aa3ff", "H2O");
       }
 
-      // Phase banner.
+      // Transient banner (phase call-outs + attack tells) — mid-screen, sized
+      // to fit, with a drop shadow so it reads over the road without a bar.
       if (sc.bannerT > 0 && sc.banner) {
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 16px monospace";
+        ctx.font = "bold 13px monospace";
         ctx.textAlign = "center";
-        ctx.fillText(sc.banner, JH.VIEW_W / 2, 40);
-        ctx.textAlign = "left";
+        ctx.globalAlpha = Math.min(1, sc.bannerT * 3);   // quick fade-out at the tail
+        ctx.fillStyle = "#0a0a12"; ctx.fillText(sc.banner, JH.VIEW_W / 2 + 1, 47);
+        ctx.fillStyle = "#ffe6a0"; ctx.fillText(sc.banner, JH.VIEW_W / 2, 46);
+        ctx.globalAlpha = 1; ctx.textAlign = "left";
       }
 
       // Full-screen white — the explosion whiteout (road phases only; the
