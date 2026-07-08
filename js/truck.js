@@ -250,7 +250,7 @@
       // and lane-matched (armored body is immune) — the boss keeps its strict
       // depth-match skill. dx in screen space.
       const fw = sc.firewall;
-      if (fw && fw.wsState === "open") {
+      if (fw && (fw.wsState === "open" || fw.wsState === "shut")) {   // shut = closing, still a last-chance hit
         const dx = fw.screenX - (t.screenX + 20);
         if (JH.TruckBalance.beamCovers(t.depth, C.firewall.wsBand, fw.wsDepth, dx, range)) {
           fw.hp -= dps * C.firewall.dmgMult * dt;
@@ -528,10 +528,11 @@
       const targetN = 2 + (FW.cableMax - 2) * (1 - Math.max(0, fw.hp / fw.maxHp));
       fw.cableN += Math.sign(targetN - fw.cableN) * Math.min(Math.abs(targetN - fw.cableN), FW.cableGrow * dt);
 
-      // Weak-spot cycle: closed → wind (opening tell) → open (vulnerable).
+      // Weak-spot cycle: closed → wind (opening) → open → shut (closing) → closed.
       if ((fw.wsT -= dt) <= 0) {
         if (fw.wsState === "closed") { fw.wsState = "wind"; fw.wsT = FW.wsWind; }
         else if (fw.wsState === "wind") { fw.wsState = "open"; fw.wsT = FW.wsOpen; }
+        else if (fw.wsState === "open") { fw.wsState = "shut"; fw.wsT = FW.wsShut; }
         else { fw.wsState = "closed"; fw.wsT = FW.wsClosed; }
       }
       // Weak spot roams in depth — line up your lane to hit it.
@@ -1084,7 +1085,10 @@
         // Switch/GK so it reads consistently). Iris shutters slide over it
         // off-cycle; only OPEN exposes the weak point.
         const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - 30;
-        const openAmt = fw.wsState === "open" ? 1 : fw.wsState === "wind" ? Math.max(0, 1 - fw.wsT / FW.wsWind) : 0;
+        const openAmt = fw.wsState === "open" ? 1
+          : fw.wsState === "wind" ? Math.max(0, 1 - fw.wsT / FW.wsWind)   // 0→1 opening
+          : fw.wsState === "shut" ? Math.max(0, fw.wsT / FW.wsShut)       // 1→0 closing
+          : 0;
         ctx.save();
         ctx.fillStyle = "#0d0f15"; ctx.fillRect(coreX - 9, coreY - 12, 18, 24);      // eye backplate
         A.bossCore(ctx, coreX, coreY, 5, sc.t, { flash: fw.hitFlash > 0 });
@@ -1093,7 +1097,7 @@
         ctx.fillRect(coreX - 9, coreY - 12, 18, shut);
         ctx.fillRect(coreX - 9, coreY + 12 - shut, 18, shut);
         ctx.fillStyle = P.wallbossHi; ctx.fillRect(coreX - 9, coreY - 12, 18, 1); ctx.fillRect(coreX - 9, coreY + 11, 18, 1);
-        if (fw.wsState === "wind" || fw.wsState === "open") {
+        if (fw.wsState === "wind" || fw.wsState === "open" || fw.wsState === "shut") {
           ctx.strokeStyle = fw.wsState === "open" ? "#ffe6a0" : ((Math.floor(sc.t * 12) & 1) ? "#ff5a5a" : "#ffd23f");
           ctx.lineWidth = 1.5; ctx.strokeRect(coreX - 10, coreY - 13, 20, 26);
         }

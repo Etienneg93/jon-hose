@@ -676,7 +676,7 @@
     firewall: {
       atSec: 35, hp: 2040, essence: 3, screenX: 355, dmgMult: 1.4,
       wsBand: 16,                                   // strict depth match to hit the core
-      wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8,      // weak-spot cycle (s)
+      wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8, wsShut: 0.5,  // weak-spot cycle (s): closed→wind(opening)→open→shut(closing)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
       surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
       // PORT SLAM: a forward crush that SWEEPS across depth — the zone splits
