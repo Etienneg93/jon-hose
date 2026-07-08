@@ -1185,7 +1185,7 @@
         ctx.textAlign = "left"; ctx.restore();
       }
 
-      // The truck (placeholder rect) + Jon on the running board.
+      // The hero truck (Jon baked into the cab) — feet-anchored on the road.
       const ty = JH.Geo.feetScreenY(t.depth, 0);
 
       // Hose cone — the same water-droplet stream as Jon's hose.
