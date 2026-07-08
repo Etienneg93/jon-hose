@@ -641,7 +641,7 @@
       this.worldCrumble = { t: 0, shakeCd: 0, quakeCd: 2.2 };
       this.shake(12);
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("dread");
-      if (JH.Music && JH.Music.fadeOut) JH.Music.fadeOut(10);   // music dies out as the truck rolls in
+      if (JH.Music && JH.Music.fadeOut) JH.Music.fadeOut(5);   // music dies out as the truck rolls in
       const stopX = JH.Camera.x + JH.VIEW_W - 42;   // brake at the right screen edge
       this.truckBoard = { x: stopX + 220, stopX: stopX, y: JH.DEPTH_MAX * 0.5, t: 0, near: false, arrived: false };
       this.banner("SOMETHING'S COMING — BOARD THE TRUCK!", 2.8);
