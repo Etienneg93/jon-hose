@@ -6,6 +6,15 @@
   "use strict";
   const JH = (window.JH = window.JH || {});
 
+  // True when a text field is focused; key handlers bail so typing (e.g. the
+  // title-screen leaderboard-name box) isn't eaten as gameplay input.
+  JH.isTyping = function () {
+    const el = document.activeElement;
+    if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return false;
+    const t = (el.type || "text").toLowerCase();
+    return t !== "range" && t !== "checkbox" && t !== "button" && t !== "radio";
+  };
+
   // Logical actions the game cares about.
   const ACTIONS = ["up", "down", "left", "right", "spray", "whack", "dash", "jump", "confirm", "pause"];
 
@@ -40,6 +49,7 @@
       BUFFERED.forEach((a) => { this._bufAt[a] = null; });
 
       window.addEventListener("keydown", (e) => {
+        if (JH.isTyping()) return;   // let the name field capture its own keys
         const a = KEYMAP[e.code];
         if (a) {
           this._keys[a] = true;
@@ -49,6 +59,7 @@
         }
       });
       window.addEventListener("keyup", (e) => {
+        if (JH.isTyping()) return;
         const a = KEYMAP[e.code];
         if (a) this._keys[a] = false;
       });

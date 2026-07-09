@@ -19,7 +19,8 @@
         <h1 class="logo">JON&nbsp;HOSE</h1>
         <p class="tagline">Spray first. Ask questions never.</p>
         <div class="menu">
-          <button class="btn" data-action="start">PRESS START</button>
+          <button class="btn" data-action="start">START GAME</button>
+          <button class="btn" data-action="leaderboard">LEADERBOARD</button>
         </div>
         <div class="audio-ctl">
           <div class="audio-row">
@@ -36,6 +37,20 @@
           </div>
         </div>
         <p class="hint">Move: WASD / Arrows &nbsp;·&nbsp; Spray: J / Space &nbsp;·&nbsp; Dash: Shift / L &nbsp;·&nbsp; Shop: E</p>
+      </section>
+
+      <!-- NAME ENTRY (after Start Game, before the run) -->
+      <section id="screen-name" class="overlay hidden">
+        <h2>ENTER YOUR NAME</h2>
+        <div class="handle-field">
+          <input type="text" id="handle-input" class="handle-input" maxlength="20"
+            placeholder="ENTER NAME" aria-label="Leaderboard name" autocomplete="off" spellcheck="false" />
+          <span class="handle-note">for the leaderboard · blank = play anonymously</span>
+        </div>
+        <div class="menu">
+          <button class="btn" data-action="back-title">◀ BACK</button>
+          <button class="btn" data-action="begin">GO ▶</button>
+        </div>
       </section>
 
       <!-- HUD (during play) -->
@@ -72,6 +87,14 @@
         <h2 class="win">YOU WIN!</h2>
         <p id="win-stats" class="stats"></p>
         <button class="btn" data-action="retry">PLAY AGAIN</button>
+        <button class="btn" data-action="leaderboard">LEADERBOARD</button>
+      </section>
+
+      <!-- LEADERBOARD -->
+      <section id="screen-leaderboard" class="overlay hidden">
+        <h2>FASTEST WINS</h2>
+        <ol id="lb-list" class="stats"><li>Loading…</li></ol>
+        <button class="btn" data-action="close-leaderboard">BACK</button>
       </section>
 
       <!-- PAUSE -->
@@ -101,6 +124,7 @@
   <!-- Load order matters: namespace + config first, bootstrap last. -->
   <script src="js/loader.js"></script>
   <script src="js/config.js"></script>
+  <script src="js/telemetry.js"></script>
   <script src="js/balance.js"></script>
   <script src="js/truckrun.balance.js"></script>
   <script src="js/pillars.js"></script>
