@@ -437,6 +437,10 @@
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
+      // Flush a restarted-but-unfinished run as "abandoned" before starting the
+      // next, so TRY AGAIN / PLAY AGAIN deaths still feed the per-wave matrix
+      // (no-op after a win, which already finished the run).
+      if (JH.Telemetry) JH.Telemetry.finishAbandoned();
       if (JH.Telemetry) JH.Telemetry.startRun(this._playerHandle());
       this.showScreen("hud");
       document.getElementById("hud-wave").textContent = "Hosetown";

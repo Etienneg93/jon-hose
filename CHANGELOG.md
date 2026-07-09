@@ -7,6 +7,13 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.29.1 — Do-Over (2026-07-09)
+
+- **Telemetry:** hitting TRY AGAIN / PLAY AGAIN now flushes the restarted run
+  as `abandoned` before the new one begins, so deaths from players who *retry*
+  (not only those who close the tab) feed the per-wave death-rate matrix.
+  No-op after a win, which already finished the run.
+
 ## v0.29.0 — Water Meter (2026-07-09)
 
 Opt-in run telemetry plus an in-game fastest-win leaderboard, backed by a
