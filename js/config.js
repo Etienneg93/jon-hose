@@ -105,7 +105,6 @@
       "essence",
       "brass_nozzle", "spigot_key", "loaded_sponge", "prayer_bead", "collection_plate",
       "censer", "sunday_suit", "punch_card", "dowsing_rod", "alarm_bell",
-      "frame_duo", "frame_legendary",
       "bene_split_stream", "bene_baptismal_wake", "bene_overflow", "bene_baptize", "bene_absolution",
       "bene_scalding_faith", "bene_backdraft", "bene_trial_by_fire", "bene_ash_walk",
       "bene_aftershock", "bene_sure_grip", "bene_bedrock", "bene_landslide",

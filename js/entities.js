@@ -2622,7 +2622,7 @@
   JH.Pickup = Pickup;
 
   // ================================================== BENEDICTION SIGILS
-  // Post-boss/set-piece walk-up offer: a floating element glyph, picked with
+  // Post-boss/set-piece walk-up offer: a floating unique benediction glyph, picked with
   // E in range. Proximity + input are ticked game-side (game.tickSigils,
   // mirrors tickRangeStations); the sigil only exposes near (label range)
   // and pick(). Picking one offer clears all sigils on the field.
@@ -2659,8 +2659,8 @@
       const col = SIGIL_COLORS[this.element] || "#ffffff";
       const dk = SIGIL_COLORS_DK[this.element] || "#333333";
       Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 6);
-      // Baked element icon; the rotated diamond stays as the streaming fallback.
-      const hasIcon = Assets.icon(ctx, "el_" + this.element, sx, sy, 1);
+      // Baked unique benediction glyph; the rotated diamond stays as the streaming fallback.
+      const hasIcon = Assets.icon(ctx, "bene_" + this.offer.id, sx, sy, 1);
       if (!hasIcon) {
         ctx.save();
         ctx.translate(sx, sy);
@@ -2680,31 +2680,11 @@
         ctx.strokeRect(-half, -half, half * 2, half * 2);
         ctx.restore();
       }
-      // Kind frames ring the icon at 1.5x so they read around the glyph.
-      if (this.kind === "duo" && hasIcon && !Assets.icon(ctx, "frame_duo", sx, sy, 1.5)) {
-        // Two-tone diamond ring fallback while frame_duo streams in.
-        ctx.save();
-        ctx.translate(sx, sy);
-        ctx.rotate(Math.PI / 4);
-        const h = 7;
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = SIGIL_COLORS[d.needs[0]] || col;
-        ctx.strokeRect(-h, -h, h, h * 2);
-        ctx.strokeStyle = SIGIL_COLORS[d.needs[1]] || col;
-        ctx.strokeRect(0, -h, h, h * 2);
-        ctx.restore();
-      }
+      // Rarity frame + glow rings the icon (boon/duo/legendary per tier).
+      Assets.tierFrame(ctx, sx, sy, d, this.offer.deepen ? 2 : 1, 1.1, this.t);
       // Verb corner mark tells same-element boons apart (boons only — the
       // duo/legendary frames are their distinguisher).
       if (this.kind === "boon" && d.verb) Assets.verbMark(ctx, d.verb, sx + 6, sy - 6);
-      if (this.kind === "legendary" && !Assets.icon(ctx, "frame_legendary", sx, sy, 1.5)) {
-        // Gold double-ring around legendary sigils (fallback).
-        ctx.save();
-        ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-      }
       if (this.offer.deepen) {
         ctx.fillStyle = "#fff"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         ctx.fillText("II", sx, sy - 15);

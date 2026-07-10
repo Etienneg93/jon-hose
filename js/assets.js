@@ -487,6 +487,56 @@
     return true;
   };
 
+  // Benediction tier frame + glow around a baked 12px icon at (x, y) center.
+  // Boon I: thin element frame. Boon II: double frame + soft glow.
+  // Duo: split two-tone frame + glow. Legendary: gold + corner studs + pulse.
+  Assets.tierFrame = function (ctx, x, y, d, rank, scale, t) {
+    const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;  // half-extent
+    const el = d.element || (d.needs && d.needs[0]) || "water";
+    const c1 = JH.SIGIL_COLORS[el] || "#ffd23f";
+    const c2 = d.needs ? (JH.SIGIL_COLORS[d.needs[1]] || c1) : c1;
+    ctx.save();
+    const glow = d.kind === "legendary" ? 0.5 + 0.2 * Math.sin((t || 0) * 3)
+               : d.kind === "duo" ? 0.35 : rank >= 2 ? 0.3 : 0;
+    if (glow > 0) {
+      const g = ctx.createRadialGradient(x, y, s * 0.4, x, y, s * 2.1);
+      const gc = d.kind === "legendary" ? "255,210,63" : hexRgb(c1);
+      g.addColorStop(0, "rgba(" + gc + "," + glow.toFixed(3) + ")");
+      g.addColorStop(1, "rgba(" + gc + ",0)");
+      ctx.fillStyle = g; ctx.fillRect(x - s * 2.1, y - s * 2.1, s * 4.2, s * 4.2);
+    }
+    ctx.lineWidth = 1;
+    if (d.kind === "duo") {
+      ctx.strokeStyle = c1; ctx.strokeRect(x - s, y - s, s, s * 2);
+      ctx.strokeStyle = c2; ctx.strokeRect(x, y - s, s, s * 2);
+    } else if (d.kind === "legendary") {
+      ctx.strokeStyle = "#ffd23f"; ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+      ctx.fillStyle = "#fff7c2";
+      [[-s, -s], [s - 1, -s], [-s, s - 1], [s - 1, s - 1]].forEach(([dx, dy]) =>
+        ctx.fillRect(x + dx, y + dy, 2, 2));
+    } else {
+      ctx.strokeStyle = c1; ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+      if (rank >= 2) ctx.strokeRect(x - s - 2, y - s - 2, s * 2 + 4, s * 2 + 4);
+    }
+    ctx.restore();
+  };
+  // hexRgb helper: "#6cd3ff" -> "108,211,255" (add above tierFrame).
+  function hexRgb(h) {
+    return parseInt(h.slice(1, 3), 16) + "," + parseInt(h.slice(3, 5), 16) + "," + parseInt(h.slice(5, 7), 16);
+  }
+
+  // Relic gear frame: uniform steel square with bronze corners, no glow.
+  Assets.gearFrame = function (ctx, x, y, scale) {
+    const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;
+    ctx.save();
+    ctx.lineWidth = 1; ctx.strokeStyle = "#8fa8c8";
+    ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+    ctx.fillStyle = "#b08a5c";
+    [[-s, -s], [s - 1, -s], [-s, s - 1], [s - 1, s - 1]].forEach(([dx, dy]) =>
+      ctx.fillRect(x + dx, y + dy, 1, 1));
+    ctx.restore();
+  };
+
   // Boon verb corner mark (procedural, no PNG): stream = bar, dash = chevron,
   // body = dot. (x, y) is the TOP-RIGHT corner of the icon the mark tags —
   // the mark hangs down-left from it. Unknown/missing verb draws nothing.

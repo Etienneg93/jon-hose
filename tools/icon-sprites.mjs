@@ -240,25 +240,6 @@ const BAKERS = {
     l(4, 3, 1, 3, GOLD_HI);
     l(1, 4, 1, 1, STEEL_DK); l(10, 4, 1, 1, STEEL_DK);  // ring-out ticks
   },
-
-  // -------------------------------------------------------------- frames --
-  // Overlay rings (transparent centers) drawn over an element icon.
-  // Two-tone diamond ring: |dx|+|dy| == 5 taxicab ring, left/right halves.
-  frame_duo(l) {
-    for (let x = 0; x < SIZE; x++) for (let y = 0; y < SIZE; y++) {
-      const d = Math.abs(x - 5.5) + Math.abs(y - 5.5);
-      if (d >= 4.6 && d <= 5.6) l(x, y, 1, 1, x <= 5 ? STEEL : STEEL_DK);
-    }
-  },
-  // Gold circle ring + 4 cardinal star points.
-  frame_legendary(l) {
-    for (let x = 0; x < SIZE; x++) for (let y = 0; y < SIZE; y++) {
-      const d = Math.hypot(x - 5.5, y - 5.5);
-      if (d >= 4.4 && d <= 5.3) l(x, y, 1, 1, GOLD);
-    }
-    l(5, 0, 2, 1, GOLD_HI); l(5, 11, 2, 1, GOLD_HI);
-    l(0, 5, 1, 2, GOLD_HI); l(11, 5, 1, 2, GOLD_HI);
-  },
 };
 
 // ---------------------------------------------------------------------------
