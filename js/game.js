@@ -2188,8 +2188,9 @@
         ctx.textAlign = "left";
         ctx.restore();
       }
-      // Stat panel: at the vendor, or toggled anywhere with Tab.
-      if (this.state === "play" && (this.nearShop || this.showStats))
+      // Stat panel: always on in play (collapsed), named near the vendor,
+      // full character sheet when Tab-toggled.
+      if (this.state === "play")
         this.drawStatPanel(this.ctx);
       // Hover shop panel — drawn outside shake transform so it stays stable.
       if (this.nearShop && this.state === "play") {
@@ -2491,11 +2492,18 @@
     // moves, flashing green for 2s after any purchase changes them. Sits at
     // the top-left — the shop panel occupies PX=280..474, and no other HUD
     // element claims this corner while the shop is open.
+    // Three-mode character block: COLLAPSED (always on in play — icons +
+    // numbers, no labels), NAMED (near the vendor — adds stat labels),
+    // EXPANDED (Tab — adds benediction rows + owned-relic grid). Every
+    // section drawn below must be counted into H before the backdrop
+    // fillRect, or it clips at the panel edge.
     drawStatPanel(ctx) {
       const S = this.player.stats, F = this.player.statFlash || {};
-      // 4th column = baked icon key (drawn at half size before the label).
+      const expanded = this.showStats;                // Tab / gamepad Back
+      const inlineDesc = expanded && !this.nearShop;   // descriptions unless the shop needs the space
+      const named = expanded || this.nearShop;         // stat labels
+      // 4th column = baked icon key (drawn at half size before/instead of the label).
       const rows = [
-        ["LV",     this.playerLevel, null, null],
         ["DMG",    Math.round(S.sprayDamage), "sprayDamage", "dmg"],
         ["RANGE",  Math.round(S.sprayRange),  "sprayRange",  "range"],
         ["WATER",  Math.round(S.maxWater),    "maxWater",    "water"],
@@ -2511,12 +2519,13 @@
         rows.push(["DODGE", Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"]);
       if (S.vampiricRate > 0 || F.vampiricRate > 0)
         rows.push(["VAMP", Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"]);
-      // Active benedictions. When Tab-toggled (not at the shop, which has its
-      // own cursor inspection), each boon shows its rank-appropriate effect
-      // text inline — the tooltip treatment without a cursor.
-      const inlineDesc = this.showStats && !this.nearShop;
+
+      // Active benedictions (expanded only): baked 12px icon + tier frame,
+      // name in element color, rank-appropriate effect text wrapped below
+      // when Tab-toggled away from the shop (the shop needs the width for
+      // its own cursor inspection instead).
       const beneRows = [];
-      if (JH.Benedictions) {
+      if (expanded && JH.Benedictions) {
         for (const id of Object.keys(JH.Benedictions.active)) {
           const d = JH.Benedictions.byId(id);
           if (!d) continue;
@@ -2525,22 +2534,31 @@
           const tag = d.kind === "boon" ? (rank >= 2 ? " II" : "")
             : d.kind === "legendary" ? " ·LEG" : " ·DUO";
           beneRows.push({
+            id, d, rank,
             name: d.name + tag,
             color: JH.SIGIL_COLORS[el] || "#ffd23f",
             lines: inlineDesc ? this.wrapText(JH.Benedictions.effectText(id, rank), 36, 4) : [],
           });
         }
       }
+      // Relic grid (expanded only): owned relic icons, 9 per row.
+      const relicIds = expanded ? Object.keys(this.relics || {}) : [];
+      const relicRows = relicIds.length ? Math.ceil(relicIds.length / 9) : 0;
+
       const X = 10, Y = 30, ROW = 9;
-      const W = inlineDesc && beneRows.length ? 152 : 74;
+      const W = inlineDesc ? 152 : named ? 74 : 46;
+
       let beneH = 0;
-      if (beneRows.length) {
-        beneH = 6;
-        for (const b of beneRows) beneH += ROW + b.lines.length * 6 + (b.lines.length ? 2 : 0);
-      } else if (inlineDesc) {
-        beneH = 12;   // room for the "no benedictions yet" hint
+      if (expanded) {
+        if (beneRows.length) {
+          for (const b of beneRows) beneH += 14 + b.lines.length * 6 + 2;
+        } else {
+          beneH = 12;   // room for the "no benedictions yet" hint
+        }
       }
-      const H = rows.length * ROW + 16 + beneH;
+      const relicH = relicRows ? 12 + relicRows * 16 : 0;
+      const H = rows.length * ROW + 16 + beneH + relicH;
+
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.85)";
       ctx.fillRect(X - 4, Y - 10, W, H);
@@ -2554,32 +2572,57 @@
         // A row may aggregate several stat keys — flash if any of them changed.
         const live = [].concat(key).some((k) => F[k] > 0);
         const hot = live && (Math.floor(this.elapsed * 6) & 1) === 0;
-        // Stat icon at half size (6px) before the label; label alone until loaded.
-        const hasIcon = ik && JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
-        ctx.fillStyle = "#667788";
-        ctx.fillText(label, hasIcon ? X + 8 : X, y);
-        ctx.textAlign = "right";
-        ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
-        ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
-        ctx.textAlign = "left";
+        if (named) {
+          // Named row: icon at half size (6px) before the label; label alone until loaded.
+          const hasIcon = ik && JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
+          ctx.fillStyle = "#667788";
+          ctx.fillText(label, hasIcon ? X + 8 : X, y);
+          ctx.textAlign = "right";
+          ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
+          ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
+          ctx.textAlign = "left";
+        } else {
+          // Collapsed row: icon + value only, no label.
+          if (ik) JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
+          ctx.textAlign = "right";
+          ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
+          ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 6, y);
+          ctx.textAlign = "left";
+        }
       });
-      // Benediction section: name in element color, with inline wrapped effect
-      // text below it when the panel is Tab-toggled.
+
       let by = Y + 6 + rows.length * ROW + 6;
-      for (const b of beneRows) {
-        ctx.font = "6px monospace"; ctx.textAlign = "left";
-        ctx.fillStyle = b.color;
-        ctx.fillText(b.name, X, by);
-        by += ROW;
-        if (b.lines.length) {
-          ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
-          for (const ln of b.lines) { ctx.fillText(ln, X + 4, by); by += 6; }
+      if (expanded) {
+        for (const b of beneRows) {
+          const rowStart = by;
+          JH.Assets.icon(ctx, "bene_" + b.id, X + 8, rowStart + 1, 1);
+          JH.Assets.tierFrame(ctx, X + 8, rowStart + 1, b.d, b.rank, 1, this.elapsed);
+          ctx.font = "6px monospace"; ctx.textAlign = "left";
+          ctx.fillStyle = b.color;
+          ctx.fillText(b.name, X + 18, rowStart + 4);
+          by = rowStart + 14;
+          if (b.lines.length) {
+            ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
+            for (const ln of b.lines) { ctx.fillText(ln, X + 4, by); by += 6; }
+          }
           by += 2;
         }
-      }
-      if (inlineDesc && beneRows.length === 0) {
-        ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
-        ctx.fillText("no benedictions yet", X, Y + 6 + rows.length * ROW + 6);
+        if (beneRows.length === 0) {
+          ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
+          ctx.fillText("no benedictions yet", X, by + 6);
+          by += 12;
+        }
+        if (relicIds.length) {
+          ctx.font = "5px monospace"; ctx.fillStyle = "#667788"; ctx.textAlign = "left";
+          ctx.fillText("RELICS", X, by + 6);
+          const gridTop = by + 12;
+          relicIds.forEach((id, i) => {
+            const gx = X + 8 + (i % 9) * 16, gy = gridTop + 8 + Math.floor(i / 9) * 16;
+            JH.Assets.icon(ctx, id, gx, gy, 1);
+            JH.Assets.gearFrame(ctx, gx, gy, 1);
+          });
+          by += relicH;
+        }
       }
       ctx.restore();
     },
