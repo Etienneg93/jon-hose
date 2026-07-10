@@ -1039,15 +1039,19 @@
       return true;
     },
     // Pooled world-space floating text (essence gains, level-ups, shop buys).
-    // Rises ~22px over 0.9s while fading; oldest dropped past a 20-cap so a
-    // burst of simultaneous pickups can't grow the pool unbounded.
-    float(x, y, text, color) {
-      this.floaters.push({ x, y, t: 0, text, color });
+    // Default: rises ~22px over 0.9s while fading. opts (all optional):
+    // life (s), rise (px), h (starting px above the feet line), big (8px
+    // bold). Oldest dropped past a 20-cap so a burst of simultaneous pickups
+    // can't grow the pool unbounded.
+    float(x, y, text, color, opts) {
+      const o = opts || {};
+      this.floaters.push({ x, y, t: 0, text, color,
+        life: o.life || 0.9, rise: o.rise || 22, h: o.h || 0, big: !!o.big });
       if (this.floaters.length > 20) this.floaters.shift();
     },
     tickFloaters(dt) {
       for (const f of this.floaters) f.t += dt;
-      this.floaters = this.floaters.filter((f) => f.t < 0.9);
+      this.floaters = this.floaters.filter((f) => f.t < (f.life || 0.9));
     },
     // Auto-award any live essence crosses. Called wherever the pickup array is
     // about to go away (win, church respawn) so banked essence can't be lost.
@@ -1132,7 +1136,10 @@
         this.audio.play("upgrade", { pitch: 1.3 });
         JH.burst(this, p.x, p.y, p.z + 16, "#ffd23f", 16, { speed: 90, life: 0.5, up: 70, size: 2 });
         this.shake(3);
-        this.float(p.x, p.y - 34, "LEVEL UP", "#ffd23f");
+        // Above the overhead bar stack (bodyH + bars + xp), bigger + slower
+        // than a loot blip so it reads through the combat noise.
+        this.float(p.x, p.y, "LEVEL UP", "#ffd23f",
+          { life: 1.8, rise: 34, h: p.stats.bodyH + 46, big: true });
         // The stat delta itself plays through the upgrade sequence (icon +
         // amount rising off Jon, queued by applyStats) — no text spam here.
       }
@@ -2243,10 +2250,13 @@
         ctx.translate(so.x, so.y);
         ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         for (const f of this.floaters) {
-          const k = f.t / 0.9;
+          const k = f.t / (f.life || 0.9);
           ctx.globalAlpha = Math.max(0, 1 - k);
           ctx.fillStyle = f.color;
-          ctx.fillText(f.text, f.x - cam, JH.Geo.feetScreenY(f.y, 0) - 22 * k);
+          if (f.big) ctx.font = "bold 8px monospace";
+          ctx.fillText(f.text, f.x - cam,
+            JH.Geo.feetScreenY(f.y, 0) - (f.h || 0) - (f.rise || 22) * k);
+          if (f.big) ctx.font = "bold 6px monospace";
         }
         ctx.globalAlpha = 1;
         ctx.textAlign = "left";
@@ -2633,7 +2643,7 @@
               beneH += Math.max(24, 16 + b.lines.length * 6);
             }
           } else {
-            beneH = 12;   // room for the "no benedictions yet" hint
+            beneH = 18;   // "no benedictions yet" hint + slack below its baseline
           }
         }
         return rows.length * ROW + 16 + beneH + relicH;

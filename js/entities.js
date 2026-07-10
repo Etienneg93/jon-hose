@@ -1070,18 +1070,18 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
-      // XP: joins the overhead stack only while xpFlashT runs (set on gain),
-      // fading over its last 0.5s — the bar stays out of the way otherwise.
+      // XP: sits ABOVE the HP bar (grows away from Jon's head) only while
+      // xpFlashT runs (set on gain), fading over its last 0.5s.
       if (this.xpFlashT > 0 && JH.Game && JH.Game.playerLevel != null) {
         ctx.save();
         ctx.globalAlpha = Math.min(1, this.xpFlashT / 0.5);
         const xf = Math.min(1, JH.Game.playerXp / JH.Balance.xpForLevel(JH.Game.playerLevel + 1));
         ctx.fillStyle = "rgba(0,0,0,0.65)";
-        ctx.fillRect(bx - 1, barTop + 8, barW + 2, 4);
+        ctx.fillRect(bx - 1, barTop - 5, barW + 2, 4);
         ctx.fillStyle = "#443300";
-        ctx.fillRect(bx, barTop + 9, barW, 2);
+        ctx.fillRect(bx, barTop - 4, barW, 2);
         ctx.fillStyle = "#ffd23f";
-        ctx.fillRect(bx, barTop + 9, Math.round(barW * xf), 2);
+        ctx.fillRect(bx, barTop - 4, Math.round(barW * xf), 2);
         ctx.restore();
       }
       // GUSH regen: a brightness wave travels left → right through the
