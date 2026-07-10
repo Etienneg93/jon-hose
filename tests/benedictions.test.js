@@ -106,19 +106,22 @@ test("wash moves active boons to the reliquary; second wash keeps the higher ran
   B.reset();
 });
 
-test("reclaimNext restores one washed boon at its rank, FIFO; empty returns null", () => {
+test("reliquary: redeemAll restores every washed boon at rank, cost escalates, reset clears", () => {
   B.reset();
-  B.take("bedrock"); B.take("bedrock");
-  B.take("gale_stride");
+  B.take("split_stream"); B.take("split_stream"); B.take("ash_walk");
   B.wash();
-  const first = B.reclaimNext();
-  assert.strictEqual(first.id, "bedrock");
-  assert.strictEqual(B.rank("bedrock"), 2, "reclaimed at washed rank");
-  assert.strictEqual(B.washedCount(), 1);
-  const second = B.reclaimNext();
-  assert.strictEqual(second.id, "gale_stride");
-  assert.strictEqual(B.reclaimNext(), null, "empty reliquary");
+  assert.strictEqual(B.redeemAllCost(), 1);
+  const n = B.redeemAll();
+  assert.strictEqual(n, 2);
+  assert.strictEqual(B.rank("split_stream"), 2);
+  assert.strictEqual(B.rank("ash_walk"), 1);
+  assert.strictEqual(B.washedCount(), 0);
+  assert.strictEqual(B.redeemAllCost(), 2, "second redemption costs 2");
+  B.wash();                      // death does NOT reset the counter
+  assert.strictEqual(B.redeemAllCost(), 2);
   B.reset();
+  assert.strictEqual(B.redeemAllCost(), 1, "new run resets the counter");
+  assert.strictEqual(typeof B.reclaimNext, "undefined", "per-boon reclaim retired");
 });
 
 test("reset clears both active and washed (new run wipes the reliquary)", () => {
