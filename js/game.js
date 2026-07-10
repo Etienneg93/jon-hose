@@ -122,13 +122,8 @@
       sync();
 
       // Tab toggles the stat panel anywhere in play (UI chrome, not a
-      // combat verb — preventDefault stops browser focus-cycling).
-      window.addEventListener("keydown", (e) => {
-        if (e.code === "Tab" && this.state === "play") {
-          e.preventDefault();
-          this.showStats = !this.showStats;
-        }
-      });
+      // combat verb). Tab / gamepad Back route through JH.Input as the
+      // "toggleStats" action, handled in update().
 
       // ---- dev menu: localhost-only, backtick toggles wave-select overlay ----
       const h = window.location.hostname;
@@ -1450,6 +1445,10 @@
         || this.state === "truck" || this.state === "truckPause"))
         this.togglePause();
 
+      // Stat + benediction panel toggle (Tab / gamepad Back).
+      if (this.input.pressed("toggleStats") && this.state === "play")
+        this.showStats = !this.showStats;
+
       if (this.bannerTimer > 0) {
         this.bannerTimer -= dt;
         if (this.bannerTimer <= 0) document.getElementById("banner").classList.add("hidden");
@@ -2365,6 +2364,22 @@
       return true;
     },
 
+    // Greedy word-wrap into up to `maxLines` lines of ~maxChars each (last line
+    // clipped past the cap). Shared by the shop + stat-panel benediction tips.
+    wrapText(str, maxChars, maxLines) {
+      const words = String(str || "").split(" ");
+      const lines = [];
+      let line = "";
+      for (const w of words) {
+        const trial = line ? line + " " + w : w;
+        if (trial.length > maxChars && line) { lines.push(line); line = w; }
+        else line = trial;
+        if (lines.length >= maxLines) return lines;
+      }
+      if (line && lines.length < maxLines) lines.push(line);
+      return lines;
+    },
+
     // Slim stat readout beside the hover shop: the numbers the scaling pass
     // moves, flashing green for 2s after any purchase changes them. Sits at
     // the top-left — the shop panel occupies PX=280..474, and no other HUD
@@ -2389,9 +2404,36 @@
         rows.push(["DODGE", Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"]);
       if (S.vampiricRate > 0 || F.vampiricRate > 0)
         rows.push(["VAMP", Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"]);
-      const beneIds = JH.Benedictions ? Object.keys(JH.Benedictions.active) : [];
-      const X = 10, Y = 30, ROW = 9, W = 74;
-      const H = rows.length * ROW + 16 + (beneIds.length ? beneIds.length * ROW + 6 : 0);
+      // Active benedictions. When Tab-toggled (not at the shop, which has its
+      // own cursor inspection), each boon shows its rank-appropriate effect
+      // text inline — the tooltip treatment without a cursor.
+      const inlineDesc = this.showStats && !this.nearShop;
+      const beneRows = [];
+      if (JH.Benedictions) {
+        for (const id of Object.keys(JH.Benedictions.active)) {
+          const d = JH.Benedictions.byId(id);
+          if (!d) continue;
+          const rank = JH.Benedictions.active[id] | 0;
+          const el = d.element || (d.needs && d.needs[0]) || "water";
+          const tag = d.kind === "boon" ? (rank >= 2 ? " II" : "")
+            : d.kind === "legendary" ? " ·LEG" : " ·DUO";
+          beneRows.push({
+            name: d.name + tag,
+            color: JH.SIGIL_COLORS[el] || "#ffd23f",
+            lines: inlineDesc ? this.wrapText(JH.Benedictions.effectText(id, rank), 36, 4) : [],
+          });
+        }
+      }
+      const X = 10, Y = 30, ROW = 9;
+      const W = inlineDesc && beneRows.length ? 152 : 74;
+      let beneH = 0;
+      if (beneRows.length) {
+        beneH = 6;
+        for (const b of beneRows) beneH += ROW + b.lines.length * 6 + (b.lines.length ? 2 : 0);
+      } else if (inlineDesc) {
+        beneH = 12;   // room for the "no benedictions yet" hint
+      }
+      const H = rows.length * ROW + 16 + beneH;
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.85)";
       ctx.fillRect(X - 4, Y - 10, W, H);
@@ -2414,16 +2456,24 @@
         ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
         ctx.textAlign = "left";
       });
-      // Active benedictions, listed under the stat rows in their element color.
-      beneIds.forEach((id, i) => {
-        const d = JH.Benedictions.byId(id);
-        if (!d) return;
-        const rank = JH.Benedictions.active[id] | 0;
-        const el = d.element || (d.needs && d.needs[0]) || "water";
-        const y = Y + 6 + rows.length * ROW + 6 + i * ROW;
-        ctx.fillStyle = JH.SIGIL_COLORS[el] || "#ffd23f";
-        ctx.fillText(d.name + (rank >= 2 ? " II" : ""), X, y);
-      });
+      // Benediction section: name in element color, with inline wrapped effect
+      // text below it when the panel is Tab-toggled.
+      let by = Y + 6 + rows.length * ROW + 6;
+      for (const b of beneRows) {
+        ctx.font = "6px monospace"; ctx.textAlign = "left";
+        ctx.fillStyle = b.color;
+        ctx.fillText(b.name, X, by);
+        by += ROW;
+        if (b.lines.length) {
+          ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
+          for (const ln of b.lines) { ctx.fillText(ln, X + 4, by); by += 6; }
+          by += 2;
+        }
+      }
+      if (inlineDesc && beneRows.length === 0) {
+        ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
+        ctx.fillText("no benedictions yet", X, Y + 6 + rows.length * ROW + 6);
+      }
       ctx.restore();
     },
 
@@ -2630,13 +2680,9 @@
       if (desc) {
         ctx.fillStyle = "#778899";
         ctx.font = "5px monospace";
-        const wrap = desc.length > 34 ? desc.lastIndexOf(" ", 34) : -1;
-        if (wrap > 0) {
-          ctx.fillText(desc.slice(0, wrap), PX + 5, dy + 6);
-          ctx.fillText(desc.slice(wrap + 1), PX + 5, dy + 12);
-        } else {
-          ctx.fillText(desc, PX + 5, dy + 6);
-        }
+        // 3 lines is the vertical budget between separator and footer; 48
+        // chars/line greedy-wraps every rank-II benediction text untruncated.
+        this.wrapText(desc, 48, 3).forEach((ln, i) => ctx.fillText(ln, PX + 5, dy + 6 + i * 6));
       }
 
       // Footer hint

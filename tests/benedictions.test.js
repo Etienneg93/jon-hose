@@ -19,6 +19,21 @@ test("DEFS: every boon carries a verb from the allowed set; duos/legendaries non
   }
 });
 
+test("effectText: rank 1 is base desc; rank 2 appends the II upgrade line", () => {
+  const d = B.byId("split_stream");
+  assert.strictEqual(B.effectText("split_stream", 1), d.desc);
+  assert.strictEqual(B.effectText("split_stream", 0), d.desc);
+  const two = B.effectText("split_stream", 2);
+  assert.ok(two.startsWith(d.desc), "rank-2 text keeps the base effect");
+  assert.ok(two.includes(d.descII), "rank-2 text includes the descII upgrade");
+});
+
+test("effectText: duos/legendaries (no descII) return their single desc at any rank", () => {
+  const duo = B.byId("steam_sermon");
+  assert.strictEqual(B.effectText("steam_sermon", 2), duo.desc);
+  assert.strictEqual(B.effectText("bogus_id", 2), "");
+});
+
 test("pickOffers: 3 offers, distinct elements when possible, no rank-2 repeats", () => {
   const state = { active: {}, pillarRanks: {}, usedOnce: {}, censer: false };
   const offers = B.pickOffers(state, () => 0.9);   // high rolls: no duo/legendary

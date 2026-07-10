@@ -132,6 +132,18 @@
 
     rank(id) { return this.active[id] | 0; },
 
+    // Rank-aware effect text for an owned/inspected boon (the tooltip body).
+    // rank 0/1 -> base desc; rank 2 -> base desc + the descII upgrade line so
+    // a maxed boon reads what rank II actually grants, not just a "II" badge.
+    // Duos/legendaries have no descII, so they always return their single desc.
+    effectText(id, rank) {
+      const d = this.byId(id);
+      if (!d) return "";
+      let t = d.desc || "";
+      if ((rank | 0) >= 2 && d.descII) t += "  ▲ II: " + d.descII;
+      return t;
+    },
+
     // Full wipe (new run): clears both live boons and the reliquary.
     reset() { this.active = {}; this.washed = {}; },
 

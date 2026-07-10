@@ -7,7 +7,7 @@
   const JH = (window.JH = window.JH || {});
 
   // Logical actions the game cares about.
-  const ACTIONS = ["up", "down", "left", "right", "spray", "whack", "dash", "jump", "confirm", "pause"];
+  const ACTIONS = ["up", "down", "left", "right", "spray", "whack", "dash", "jump", "confirm", "pause", "toggleStats"];
 
   // Keyboard map (multiple keys per action).
   const KEYMAP = {
@@ -19,6 +19,7 @@
     ShiftLeft: "dash", ShiftRight: "dash", KeyL: "dash",
     Enter: "confirm", KeyE: "confirm",   // confirm doubles as "interact" with the shop NPC
     Escape: "pause",
+    Tab: "toggleStats",                  // stat/benediction panel (UI chrome, not a verb)
   };
 
   // Edge-buffered actions: a press stays "pending" for BUFFER_MS and is
@@ -43,8 +44,8 @@
         const a = KEYMAP[e.code];
         if (a) {
           this._keys[a] = true;
-          // Prevent page scroll on arrows/space.
-          if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code))
+          // Prevent page scroll on arrows/space and focus-cycling on Tab.
+          if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(e.code))
             e.preventDefault();
         }
       });
@@ -81,10 +82,12 @@
         if (down(13)) s.down = true;
         if (down(14)) s.left = true;
         if (down(15)) s.right = true;
-        if (down(0)) s.spray = true;  // A
+        if (down(0)) { s.spray = true; s.confirm = true; } // A: spray in play, confirm/interact in menus
         if (down(7)) s.spray = true;  // RT
         if (down(1)) s.dash = true;   // B
-        if (down(9)) { s.confirm = true; s.pause = true; } // Start
+        if (down(2)) s.confirm = true; // X: confirm/interact
+        if (down(8)) s.toggleStats = true; // Back/Select: stat + benediction panel
+        if (down(9)) s.pause = true;  // Start
       }
 
       this.state = s;
