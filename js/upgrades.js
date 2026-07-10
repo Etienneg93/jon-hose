@@ -1,11 +1,12 @@
 /* =====================================================================
-   upgrades.js — three signature purchases + a repeatable Overcharge sink
-   (replaces the old 15-node branching skill tree).
+   upgrades.js — the repeatable Overcharge sink + the player stat fold.
 
-   Each node is bought ONCE, costs Suds, and may require earlier nodes in
-   its branch. `owned` tracks purchased node ids; computeStats() folds the
-   apply() of every owned node onto the base JH.PLAYER block. Some nodes
-   set flags (beam / dashPuddle) that the player logic reads directly.
+   NODES is empty (the three signature purchases live in JH.RELICS now,
+   vendor-stock relics). REPEATABLES (Overcharge) unlocks by act via
+   overchargeUnlocked(), bought any number of times at rising cost.
+   computeStats() builds the player's effective stats fresh each time from
+   base JH.PLAYER + owned relics' apply() + repeatable buys + XP-level
+   gains + Church pillar ranks + active benedictions.
    ===================================================================== */
 (function () {
   "use strict";
@@ -60,8 +61,9 @@
     // the Punch Card relic discount before calling in.
     canBuy(id, suds, price) { return this.isAvailable(id) && suds >= (price != null ? price : this.cost(id)); },
 
-    // Every one-time skill node purchased — gates the repeatable OVERCHARGE nodes.
-    allNodesOwned() { return NODES.every((n) => this.owned[n.id]); },
+    // Gates the repeatable OVERCHARGE nodes: unlocked from Act 2 on
+    // (currentActLevel >= 0, set by Game after the first boss falls).
+    overchargeUnlocked() { return this.currentActLevel >= 0; },
 
     nodesByBranch(branch) {
       return NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier);

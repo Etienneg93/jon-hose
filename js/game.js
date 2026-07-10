@@ -430,7 +430,8 @@
       // batch/trickle + wall/holdout reinforcement).
       const actLevel = JH.Balance.actLevelForWave(i, JH.ACT_STARTS);
       const ownedCount = JH.Balance.powerCount(
-        JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
+        JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount,
+        this.statRelicCount());
       this.waveEliteScale = wave.tough ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
       this.waveEliteFrac = wave.tough ? (JH.ELITE_FRAC[actLevel + 1] || 0) : 0;
       this._eliteAcc = 0;
@@ -910,7 +911,8 @@
       // instead of deleting them.
       if (e.isBoss) {
         const pc = JH.Balance.powerCount(
-          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount,
+          this.statRelicCount());
         e.hp = e.maxHp = JH.Balance.bossHpScale(e.maxHp, pc);
       }
       this.enemies.push(e);
@@ -929,11 +931,18 @@
       return Math.round(p);
     },
     // Places a walk-up vendor and rolls its relic stock (3 of the still-
-    // unowned pool). Single spot so every vendor spawn site rolls stock the
-    // same way.
+    // unowned pool, minus any actGate relics before Act 2). Single spot so
+    // every vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
-      this.relicStock = JH.Balance.pickRelics(JH.RELICS.map((r) => r.id), this.relics, 3, Math.random);
+      const pool = JH.Balance.relicPoolIds(JH.RELICS, JH.Upgrades.currentActLevel);
+      this.relicStock = JH.Balance.pickRelics(pool, this.relics, 3, Math.random);
+    },
+    // Stat-bearing relics owned (defs with apply) — feeds Balance.powerCount.
+    statRelicCount() {
+      let n = 0;
+      (JH.RELICS || []).forEach((r) => { if (r.apply && this.relics && this.relics[r.id]) n++; });
+      return n;
     },
     // Attempt to buy a relic from the current vendor stock; returns true on success.
     buyRelic(id) {
@@ -2350,8 +2359,8 @@
       const U = JH.Upgrades;
       const out = [];
       U.nodes.forEach((n) => { if (U.isAvailable(n.id)) out.push({ kind: "node", id: n.id }); });
-      // OVERCHARGE only unlocks once the whole skill tree is bought.
-      if (U.allNodesOwned()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
+      // OVERCHARGE only unlocks from Act 2 on (after the first boss).
+      if (U.overchargeUnlocked()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
       // "pressure" is delisted until the buff works.
       Object.keys(JH.CONSUMABLES).forEach((k) => {
         if (k !== "pressure") out.push({ kind: "consumable", id: k });
@@ -2581,8 +2590,8 @@
         U.nodesByBranch(branch).forEach((n) => rows.push({ t: "node", n }));
       });
       rows.push({ t: "head", label: "── OVERCHARGE ──" });
-      if (U.allNodesOwned()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
-      else rows.push({ t: "lock", label: "Max the skill tree to unlock" });
+      if (U.overchargeUnlocked()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
+      else rows.push({ t: "lock", label: "Unlocks after the first boss" });
       rows.push({ t: "head", label: "── SUPPLIES ──" });
       Object.keys(JH.CONSUMABLES).forEach((k) => rows.push({ t: "con", k }));
       rows.push({ t: "head", label: "── RELICS ──" });

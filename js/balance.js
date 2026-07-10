@@ -30,16 +30,25 @@
     },
 
     // Total player-power count fed to eliteScale/bossHpScale: one-time nodes
-    // + repeatable Overcharge buys + total pillar ranks + XP levels. All sources of
-    // permanent stat growth count, so the enemy ramp can see them.
-    powerCount(owned, repCount, churchState, levelCount) {
+    // + repeatable Overcharge buys + total pillar ranks + XP levels + owned
+    // stat-bearing relics (5th arg, default 0). All sources of permanent
+    // stat growth count, so the enemy ramp can see them.
+    powerCount(owned, repCount, churchState, levelCount, statRelicCount) {
       let n = Object.keys(owned || {}).length;
       const rc = repCount || {};
       for (const k in rc) n += rc[k] || 0;
       const p = (churchState && churchState.pillars) || {};
       for (const k in p) n += p[k] | 0;
       n += levelCount | 0;
+      n += statRelicCount | 0;
       return n;
+    },
+
+    // Vendor relic pool: every relic id except actGate ones (hydro_lance)
+    // before Act 2 (actLevel >= 0 means the first boss is down). Pure —
+    // takes the relic defs array, doesn't read JH.RELICS itself.
+    relicPoolIds(relicDefs, actLevel) {
+      return (relicDefs || []).filter((r) => !r.actGate || actLevel >= 0).map((r) => r.id);
     },
 
     // Boss HP at spawn scales with player power (same count as eliteScale).
