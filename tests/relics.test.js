@@ -51,3 +51,11 @@ test("overcharge unlocks by act, not node ownership", () => {
   assert.strictEqual(JH.Upgrades.overchargeUnlocked(), true);
   JH.Upgrades.currentActLevel = -1;
 });
+
+test("retuned relic descs match the flat-gear effects", () => {
+  const d = (id) => JH.RELICS.find((r) => r.id === id).desc;
+  assert.match(d("brass_nozzle"), /\+10 spray dmg .* first enemy/i);
+  assert.match(d("spigot_key"), /hydrant .* (restores|heals)/i);
+  assert.match(d("prayer_bead"), /8s|8 s/i);
+  assert.match(d("loaded_sponge"), /doubled .* regen window/i);
+});

@@ -319,6 +319,18 @@ test("GUSH x5 bumps the regen tier and refunds water", () => {
   assert.ok(g.audio.played.some((s) => s.k === "upgrade"), "audible milestone");
 });
 
+test("Loaded Sponge: GUSH regen windows (x3 and x5+) run spongeWindowBonus seconds longer", () => {
+  const g = killStub(false);
+  g.relics = { loaded_sponge: true };
+  g.combo = 2;
+  JH.Game.onEnemyKilled.call(g, null);   // x3
+  assert.strictEqual(g.player.gushRegenT, JH.JUICE.gushRegenDur + JH.RELIC_TUNE.spongeWindowBonus);
+
+  g.combo = 4;
+  JH.Game.onEnemyKilled.call(g, null);   // x5
+  assert.strictEqual(g.player.gushRegenT, JH.JUICE.gushRegenDur + JH.RELIC_TUNE.spongeWindowBonus);
+});
+
 test("GUSH regen scales with the milestone — x20 pays 4x the x5 rate, uncapped", () => {
   const g = killStub(false);
   g.combo = 9;

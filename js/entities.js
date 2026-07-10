@@ -180,7 +180,6 @@
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
       this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
-      this.spigotT = 0;            // Spigot Key: +10% spray dmg window after a hydrant refill, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
       this.kibbleTickT = 0;        // seconds until the next +N floater tick
@@ -261,7 +260,7 @@
       this.kibbleTimer = 0; this.kibbleRegen = 0;
       this.concertaTimer = 0; this.pressureBuffT = 0;
       this.gushRegenT = 0; this.gushRegenRate = 0;
-      this.spigotT = 0; this.freeSprayT = 0;
+      this.freeSprayT = 0;
       this.stormT = 0; this.vigorT = 0;
       this.douseCdT = 0; this.dashGraceT = 0;
     }
@@ -301,7 +300,6 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
-      if (this.spigotT > 0) this.spigotT -= dt;
       if (this.douseCdT > 0) this.douseCdT -= dt;
       if (this.freeSprayT > 0) this.freeSprayT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
@@ -536,8 +534,9 @@
         for (const h of game.hydrants) {
           if (Math.abs(this.x - h.x) < JH.HYDRANT.range && Math.abs(this.y - h.y) < 24) {
             this.nearHydrant = h;
-            // Spigot Key: a hydrant refill grants a brief spray-dmg buff.
-            if (game.relics && game.relics.spigot_key) this.spigotT = 15;
+            // Spigot Key: while a hydrant is refilling you, also heal HP/s.
+            if (game.relics && game.relics.spigot_key)
+              this.hp = Math.min(S.maxHp, this.hp + JH.RELIC_TUNE.spigotHealRate * dt);
             if (this.water < S.maxWater) {
               this.water = Math.min(S.maxWater, this.water + JH.HYDRANT.refill * dt);
               if (Math.random() < 0.5)
@@ -616,8 +615,6 @@
       const pierce = beam >= 3;
       let blocker = null;
       let minFwd = Infinity;   // near-edge distance of the chosen blocker (used below)
-      let shieldFwd = Infinity;     // near edge of the CLOSEST blocking shield/dome in the stream
-      let blockerIsEnemy = false;   // final blocker came from game.enemies (not a shield/dome)
       {
         if (!pierce) {
           for (const e of game.enemies) {
@@ -625,7 +622,7 @@
             if (e.dropping) continue;   // airborne drop-ins can't block or be hit
             if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
-            if (fwd < minFwd) { minFwd = fwd; blocker = e; blockerIsEnemy = true; }
+            if (fwd < minFwd) { minFwd = fwd; blocker = e; }
           }
         }
         for (const s of game.shields) {
@@ -643,39 +640,12 @@
             const half = s.radius * Math.sqrt(1 - (dyS * dyS) / (ry * ry));// x half-width at this depth
             const edgeFwd = (s.x - ox) * this.facing - half;               // near edge along facing
             if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
-            if (edgeFwd < shieldFwd) shieldFwd = edgeFwd;
-            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; blockerIsEnemy = false; }
+            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
           } else {
             if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (s.x - ox) * this.facing;
-            if (fwd < shieldFwd) shieldFwd = fwd;
-            if (fwd < minFwd) { minFwd = fwd; blocker = s; blockerIsEnemy = false; }
+            if (fwd < minFwd) { minFwd = fwd; blocker = s; }
           }
-        }
-      }
-      // Brass Nozzle: the non-pierce stream also catches the next-closest
-      // enemy in arc (a second, independent blocker — not just splash off the
-      // first). Only when the primary blocker is an ENEMY (a shield/dome
-      // blocker means the stream is stopped by a wall — nothing gets promoted
-      // past it), and never a candidate at/past any blocking shield's near
-      // edge or sheltered inside an active dome.
-      let blocker2 = null;
-      if (!pierce && blockerIsEnemy && game.relics && game.relics.brass_nozzle) {
-        let minFwd2 = Infinity;
-        for (const e of game.enemies) {
-          if (e.dead || e.dropping || e === blocker) continue;
-          if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-          const fwd = (e.x - ox) * this.facing;
-          if (fwd >= shieldFwd) continue;   // the stream never reaches past a shield/dome
-          // Dome shelter mirrors the damage loop's rule: don't promote a
-          // target the loop would refuse to hit — pick a reachable one instead.
-          let sheltered = false;
-          for (const s of game.shields) {
-            if (s.dead || !s.radius || !s.active) continue;
-            if (insideDome(s, e.x, e.y) && !insideDome(s, this.x, this.y)) { sheltered = true; break; }
-          }
-          if (sheltered) continue;
-          if (fwd < minFwd2) { minFwd2 = fwd; blocker2 = e; }
         }
       }
       // Particles die at the blocker's near face so the stream visually stops there.
@@ -732,8 +702,7 @@
         }
       }
 
-      // Damage enemies: non-pierce hits only the closest (blocker) — plus a
-      // second, next-closest target (blocker2) when Brass Nozzle is owned;
+      // Damage enemies: non-pierce hits only the closest (blocker);
       // pierce hits everyone EXCEPT anyone standing behind a planted shield's wall.
       // (`blocker` can only ever be an enemy in non-pierce mode, or a
       // DeployedShield in pierce mode — see the blocker-finding block above,
@@ -754,11 +723,13 @@
       const anyBene = beneRanks.overflow || beneRanks.baptize || beneRanks.trial;
       const waterFrac = this.water / S.maxWater;
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
+      // Brass Nozzle: flat dmg add to the primary stream target only.
+      const nozzleAdd = (game.relics && game.relics.brass_nozzle) ? JH.RELIC_TUNE.brassNozzleAdd : 0;
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-        if (!pierce && e !== blocker && e !== blocker2) continue;
+        if (!pierce && e !== blocker) continue;
         if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
         // Dome shelter: an enemy inside an active dome is immune while you're
         // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
@@ -778,8 +749,8 @@
           burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
         }) : 1;
         const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
-        const spigotMult = this.spigotT > 0 ? 1.1 : 1;   // Spigot Key: post-hydrant dmg window
-        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * ssMult * spigotMult * dt;
+        const flatDmg = S.sprayDamage + (e === blocker ? nozzleAdd : 0);
+        const dmg = flatDmg * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
         // fire pillar's baseline capstone are independent sources — both can land.
@@ -2460,7 +2431,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
       }
       const spd = enraged ? d.speed * 1.6 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -2795,7 +2766,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
       }
       if (this.fireFx > 0) this.fireFx -= dt;
 
@@ -3400,7 +3371,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
       }
       const spd = enraged ? d.speed * 1.4 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -3946,7 +3917,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
       }
       if (this.fireFx > 0) this.fireFx -= dt;
 
@@ -4150,7 +4121,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
       }
       // Pin to the right edge of the arena; never moves.
       this.x = game.bounds.maxX - 6;
@@ -4592,7 +4563,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
       }
       if (this.strikeFx > 0) this.strikeFx -= dt;
       if (this.shootPoseT > 0) this.shootPoseT -= dt;

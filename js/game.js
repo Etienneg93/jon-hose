@@ -997,15 +997,17 @@
       const p = this.player;
       if (p && p.alive) {
         const J = JH.JUICE;
+        // Loaded Sponge: GUSH regen windows run longer (both the x3 and x5+ tiers).
+        const winBonus = (this.relics && this.relics.loaded_sponge) ? JH.RELIC_TUNE.spongeWindowBonus : 0;
         if (this.combo === 3) {
-          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenT = J.gushRegenDur + winBonus;
           p.gushRegenRate = J.gushRegen3;
           this.audio.play("upgrade");
         } else if (this.combo >= 5 && this.combo % 5 === 0) {
           // Regen scales with the milestone, uncapped — x5 pays 8/s, x10 16/s,
           // x20 32/s: absurd chains deserve absurd water.
           const tier = this.combo / 5;
-          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenT = J.gushRegenDur + winBonus;
           p.gushRegenRate = J.gushRegen5 * tier;
           // Loaded Sponge: GUSH milestone water refund doubled.
           const refundMult = (this.relics && this.relics.loaded_sponge) ? 2 : 1;

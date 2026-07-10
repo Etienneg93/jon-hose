@@ -1271,10 +1271,10 @@ test("super bulwark recovers its shield when the lob dies mid-flight", () => {
 
 // ---- Relics: runtime effect hooks ----
 
-test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", () => {
+test("Brass Nozzle: +10 flat dmg to the primary (blocker) target only; never a second target", () => {
   const g = makeThinkGame(60, 40);
   const p = g.player;
-  p.water = p.stats.maxWater; p.facing = 1;
+  p.water = p.stats.maxWater; p.facing = 1;   // full pressure tier (dmgScale 1.2)
   const near = new JH.Enemy("mook", p.x + 20, p.y);
   const far  = new JH.Enemy("mook", p.x + 40, p.y);
   g.enemies = [far, near];   // order shouldn't matter — nearest is still the primary blocker
@@ -1282,45 +1282,23 @@ test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", 
   // Without the relic: only the closest (blocker) takes damage.
   const hpNear0 = near.hp, hpFar0 = far.hp;
   p.doSpray(0.05, g);
-  assert.ok(near.hp < hpNear0, "closest enemy always hit");
-  assert.strictEqual(far.hp, hpFar0, "no relic: second enemy in line is untouched");
+  const baseDmg = hpNear0 - near.hp;
+  assert.ok(baseDmg > 0, "closest enemy always hit");
+  assert.strictEqual(far.hp, hpFar0, "second enemy in line is untouched");
 
-  // With the relic: the next-closest also takes damage.
+  // With the relic: the primary target takes +10 flat dmg (scaled by dmgScale/dt
+  // like the base hit); the second-closest is still never touched — no chain promotion.
   g.relics = { brass_nozzle: true };
-  const hpFar1 = far.hp;
+  const near2 = new JH.Enemy("mook", p.x + 20, p.y);
+  const far2  = new JH.Enemy("mook", p.x + 40, p.y);
+  g.enemies = [far2, near2];
+  const hpNear2 = near2.hp, hpFar2 = far2.hp;
   p.doSpray(0.05, g);
-  assert.ok(far.hp < hpFar1, "Brass Nozzle: second-closest enemy also hit");
-});
-
-test("Brass Nozzle: never promotes a target past an active dome blocker (regression)", () => {
-  const g = makeThinkGame(60, 40);
-  g.relics = { brass_nozzle: true };
-  const p = g.player;
-  p.water = p.stats.maxWater; p.facing = 1;
-  p.stats.sprayRange = 300;   // long reach — the arc spans well past the dome
-  // Dome (r 58) between Jon and the mook; Jon outside it, mook beyond its far edge.
-  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];
-  const beyond = new JH.Enemy("mook", p.x + 250, p.y);
-  g.enemies = [beyond];
-  const hp0 = beyond.hp;
-  p.doSpray(0.05, g);
-  assert.strictEqual(beyond.hp, hp0, "dome stops the stream — no second target promoted past it");
-});
-
-test("Brass Nozzle: enemy blocker with a dome behind it — second target can't sit past the dome", () => {
-  const g = makeThinkGame(60, 40);
-  g.relics = { brass_nozzle: true };
-  const p = g.player;
-  p.water = p.stats.maxWater; p.facing = 1;
-  p.stats.sprayRange = 300;
-  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];   // dome near edge ~30px out
-  const near   = new JH.Enemy("mook", p.x + 20, p.y);    // in front of the dome — the blocker
-  const beyond = new JH.Enemy("mook", p.x + 250, p.y);   // past the dome's far edge
-  g.enemies = [near, beyond];
-  const hpNear0 = near.hp, hpBeyond0 = beyond.hp;
-  p.doSpray(0.05, g);
-  assert.ok(near.hp < hpNear0, "enemy in front of the dome still takes the stream");
-  assert.strictEqual(beyond.hp, hpBeyond0, "second target is never promoted past the dome");
+  const nozzleDmg = hpNear2 - near2.hp;
+  const expectedAdd = JH.RELIC_TUNE.brassNozzleAdd * 1.2 * 0.05;
+  assert.ok(Math.abs((nozzleDmg - baseDmg) - expectedAdd) < 1e-6,
+    "Brass Nozzle: primary target takes exactly the flat dmg add, scaled like the base hit");
+  assert.strictEqual(far2.hp, hpFar2, "Brass Nozzle: second-closest enemy is never hit");
 });
 
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
@@ -1341,32 +1319,31 @@ test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", 
   assert.strictEqual(p.water, 15, "Dowsing Rod: water_can value x1.5 (10 -> 15)");
 });
 
-test("Spigot Key: hydrant contact arms a 15s window; doSpray deals +10% while it's live", () => {
+test("Spigot Key: standing at a hydrant heals HP at the configured rate while it refills you", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, p) => ({
+    hydrants: [{ x: p.x, y: p.y }], relics,
+    particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
   const p = makePlayer();
-  p.facing = 1;
-  const g = { hydrants: [{ x: p.x, y: p.y, t: 0 }], relics: { spigot_key: true },
-    particles: [], bounds: { minX: 0, maxX: 480 }, input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} } };
-  // Drive just the hydrant-proximity slice of Player.update via a direct call
-  // to the same logic: assert the flag through a real update() tick.
-  p.update(1 / 60, g);
-  assert.strictEqual(p.spigotT, 15, "standing at a hydrant arms Spigot Key's window");
+  p.facing = 1; p.hp = p.stats.maxHp - 50;   // leave room to heal
+  const hpBefore = p.hp;
+  p.update(dt, mkGame({ spigot_key: true }, p));
+  assert.ok(Math.abs((p.hp - hpBefore) - JH.RELIC_TUNE.spigotHealRate * dt) < 1e-6,
+    "Spigot Key: heals at spigotHealRate HP/s while near a hydrant");
 
-  const g2 = makeThinkGame(60, 40);
-  const e = new JH.Enemy("mook", p.x + 20, p.y);
-  g2.player = p; g2.enemies = [e]; g2.relics = { spigot_key: true };
-  p.water = p.stats.maxWater;
-  const hpBefore = e.hp;
-  p.doSpray(0.05, g2);
-  const dmgWithBuff = hpBefore - e.hp;
+  const p2 = makePlayer();
+  p2.facing = 1; p2.hp = p2.stats.maxHp - 50;
+  const hpBefore2 = p2.hp;
+  p2.update(dt, mkGame({}, p2));
+  assert.strictEqual(p2.hp, hpBefore2, "no relic: hydrant proximity alone doesn't heal");
 
-  p.spigotT = 0;
-  const e2 = new JH.Enemy("mook", p.x + 20, p.y);
-  g2.enemies = [e2];
-  p.water = p.stats.maxWater;
-  const hpBefore2 = e2.hp;
-  p.doSpray(0.05, g2);
-  const dmgWithoutBuff = hpBefore2 - e2.hp;
-  assert.ok(Math.abs(dmgWithBuff - dmgWithoutBuff * 1.1) < 1e-6, "spigotT active: +10% spray dmg");
+  const p3 = makePlayer();
+  p3.facing = 1; p3.hp = p3.stats.maxHp;   // already full
+  p3.update(dt, mkGame({ spigot_key: true }, p3));
+  assert.strictEqual(p3.hp, p3.stats.maxHp, "heal clamps at maxHp");
 });
 
 test("shopSelectables lists the current relic stock; buyRelic spends suds, flags ownership, and clears stock", () => {
@@ -1407,7 +1384,7 @@ test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly onc
   boss.hp = boss.maxHp * 0.5;         // already below the (high) enrageAt threshold
   g.player.pressureBuffT = 0;
   boss.think(1 / 60, g);
-  assert.strictEqual(g.player.pressureBuffT, 4, "first enrage tick grants the buff");
+  assert.strictEqual(g.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur, "first enrage tick grants the buff");
   g.player.pressureBuffT = 0;         // simulate the buff wearing off
   boss.think(1 / 60, g);
   assert.strictEqual(g.player.pressureBuffT, 0, "latch prevents re-granting on subsequent enraged frames");

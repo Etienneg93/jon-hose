@@ -48,7 +48,7 @@
     { x: 9000,  y: JH.DEPTH_MAX - 12 },   // after Gateway Krusher
     { x: 10140, y: JH.DEPTH_MAX - 26 },   // Fire midpoint (before FURNACE TRIAL)
   ];
-  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
+  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill; HP only via Spigot Key relic
 
   // Floor collision for Act-3 rubble piles. Ellipse footprint scaled by pile's `s`.
   // rx/ry are a touch larger than the sprite so the visual edge always blocks.
@@ -369,10 +369,10 @@
   // A rotating stock of 3 is rolled per vendor visit from the still-unowned
   // pool (Balance.pickRelics).
   JH.RELICS = [
-    { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "Non-pierce stream also catches the next-closest enemy" },
-    { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "Hydrant refill grants +10% spray dmg for 15s" },
-    { id: "loaded_sponge",   name: "Loaded Sponge",    cost: 160, desc: "GUSH milestone water refund doubled" },
-    { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants a brief pressure buff" },
+    { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "+10 spray dmg to the first enemy the stream hits" },
+    { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "A hydrant refill also restores 15 HP/s while filling" },
+    { id: "loaded_sponge",   name: "Loaded Sponge",    cost: 160, desc: "GUSH refund doubled and regen windows +2s" },
+    { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants an 8s pressure buff" },
     { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
     { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
     { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Bosses drop a second Holy Essence cross" },
