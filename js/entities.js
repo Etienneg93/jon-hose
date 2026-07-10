@@ -194,6 +194,7 @@
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
+      this.shopWheelFocus = false;   // set by game.js: shop cursor is on the relic wheel row (left/right = card nav)
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
       this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
       this.upgradeQ = [];     // pending stat-gain sequence entries {icon, text}
@@ -328,7 +329,10 @@
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
-      let mx = (In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0);
+      // Suppress horizontal movement while the shop cursor is on the wheel
+      // row — left/right is card navigation there. Off the wheel row, walking
+      // out of the shop with left/right still works. Dash is never suppressed.
+      let mx = this.shopWheelFocus ? 0 : ((In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0));
       // Suppress vertical movement when near shop — up/down is used for shop navigation.
       let my = this.nearShop ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
       // Facing is LOCKED while spraying so you can back-pedal and keep aim.

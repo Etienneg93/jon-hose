@@ -74,11 +74,19 @@ test("retuned relic descs match the flat-gear effects", () => {
 });
 
 test("wheel entries: three stock slots + fixed kibble slot", () => {
-  const entries = JH.Balance.shopWheelEntries(["censer", "punch_card"]);
+  const entries = JH.Balance.shopWheelEntries(["censer", "punch_card"], {});
   assert.deepStrictEqual(entries, [
-    { kind: "wheel", slot: 0, id: "censer" },
-    { kind: "wheel", slot: 1, id: "punch_card" },
-    { kind: "wheel", slot: 2, id: null },          // exhausted stock renders empty
-    { kind: "wheel", slot: 3, id: "kibble" },
+    { kind: "wheel", slot: 0, id: "censer", sold: false },
+    { kind: "wheel", slot: 1, id: "punch_card", sold: false },
+    { kind: "wheel", slot: 2, id: null, sold: false },   // thin pool at spawn renders empty
+    { kind: "wheel", slot: 3, id: "kibble", sold: false },
   ]);
+});
+
+test("wheel entries: buying marks sold in place, slots never shift", () => {
+  const stock = ["censer", "punch_card", "dowsing_rod"];   // spawn-time snapshot
+  const entries = JH.Balance.shopWheelEntries(stock, { punch_card: true });
+  assert.deepStrictEqual(entries.map((e) => e.id), ["censer", "punch_card", "dowsing_rod", "kibble"],
+    "ids stay put after a buy — sold marks in place, no left-shift");
+  assert.deepStrictEqual(entries.map((e) => e.sold), [false, true, false, false]);
 });

@@ -143,13 +143,19 @@
       return pool.slice(0, n);
     },
 
-    // Slot-wheel entries for the shop's relic row: 3 stock cards (null once
-    // the stock array runs short — exhausted/bought slots render empty) +
-    // a 4th fixed Kibble Pack card. Pure — never mutates stock.
-    shopWheelEntries(stock) {
+    // Slot-wheel entries for the shop's relic row: 3 stock cards + a 4th
+    // fixed Kibble Pack card. `stock` is the vendor's spawn-time snapshot,
+    // so slots never shift: a bought relic keeps its slot with sold=true.
+    // id is null only when the pool was thin at spawn (renders empty).
+    // Pure — never mutates stock.
+    shopWheelEntries(stock, relicsOwned) {
+      const owned = relicsOwned || {};
       const out = [];
-      for (let i = 0; i < 3; i++) out.push({ kind: "wheel", slot: i, id: (stock && stock[i]) || null });
-      out.push({ kind: "wheel", slot: 3, id: "kibble" });
+      for (let i = 0; i < 3; i++) {
+        const id = (stock && stock[i]) || null;
+        out.push({ kind: "wheel", slot: i, id, sold: !!(id && owned[id]) });
+      }
+      out.push({ kind: "wheel", slot: 3, id: "kibble", sold: false });
       return out;
     },
 

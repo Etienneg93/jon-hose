@@ -44,7 +44,9 @@
     bannerTimer: 0,
     shopCursor: 0,
     shopWheelSlot: 0,   // 0-3 cursor within the relic wheel row (3 = kibble)
-    wheelSpinT: 0,      // seconds since the current vendor spawned; drives the reel spin-in
+    wheelStock: [],     // spawn-time snapshot of relicStock — wheel slots render from this and never shift
+    wheelSpinT: 0,      // seconds since the spin started; drives the reel spin-in
+    _wheelSpun: false,  // latches on the first nearShop approach — one spin per vendor
     _wheelSettled: [false, false, false],   // one-shot "coin" SFX per reel as it settles
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
@@ -411,7 +413,8 @@
       this.sigils = []; this.beneUsedOnce = {};
       this.voucher50 = false;
       this.relics = {}; this.relicStock = [];
-      this.shopWheelSlot = 0; this.wheelSpinT = 0; this._wheelSettled = [false, false, false];
+      this.shopWheelSlot = 0; this.wheelStock = []; this.wheelSpinT = 0;
+      this._wheelSpun = false; this._wheelSettled = [false, false, false];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -1002,7 +1005,11 @@
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
       const pool = JH.Balance.relicPoolIds(JH.RELICS, JH.Upgrades.currentActLevel);
       this.relicStock = JH.Balance.pickRelics(pool, this.relics, 3, Math.random);
-      this.shopWheelSlot = 0; this.wheelSpinT = 0; this._wheelSettled = [false, false, false];
+      // Wheel slots render from this fixed snapshot (bought cards go SOLD in
+      // place, never shift); the reel spin arms on the first walk-up instead
+      // of here so it plays in front of the open panel.
+      this.wheelStock = this.relicStock.slice(0, 3);
+      this.shopWheelSlot = 0; this._wheelSpun = false;
     },
     // Stat-bearing relics owned (defs with apply) — feeds Balance.powerCount.
     statRelicCount() {
@@ -1719,21 +1726,28 @@
       }
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
-        // Wheel reel-spin clock: ticks from vendor spawn regardless of the
-        // player's distance, so the spin-in always finishes on its own
-        // schedule. Each reel (0-2) settles at 0.6 + i*0.3s and fires one
-        // pitch-stepped "coin" blip the frame it crosses that threshold.
-        this.wheelSpinT += dt;
-        for (let i = 0; i < 3; i++) {
-          const settle = 0.6 + i * 0.3;
-          if (!this._wheelSettled[i] && this.wheelSpinT >= settle) {
-            this._wheelSettled[i] = true;
-            this.audio.play("coin", { pitch: 1 + i * 0.2 });
-          }
-        }
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
         this.player.nearShop = this.nearShop;
+        // Wheel reel-spin: arms once per vendor on the first walk-up, so the
+        // reels + coin blips play in front of the open panel. Each reel (0-2)
+        // settles at 0.6 + i*0.3s with one pitch-stepped "coin" blip.
+        if (this.nearShop && !this._wheelSpun) {
+          this._wheelSpun = true;
+          this.wheelSpinT = 0;
+          this._wheelSettled = [false, false, false];
+        }
+        if (this._wheelSpun) {
+          this.wheelSpinT += dt;
+          for (let i = 0; i < 3; i++) {
+            const settle = 0.6 + i * 0.3;
+            if (!this._wheelSettled[i] && this.wheelSpinT >= settle) {
+              this._wheelSettled[i] = true;
+              this.audio.play("coin", { pitch: 1 + i * 0.2 });
+            }
+          }
+        }
+        this.player.shopWheelFocus = false;
         if (this.nearShop) {
           const U = JH.Upgrades;
           const sel = this.shopSelectables();
@@ -1741,6 +1755,10 @@
             if (this.input.pressed("up"))   this.shopCursor = (this.shopCursor - 1 + sel.length) % sel.length;
             if (this.input.pressed("down")) this.shopCursor = (this.shopCursor + 1) % sel.length;
             const onWheel = sel[this.shopCursor] && sel[this.shopCursor].kind === "wheelRow";
+            // Entity movement reads this: while the cursor sits on the wheel
+            // row, left/right belong to card navigation, not walking (same
+            // pattern as the nearShop up/down suppression in Player.update).
+            this.player.shopWheelFocus = onWheel;
             if (onWheel) {
               if (this.input.pressed("left"))  this.shopWheelSlot = Math.max(0, this.shopWheelSlot - 1);
               if (this.input.pressed("right")) this.shopWheelSlot = Math.min(3, this.shopWheelSlot + 1);
@@ -1762,9 +1780,11 @@
                   ok = this.buyKibble();
                   if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, "Kibble Pack", "#80ff80"); }
                 } else {
-                  const wid = (this.relicStock || [])[this.shopWheelSlot];
+                  // Snapshot slot: sold/empty cards leave ok false → deny
+                  // "hurt" (buyRelic itself also refuses owned/out-of-stock).
+                  const wid = (this.wheelStock || [])[this.shopWheelSlot];
                   telemKind = "relic"; telemId = wid;
-                  if (wid) {
+                  if (wid && !(this.relics && this.relics[wid])) {
                     ok = this.buyRelic(wid);
                     if (ok) {
                       const r = JH.RELICS.find((x) => x.id === wid);
@@ -1786,7 +1806,7 @@
             }
           }
         }
-      } else { this.nearShop = false; this.player.nearShop = false; }
+      } else { this.nearShop = false; this.player.nearShop = false; this.player.shopWheelFocus = false; }
 
       // --- separation so enemies don't fully stack
       this.separate();
@@ -2816,7 +2836,9 @@
           return;
         }
         if (r.t === "wheel") {
-          const entries = JH.Balance.shopWheelEntries(this.relicStock);
+          // Cards render from the spawn-time snapshot: a bought card shows
+          // SOLD in its own slot, id null (thin pool at spawn) shows "—".
+          const entries = JH.Balance.shopWheelEntries(this.wheelStock, this.relics);
           entries.forEach((en, i) => {
             const cx = PX + 6 + i * 47, cy2 = ry + 2, focused = isCurRow(r) && this.shopWheelSlot === i;
             ctx.fillStyle = focused ? "rgba(255,210,63,0.14)" : "rgba(20,28,44,0.9)";
@@ -2828,14 +2850,20 @@
             let iconKey = en.id === "kibble" ? "kibble" : en.id;
             let label, price;
             if (en.id === "kibble") { label = "KIBBLE PACK"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
+            else if (en.sold) { label = "SOLD"; price = null; }
             else if (en.id) { const rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
-            else { label = this.relics && Object.keys(this.relics).length ? "SOLD" : "—"; price = null; }
-            if (i < 3 && this.wheelSpinT < settle && en.id) {
+            else { label = "—"; price = null; }
+            if (i < 3 && this.wheelSpinT < settle && en.id && !en.sold) {
               const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
               label = "· · ·"; price = null;
             }
-            if (iconKey) { JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1); JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1); }
-            ctx.font = "5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = en.id ? "#dfe8f5" : "#556070";
+            if (iconKey) {
+              ctx.globalAlpha = en.sold ? 0.35 : 1;
+              JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1); JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1);
+              ctx.globalAlpha = 1;
+            }
+            ctx.font = "5px monospace"; ctx.textAlign = "center";
+            ctx.fillStyle = en.id && !en.sold ? "#dfe8f5" : "#556070";
             ctx.fillText(label.slice(0, 12), cx + 22, cy2 + 23);
             if (price != null) { ctx.fillStyle = pl.suds >= price ? "#ffd23f" : "#775533"; ctx.fillText(price + "", cx + 22, cy2 + 29); }
           });
@@ -2896,9 +2924,9 @@
           const c = JH.CONSUMABLES[cur.id];
           desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now." : "";
         } else if (cur.kind === "wheelRow") {
-          const en = JH.Balance.shopWheelEntries(this.relicStock)[this.shopWheelSlot];
+          const en = JH.Balance.shopWheelEntries(this.wheelStock, this.relics)[this.shopWheelSlot];
           if (en.id === "kibble") desc = "25 HP over 6s. Stacks.";
-          else if (en.id) { const rd = JH.RELICS.find((x) => x.id === en.id); desc = rd ? rd.desc : ""; }
+          else if (en.id && !en.sold) { const rd = JH.RELICS.find((x) => x.id === en.id); desc = rd ? rd.desc : ""; }
           else desc = "";
         }
       }
