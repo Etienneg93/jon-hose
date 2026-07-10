@@ -2,6 +2,9 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const B = require("../js/benedictions.js");
+global.window = global.window || {};
+require("../js/config.js");
+const JH = global.window.JH;
 
 test("DEFS: 17 boons, 3 duos, 4 legendaries; ids unique", () => {
   const boons = B.DEFS.filter((d) => d.kind === "boon");
@@ -122,6 +125,11 @@ test("reliquary: redeemAll restores every washed boon at rank, cost escalates, r
   B.reset();
   assert.strictEqual(B.redeemAllCost(), 1, "new run resets the counter");
   assert.strictEqual(typeof B.reclaimNext, "undefined", "per-boon reclaim retired");
+});
+
+test("every benediction has a baked icon key", () => {
+  for (const d of B.DEFS)
+    assert.ok(JH.ICONS.keys.includes("bene_" + d.id), "missing icon key bene_" + d.id);
 });
 
 test("reset clears both active and washed (new run wipes the reliquary)", () => {

@@ -106,6 +106,12 @@
       "brass_nozzle", "spigot_key", "loaded_sponge", "prayer_bead", "collection_plate",
       "censer", "sunday_suit", "punch_card", "dowsing_rod", "alarm_bell",
       "frame_duo", "frame_legendary",
+      "bene_split_stream", "bene_baptismal_wake", "bene_overflow", "bene_baptize", "bene_absolution",
+      "bene_scalding_faith", "bene_backdraft", "bene_trial_by_fire", "bene_ash_walk",
+      "bene_aftershock", "bene_sure_grip", "bene_bedrock", "bene_landslide",
+      "bene_gale_stride", "bene_slipstream", "bene_tailwind", "bene_eye_of_storm",
+      "bene_steam_sermon", "bene_mudslide", "bene_firestorm",
+      "bene_pressure_sermon", "bene_bushfire", "bene_standing_stone", "bene_whirlwind_walk",
     ],
   };
 
