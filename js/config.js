@@ -363,6 +363,10 @@
     pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
   };
 
+  // Kibble Pack: repeatable shop staple (slot-wheel fixed card). Same grant
+  // semantics as the health-pickup collect — JH.Balance.kibbleGrant.
+  JH.KIBBLE_PACK = { cost: 30, heal: 25, dur: 6 };
+
   // Relics: one-time flag purchases (game.relics[id] = true), never a
   // repeatable. Effects are hook-checks scattered across game.js/entities.js
   // (grep the id) rather than an apply fn — see each id's comment there.

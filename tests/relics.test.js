@@ -39,6 +39,19 @@ test("relicPoolIds: hydro_lance absent pre-Act-2, present from Act 2 on", () => 
   assert.ok(idsAt(-1).includes("hydro_dash"), "non-gated relics unaffected");
 });
 
+test("kibble grant matches pickup semantics", () => {
+  const pl = { kibbleTimer: 3, kibbleRegen: 0 };
+  JH.Balance.kibbleGrant(pl, JH.KIBBLE_PACK);
+  assert.strictEqual(pl.kibbleTimer, 3 + JH.KIBBLE_PACK.dur);
+  assert.ok(Math.abs(pl.kibbleRegen - JH.KIBBLE_PACK.heal / JH.KIBBLE_PACK.dur) < 1e-9);
+});
+
+test("JH.KIBBLE_PACK is shaped as the shop expects", () => {
+  assert.strictEqual(JH.KIBBLE_PACK.cost, 30);
+  assert.strictEqual(JH.KIBBLE_PACK.heal, 25);
+  assert.strictEqual(JH.KIBBLE_PACK.dur, 6);
+});
+
 test("powerCount counts stat relics via 5th arg", () => {
   const base = JH.Balance.powerCount({}, {}, null, 0);
   assert.strictEqual(JH.Balance.powerCount({}, {}, null, 0, 3), base + 3);

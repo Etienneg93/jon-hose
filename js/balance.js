@@ -269,6 +269,13 @@
       if (ranks.trial && t.burning) m *= ranks.trial >= 2 ? 1.3 : 1.2;
       return m;
     },
+
+    // Kibble grant: extend the regen window, reset the rate (same semantics
+    // as the health-pickup collect path and the shop's Kibble Pack buy).
+    kibbleGrant(pl, pack) {
+      pl.kibbleTimer += pack.dur;
+      pl.kibbleRegen = pack.heal / pack.dur;
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

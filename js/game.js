@@ -2380,6 +2380,14 @@
       if (key === "medkit") this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
       return true;
     },
+    // Buy a Kibble Pack (fixed slot-wheel card, repeatable); returns true on success.
+    buyKibble() {
+      const K = JH.KIBBLE_PACK, price = this.priceOf(K.cost);
+      if (this.player.suds < price) return false;
+      this.player.suds -= price;
+      JH.Balance.kibbleGrant(this.player, K);
+      return true;
+    },
 
     // Greedy word-wrap into up to `maxLines` lines of ~maxChars each (last line
     // clipped past the cap). Shared by the shop + stat-panel benediction tips.

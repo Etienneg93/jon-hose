@@ -2583,9 +2583,9 @@
       if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
       else if (this.kind === "health") {
         // Stacking kibble EXTENDS the regen window (never resets it — two
-        // kibbles heal for twice as long).
-        pl.kibbleTimer += 6.0;
-        pl.kibbleRegen = this.value / 6.0;
+        // kibbles heal for twice as long). Routed through Balance.kibbleGrant
+        // so the shop's Kibble Pack buy shares the same semantics.
+        JH.Balance.kibbleGrant(pl, { dur: 6.0, heal: this.value });
         game.audio.play("buy");
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
       }
