@@ -270,6 +270,13 @@ const BAKERS = {
     l(4, 5, 1, 1, WOOD_HI); l(6, 5, 1, 1, WOOD_HI); l(8, 5, 1, 1, WOOD);   // scattered pieces
     l(5, 5, 1, 1, GOLD); l(7, 6, 1, 1, GOLD);            // gold kernel bits
   },
+  // Sold out: empty open crate, red slash across it (empty vendor wheel slot).
+  sold_out(l) {
+    l(2, 4, 8, 6, WOOD); l(3, 5, 6, 4, "#241a10");       // crate + dark empty interior
+    l(2, 4, 8, 1, WOOD_HI);                              // top edge light
+    l(2, 9, 8, 1, "#5c4530");                            // base shade
+    l(1, 9, 2, 2, RED); l(3, 7, 2, 2, RED); l(5, 5, 2, 2, RED); l(7, 3, 2, 2, RED); l(9, 1, 2, 2, RED_HI); // diagonal slash
+  },
 };
 
 // ---------------------------------------------------------------------------

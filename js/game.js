@@ -2858,13 +2858,13 @@
             if (en.id === "kibble") { label = "KIBBLE PACK"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
             else if (en.sold) { label = "SOLD"; price = null; }
             else if (en.id) { const rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
-            else { label = "—"; price = null; }
+            else { label = "SOLD OUT"; price = null; iconKey = "sold_out"; }
             if (i < 3 && this.wheelSpinT < settle && en.id && !en.sold) {
               const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
               label = "· · ·"; price = null;
             }
             if (iconKey) {
-              ctx.globalAlpha = en.sold ? 0.35 : 1;
+              ctx.globalAlpha = en.sold ? 0.35 : iconKey === "sold_out" ? 0.6 : 1;
               JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1); JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1);
               ctx.globalAlpha = 1;
             }
@@ -2928,6 +2928,7 @@
           const en = JH.Balance.shopWheelEntries(this.wheelStock, this.relics)[this.shopWheelSlot];
           if (en.id === "kibble") desc = "Heal " + JH.KIBBLE_PACK.heal + " HP over " + JH.KIBBLE_PACK.dur + "s. Stacks.";
           else if (en.id && !en.sold) { const rd = JH.RELICS.find((x) => x.id === en.id); desc = rd ? rd.desc : ""; }
+          else if (!en.id) desc = "No more relics in the vendor's stock.";
           else desc = "";
         }
       }
