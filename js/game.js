@@ -2537,27 +2537,44 @@
             id, d, rank,
             name: d.name + tag,
             color: JH.SIGIL_COLORS[el] || "#ffd23f",
-            lines: inlineDesc ? this.wrapText(JH.Benedictions.effectText(id, rank), 36, 4) : [],
+            text: JH.Benedictions.effectText(id, rank),
+            lines: [],
           });
         }
       }
-      // Relic grid (expanded only): owned relic icons, 9 per row.
+      // Relic grid (expanded only): owned relic icons, 9 per row. The grid
+      // always participates in H — it is never truncated by degradation.
       const relicIds = expanded ? Object.keys(this.relics || {}) : [];
       const relicRows = relicIds.length ? Math.ceil(relicIds.length / 9) : 0;
 
       const X = 10, Y = 30, ROW = 9;
       const W = inlineDesc ? 152 : named ? 74 : 46;
-
-      let beneH = 0;
-      if (expanded) {
-        if (beneRows.length) {
-          for (const b of beneRows) beneH += 14 + b.lines.length * 6 + 2;
-        } else {
-          beneH = 12;   // room for the "no benedictions yet" hint
-        }
-      }
       const relicH = relicRows ? 12 + relicRows * 16 : 0;
-      const H = rows.length * ROW + 16 + beneH + relicH;
+
+      // Rewraps every benediction desc at maxLines (0 = icon + name only)
+      // and returns the resulting total panel height.
+      const measure = (maxLines) => {
+        let beneH = 0;
+        if (expanded) {
+          if (beneRows.length) {
+            for (const b of beneRows) {
+              b.lines = (inlineDesc && maxLines)
+                ? this.wrapText(b.text, 36, maxLines) : [];
+              beneH += 14 + b.lines.length * 6 + 2;
+            }
+          } else {
+            beneH = 12;   // room for the "no benedictions yet" hint
+          }
+        }
+        return rows.length * ROW + 16 + beneH + relicH;
+      };
+      // Panel must never draw past the screen: degrade desc wrap 4 lines ->
+      // 2 lines -> none until the bottom edge fits inside VIEW_H - 4.
+      const maxBottom = JH.VIEW_H - 4;
+      let H = measure(4);
+      if (Y - 10 + H > maxBottom) H = measure(2);
+      if (Y - 10 + H > maxBottom) H = measure(0);
+      this.statPanelBottom = Y - 10 + H;   // screen-fit probe for tests
 
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.85)";
