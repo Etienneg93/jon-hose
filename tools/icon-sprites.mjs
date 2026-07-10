@@ -240,6 +240,36 @@ const BAKERS = {
     l(4, 3, 1, 3, GOLD_HI);
     l(1, 4, 1, 1, STEEL_DK); l(10, 4, 1, 1, STEEL_DK);  // ring-out ticks
   },
+  // Blue dash-trail boot: same silhouette as the speed boot, water-colored.
+  hydro_dash(l) {
+    l(1, 4, 3, 1, WATER_DK); l(2, 6, 3, 1, WATER_DK); l(1, 8, 2, 1, WATER_DK);  // wind/trail streaks
+    l(6, 2, 3, 5, WATER); l(6, 7, 5, 2, WATER);         // shaft + foot
+    l(6, 9, 5, 1, WATER_DK);                            // sole
+    l(6, 2, 1, 4, WATER_HI);
+  },
+  // Marshal shield badge with a fire-colored star.
+  fire_marshal(l) {
+    l(3, 1, 6, 1, GOLD); l(2, 2, 8, 1, GOLD); l(1, 3, 10, 5, GOLD);
+    l(2, 8, 8, 1, GOLD); l(3, 9, 6, 1, GOLD_DK); l(4, 10, 4, 1, GOLD_DK); l(5, 11, 2, 1, GOLD_DK);
+    l(1, 3, 10, 1, GOLD_HI);                            // top shine band
+    l(5, 4, 2, 1, FIRE); l(4, 5, 4, 1, FIRE); l(3, 6, 6, 2, FIRE); l(4, 8, 1, 1, FIRE); l(7, 8, 1, 1, FIRE);
+    l(5, 6, 2, 1, FIRE_HI);                             // star hot core
+  },
+  // Long tapered lance: steel shaft + grip collar, water-jet head.
+  hydro_lance(l) {
+    l(0, 5, 6, 2, STEEL); l(0, 6, 6, 1, STEEL_DK);       // shaft
+    l(6, 4, 2, 4, STEEL_DK);                             // grip collar
+    l(8, 3, 2, 6, WATER); l(10, 4, 1, 4, WATER);         // tapered nozzle head
+    l(8, 3, 2, 1, WATER_HI); l(11, 5, 1, 2, WATER_HI);   // shine + tip glint
+  },
+  // Kibble bowl: steel rim, wood-toned mound, a few gold kernel bits.
+  kibble(l) {
+    l(2, 6, 8, 1, STEEL_DK);                            // rim back
+    l(1, 7, 10, 3, STEEL); l(2, 9, 8, 1, STEEL_DK);      // bowl body + base shade
+    l(3, 6, 6, 1, WOOD);                                 // kibble mound
+    l(4, 5, 1, 1, WOOD_HI); l(6, 5, 1, 1, WOOD_HI); l(8, 5, 1, 1, WOOD);   // scattered pieces
+    l(5, 5, 1, 1, GOLD); l(7, 6, 1, 1, GOLD);            // gold kernel bits
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -72,3 +72,13 @@ test("retuned relic descs match the flat-gear effects", () => {
   assert.match(d("prayer_bead"), /8s|8 s/i);
   assert.match(d("loaded_sponge"), /doubled .* regen window/i);
 });
+
+test("wheel entries: three stock slots + fixed kibble slot", () => {
+  const entries = JH.Balance.shopWheelEntries(["censer", "punch_card"]);
+  assert.deepStrictEqual(entries, [
+    { kind: "wheel", slot: 0, id: "censer" },
+    { kind: "wheel", slot: 1, id: "punch_card" },
+    { kind: "wheel", slot: 2, id: null },          // exhausted stock renders empty
+    { kind: "wheel", slot: 3, id: "kibble" },
+  ]);
+});

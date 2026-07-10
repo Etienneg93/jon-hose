@@ -143,6 +143,16 @@
       return pool.slice(0, n);
     },
 
+    // Slot-wheel entries for the shop's relic row: 3 stock cards (null once
+    // the stock array runs short — exhausted/bought slots render empty) +
+    // a 4th fixed Kibble Pack card. Pure — never mutates stock.
+    shopWheelEntries(stock) {
+      const out = [];
+      for (let i = 0; i < 3; i++) out.push({ kind: "wheel", slot: i, id: (stock && stock[i]) || null });
+      out.push({ kind: "wheel", slot: 3, id: "kibble" });
+      return out;
+    },
+
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
     // dropMult. Base rates (mult 1): 18% health, 27% water can.
     // The 0.9 cap applies to the cumulative water threshold, not per-item.

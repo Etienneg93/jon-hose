@@ -1404,15 +1404,17 @@ test("Spigot Key: standing at a hydrant heals HP at the configured rate while it
   assert.strictEqual(p3.hp, p3.stats.maxHp, "heal clamps at maxHp");
 });
 
-test("shopSelectables lists the current relic stock; buyRelic spends suds, flags ownership, and clears stock", () => {
+test("shopSelectables carries the relic wheel as one row; buyRelic spends suds, flags ownership, and clears stock", () => {
   const g = Object.create(JH.Game);
   g.player = makePlayer();
   g.player.suds = 300;
   g.relics = {};
   g.relicStock = ["brass_nozzle", "spigot_key"];
   const sel = g.shopSelectables();
-  const relicRows = sel.filter((s) => s.kind === "relic");
-  assert.deepStrictEqual(relicRows.map((r) => r.id), ["brass_nozzle", "spigot_key"]);
+  const wheelRows = sel.filter((s) => s.kind === "wheelRow");
+  assert.strictEqual(wheelRows.length, 1, "the whole relic stock collapses to a single wheel row");
+  const entries = JH.Balance.shopWheelEntries(g.relicStock);
+  assert.deepStrictEqual(entries.map((e) => e.id), ["brass_nozzle", "spigot_key", null, "kibble"]);
 
   assert.strictEqual(g.buyRelic("dowsing_rod"), false, "not in stock: rejected");
   const cost = JH.RELICS.find((r) => r.id === "brass_nozzle").cost;

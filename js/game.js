@@ -43,6 +43,9 @@
     essenceDim: 0,              // 0..1 world-darken while a Holy Essence cross is uncollected
     bannerTimer: 0,
     shopCursor: 0,
+    shopWheelSlot: 0,   // 0-3 cursor within the relic wheel row (3 = kibble)
+    wheelSpinT: 0,      // seconds since the current vendor spawned; drives the reel spin-in
+    _wheelSettled: [false, false, false],   // one-shot "coin" SFX per reel as it settles
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
     dyingBoss: null, deathSeqT: 0,
@@ -408,6 +411,7 @@
       this.sigils = []; this.beneUsedOnce = {};
       this.voucher50 = false;
       this.relics = {}; this.relicStock = [];
+      this.shopWheelSlot = 0; this.wheelSpinT = 0; this._wheelSettled = [false, false, false];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
@@ -998,6 +1002,7 @@
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
       const pool = JH.Balance.relicPoolIds(JH.RELICS, JH.Upgrades.currentActLevel);
       this.relicStock = JH.Balance.pickRelics(pool, this.relics, 3, Math.random);
+      this.shopWheelSlot = 0; this.wheelSpinT = 0; this._wheelSettled = [false, false, false];
     },
     // Stat-bearing relics owned (defs with apply) — feeds Balance.powerCount.
     statRelicCount() {
@@ -1714,6 +1719,18 @@
       }
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
+        // Wheel reel-spin clock: ticks from vendor spawn regardless of the
+        // player's distance, so the spin-in always finishes on its own
+        // schedule. Each reel (0-2) settles at 0.6 + i*0.3s and fires one
+        // pitch-stepped "coin" blip the frame it crosses that threshold.
+        this.wheelSpinT += dt;
+        for (let i = 0; i < 3; i++) {
+          const settle = 0.6 + i * 0.3;
+          if (!this._wheelSettled[i] && this.wheelSpinT >= settle) {
+            this._wheelSettled[i] = true;
+            this.audio.play("coin", { pitch: 1 + i * 0.2 });
+          }
+        }
         this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
         this.player.nearShop = this.nearShop;
@@ -1723,10 +1740,15 @@
           if (sel.length > 0) {
             if (this.input.pressed("up"))   this.shopCursor = (this.shopCursor - 1 + sel.length) % sel.length;
             if (this.input.pressed("down")) this.shopCursor = (this.shopCursor + 1) % sel.length;
+            const onWheel = sel[this.shopCursor] && sel[this.shopCursor].kind === "wheelRow";
+            if (onWheel) {
+              if (this.input.pressed("left"))  this.shopWheelSlot = Math.max(0, this.shopWheelSlot - 1);
+              if (this.input.pressed("right")) this.shopWheelSlot = Math.min(3, this.shopWheelSlot + 1);
+            }
             if (this.input.buffered("confirm")) {
               this.input.consume("confirm");
               const e = sel[this.shopCursor];
-              let ok = false;
+              let ok = false, telemKind = e.kind, telemId = e.id;
               if (e.kind === "node") {
                 ok = U.buy(e.id, this.player, this.priceOf(U.cost(e.id)));
                 if (ok) { this.upgradeFx(U.byId(e.id)); this.float(this.player.x, this.player.y - 30, U.byId(e.id).name, "#80ff80"); }
@@ -1734,15 +1756,25 @@
                 ok = U.buyRep(e.id, this.player, this.priceOf(U.repCost(e.id)));
                 if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, U.repById(e.id).name, "#80ff80"); }
               } else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
-              else if (e.kind === "relic") {
-                ok = this.buyRelic(e.id);
-                if (ok) {
-                  const r = JH.RELICS.find((x) => x.id === e.id);
-                  this.audio.play("upgrade");
-                  this.float(this.player.x, this.player.y - 30, r.name, "#80ff80");
+              else if (e.kind === "wheelRow") {
+                if (this.shopWheelSlot === 3) {
+                  telemKind = "consumable"; telemId = "kibble";
+                  ok = this.buyKibble();
+                  if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, "Kibble Pack", "#80ff80"); }
+                } else {
+                  const wid = (this.relicStock || [])[this.shopWheelSlot];
+                  telemKind = "relic"; telemId = wid;
+                  if (wid) {
+                    ok = this.buyRelic(wid);
+                    if (ok) {
+                      const r = JH.RELICS.find((x) => x.id === wid);
+                      this.audio.play("upgrade");
+                      this.float(this.player.x, this.player.y - 30, r.name, "#80ff80");
+                    }
+                  }
                 }
               }
-              if (ok && JH.Telemetry) JH.Telemetry.item(e.kind + ":" + e.id);
+              if (ok && JH.Telemetry) JH.Telemetry.item(telemKind + ":" + telemId);
               if (!ok) this.audio.play("hurt");
               else {
                 if (this.voucher50) {
@@ -2450,7 +2482,7 @@
       Object.keys(JH.CONSUMABLES).forEach((k) => {
         if (k !== "pressure") out.push({ kind: "consumable", id: k });
       });
-      (this.relicStock || []).forEach((id) => out.push({ kind: "relic", id }));
+      out.push({ kind: "wheelRow" });
       return out;
     },
     // Buy a between-wave consumable; returns true on success.
@@ -2738,7 +2770,7 @@
 
       // ---- Build the flat row list (headers + buyable items), then scroll it
       // so the cursor row stays visible (the list now overflows the panel). ----
-      const HROW = 7, IROW = 11;
+      const HROW = 7, IROW = 14;
       const rows = [];
       U.branches.forEach((branch) => {
         rows.push({ t: "head", label: "── " + branch + " ──" });
@@ -2750,16 +2782,16 @@
       rows.push({ t: "head", label: "── SUPPLIES ──" });
       Object.keys(JH.CONSUMABLES).forEach((k) => rows.push({ t: "con", k }));
       rows.push({ t: "head", label: "── RELICS ──" });
-      (this.relicStock || []).forEach((id) => rows.push({ t: "relic", id }));
+      rows.push({ t: "wheel" });
 
       const isCurRow = (r) => cur && (
         (r.t === "node" && cur.kind === "node" && cur.id === r.n.id) ||
         (r.t === "rep" && cur.kind === "rep" && cur.id === r.n.id) ||
         (r.t === "con" && cur.kind === "consumable" && cur.id === r.k) ||
-        (r.t === "relic" && cur.kind === "relic" && cur.id === r.id));
+        (r.t === "wheel" && cur.kind === "wheelRow"));
 
       let cy = 0, cursorCY = 0;
-      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
+      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : r.t === "wheel" ? 34 : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
       const contentH = cy;
 
       const viewTop = PY + 26, viewBot = PY + PH - 34, viewH = viewBot - viewTop;
@@ -2783,6 +2815,33 @@
           ctx.fillText("🔒 " + r.label, MID, ry + 7); ctx.textAlign = "left";
           return;
         }
+        if (r.t === "wheel") {
+          const entries = JH.Balance.shopWheelEntries(this.relicStock);
+          entries.forEach((en, i) => {
+            const cx = PX + 6 + i * 47, cy2 = ry + 2, focused = isCurRow(r) && this.shopWheelSlot === i;
+            ctx.fillStyle = focused ? "rgba(255,210,63,0.14)" : "rgba(20,28,44,0.9)";
+            ctx.fillRect(cx, cy2, 44, 30);
+            ctx.strokeStyle = focused ? "#ffd23f" : "#2a3550"; ctx.strokeRect(cx, cy2, 44, 30);
+            // Reel spin: for slots 0-2, before this reel's settle time show a
+            // cycling icon instead of the real one (staggered left->right).
+            const settle = 0.6 + i * 0.3;
+            let iconKey = en.id === "kibble" ? "kibble" : en.id;
+            let label, price;
+            if (en.id === "kibble") { label = "KIBBLE PACK"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
+            else if (en.id) { const rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
+            else { label = this.relics && Object.keys(this.relics).length ? "SOLD" : "—"; price = null; }
+            if (i < 3 && this.wheelSpinT < settle && en.id) {
+              const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
+              label = "· · ·"; price = null;
+            }
+            if (iconKey) { JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1); JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1); }
+            ctx.font = "5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = en.id ? "#dfe8f5" : "#556070";
+            ctx.fillText(label.slice(0, 12), cx + 22, cy2 + 23);
+            if (price != null) { ctx.fillStyle = pl.suds >= price ? "#ffd23f" : "#775533"; ctx.fillText(price + "", cx + 22, cy2 + 29); }
+          });
+          ctx.textAlign = "left";
+          return;
+        }
         let name, cost, owned = false, locked = false, afford = false, suffix = "";
         if (r.t === "node") {
           const n = r.n;
@@ -2793,29 +2852,23 @@
         } else if (r.t === "rep") {
           cost = this.priceOf(U.repCost(r.n.id)); afford = pl.suds >= cost; name = r.n.name;
           if (U.repCount[r.n.id]) suffix = " x" + U.repCount[r.n.id];
-        } else if (r.t === "relic") {
-          const rd = JH.RELICS.find((x) => x.id === r.id);
-          owned = !!(this.relics && this.relics[r.id]);
-          cost = this.priceOf(rd.cost); afford = pl.suds >= cost; name = rd.name;
         } else {
           const c = JH.CONSUMABLES[r.k]; cost = this.priceOf(c.cost); afford = pl.suds >= cost; name = c.name;
         }
         if (isCurRow(r)) {
           ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
-          ctx.fillRect(PX + 2, ry, PW - 4, 11);
+          ctx.fillRect(PX + 2, ry, PW - 4, IROW);
         }
         ctx.font = "bold 6px monospace";
         ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
-        // Baked icon replaces the •/▸/✓ mark: relics by id, signatures and
-        // Overcharge by the stat they push. Text mark remains the fallback.
-        const ik = r.t === "relic" ? r.id
-          : r.t === "node" ? ({ sig_dash: "dash", sig_marshal: "range", sig_lance: "dmg" })[r.n.id]
-          : r.t === "rep" ? "dmg" : null;
+        // Baked icon replaces the •/▸/✓ mark: Overcharge by the stat it
+        // pushes, supplies by their own key. Text mark remains the fallback.
+        const ik = r.t === "rep" ? "dmg" : r.t === "con" ? ({ medkit: "hp" }[r.k] || null) : null;
         ctx.globalAlpha = locked ? 0.45 : 1;
-        const hasIcon = ik && JH.Assets.icon(ctx, ik, PX + 8, ry + 5, 0.5);
+        const hasIcon = ik && JH.Assets.icon(ctx, ik, PX + 10, ry + 5, 1);
         ctx.globalAlpha = 1;
         const mark = owned ? "✓" : locked ? "▸" : "•";
-        ctx.fillText(hasIcon ? name + suffix : mark + " " + name + suffix, hasIcon ? PX + 13 : PX + 5, ry + 8);
+        ctx.fillText(hasIcon ? name + suffix : mark + " " + name + suffix, hasIcon ? PX + 19 : PX + 5, ry + 8);
         if (!owned) {
           ctx.textAlign = "right";
           ctx.fillStyle = locked ? "#3a4a5a" : afford ? "#ffd23f" : "#cc4444";
@@ -2842,9 +2895,11 @@
         else if (cur.kind === "consumable") {
           const c = JH.CONSUMABLES[cur.id];
           desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now." : "";
-        } else if (cur.kind === "relic") {
-          const rd = JH.RELICS.find((x) => x.id === cur.id);
-          desc = rd ? rd.desc : "";
+        } else if (cur.kind === "wheelRow") {
+          const en = JH.Balance.shopWheelEntries(this.relicStock)[this.shopWheelSlot];
+          if (en.id === "kibble") desc = "25 HP over 6s. Stacks.";
+          else if (en.id) { const rd = JH.RELICS.find((x) => x.id === en.id); desc = rd ? rd.desc : ""; }
+          else desc = "";
         }
       }
       if (desc) {
