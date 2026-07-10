@@ -1139,7 +1139,7 @@
         // Above the overhead bar stack (bodyH + bars + xp), bigger + slower
         // than a loot blip so it reads through the combat noise.
         this.float(p.x, p.y, "LEVEL UP", "#ffd23f",
-          { life: 1.8, rise: 34, h: p.stats.bodyH + 46, big: true });
+          { life: 2.2, rise: 30, h: p.stats.bodyH + 56, big: true });
         // The stat delta itself plays through the upgrade sequence (icon +
         // amount rising off Jon, queued by applyStats) — no text spam here.
       }
@@ -2252,10 +2252,17 @@
         for (const f of this.floaters) {
           const k = f.t / (f.life || 0.9);
           ctx.globalAlpha = Math.max(0, 1 - k);
-          ctx.fillStyle = f.color;
           if (f.big) ctx.font = "bold 8px monospace";
-          ctx.fillText(f.text, f.x - cam,
-            JH.Geo.feetScreenY(f.y, 0) - (f.h || 0) - (f.rise || 22) * k);
+          const fx = f.x - cam;
+          const fy = JH.Geo.feetScreenY(f.y, 0) - (f.h || 0) - (f.rise || 22) * k;
+          // Big floaters get a dark outline so they read over any backdrop.
+          if (f.big) {
+            ctx.fillStyle = "#0a0e18";
+            ctx.fillText(f.text, fx + 1, fy + 1); ctx.fillText(f.text, fx - 1, fy + 1);
+            ctx.fillText(f.text, fx + 1, fy - 1); ctx.fillText(f.text, fx - 1, fy - 1);
+          }
+          ctx.fillStyle = f.color;
+          ctx.fillText(f.text, fx, fy);
           if (f.big) ctx.font = "bold 6px monospace";
         }
         ctx.globalAlpha = 1;
