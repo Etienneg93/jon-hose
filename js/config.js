@@ -371,16 +371,9 @@
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
 
-  // Between-wave consumables (Suds sink). Med Kit heals instantly on purchase;
-  // Pressure Charge is "armed" in the shop and ticks down only during play.
-  JH.CONSUMABLES = {
-    medkit:   { name: "Med Kit",        cost: 45, heal: 60 },
-    pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
-  };
-
-  // Kibble Pack: repeatable shop staple (slot-wheel fixed card). Same grant
-  // semantics as the health-pickup collect — JH.Balance.kibbleGrant.
-  JH.KIBBLE_PACK = { cost: 30, heal: 25, dur: 6 };
+  // Kibble Pack: the only purchasable heal (slot-wheel fixed card, repeatable).
+  // Same grant semantics as the health-pickup collect — JH.Balance.kibbleGrant.
+  JH.KIBBLE_PACK = { name: "Kibble Pack", cost: 30, heal: 25, dur: 6 };
 
   // Relics: one-time purchases (game.relics[id] = true), never a repeatable.
   // Effects are either hook-checks scattered across game.js/entities.js (grep
@@ -416,6 +409,7 @@
     spigotHealRate: 15,     // hp/s restored while a hydrant is refilling you
     prayerBeadDur: 8,       // s of pressure buff at a boss's first enrage
     spongeWindowBonus: 2,   // s added to GUSH regen windows
+    prayerBeadMult: 1.5,    // spray dmg mult while the pressure buff runs
   };
 
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).

@@ -29,7 +29,7 @@
     enemies: [], embers: [], pickups: [], particles: [], floaters: [], sigils: [],
     beneUsedOnce: {},
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
-    hydrants: [], shopNpc: null, nearShop: false,
+    hydrants: [], shopNpc: null, nearShop: false, nearVendor: false, shopOpen: false,
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
@@ -418,7 +418,8 @@
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
-      this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
+      this.shopNpc = null; this.nearShop = false; this.nearVendor = false;
+      this.shopOpen = false; this.shopCursor = 0;
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
@@ -481,7 +482,7 @@
       this.waveCleared = false;
       this.wavePool = [];   // reinforcement queue — only regular waves fill it
       this.shopNpc = null;          // vendor gets left behind once the fight starts
-      this.nearShop = false;
+      this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       if (this.player.beneRank("eye_of_storm"))
         this.player.stormT = this.player.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
       const wave = JH.LEVEL1.waves[i];
@@ -1321,17 +1322,12 @@
       const conCol = document.createElement("div");
       conCol.className = "tree-col";
       conCol.innerHTML = '<div class="tree-head">SUPPLIES</div>';
-      // Pressure Charge is delisted from both shops until the buff works.
+      // Kibble Pack is the only purchasable heal (over-time, stacks).
       const cons = [
-        { key: "medkit", buy: () => {
-            const c = JH.CONSUMABLES.medkit;
-            if (this.player.suds < c.cost) return false;
-            this.player.suds -= c.cost;
-            this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
-            return true;
-          }, label: () => JH.CONSUMABLES.medkit.name,
-          desc: () => "Heal " + JH.CONSUMABLES.medkit.heal + " HP now.",
-          cost: () => JH.CONSUMABLES.medkit.cost },
+        { key: "kibble", buy: () => this.buyKibble(),
+          label: () => JH.KIBBLE_PACK.name,
+          desc: () => "Heal " + JH.KIBBLE_PACK.heal + " HP over " + JH.KIBBLE_PACK.dur + "s. Stacks.",
+          cost: () => this.priceOf(JH.KIBBLE_PACK.cost) },
       ];
       cons.forEach((item) => {
         const cost = item.cost();
@@ -1384,7 +1380,7 @@
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
-      this.shopNpc = null; this.nearShop = false;
+      this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       this.dropBudget = { suds: 0, items: 0 };
       this.waveIndex = next - 1;
       // Act gate keyed to the wave being re-fought, not the decremented index.
@@ -1549,11 +1545,14 @@
     update(dt) {
       this.input.poll();
 
-      // pause toggle works in play/pause, church/churchPause, and truck/truckPause
+      // pause toggle works in play/pause, church/churchPause, and truck/truckPause.
+      // While the shop is open, Escape/Start closes it instead of pausing.
       if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"
         || this.state === "church" || this.state === "churchPause"
-        || this.state === "truck" || this.state === "truckPause"))
-        this.togglePause();
+        || this.state === "truck" || this.state === "truckPause")) {
+        if (this.state === "play" && this.shopOpen) this.shopOpen = false;
+        else this.togglePause();
+      }
 
       // Stat + benediction panel toggle (Tab / gamepad Back).
       if (this.input.pressed("toggleStats") && this.state === "play")
@@ -1726,13 +1725,25 @@
       }
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
-        this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
+        this.nearVendor = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
+        // The shop is a walk-up interaction: E at the vendor opens it; it
+        // closes on Escape/Start or by leaving vendor range.
+        if (!this.shopOpen && this.nearVendor && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          this.shopOpen = true;
+          this.shopCursor = 0;
+          this.audio.play("coin");
+        }
+        if (this.shopOpen && !this.nearVendor) this.shopOpen = false;
+        // Downstream consumers (panel mode, HUD hide, nav gating, wave hold)
+        // key off nearShop = "shop UI open".
+        this.nearShop = this.shopOpen;
         this.player.nearShop = this.nearShop;
-        // Wheel reel-spin: arms once per vendor on the first walk-up, so the
+        // Wheel reel-spin: arms once per vendor on the first OPEN, so the
         // reels + coin blips play in front of the open panel. Each reel (0-2)
         // settles at 0.6 + i*0.3s with one pitch-stepped "coin" blip.
-        if (this.nearShop && !this._wheelSpun) {
+        if (this.shopOpen && !this._wheelSpun) {
           this._wheelSpun = true;
           this.wheelSpinT = 0;
           this._wheelSettled = [false, false, false];
@@ -1773,7 +1784,7 @@
               } else if (e.kind === "rep") {
                 ok = U.buyRep(e.id, this.player, this.priceOf(U.repCost(e.id)));
                 if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, U.repById(e.id).name, "#80ff80"); }
-              } else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
+              }
               else if (e.kind === "wheelRow") {
                 if (this.shopWheelSlot === 3) {
                   telemKind = "consumable"; telemId = "kibble";
@@ -1806,7 +1817,10 @@
             }
           }
         }
-      } else { this.nearShop = false; this.player.nearShop = false; this.player.shopWheelFocus = false; }
+      } else {
+        this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
+        this.player.nearShop = false; this.player.shopWheelFocus = false;
+      }
 
       // --- separation so enemies don't fully stack
       this.separate();
@@ -2245,6 +2259,15 @@
       if (this.state === "play")
         this.drawStatPanel(this.ctx);
       // Hover shop panel — drawn outside shake transform so it stays stable.
+      // Walk-up prompt over the vendor while the shop is closed.
+      if (this.state === "play" && this.shopNpc && this.nearVendor && !this.shopOpen) {
+        const psx = Math.round(this.shopNpc.x - JH.Camera.x);
+        const psy = Math.round(JH.Geo.feetScreenY(this.shopNpc.y, 0)) - 42;
+        this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E  SHOP", psx + 1, psy + 1);
+        this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E  SHOP", psx, psy);
+        this.ctx.textAlign = "left";
+      }
       if (this.nearShop && this.state === "play") {
         this.drawHoverShop(this.ctx);
         // Sigils must never hide behind the shop panel — redraw them above it.
@@ -2498,22 +2521,8 @@
       U.nodes.forEach((n) => { if (U.isAvailable(n.id)) out.push({ kind: "node", id: n.id }); });
       // OVERCHARGE only unlocks from Act 2 on (after the first boss).
       if (U.overchargeUnlocked()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
-      // "pressure" is delisted until the buff works.
-      Object.keys(JH.CONSUMABLES).forEach((k) => {
-        if (k !== "pressure") out.push({ kind: "consumable", id: k });
-      });
       out.push({ kind: "wheelRow" });
       return out;
-    },
-    // Buy a between-wave consumable; returns true on success.
-    buyConsumable(key) {
-      const c = JH.CONSUMABLES[key];
-      if (!c) return false;
-      const price = this.priceOf(c.cost);
-      if (this.player.suds < price) return false;
-      this.player.suds -= price;
-      if (key === "medkit") this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
-      return true;
     },
     // Buy a Kibble Pack (fixed slot-wheel card, repeatable); returns true on success.
     buyKibble() {
@@ -2799,15 +2808,12 @@
       rows.push({ t: "head", label: "── OVERCHARGE ──" });
       if (U.overchargeUnlocked()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
       else rows.push({ t: "lock", label: "Unlocks after the first boss" });
-      rows.push({ t: "head", label: "── SUPPLIES ──" });
-      Object.keys(JH.CONSUMABLES).forEach((k) => rows.push({ t: "con", k }));
       rows.push({ t: "head", label: "── RELICS ──" });
       rows.push({ t: "wheel" });
 
       const isCurRow = (r) => cur && (
         (r.t === "node" && cur.kind === "node" && cur.id === r.n.id) ||
         (r.t === "rep" && cur.kind === "rep" && cur.id === r.n.id) ||
-        (r.t === "con" && cur.kind === "consumable" && cur.id === r.k) ||
         (r.t === "wheel" && cur.kind === "wheelRow"));
 
       let cy = 0, cursorCY = 0;
@@ -2880,8 +2886,6 @@
         } else if (r.t === "rep") {
           cost = this.priceOf(U.repCost(r.n.id)); afford = pl.suds >= cost; name = r.n.name;
           if (U.repCount[r.n.id]) suffix = " x" + U.repCount[r.n.id];
-        } else {
-          const c = JH.CONSUMABLES[r.k]; cost = this.priceOf(c.cost); afford = pl.suds >= cost; name = c.name;
         }
         if (isCurRow(r)) {
           ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
@@ -2890,8 +2894,8 @@
         ctx.font = "bold 6px monospace";
         ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
         // Baked icon replaces the •/▸/✓ mark: Overcharge by the stat it
-        // pushes, supplies by their own key. Text mark remains the fallback.
-        const ik = r.t === "rep" ? "dmg" : r.t === "con" ? ({ medkit: "hp" }[r.k] || null) : null;
+        // pushes. Text mark remains the fallback.
+        const ik = r.t === "rep" ? "dmg" : null;
         ctx.globalAlpha = locked ? 0.45 : 1;
         const hasIcon = ik && JH.Assets.icon(ctx, ik, PX + 10, ry + 5, 1);
         ctx.globalAlpha = 1;
@@ -2920,12 +2924,9 @@
       if (cur) {
         if (cur.kind === "node") { const n = U.byId(cur.id); desc = n ? n.desc : ""; }
         else if (cur.kind === "rep") { const n = U.repById(cur.id); desc = n ? n.desc : ""; }
-        else if (cur.kind === "consumable") {
-          const c = JH.CONSUMABLES[cur.id];
-          desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now." : "";
-        } else if (cur.kind === "wheelRow") {
+        else if (cur.kind === "wheelRow") {
           const en = JH.Balance.shopWheelEntries(this.wheelStock, this.relics)[this.shopWheelSlot];
-          if (en.id === "kibble") desc = "25 HP over 6s. Stacks.";
+          if (en.id === "kibble") desc = "Heal " + JH.KIBBLE_PACK.heal + " HP over " + JH.KIBBLE_PACK.dur + "s. Stacks.";
           else if (en.id && !en.sold) { const rd = JH.RELICS.find((x) => x.id === en.id); desc = rd ? rd.desc : ""; }
           else desc = "";
         }
@@ -2942,7 +2943,7 @@
       ctx.fillStyle = "#445566";
       ctx.font = "5px monospace";
       ctx.textAlign = "center";
-      ctx.fillText("▲▼ SELECT   [E] BUY", MID, PY + PH - 5);
+      ctx.fillText("▲▼ SELECT   [E] BUY   [ESC] CLOSE", MID, PY + PH - 5);
       ctx.textAlign = "left";
     },
 

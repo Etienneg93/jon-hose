@@ -179,7 +179,7 @@
       this.sprayEmitAcc = 0;       // fractional particle emitter for the stream
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
-      this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
+      this.pressureBuffT = 0;      // Prayer Bead pressure buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
       this.kibbleTickT = 0;        // seconds until the next +N floater tick
@@ -770,7 +770,7 @@
           if (sheltered) continue;
         }
         const mult = e.def ? (e.def.waterMult || 1) : 1;
-        const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
+        const pressureMult = this.pressureBuffT > 0 ? JH.RELIC_TUNE.prayerBeadMult : 1;
         const beneMult = anyBene ? JH.Balance.beneDmgMult(beneRanks, {
           waterFrac, wet: e.wetness || 0,
           burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
