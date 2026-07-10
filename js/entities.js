@@ -1072,7 +1072,8 @@
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
       // XP: sits ABOVE the HP bar (grows away from Jon's head) only while
       // xpFlashT runs (set on gain), fading over its last 0.5s.
-      if (this.xpFlashT > 0 && JH.Game && JH.Game.playerLevel != null) {
+      const xpShown = this.xpFlashT > 0 && JH.Game && JH.Game.playerLevel != null;
+      if (xpShown) {
         ctx.save();
         ctx.globalAlpha = Math.min(1, this.xpFlashT / 0.5);
         const xf = Math.min(1, JH.Game.playerXp / JH.Balance.xpForLevel(JH.Game.playerLevel + 1));
@@ -1099,8 +1100,12 @@
         }
         ctx.restore();
       }
-      // Status indicators above bars — stacked if both active
+      // Status indicators above bars — indY is a running baseline cursor:
+      // it starts above whatever the XP bar occupies (sliding down in sync
+      // with its fade) and every row claims 7px, so rows never overlap the
+      // XP bar or each other.
       let indY = barTop - 2;
+      if (xpShown) indY -= Math.round(6 * Math.min(1, this.xpFlashT / 0.5));
       if (this.kibbleTimer > 0) {
         ctx.fillStyle = "#44ff77";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
@@ -1117,11 +1122,13 @@
         ctx.fillStyle = "#ff6610";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
         ctx.fillText("BURN x" + this.burnStacks, sx, indY);
+        indY -= 7;
       }
 
-      // Floating coin count above bars when standing near the vendor
+      // Floating coin count above bars when standing near the vendor;
+      // takes the next free slot on the indY cursor (9px-tall bg box).
       if (this.nearShop) {
-        const coinY = barTop - 12;
+        const coinY = indY - 8;
         ctx.fillStyle = "rgba(0,0,0,0.65)";
         ctx.fillRect(bx - 1, coinY - 1, barW + 2, 9);
         ctx.fillStyle = "#ffd23f";
