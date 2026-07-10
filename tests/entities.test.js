@@ -1359,6 +1359,53 @@ test("dome shelter: pierce beam — enemy in front is hit, enemy inside the dome
   assert.strictEqual(beyond.hp, hpBeyond0, "pierce: dome hard-blocks the beam — nothing past it is hit");
 });
 
+// ---- Brass Nozzle: bonus targets the first (nearest) enemy the stream hits ----
+
+test("Brass Nozzle: pierce beam (Hydro Lance) — bonus lands on the nearest enemy only", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;                        // Hydro Lance tier: pierce, blocker can only be a planted shield
+  g.relics = { brass_nozzle: true };
+  const near = new JH.Enemy("mook", p.x + 40, p.y);
+  const far  = new JH.Enemy("mook", p.x + 120, p.y);
+  g.enemies = [near, far];
+
+  const n0 = near.hp, f0 = far.hp;
+  p.doSpray(0.05, g);
+  const nearLoss = n0 - near.hp, farLoss = f0 - far.hp;
+  assert.ok(farLoss > 0, "pierce: far enemy is hit too");
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / p.stats.sprayDamage;
+  assert.ok(Math.abs(nearLoss / farLoss - expected) < 1e-9,
+    "near enemy takes the nozzle bonus: loss ratio near/far == (sprayDamage+add)/sprayDamage, got " + (nearLoss / farLoss));
+});
+
+test("Brass Nozzle: beam 0 — bonus still lands on the blocker (regression)", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const near = new JH.Enemy("mook", p.x + 40, p.y);
+  const far  = new JH.Enemy("mook", p.x + 60, p.y);
+  g.enemies = [near, far];
+
+  g.relics = {};                           // control: no nozzle
+  const n0 = near.hp;
+  p.doSpray(0.05, g);
+  const plainLoss = n0 - near.hp;
+  assert.ok(plainLoss > 0, "non-pierce: blocker is hit");
+
+  near.hp = n0; p.water = p.stats.maxWater;
+  g.relics = { brass_nozzle: true };
+  const f0 = far.hp;
+  p.doSpray(0.05, g);
+  const nozzleLoss = n0 - near.hp;
+  assert.strictEqual(far.hp, f0, "non-pierce: enemy behind the blocker is untouched");
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / p.stats.sprayDamage;
+  assert.ok(Math.abs(nozzleLoss / plainLoss - expected) < 1e-9,
+    "blocker takes the nozzle bonus: loss ratio == (sprayDamage+add)/sprayDamage, got " + (nozzleLoss / plainLoss));
+});
+
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
   const pull = new JH.Pickup("water_can", 0, 0, 10);
   const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60

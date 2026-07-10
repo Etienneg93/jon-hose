@@ -727,8 +727,32 @@
       const anyBene = beneRanks.overflow || beneRanks.baptize || beneRanks.trial;
       const waterFrac = this.water / S.maxWater;
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
-      // Brass Nozzle: flat dmg add to the primary stream target only.
+      // Brass Nozzle: flat dmg add to the nearest-forward enemy hit this frame
+      // (in pierce mode `blocker` is shield-only, so scan with the loop's filters).
       const nozzleAdd = (game.relics && game.relics.brass_nozzle) ? JH.RELIC_TUNE.brassNozzleAdd : 0;
+      let nozzleTarget = null;
+      if (nozzleAdd) {
+        if (!pierce) nozzleTarget = blocker;   // non-pierce: nearest in-arc enemy IS the blocker
+        else {
+          let bestFwd = Infinity;
+          for (const e of game.enemies) {
+            if (e.dead || e.dropping) continue;
+            if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+            const fwd = (e.x - ox) * this.facing;
+            if (blocker && fwd > blockerFwd) continue;
+            if (game.shields) {
+              let sheltered = false;
+              for (const s of game.shields) {
+                if (s.dead || !s.radius || !s.active) continue;
+                if (!insideDome(s, e.x, e.y)) continue;
+                if (!insideDome(s, this.x, this.y)) { sheltered = true; break; }
+              }
+              if (sheltered) continue;
+            }
+            if (fwd < bestFwd) { bestFwd = fwd; nozzleTarget = e; }
+          }
+        }
+      }
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
@@ -753,7 +777,7 @@
           burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
         }) : 1;
         const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
-        const flatDmg = S.sprayDamage + (e === blocker ? nozzleAdd : 0);
+        const flatDmg = S.sprayDamage + (e === nozzleTarget ? nozzleAdd : 0);
         const dmg = flatDmg * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
