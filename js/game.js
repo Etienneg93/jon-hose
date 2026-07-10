@@ -946,6 +946,12 @@
       this.player.suds -= price;
       this.relics = this.relics || {};
       this.relics[id] = true;
+      const fresh = JH.Upgrades.computeStats(JH.Upgrades.owned);
+      const hpGain = fresh.maxHp - this.player.stats.maxHp;
+      const waterGain = fresh.maxWater - this.player.stats.maxWater;
+      this.player.applyStats(fresh);
+      if (hpGain > 0) this.player.hp = Math.min(fresh.maxHp, this.player.hp + hpGain);
+      if (waterGain > 0) this.player.water = Math.min(fresh.maxWater, this.player.water + waterGain);
       this.relicStock = this.relicStock.filter((rid) => rid !== id);
       return true;
     },

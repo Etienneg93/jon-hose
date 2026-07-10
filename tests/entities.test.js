@@ -583,25 +583,18 @@ test("mook holds its windup when no attack ticket is free", () => {
   assert.strictEqual(m.usingTicket, true);
 });
 
-test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {
-  JH.Upgrades.reset();
-  JH.Upgrades.currentActLevel = -1;                     // Act 1
-  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), false);
-  JH.Upgrades.currentActLevel = 0;                      // Act 2 — gate opens here
-  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
-  JH.Upgrades.currentActLevel = 1;                      // Act 3 — still available
-  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
-  JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
-});
+// Act-gating for the ex-signature Hydro Lance moved with it into JH.RELICS
+// (relic.actGate) — see tests/relics.test.js; the NODES-tier gate this used
+// to test no longer exists (NODES is empty, below).
 
-test("Upgrades NODES: exactly three signatures, retired ids gone", () => {
-  const ids = JH.Upgrades.nodes.map((n) => n.id).sort();
-  assert.deepStrictEqual(ids, ["sig_dash", "sig_lance", "sig_marshal"]);
-  assert.deepStrictEqual(JH.Upgrades.branches, ["SIGNATURE"]);
+test("Upgrades NODES: empty, signatures retired to JH.RELICS", () => {
+  assert.strictEqual(JH.Upgrades.nodes.length, 0);
+  assert.deepStrictEqual(JH.Upgrades.branches, []);
   assert.strictEqual(JH.Upgrades.repeatables.length, 1);
   assert.strictEqual(JH.Upgrades.repeatables[0].id, "ov_dmg");
   ["pw1", "pw2", "pw3", "rc1", "rc2", "rc3", "tk1", "tk2", "tk3",
-   "mb1", "mb2", "mb3", "vt1", "vt2", "vt3", "ov_water", "ov_hp"].forEach((id) => {
+   "mb1", "mb2", "mb3", "vt1", "vt2", "vt3", "ov_water", "ov_hp",
+   "sig_dash", "sig_marshal", "sig_lance"].forEach((id) => {
     assert.strictEqual(JH.Upgrades.byId(id), undefined, id + " should be retired");
   });
 });
@@ -1443,17 +1436,19 @@ test("dropLoot: dryStreak increments on a null roll and resets once an item drop
   }
 });
 
-test("death wash: benedictions clear, levels/signatures survive respawn refresh", () => {
+test("death wash: benedictions clear, levels/relics survive respawn refresh", () => {
   JH.Upgrades.reset(); JH.Benedictions.reset();
-  JH.Upgrades.owned = { sig_marshal: true };
+  const prevGame = JH.Game;
+  JH.Game = { relics: { fire_marshal: true } };
   JH.Upgrades.levelCount = 4;
   JH.Benedictions.take("bedrock");
   const before = JH.Upgrades.computeStats(JH.Upgrades.owned);
   JH.Benedictions.reset();                             // what respawnFromChurch does
   const after = JH.Upgrades.computeStats(JH.Upgrades.owned);
   assert.strictEqual(before.maxHp - after.maxHp, 40);  // bedrock gone
-  assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // signature survived
+  assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // relic survived
   JH.Upgrades.reset(); JH.Benedictions.reset();
+  JH.Game = prevGame;
 });
 
 test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {

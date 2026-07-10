@@ -379,7 +379,24 @@
     { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
     { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
     { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },
+    { id: "hydro_dash",   name: "Hydro-Dash",        cost: 200,
+      desc: "-0.2s dash cooldown; dash boosts speed +28 for 3s",
+      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashBoost = 28; s.dashBoostDur = 3; } },
+    { id: "fire_marshal", name: "Fire-Marshal Spec", cost: 220,
+      desc: "+30 range, +30 knockback",
+      apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
+    { id: "hydro_lance",  name: "Hydro Lance",       cost: 300, actGate: true,
+      desc: "+18 dmg; a cutting beam that pierces the whole line",
+      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
   ];
+
+  // Relic behavior tunables (flat-gear rule: adders only, no multipliers).
+  JH.RELIC_TUNE = {
+    brassNozzleAdd: 10,     // + spray dmg to the primary stream target
+    spigotHealRate: 15,     // hp/s restored while a hydrant is refilling you
+    prayerBeadDur: 8,       // s of pressure buff at a boss's first enrage
+    spongeWindowBonus: 2,   // s added to GUSH regen windows
+  };
 
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
