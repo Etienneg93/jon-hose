@@ -201,6 +201,7 @@
       this.upgradeT = 0;      // time left on the entry currently showing
       this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
+      this.xpFlashT = 0;      // overhead XP bar visibility: set on XP gain, fades out
       this.sermonFullPressure = false;  // Pressure Sermon: hit full pressure during THIS spray hold
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
@@ -303,6 +304,7 @@
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
       if (this.douseCdT > 0) this.douseCdT -= dt;
       if (this.freeSprayT > 0) this.freeSprayT -= dt;
+      if (this.xpFlashT > 0) this.xpFlashT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
       if (this.vigorT > 0) this.vigorT -= dt;
       if (this.statFlash)
@@ -1068,6 +1070,20 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // XP: joins the overhead stack only while xpFlashT runs (set on gain),
+      // fading over its last 0.5s — the bar stays out of the way otherwise.
+      if (this.xpFlashT > 0 && JH.Game && JH.Game.playerLevel != null) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.xpFlashT / 0.5);
+        const xf = Math.min(1, JH.Game.playerXp / JH.Balance.xpForLevel(JH.Game.playerLevel + 1));
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.fillRect(bx - 1, barTop + 8, barW + 2, 4);
+        ctx.fillStyle = "#443300";
+        ctx.fillRect(bx, barTop + 9, barW, 2);
+        ctx.fillStyle = "#ffd23f";
+        ctx.fillRect(bx, barTop + 9, Math.round(barW * xf), 2);
+        ctx.restore();
+      }
       // GUSH regen: a brightness wave travels left → right through the
       // FILLED portion only — a brighter shade of the bar's own blue, kept
       // strictly inside the fill (no halo).

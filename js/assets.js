@@ -488,13 +488,20 @@
   };
 
   // Benediction tier frame + glow around a baked 12px icon at (x, y) center.
-  // Boon I: thin element frame. Boon II: double frame + soft glow.
-  // Duo: split two-tone frame + glow. Legendary: gold + corner studs + pulse.
+  // Edges are 1px pixel-fills (never strokeRect): crisp lines, and the duo
+  // split colors the border's left/right halves with NO seam through the
+  // icon. All tiers sit on a dark outer ring so the frame reads on any
+  // backdrop. Corner caps (2x2) mark the tier: element color for boon I,
+  // white for boon II (plus an outer band), split colors for duos, and
+  // shimmering gold for legendaries (plus the pulse glow).
   Assets.tierFrame = function (ctx, x, y, d, rank, scale, t) {
     const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;  // half-extent
     const el = d.element || (d.needs && d.needs[0]) || "water";
-    const c1 = JH.SIGIL_COLORS[el] || "#ffd23f";
+    const c1 = d.kind === "legendary" ? "#ffd23f" : (JH.SIGIL_COLORS[el] || "#ffd23f");
     const c2 = d.needs ? (JH.SIGIL_COLORS[d.needs[1]] || c1) : c1;
+    // Border box: a 1px ring just outside the icon's half-extent.
+    const bx = Math.round(x - s) - 1, by = Math.round(y - s) - 1;
+    const bw = Math.round(s * 2) + 2, bh = Math.round(s * 2) + 2;
     ctx.save();
     const glow = d.kind === "legendary" ? 0.5 + 0.2 * Math.sin((t || 0) * 3)
                : d.kind === "duo" ? 0.35 : rank >= 2 ? 0.3 : 0;
@@ -505,18 +512,38 @@
       g.addColorStop(1, "rgba(" + gc + ",0)");
       ctx.fillStyle = g; ctx.fillRect(x - s * 2.1, y - s * 2.1, s * 4.2, s * 4.2);
     }
-    ctx.lineWidth = 1;
+    const px = (xa, ya, wa, ha, c) => { ctx.fillStyle = c; ctx.fillRect(xa, ya, wa, ha); };
+    const RIM = "rgba(10,14,24,0.85)";
+    px(bx - 1, by - 1, bw + 2, 1, RIM); px(bx - 1, by + bh, bw + 2, 1, RIM);
+    px(bx - 1, by, 1, bh, RIM);         px(bx + bw, by, 1, bh, RIM);
+    // Colored border; duo splits top/bottom at mid, one color per side edge.
     if (d.kind === "duo") {
-      ctx.strokeStyle = c1; ctx.strokeRect(x - s, y - s, s, s * 2);
-      ctx.strokeStyle = c2; ctx.strokeRect(x, y - s, s, s * 2);
-    } else if (d.kind === "legendary") {
-      ctx.strokeStyle = "#ffd23f"; ctx.strokeRect(x - s, y - s, s * 2, s * 2);
-      ctx.fillStyle = "#fff7c2";
-      [[-s, -s], [s - 1, -s], [-s, s - 1], [s - 1, s - 1]].forEach(([dx, dy]) =>
-        ctx.fillRect(x + dx, y + dy, 2, 2));
+      const mid = bx + (bw >> 1);
+      px(bx, by, mid - bx, 1, c1);          px(mid, by, bx + bw - mid, 1, c2);
+      px(bx, by + bh - 1, mid - bx, 1, c1); px(mid, by + bh - 1, bx + bw - mid, 1, c2);
+      px(bx, by + 1, 1, bh - 2, c1);        px(bx + bw - 1, by + 1, 1, bh - 2, c2);
     } else {
-      ctx.strokeStyle = c1; ctx.strokeRect(x - s, y - s, s * 2, s * 2);
-      if (rank >= 2) ctx.strokeRect(x - s - 2, y - s - 2, s * 2 + 4, s * 2 + 4);
+      px(bx, by, bw, 1, c1); px(bx, by + bh - 1, bw, 1, c1);
+      px(bx, by + 1, 1, bh - 2, c1); px(bx + bw - 1, by + 1, 1, bh - 2, c1);
+    }
+    // Corner caps (2x2). Duo: left corners in c1, right in c2.
+    [[bx, by], [bx + bw - 2, by], [bx, by + bh - 2], [bx + bw - 2, by + bh - 2]]
+      .forEach(([cxp, cyp], i) => {
+        let cc;
+        if (d.kind === "legendary")
+          cc = "rgba(255,247,194," + (0.65 + 0.35 * Math.sin((t || 0) * 5 + i * 1.57)).toFixed(3) + ")";
+        else if (d.kind === "duo") cc = (i % 2 === 0) ? c1 : c2;
+        else cc = rank >= 2 ? "#eaf6ff" : c1;
+        px(cxp, cyp, 2, 2, cc);
+      });
+    // Boon rank II: a soft outer band 2px out marks the upgrade. Drawn only
+    // at sigil scale — in the dense panel the white caps + glow + the name's
+    // "II" tag carry it, and the band would collide with neighboring rows.
+    if (d.kind === "boon" && rank >= 2 && (scale || 1) >= 1.05) {
+      ctx.globalAlpha = 0.55;
+      px(bx - 3, by - 3, bw + 6, 1, c1); px(bx - 3, by + bh + 2, bw + 6, 1, c1);
+      px(bx - 3, by - 2, 1, bh + 4, c1); px(bx + bw + 2, by - 2, 1, bh + 4, c1);
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   };

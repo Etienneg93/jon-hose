@@ -1120,6 +1120,7 @@
     grantXp(n) {
       if (!this.player || !this.player.alive) return;
       this.playerXp += n;
+      this.player.xpFlashT = 2.2;   // overhead XP bar fades in on gain, out after
       while (this.playerXp >= JH.Balance.xpForLevel(this.playerLevel + 1)) {
         this.playerXp -= JH.Balance.xpForLevel(this.playerLevel + 1);
         this.playerLevel++;
@@ -2002,9 +2003,6 @@
       const hud = document.getElementById("hud");
       if (hud) hud.style.visibility = (this.state === "play" && this.nearShop) ? "hidden" : "";
       document.getElementById("hud-suds").textContent = Math.floor(this.player.suds);
-      document.getElementById("hud-xp-fill").style.width =
-        Math.min(100, 100 * this.playerXp / JH.Balance.xpForLevel(this.playerLevel + 1)) + "%";
-      document.getElementById("hud-lv").textContent = "LV " + this.playerLevel;
     },
 
     // ============================================================ RENDER
@@ -2580,6 +2578,12 @@
         rows.push(["DODGE", Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"]);
       if (S.vampiricRate > 0 || F.vampiricRate > 0)
         rows.push(["VAMP", Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"]);
+      // Level + XP live in the expanded sheet only — the top-left HUD bar is
+      // gone (the overhead XP bar over Jon fades in on gain instead).
+      if (expanded) {
+        rows.unshift(["XP", Math.floor(this.playerXp) + "/" + JH.Balance.xpForLevel(this.playerLevel + 1), null, null]);
+        rows.unshift(["LV", this.playerLevel, null, null]);
+      }
 
       // Active benedictions (expanded only): baked 12px icon + tier frame,
       // name in element color, rank-appropriate effect text wrapped below
@@ -2623,8 +2627,10 @@
           if (beneRows.length) {
             for (const b of beneRows) {
               b.lines = (inlineDesc && maxLines)
-                ? this.wrapText(b.text, 36, maxLines) : [];
-              beneH += 14 + b.lines.length * 6 + 2;
+                ? this.wrapText(b.text, 34, maxLines) : [];
+              // Row height clears the framed icon (±9 with seat rim) or the
+              // text column, whichever is taller.
+              beneH += Math.max(24, 16 + b.lines.length * 6);
             }
           } else {
             beneH = 12;   // room for the "no benedictions yet" hint
@@ -2676,17 +2682,19 @@
       if (expanded) {
         for (const b of beneRows) {
           const rowStart = by;
-          JH.Assets.icon(ctx, "bene_" + b.id, X + 8, rowStart + 1, 1);
-          JH.Assets.tierFrame(ctx, X + 8, rowStart + 1, b.d, b.rank, 1, this.elapsed);
+          // Icon rail on the left; name + desc share the right column so the
+          // frame never strikes through text.
+          JH.Assets.icon(ctx, "bene_" + b.id, X + 10, rowStart + 4, 1);
+          JH.Assets.tierFrame(ctx, X + 10, rowStart + 4, b.d, b.rank, 1, this.elapsed);
           ctx.font = "6px monospace"; ctx.textAlign = "left";
           ctx.fillStyle = b.color;
-          ctx.fillText(b.name, X + 18, rowStart + 4);
-          by = rowStart + 14;
+          ctx.fillText(b.name, X + 24, rowStart + 4);
           if (b.lines.length) {
             ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
-            for (const ln of b.lines) { ctx.fillText(ln, X + 4, by); by += 6; }
+            let ly = rowStart + 12;
+            for (const ln of b.lines) { ctx.fillText(ln, X + 24, ly); ly += 6; }
           }
-          by += 2;
+          by = rowStart + Math.max(24, 16 + b.lines.length * 6);
         }
         if (beneRows.length === 0) {
           ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
@@ -2698,7 +2706,7 @@
           ctx.fillText("RELICS", X, by + 6);
           const gridTop = by + 12;
           relicIds.forEach((id, i) => {
-            const gx = X + 8 + (i % 9) * 16, gy = gridTop + 8 + Math.floor(i / 9) * 16;
+            const gx = X + 10 + (i % 9) * 16, gy = gridTop + 8 + Math.floor(i / 9) * 16;
             JH.Assets.icon(ctx, id, gx, gy, 1);
             JH.Assets.gearFrame(ctx, gx, gy, 1);
           });
