@@ -1301,6 +1301,64 @@ test("Brass Nozzle: +10 flat dmg to the primary (blocker) target only; never a s
   assert.strictEqual(far2.hp, hpFar2, "Brass Nozzle: second-closest enemy is never hit");
 });
 
+// ---- Dome shelter contract (Bulwark's planted dome blocks/shelters the stream) ----
+
+test("dome shelter: enemy inside an active dome is immune while Jon is outside; hittable once the dome fades", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;   // long reach — the arc spans well past the dome
+  const dome = new JH.DeployedShield(p.x + 100, p.y, null);
+  g.shields = [dome];
+  const e = new JH.Enemy("mook", dome.x, dome.y);   // at the dome's center
+  g.enemies = [e];
+
+  const hp0 = e.hp;
+  p.doSpray(0.05, g);
+  assert.strictEqual(e.hp, hp0, "active dome: stream blocked, enemy inside takes nothing");
+
+  dome.active = false;   // dome faded — no blocking, no shelter
+  p.doSpray(0.05, g);
+  assert.ok(e.hp < hp0, "inactive dome: the same enemy takes spray damage");
+});
+
+test("dome shelter: stepping inside the dome lets the stream through (the counter)", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const dome = new JH.DeployedShield(p.x + 30, p.y, null);   // Jon inside (30 < domeRadius)
+  g.shields = [dome];
+  assert.ok(JH.insideDome(dome, p.x, p.y), "setup: Jon is inside the dome");
+  const e = new JH.Enemy("mook", dome.x + 20, dome.y);       // also inside, in front of Jon
+  g.enemies = [e];
+
+  const hp0 = e.hp;
+  p.doSpray(0.05, g);
+  assert.ok(e.hp < hp0, "Jon inside the dome: sheltered enemy is hittable");
+});
+
+test("dome shelter: pierce beam — enemy in front is hit, enemy inside the dome is sheltered, enemy beyond is blocked", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;   // Hydro Lance tier: pierce (planted shields still hard-block)
+  const dome = new JH.DeployedShield(p.x + 100, p.y, null);
+  g.shields = [dome];
+  const front  = new JH.Enemy("mook", p.x + 30, p.y);        // before the dome, in the open
+  const inside = new JH.Enemy("mook", dome.x - 20, dome.y);  // inside the dome, ahead of its center
+  const beyond = new JH.Enemy("mook", dome.x + 100, dome.y); // past the dome
+  g.enemies = [front, inside, beyond];
+  assert.ok(JH.insideDome(dome, inside.x, inside.y) && !JH.insideDome(dome, p.x, p.y),
+    "setup: middle enemy sheltered, Jon outside");
+
+  const hpFront0 = front.hp, hpInside0 = inside.hp, hpBeyond0 = beyond.hp;
+  p.doSpray(0.05, g);
+  assert.ok(front.hp < hpFront0, "pierce: enemy in the open before the dome is hit");
+  assert.strictEqual(inside.hp, hpInside0, "pierce: enemy inside the active dome is sheltered");
+  assert.strictEqual(beyond.hp, hpBeyond0, "pierce: dome hard-blocks the beam — nothing past it is hit");
+});
+
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
   const pull = new JH.Pickup("water_can", 0, 0, 10);
   const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60
