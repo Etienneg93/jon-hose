@@ -410,8 +410,6 @@
         this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
-        if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
-          burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
         // Baptismal Wake: dash leaves an enemy-slowing puddle; rank II also
         // soaks enemies standing in it (see SlowZone's vsEnemies comment).
         const wakeRank = this.beneRank("baptismal_wake");
@@ -538,10 +536,11 @@
         for (const h of game.hydrants) {
           if (Math.abs(this.x - h.x) < JH.HYDRANT.range && Math.abs(this.y - h.y) < 24) {
             this.nearHydrant = h;
-            // Spigot Key: while a hydrant is refilling you, also heal HP/s.
-            if (game.relics && game.relics.spigot_key)
-              this.hp = Math.min(S.maxHp, this.hp + JH.RELIC_TUNE.spigotHealRate * dt);
             if (this.water < S.maxWater) {
+              // Spigot Key: heals only while the hydrant is actively refilling
+              // (full tank = no heal, so hydrants can't be camped for HP).
+              if (game.relics && game.relics.spigot_key)
+                this.hp = Math.min(S.maxHp, this.hp + JH.RELIC_TUNE.spigotHealRate * dt);
               this.water = Math.min(S.maxWater, this.water + JH.HYDRANT.refill * dt);
               if (Math.random() < 0.5)
                 game.particles.push(new Particle({

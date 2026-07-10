@@ -149,7 +149,6 @@
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
-    dashPuddle: false,      // dash leaves a slick water puddle (Hydro-Dash)
 
     // Melee fallback (no water cost) — deliberately weak so the hose wins at
     // any decent pressure; melee is just for when you're dry.
@@ -383,11 +382,12 @@
   // semantics as the health-pickup collect — JH.Balance.kibbleGrant.
   JH.KIBBLE_PACK = { cost: 30, heal: 25, dur: 6 };
 
-  // Relics: one-time flag purchases (game.relics[id] = true), never a
-  // repeatable. Effects are hook-checks scattered across game.js/entities.js
-  // (grep the id) rather than an apply fn — see each id's comment there.
-  // A rotating stock of 3 is rolled per vendor visit from the still-unowned
-  // pool (Balance.pickRelics).
+  // Relics: one-time purchases (game.relics[id] = true), never a repeatable.
+  // Effects are either hook-checks scattered across game.js/entities.js (grep
+  // the id) or an apply(s) stat fold run by Upgrades.computeStats; apply-
+  // bearing relics also count toward Balance.powerCount. A rotating stock of
+  // 3 is rolled per vendor visit from the still-unowned pool
+  // (Balance.pickRelics over Balance.relicPoolIds).
   JH.RELICS = [
     { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "+10 spray dmg to the first enemy the stream hits" },
     { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "A hydrant refill also restores 15 HP/s while filling" },

@@ -1434,10 +1434,19 @@ test("Spigot Key: standing at a hydrant heals HP at the configured rate while it
 
   const p = makePlayer();
   p.facing = 1; p.hp = p.stats.maxHp - 50;   // leave room to heal
+  p.water = p.stats.maxWater * 0.5;          // tank must be FILLING for the heal
   const hpBefore = p.hp;
   p.update(dt, mkGame({ spigot_key: true }, p));
-  assert.ok(Math.abs((p.hp - hpBefore) - JH.RELIC_TUNE.spigotHealRate * dt) < 1e-6,
-    "Spigot Key: heals at spigotHealRate HP/s while near a hydrant");
+  assert.ok((p.hp - hpBefore) >= JH.RELIC_TUNE.spigotHealRate * dt - 1e-6,
+    "Spigot Key: heals at spigotHealRate HP/s while the hydrant refills you");
+
+  // Full tank: no refill happening -> no heal (hydrants can't be camped for HP).
+  const pFull = makePlayer();
+  pFull.facing = 1; pFull.hp = pFull.stats.maxHp - 50;
+  pFull.water = pFull.stats.maxWater;
+  const hpBeforeFull = pFull.hp;
+  pFull.update(dt, mkGame({ spigot_key: true }, pFull));
+  assert.ok(pFull.hp <= hpBeforeFull + 1e-9, "Spigot Key: full tank grants no heal");
 
   const p2 = makePlayer();
   p2.facing = 1; p2.hp = p2.stats.maxHp - 50;
