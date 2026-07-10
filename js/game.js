@@ -2548,7 +2548,10 @@
       const relicRows = relicIds.length ? Math.ceil(relicIds.length / 9) : 0;
 
       const X = 10, Y = 30, ROW = 9;
-      const W = inlineDesc ? 152 : named ? 74 : 46;
+      // Width follows expansion: benediction names + the relic grid need the
+      // full 152 even when the shop suppresses desc text. The shop overlay
+      // starts at PX=280, so the wide panel (x 6..158) never reaches it.
+      const W = expanded ? 152 : named ? 74 : 46;
       const relicH = relicRows ? 12 + relicRows * 16 : 0;
 
       // Rewraps every benediction desc at maxLines (0 = icon + name only)
