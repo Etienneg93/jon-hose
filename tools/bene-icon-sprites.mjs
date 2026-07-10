@@ -111,12 +111,16 @@ const BAKERS = {
     l(3, 6, 2, 4, WATER); l(2, 9, 2, 2, WATER_HI);   // left branch + tip
     l(7, 6, 2, 4, WATER); l(8, 9, 2, 2, WATER_HI);   // right branch + tip
   }),
-  // Baptismal Wake — ripple ring above a footprint (dash leaves a wet mark).
+  // Baptismal Wake — concentric ripple arcs widening downward; the last step
+  // (small boot, above-left) left rings. Rings are the subject, foot the accent.
   bene_baptismal_wake: icon((l) => {
-    ring(l, 5.5, 3.0, 1.8, 2.8, WATER);          // thick ripple ring, stays connected
-    l(5, 2, 2, 2, WATER_HI);                     // splash droplet at ring center
-    l(4, 7, 4, 1, WATER);                        // toe (narrow ball of foot)
-    l(3, 8, 6, 3, WATER_DK); l(3, 8, 6, 1, WATER); // sole widens into the heel
+    l(2, 1, 2, 3, WATER); l(2, 1, 1, 2, WATER_HI);      // boot shaft + sheen
+    l(2, 4, 3, 1, WATER_DK);                             // boot sole, toe right
+    l(5, 6, 3, 1, WATER_HI);                             // inner ripple arc
+    l(3, 8, 7, 1, WATER);                                // mid arc, wider
+    l(3, 7, 1, 1, WATER); l(9, 7, 1, 1, WATER);          // mid arc upturned tips
+    l(1, 10, 10, 1, WATER_DK);                           // outer arc, widest
+    l(1, 9, 1, 1, WATER_DK); l(10, 9, 1, 1, WATER_DK);   // outer tips
   }),
   // Overflow — a cup filled past the brim, spilling.
   bene_overflow: icon((l) => {
@@ -213,12 +217,15 @@ const BAKERS = {
     chevron(l, 6, AIR_DK);
     l(2, 2, 1, 1, AIR_HI); l(6, 2, 1, 1, AIR_HI);
   }),
-  // Tailwind Tithe — a coin trailing gust lines.
+  // Tailwind Tithe — a GOLD coin (it's a tithe) trailing AIR gust dashes.
+  // Gold money + blue wind = the two-tone tells the story.
   bene_tailwind: icon((l) => {
-    l(4, 3, 4, 6, AIR);
-    l(4, 3, 1, 1, AIR_DK); l(7, 3, 1, 1, AIR_DK); l(4, 8, 1, 1, AIR_DK); l(7, 8, 1, 1, AIR_DK); // round shave
-    l(5, 4, 2, 1, AIR_HI);          // shine band
-    l(9, 4, 2, 1, AIR_DK); l(10, 6, 2, 1, AIR); l(9, 8, 2, 1, AIR_DK);  // gust lines
+    ring(l, 7.5, 5.5, 0, 3.4, GOLD_DK);      // coin rim disk
+    ring(l, 7.5, 5.5, 0, 2.4, GOLD);         // coin face
+    l(6, 4, 1, 1, GOLD_HI);                  // glint
+    l(1, 3, 3, 1, AIR);                      // gust dashes trailing off the left
+    l(0, 6, 4, 1, AIR);
+    l(1, 8, 3, 1, AIR_DK);
   }),
   // Eye of the Storm — full cyclone rings around a calm bright center.
   bene_eye_of_storm: icon((l) => {
