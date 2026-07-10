@@ -52,8 +52,9 @@ Rationale (stacking audit, 2026-07-09, `stack-analysis` scratchpad script):
 full damage-multiplier stack (Overflow II + Baptize II + Trial II = ×2.54)
 costs 6 of them. Late-typical DPS ≈ 182 vs late-all-in ≈ 284 (~×1.56 — a lucky
 good build, not broken; elite smelt still ~3s, GK ~11s raw). Keeping relic
-damage additive (not multiplicative) caps the transient god-window near ×4.6
-and keeps the multiplier budget entirely inside the pick-bounded system.
+damage additive (not multiplicative) caps the transient god-window under ×5
+(Stone 1.25 × Charge 1.5 × bene stack 2.54) and keeps the multiplier budget
+entirely inside the pick-bounded system.
 **No benediction nerfs.**
 
 ## 1 — Mechanics
@@ -83,7 +84,7 @@ and keeps the multiplier budget entirely inside the pick-bounded system.
 | Relic | Was | Becomes |
 |---|---|---|
 | Brass Nozzle (180) | non-pierce stream also catches next-closest enemy | **+10 spray dmg to the first enemy the stream hits** (chain identity belongs to Split Stream) |
-| Spigot Key (150) | +10% dmg for 15s after hydrant refill | **+12 spray dmg for 20s** after hydrant refill (flat replaces the ×1.1 `spigotMult`) |
+| Spigot Key (150) | +10% dmg for 15s after hydrant refill | **Hydrant refill also restores 15 HP** (windowed dmg cut entirely — a temporary +N is strictly worse than Brass Nozzle's permanent +10; ~300 HP/run ≈ 335 suds of Med Kit value for 150, paid for in hydrant trips) |
 | Prayer Bead (220) | 4s pressure buff at a boss's first enrage | **8s** |
 | Loaded Sponge (160) | GUSH x5 refund doubled (10→20) | doubled refund **and** GUSH regen windows 4s→**6s** (`gushRegenDur`) |
 
@@ -91,10 +92,10 @@ Untouched: Censer, Sunday Suit, Punch Card, Dowsing Rod, Alarm Bell,
 Collection Plate. Sunday Suit gains value passively via the new Reliquary
 (essence worth more) — intended synergy.
 
-Implementation note: `spigotMult` in `Player.doSpray` becomes an additive term
-on `S.sprayDamage` (or a `spigotAdd` applied pre-multiplier); Brass Nozzle adds
-its +10 only to the primary target (`e === blocker` path), never to Split
-Stream chain hits.
+Implementation note: `spigotMult` and the `spigotT` window timer in
+`Player.doSpray`/update are removed (heal fires in the hydrant-refill handler);
+Brass Nozzle adds its +10 only to the primary target (`e === blocker` path),
+never to Split Stream chain hits.
 
 ### 1c. Reliquary — redeem-all, escalating
 
@@ -221,8 +222,8 @@ Unit (node --test; derive numbers from config, not literals):
 - `powerCount` counts stat-relics, ignores flag-relics.
 - `pickRelics` never yields hydro_lance at actLevel −1; can from 0.
 - Overcharge availability flips at actLevel 0.
-- Spigot/Brass flat adders: primary-target damage math (+12 windowed, +10
-  primary-only — chain hits unaffected).
+- Brass Nozzle: +10 on the primary target only — chain hits unaffected.
+- Spigot Key: hydrant refill heals 15 (capped at maxHp), no dmg window remains.
 - Kibble Pack purchase: suds −30, kibble pool +25/+6s, stacks.
 
 Headless (headless-playtest skill; telemetry spy BEFORE any startGame):
