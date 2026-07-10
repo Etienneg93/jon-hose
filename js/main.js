@@ -37,9 +37,10 @@
     // Space to spray through the boss kill cannot instantly restart.
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return;
+      if (JH.isTyping()) return;   // typing the leaderboard name must not start the game
       const s = JH.Game.state;
       if (s === "title") {
-        if (e.code === "Enter" || e.code === "Space" || e.code === "KeyE") JH.Game.startGame();
+        if (e.code === "Enter" || e.code === "Space" || e.code === "KeyE") JH.Game.openNameEntry();
       } else if (s === "over" || s === "win") {
         if (e.code === "Enter" || e.code === "KeyE") JH.Game.startGame();
       } else if (s === "shop") {

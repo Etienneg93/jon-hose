@@ -57,6 +57,7 @@ html, body {
 #ui .overlay .shop-service,
 #ui .overlay .audio-ctl,
 #ui .overlay .mute-btn,
+#ui .overlay .handle-input,
 #ui .overlay .vol-slider { pointer-events: auto; }
 
 .hidden { display: none !important; }
@@ -101,6 +102,32 @@ html, body {
 }
 .tagline { color: var(--accent-2); font-size: clamp(12px, 2.4vw, 20px); letter-spacing: 0.12em; }
 .hint { position: absolute; bottom: 3vh; font-size: clamp(9px, 1.6vw, 13px); opacity: 0.7; }
+
+/* ---------- Leaderboard name entry (title screen) ---------- */
+.menu { display: flex; flex-direction: column; align-items: center; gap: 0.8em; }
+/* Title buttons share one width so START GAME + LEADERBOARD line up. */
+#screen-title .menu .btn { width: min(80vw, 300px); }
+/* Name-screen GO / BACK share one row and split it evenly. */
+#screen-name .menu { flex-direction: row; width: min(80vw, 300px); }
+#screen-name .menu .btn { flex: 1 1 0; min-width: 0; }
+.handle-field { display: flex; flex-direction: column; align-items: center; gap: 0.35em; }
+.handle-input {
+  font-family: var(--font);
+  font-weight: bold;
+  font-size: clamp(12px, 2.3vw, 18px);
+  letter-spacing: 0.1em;
+  text-align: center;
+  color: var(--paper);
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  padding: 0.55em 0.9em;
+  width: min(80vw, 320px);
+  box-shadow: 4px 4px 0 #000;
+  outline: none;
+}
+.handle-input::placeholder { color: var(--accent); opacity: 0.55; letter-spacing: 0.08em; }
+.handle-input:focus { border-color: var(--accent-2); }
+.handle-note { font-size: clamp(8px, 1.4vw, 11px); opacity: 0.55; letter-spacing: 0.04em; }
 
 /* ---------- Audio controls (title + pause) ---------- */
 .audio-ctl {
@@ -180,6 +207,8 @@ h2.over { color: var(--danger); }
 h2.win  { color: var(--hp); }
 
 .stats { font-size: clamp(12px, 2.4vw, 18px); opacity: 0.9; white-space: pre-line; }
+/* #lb-list is an <ol> reusing .stats; suppress the browser's own marker since rows number themselves. */
+#lb-list { list-style: none; margin: 0; padding: 0; }
 
 /* ---------- Buttons ---------- */
 .btn {

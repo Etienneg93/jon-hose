@@ -7,6 +7,37 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.29.1 — Do-Over (2026-07-09)
+
+- **Telemetry:** hitting TRY AGAIN / PLAY AGAIN now flushes the restarted run
+  as `abandoned` before the new one begins, so deaths from players who *retry*
+  (not only those who close the tab) feed the per-wave death-rate matrix.
+  No-op after a win, which already finished the run.
+
+## v0.29.0 — Water Meter (2026-07-09)
+
+Opt-in run telemetry plus an in-game fastest-win leaderboard, backed by a
+Google Apps Script + Sheet. (Spec:
+`docs/superpowers/specs/2026-07-08-telemetry-leaderboard-design.md`.)
+
+### Telemetry
+- Every run records where the player reached and died per wave, the
+  benedictions chosen and items bought, and the outcome/deaths/kills/time/suds
+  — sent once on a win (or on tab-close mid-run). Deaths respawn, so the data
+  feeds a per-wave death-rate matrix rather than a single win/lose flag.
+- Leaderboard name is entered on a title-screen step (blank = play
+  anonymously — nothing is sent). The whole system is inert until an endpoint
+  is configured.
+
+### Leaderboard
+- In-game **FASTEST WINS** board (top 10 by run time) reachable from the title
+  and shown on the win screen, read live via JSONP.
+
+### Backend
+- `tools/telemetry.gs` (Google Apps Script) appends each run to a Sheet, serves
+  the leaderboard, and rebuilds a per-wave death-rate matrix from a menu.
+  One-time setup in `docs/telemetry-setup.md`.
+
 ## v0.28.0 — Fire Drill (2026-07-08)
 
 The Fire-Truck Escape — a full designed interlude that plays after the

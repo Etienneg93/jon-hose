@@ -8,6 +8,12 @@
   const JH = (window.JH = window.JH || {});
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+  // Escapes a value for safe injection into innerHTML (leaderboard handles).
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
   const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000];
@@ -63,6 +69,29 @@
     bindUI() {
       const startAudio = () => { this.audio.resume(); JH.Music.start(); };
 
+      // Telemetry: configure from JH.TELEMETRY, install the real transport,
+      // and flush an "abandoned" record if the tab closes mid-run.
+      if (JH.Telemetry) {
+        JH.Telemetry.configure({
+          endpoint: JH.TELEMETRY.endpoint, enabled: JH.TELEMETRY.enabled,
+          gameVersion: JH.TELEMETRY.version,
+        });
+        JH.Telemetry.installBrowserTransport();
+        window.addEventListener("beforeunload", () => {
+          try { JH.Telemetry.finishAbandoned(); } catch (e) { /* ignore */ }
+        });
+      }
+
+      // Leaderboard-name box (on the name-entry screen): prefill from the last
+      // saved handle, and let Enter start the game straight from the field.
+      const handleEl = document.getElementById("handle-input");
+      if (handleEl) {
+        try { handleEl.value = window.localStorage.getItem("jh_handle") || ""; } catch (e) { /* ignore */ }
+        handleEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); startAudio(); this.startGame(); }
+        });
+      }
+
       // Overlay buttons dispatch by data-action.
       document.querySelectorAll("[data-action]").forEach((el) => {
         el.addEventListener("click", () => {
@@ -70,9 +99,13 @@
           // Gate the title "start" until every tracked image has settled.
           if (a === "start" && !JH.Loader.ready()) return;
           startAudio();
-          if (a === "start" || a === "retry") this.startGame();
+          if (a === "start") this.openNameEntry();          // title → name-entry step
+          else if (a === "begin" || a === "retry") this.startGame();
+          else if (a === "back-title") this.showScreen("screen-title");
           else if (a === "resume") this.closeShop();
           else if (a === "resume-pause") this.togglePause();
+          else if (a === "leaderboard") this.openLeaderboard();
+          else if (a === "close-leaderboard") this.showScreen(this.state === "win" ? "screen-win" : "screen-title");
         });
       });
 
@@ -83,7 +116,7 @@
         const updateGate = () => {
           if (JH.Loader.ready()) {
             startBtn.disabled = false;
-            startBtn.textContent = "PRESS START";
+            startBtn.textContent = "START GAME";
           } else {
             startBtn.disabled = true;
             startBtn.textContent = `LOADING… ${JH.Loader.settled}/${JH.Loader.total}`;
@@ -130,6 +163,7 @@
       const isDev = h === "localhost" || h === "127.0.0.1" || h === "";
       if (!isDev) return;
       window.addEventListener("keydown", (e) => {
+        if (JH.isTyping()) return;   // don't hijack keys while typing a name
         if (e.code === "Backquote") {
           e.preventDefault();
           if (this.state === "title" || this.state === "over" || this.state === "win")
@@ -292,8 +326,17 @@
     },
 
     // -------------------------------------------------------- overlays
+    // Title "Start Game" opens this before the run so the player can set their
+    // leaderboard name; the field is prefilled from the last saved handle.
+    openNameEntry() {
+      const el = document.getElementById("handle-input");
+      if (el) { try { el.value = window.localStorage.getItem("jh_handle") || ""; } catch (e) { /* ignore */ } }
+      this.showScreen("screen-name");
+      if (el) setTimeout(() => { try { el.focus(); el.select(); } catch (e) { /* ignore */ } }, 0);
+    },
+
     showScreen(id) {
-      ["screen-title", "screen-shop", "screen-over", "screen-win", "screen-pause"]
+      ["screen-title", "screen-name", "screen-shop", "screen-over", "screen-win", "screen-pause", "screen-leaderboard"]
         .forEach((s) => document.getElementById(s).classList.add("hidden"));
       document.getElementById("hud").classList.toggle("hidden", !(id === null || id === "hud"));
       if (id && id !== "hud") document.getElementById(id).classList.remove("hidden");
@@ -342,6 +385,18 @@
       this.shake(3);
     },
 
+    // Leaderboard handle, prompted ONCE ever (localStorage). A blank answer
+    // is stored and honored — telemetry stays fully off for that player.
+    _playerHandle() {
+      try {
+        const el = document.getElementById("handle-input");
+        let h = el ? el.value : (window.localStorage.getItem("jh_handle") || "");
+        h = (h || "").trim().slice(0, 20);
+        window.localStorage.setItem("jh_handle", h);   // blank persists = opt-out
+        return h;
+      } catch (e) { return ""; }
+    },
+
     // ------------------------------------------------------- new game
     startGame() {
       JH.Upgrades.reset();
@@ -377,6 +432,11 @@
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
+      // Flush a restarted-but-unfinished run as "abandoned" before starting the
+      // next, so TRY AGAIN / PLAY AGAIN deaths still feed the per-wave matrix
+      // (no-op after a win, which already finished the run).
+      if (JH.Telemetry) JH.Telemetry.finishAbandoned();
+      if (JH.Telemetry) JH.Telemetry.startRun(this._playerHandle());
       this.showScreen("hud");
       document.getElementById("hud-wave").textContent = "Hosetown";
       document.getElementById("hud-wave-label").classList.add("hidden");
@@ -405,6 +465,7 @@
 
     startWave(i) {
       this.waveIndex = i;
+      if (JH.Telemetry) JH.Telemetry.waveReached(i, (JH.LEVEL1.waves[i] || {}).name || "");
       this.sigils = [];   // walking onto the next wave skips any unclaimed offer
       // Shop reads this for the tier-3 act gate.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
@@ -1372,12 +1433,31 @@
       this.sweepCrosses();   // bank any cross still on the ground (e.g. the Slayer's)
       JH.Music.setTrack("level");
       this.state = "win";
+      if (JH.Telemetry) JH.Telemetry.finishWin({
+        timeSec: this.elapsed, kills: this.kills, deaths: this.deathCount || 0,
+        sudsEarned: this.player.sudsEarned, finalWaveIndex: this.waveIndex,
+        finalWaveName: (JH.LEVEL1.waves[this.waveIndex] || {}).name || "",
+      });
       document.getElementById("win-stats").textContent =
         "Suds banked: " + Math.floor(this.player.sudsEarned) +
         "\nEnemies hosed: " + this.kills +
         "\nTime: " + this.elapsed.toFixed(1) + "s" +
         "\nVisits to Father Jon: " + (this.deathCount || 0);
       this.showScreen("screen-win");
+    },
+    // Fetches + renders the fastest-win leaderboard; shows loading/empty/failure states.
+    openLeaderboard() {
+      const list = document.getElementById("lb-list");
+      list.innerHTML = "<li>Loading…</li>";
+      this.showScreen("screen-leaderboard");
+      const render = (rows) => {
+        if (!rows || !rows.length) { list.innerHTML = "<li>No wins yet — be the first.</li>"; return; }
+        list.innerHTML = rows.map((r, i) =>
+          "<li>" + (i + 1) + ". " + escapeHtml(r.handle || "anon") +
+          " — " + Number(r.timeSec).toFixed(1) + "s (" + (r.deaths | 0) + " deaths)</li>").join("");
+      };
+      if (JH.Telemetry && JH.Telemetry.fetchLeaderboard) JH.Telemetry.fetchLeaderboard(render);
+      else render(null);
     },
     // Retired from the death path (death now routes to the Church via
     // startPlayerDeathSeq); kept for a future manual quit/give-up affordance.
@@ -1393,6 +1473,7 @@
       // First death of the RUN: cue Father Jon's line; the pity Essence is a
       // cross he sets down in the church scene itself (church.js pityCross).
       this.deathCount = (this.deathCount || 0) + 1;
+      if (JH.Telemetry) JH.Telemetry.death(this.waveIndex);
       if (this.deathCount === 1 && JH.Church) JH.Church.pendingPity = true;
       this.diedWave = this.waveIndex;        // the wave to re-arm on return
       // Wash (not wipe) benedictions at the death moment: they move to the
@@ -1661,6 +1742,7 @@
                   this.float(this.player.x, this.player.y - 30, r.name, "#80ff80");
                 }
               }
+              if (ok && JH.Telemetry) JH.Telemetry.item(e.kind + ":" + e.id);
               if (!ok) this.audio.play("hurt");
               else {
                 if (this.voucher50) {

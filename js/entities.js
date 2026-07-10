@@ -2641,6 +2641,7 @@
     pick(game) {
       const d = JH.Benedictions.byId(this.offer.id);
       JH.Benedictions.take(this.offer.id);
+      if (JH.Telemetry) JH.Telemetry.benediction(this.offer.id);
       if (d.kind === "duo" || d.kind === "legendary") game.beneUsedOnce[this.offer.id] = true;
       const p = game.player;
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));

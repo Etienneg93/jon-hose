@@ -14,6 +14,16 @@
   JH.FIXED_DT = 1 / 60;     // physics step (seconds)
   JH.MAX_STEPS = 5;         // clamp spiral-of-death after lag spikes
 
+  // ---- Telemetry / leaderboard ---------------------------------------
+  // Paste the Google Apps Script /exec URL into `endpoint` to enable data
+  // collection + the leaderboard. Empty endpoint or enabled:false = inert
+  // (no network, game unchanged). `version` is bumped by the release ritual.
+  JH.TELEMETRY = {
+    endpoint: "https://script.google.com/macros/s/AKfycbyFboznlhgCeQxyGTSM76G2FtGVlZJsbFYuNZ9jqWnYoYHghOkV5Iwn2-n10-XKBQkM/exec",       // e.g. "https://script.google.com/macros/s/AKfy.../exec"
+    enabled: true,
+    version: "0.29.0",
+  };
+
   // ---- The walkable depth band (2.5-D floor plane) --------------------
   // Characters live at a worldY in [DEPTH_MIN, DEPTH_MAX]. Screen Y is
   // derived from depth (+ jump height z). Bigger depth = lower on screen.
