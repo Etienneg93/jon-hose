@@ -2,6 +2,10 @@
 
 *Date: 2026-07-09 · Base: main @ v0.28.0 line (branch `claude/fire-truck-minigame-concept-2pdlg0` working tree)*
 
+> **Revised 2026-07-11:** the relic roster, pricing, and wheel-roll sections
+> are superseded by `2026-07-11-relic-rarity-tiers-design.md` (rarity tiers,
+> Lance pierce falloff, 9 new items) — same release. Everything else stands.
+
 ## Summary
 
 One designed pass over the item economy and its presentation:
