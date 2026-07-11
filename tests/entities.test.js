@@ -584,7 +584,7 @@ test("mook holds its windup when no attack ticket is free", () => {
 });
 
 // Act-gating for the ex-signature Hydro Lance moved with it into JH.RELICS
-// (relic.actGate) — see tests/relics.test.js; the NODES-tier gate this used
+// (relic.minAct) — see tests/relics.test.js; the NODES-tier gate this used
 // to test no longer exists (NODES is empty, below).
 
 test("Upgrades NODES: empty, signatures retired to JH.RELICS", () => {

@@ -11,11 +11,45 @@ test("RELICS: ex-signatures exist with apply hooks and relic costs", () => {
   const byId = (id) => JH.RELICS.find((r) => r.id === id);
   const dash = byId("hydro_dash"), marshal = byId("fire_marshal"), lance = byId("hydro_lance");
   assert.ok(dash && marshal && lance, "all three ex-signatures are relics");
-  assert.strictEqual(dash.cost, 200);
-  assert.strictEqual(marshal.cost, 220);
-  assert.strictEqual(lance.cost, 300);
-  assert.ok(lance.actGate, "lance is act-gated");
+  assert.strictEqual(dash.tier, "rare");
+  assert.strictEqual(marshal.tier, "rare");
+  assert.strictEqual(lance.tier, "relic");
+  assert.strictEqual(lance.minAct, 0, "lance is act-gated");
   for (const r of [dash, marshal, lance]) assert.strictEqual(typeof r.apply, "function");
+});
+
+test("RELICS: every relic has a tier and a price inside its band", () => {
+  const bands = { common: [60, 100], rare: [250, 350], relic: [500, Infinity] };
+  assert.strictEqual(JH.RELICS.length, 22);
+  for (const r of JH.RELICS) {
+    const b = bands[r.tier];
+    assert.ok(b, r.id + " has a known tier");
+    assert.ok(r.cost >= b[0] && r.cost <= b[1], r.id + " cost " + r.cost + " in " + r.tier + " band");
+  }
+  const count = (t) => JH.RELICS.filter((r) => r.tier === t).length;
+  assert.strictEqual(count("common"), 8);
+  assert.strictEqual(count("rare"), 10);
+  assert.strictEqual(count("relic"), 4);
+});
+
+test("RELIC_TUNE: rarity-pass tunables exist", () => {
+  const T = JH.RELIC_TUNE;
+  assert.deepStrictEqual(T.lanceFalloff, [1, 0.7, 0.5, 0.35, 0.25]);
+  for (const k of ["socksBurnDpsCut", "socksBurnDpsFloor", "socksGraceBonus", "leashLungeBonus",
+                   "rosaryPerKill", "rosaryCap", "pulseRadius", "valveKnockback", "spigotDamage",
+                   "sprinklerRange", "sprinklerDps", "boilerHeatTime", "boilerBonus",
+                   "boilerSplash", "boilerSplashR", "boilerGap", "bootsHp"])
+    assert.strictEqual(typeof T[k], "number", k);
+});
+
+test("SHOP.relicGradeOdds is act-indexed 0..3", () => {
+  assert.deepStrictEqual(JH.SHOP.relicGradeOdds, [0, 0.25, 0.5, 0.75]);
+});
+
+test("minAct gates: lance from act 2 (>=0), boiler one act later (>=1)", () => {
+  const byId = (id) => JH.RELICS.find((r) => r.id === id);
+  assert.strictEqual(byId("hydro_lance").minAct, 0);
+  assert.strictEqual(byId("boiler_coil").minAct, 1);
 });
 
 test("computeStats folds owned relic applies (lance +18 dmg, dash cd, no puddle)", () => {

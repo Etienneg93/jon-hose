@@ -1000,8 +1000,8 @@
       return Math.round(p);
     },
     // Places a walk-up vendor and rolls its relic stock (3 of the still-
-    // unowned pool, minus any actGate relics before Act 2). Single spot so
-    // every vendor spawn site rolls stock the same way.
+    // unowned pool, minus any minAct-gated relics not yet reached). Single
+    // spot so every vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
       const pool = JH.Balance.relicPoolIds(JH.RELICS, JH.Upgrades.currentActLevel);

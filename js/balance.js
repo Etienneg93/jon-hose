@@ -44,11 +44,11 @@
       return n;
     },
 
-    // Vendor relic pool: every relic id except actGate ones (hydro_lance)
-    // before Act 2 (actLevel >= 0 means the first boss is down). Pure —
-    // takes the relic defs array, doesn't read JH.RELICS itself.
+    // Vendor relic pool: every relic id whose minAct is unset or already
+    // reached (actLevelForWave returns -1..3; minAct: 0 means "Act 2 on").
+    // Pure — takes the relic defs array, doesn't read JH.RELICS itself.
     relicPoolIds(relicDefs, actLevel) {
-      return (relicDefs || []).filter((r) => !r.actGate || actLevel >= 0).map((r) => r.id);
+      return (relicDefs || []).filter((r) => r.minAct == null || actLevel >= r.minAct).map((r) => r.id);
     },
 
     // Boss HP at spawn scales with player power (same count as eliteScale).

@@ -65,7 +65,10 @@
   JH.DEBRIS = { collide: true, rx: 13, ry: 10 }; // rx/ry = half-extents in worldX / depth at s=1
 
   // Walk-up shop vendor between fights.
-  JH.SHOP = { range: 28 };
+  JH.SHOP = {
+    range: 28,
+    relicGradeOdds: [0, 0.25, 0.5, 0.75],  // slot-3 upgrade chance by actLevel+1
+  };
 
   // Colour palette (kept central so procedural art + UI stay in sync).
   JH.PAL = {
@@ -116,6 +119,8 @@
       "brass_nozzle", "spigot_key", "loaded_sponge", "prayer_bead", "collection_plate",
       "censer", "sunday_suit", "punch_card", "dowsing_rod", "alarm_bell",
       "hydro_dash", "fire_marshal", "hydro_lance", "kibble", "sold_out",
+      "rubber_boots", "asbestos_socks", "squeegee", "rosary_chain", "backdraft_valve",
+      "dog_leash", "deputy_sprinkler", "big_spigot", "boiler_coil",
       "bene_split_stream", "bene_baptismal_wake", "bene_overflow", "bene_baptize", "bene_absolution",
       "bene_scalding_faith", "bene_backdraft", "bene_trial_by_fire", "bene_ash_walk",
       "bene_aftershock", "bene_sure_grip", "bene_bedrock", "bene_landslide",
@@ -381,26 +386,48 @@
   // bearing relics also count toward Balance.powerCount. A rotating stock of
   // 3 is rolled per vendor visit from the still-unowned pool
   // (Balance.pickRelics over Balance.relicPoolIds).
+  // Three tiers: common (steel, 60-100, one honest felt effect), rare
+  // (brass, 250-350, a combat-moment mechanic), relic (gold, 500+, a
+  // minAct-gated build-around). minAct (replaces the old boolean actGate):
+  // null/absent = available from Act 1; a number = actLevel must be >= it
+  // (actLevelForWave returns -1..3, so minAct: 0 means "Act 2 on").
   JH.RELICS = [
-    { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "+10 spray dmg to the first enemy the stream hits" },
-    { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "A hydrant refill also restores 15 HP/s while filling" },
-    { id: "loaded_sponge",   name: "Loaded Sponge",    cost: 160, desc: "GUSH refund doubled and regen windows +2s" },
-    { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants an 8s pressure buff" },
-    { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
-    { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
-    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Bosses drop a second Holy Essence cross" },
-    { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
-    { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
-    { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },
-    { id: "hydro_dash",   name: "Hydro-Dash",        cost: 200,
+    // -- common (steel frame, 60-100): one honest felt effect --------------
+    { id: "dowsing_rod",   tier: "common", name: "Dowsing Rod",    cost: 80,  desc: "Pickups magnet from farther away; water cans +50% value" },
+    { id: "alarm_bell",    tier: "common", name: "Alarm Bell",     cost: 80,  desc: "Non-elite wave clears also roll the bonus item drop" },
+    { id: "spigot_key",    tier: "common", name: "Spigot Key",     cost: 90,  desc: "A hydrant refill also restores 15 HP/s while filling" },
+    { id: "brass_nozzle",  tier: "common", name: "Brass Nozzle",   cost: 90,  desc: "+10 spray dmg to the first enemy the stream hits" },
+    { id: "loaded_sponge", tier: "common", name: "Loaded Sponge",  cost: 100, desc: "GUSH refund doubled and regen windows +2s" },
+    { id: "rubber_boots",  tier: "common", name: "Rubber Boots",   cost: 90,
+      desc: "+20 max HP; slow zones and puddles don't slow you",
+      apply: (s) => { s.maxHp += JH.RELIC_TUNE.bootsHp; } },
+    { id: "asbestos_socks",tier: "common", name: "Asbestos Socks", cost: 80,  desc: "Burn ticks hurt less; burn i-frames last +1s" },
+    { id: "squeegee",      tier: "common", name: "Squeegee",       cost: 80,  desc: "An enemy killed on a fire patch douses the patch" },
+    // -- rare (brass frame, 250-350): a combat-moment mechanic -------------
+    { id: "punch_card",    tier: "rare", name: "Punch Card",       cost: 250, desc: "All shop prices are 20% cheaper" },
+    { id: "censer",        tier: "rare", name: "Censer",           cost: 270, desc: "Sigil offers include an extra choice" },
+    { id: "dog_leash",     tier: "rare", name: "Dog Leash",        cost: 270, desc: "+15 spray dmg to charging or lunging enemies" },
+    { id: "hydro_dash",    tier: "rare", name: "Hydro-Dash",       cost: 270,
       desc: "-0.2s dash cooldown; dash boosts speed +28 for 3s",
       apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashBoost = 28; s.dashBoostDur = 3; } },
-    { id: "fire_marshal", name: "Fire-Marshal Spec", cost: 220,
+    { id: "sunday_suit",   tier: "rare", name: "Sunday Suit",      cost: 300, desc: "Bosses drop a second Holy Essence cross" },
+    { id: "fire_marshal",  tier: "rare", name: "Fire-Marshal Spec", cost: 300,
       desc: "+30 range, +30 knockback",
       apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
-    { id: "hydro_lance",  name: "Hydro Lance",       cost: 300, actGate: true,
-      desc: "+18 dmg; a cutting beam that pierces the whole line",
+    { id: "prayer_bead",   tier: "rare", name: "Prayer Bead",      cost: 300, desc: "Boss enrages AND super-elite arrivals grant an 8s pressure buff" },
+    { id: "collection_plate", tier: "rare", name: "Collection Plate", cost: 320, desc: "+2 bonus suds per kill" },
+    { id: "rosary_chain",  tier: "rare", name: "Rosary Chain",     cost: 320, desc: "Each GUSH combo kill: +1 spray dmg (max +10) until the chain breaks" },
+    { id: "backdraft_valve", tier: "rare", name: "Backdraft Valve", cost: 320, desc: "GUSH milestones blast a knockback ring that douses fires" },
+    // -- relic-grade (gold frame, 500+, minAct-gated build-arounds) --------
+    { id: "deputy_sprinkler", tier: "relic", name: "Deputy Sprinkler", cost: 500, minAct: 0,
+      desc: "A tank-mounted sprinkler auto-sprays the nearest enemy" },
+    { id: "hydro_lance",   tier: "relic", name: "Hydro Lance",     cost: 520, minAct: 0,
+      desc: "+18 dmg; a cutting beam that pierces the line, fading down it",
       apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
+    { id: "big_spigot",    tier: "relic", name: "The Big Spigot",  cost: 540, minAct: 0,
+      desc: "GUSH milestones detonate a 360° water blast around Jon" },
+    { id: "boiler_coil",   tier: "relic", name: "Boiler Coil",     cost: 560, minAct: 1,
+      desc: "2s of focused spray superheats: +30 dmg and splash to neighbors" },
   ];
 
   // Relic behavior tunables (flat-gear rule: adders only, no multipliers).
@@ -410,6 +437,20 @@
     prayerBeadDur: 8,       // s of pressure buff at a boss's first enrage
     spongeWindowBonus: 2,   // s added to GUSH regen windows
     prayerBeadMult: 1.5,    // spray dmg mult while the pressure buff runs
+    lanceFalloff: [1, 0.7, 0.5, 0.35, 0.25], // pierce dmg mult by hit order; last entry repeats
+    bootsHp: 20,
+    socksBurnDpsCut: 2,       // subtracted from FIRE.burnDpsPerStack
+    socksBurnDpsFloor: 1,     // per-stack dps never below this
+    socksGraceBonus: 1,       // s added to burn i-frames
+    leashLungeBonus: 15,      // flat dmg vs charging/lunging enemies
+    rosaryPerKill: 1, rosaryCap: 10,
+    pulseRadius: 70,          // GUSH pulse ring radius (world px)
+    valveKnockback: 40, spigotDamage: 30,
+    sprinklerRange: 80, sprinklerDps: 8,
+    boilerHeatTime: 2,        // s of same-target spray to superheat
+    boilerBonus: 30,          // flat dps added on the heated target
+    boilerSplash: 12, boilerSplashR: 24,
+    boilerGap: 0.3,           // s of no-spray that resets the heat
   };
 
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
