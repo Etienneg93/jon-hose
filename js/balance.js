@@ -44,11 +44,39 @@
       return n;
     },
 
-    // Vendor relic pool: every relic id whose minAct is unset or already
-    // reached (actLevelForWave returns -1..3; minAct: 0 means "Act 2 on").
+    // Vendor relic pool: minAct-gated by actLevel; optional tier filter.
     // Pure — takes the relic defs array, doesn't read JH.RELICS itself.
-    relicPoolIds(relicDefs, actLevel) {
-      return (relicDefs || []).filter((r) => r.minAct == null || actLevel >= r.minAct).map((r) => r.id);
+    relicPoolIds(relicDefs, actLevel, tier) {
+      return (relicDefs || [])
+        .filter((r) => (r.minAct == null || actLevel >= r.minAct) && (!tier || r.tier === tier))
+        .map((r) => r.id);
+    },
+
+    // Tiered 3-slot wheel roll: slot 1 common, slot 2 rare, slot 3 rare that
+    // upgrades to relic-grade with act-indexed odds (JH.SHOP.relicGradeOdds).
+    // Exhausted tiers fall back down the chain; fully-exhausted slots are null.
+    // Never rolls duplicates. Pure aside from the injected rng.
+    rollWheelStock(relicDefs, ownedMap, actLevel, rng) {
+      const owned = ownedMap || {}, r = rng || Math.random;
+      const pools = {};
+      for (const t of ["common", "rare", "relic"])
+        pools[t] = this.relicPoolIds(relicDefs, actLevel, t).filter((id) => !owned[id]);
+      const draw = (chain) => {
+        for (const t of chain) {
+          const p = pools[t];
+          if (p.length) return p.splice(Math.floor(r() * p.length), 1)[0];
+        }
+        return null;
+      };
+      const shop = (root.JH && root.JH.SHOP) || {};
+      const oddsArr = shop.relicGradeOdds || [0, 0, 0, 0];
+      const odds = oddsArr[Math.max(0, Math.min(3, actLevel + 1))] || 0;
+      const slot3Chain = (pools.relic.length && r() < odds)
+        ? ["relic", "rare", "common"] : ["rare", "common", "relic"];
+      const s1 = draw(["common", "rare", "relic"]);
+      const s2 = draw(["rare", "common", "relic"]);
+      const s3 = draw(slot3Chain);
+      return [s1, s2, s3];
     },
 
     // Boss HP at spawn scales with player power (same count as eliteScale).

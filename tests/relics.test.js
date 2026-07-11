@@ -124,3 +124,38 @@ test("wheel entries: buying marks sold in place, slots never shift", () => {
     "ids stay put after a buy — sold marks in place, no left-shift");
   assert.deepStrictEqual(entries.map((e) => e.sold), [false, true, false, false]);
 });
+
+test("relicPoolIds: optional tier filter + minAct gating", () => {
+  const ids = (act, tier) => JH.Balance.relicPoolIds(JH.RELICS, act, tier);
+  assert.ok(ids(-1, "relic").length === 0, "no relic-grade before act 2");
+  assert.ok(ids(0, "relic").includes("hydro_lance"));
+  assert.ok(!ids(0, "relic").includes("boiler_coil"), "boiler gated one act later");
+  assert.ok(ids(1, "relic").includes("boiler_coil"));
+  assert.strictEqual(ids(3, "common").length, 8);
+});
+
+test("rollWheelStock: slot tiers, upgrade odds, no dupes", () => {
+  const tierOf = (id) => id && JH.RELICS.find((r) => r.id === id).tier;
+  // rng -> 0.99: slot-3 upgrade never procs => [common, rare, rare]
+  let s = JH.Balance.rollWheelStock(JH.RELICS, {}, 3, () => 0.99);
+  assert.strictEqual(tierOf(s[0]), "common");
+  assert.strictEqual(tierOf(s[1]), "rare");
+  assert.strictEqual(tierOf(s[2]), "rare");
+  assert.strictEqual(new Set(s.filter(Boolean)).size, s.filter(Boolean).length);
+  // rng -> 0: upgrade always procs at act 3 => slot 3 is relic-grade
+  s = JH.Balance.rollWheelStock(JH.RELICS, {}, 3, () => 0);
+  assert.strictEqual(tierOf(s[2]), "relic");
+  // act -1: odds[0] = 0, so even rng 0 stays rare AND no relic-grade exists anyway
+  s = JH.Balance.rollWheelStock(JH.RELICS, {}, -1, () => 0);
+  assert.notStrictEqual(tierOf(s[2]), "relic");
+});
+
+test("rollWheelStock: exhaustion falls back across tiers, then null", () => {
+  const own = (tiers) => { const o = {}; JH.RELICS.forEach((r) => { if (tiers.includes(r.tier)) o[r.id] = true; }); return o; };
+  // all commons owned -> slot 1 falls back to a rare
+  let s = JH.Balance.rollWheelStock(JH.RELICS, own(["common"]), 3, () => 0.99);
+  assert.strictEqual(JH.RELICS.find((r) => r.id === s[0]).tier, "rare");
+  // everything owned -> all null
+  s = JH.Balance.rollWheelStock(JH.RELICS, own(["common", "rare", "relic"]), 3, () => 0.5);
+  assert.deepStrictEqual(s, [null, null, null]);
+});

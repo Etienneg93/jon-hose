@@ -999,13 +999,13 @@
       if (this.voucher50) p *= 0.5;
       return Math.round(p);
     },
-    // Places a walk-up vendor and rolls its relic stock (3 of the still-
-    // unowned pool, minus any minAct-gated relics not yet reached). Single
-    // spot so every vendor spawn site rolls stock the same way.
+    // Places a walk-up vendor and rolls its tiered relic stock (slot 1
+    // common, slot 2 rare, slot 3 rare-or-relic per act-indexed odds),
+    // minus minAct-gated and already-owned relics. Single spot so every
+    // vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
-      const pool = JH.Balance.relicPoolIds(JH.RELICS, JH.Upgrades.currentActLevel);
-      this.relicStock = JH.Balance.pickRelics(pool, this.relics, 3, Math.random);
+      this.relicStock = JH.Balance.rollWheelStock(JH.RELICS, this.relics, JH.Upgrades.currentActLevel, Math.random);
       // Wheel slots render from this fixed snapshot (bought cards go SOLD in
       // place, never shift); the reel spin arms on the first walk-up instead
       // of here so it plays in front of the open panel.
