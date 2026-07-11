@@ -1,8 +1,9 @@
 # CLAUDE.md — working notes for this repo
 
-(Gitignored — local only. The committed companion is `docs/HANDBOOK.md`:
-design principles, systems map, and the future vision. Read it once per
-session before touching gameplay code.)
+(Checked into the repo — visible to anyone with source access, so keep it
+free of secrets. The companion is `docs/HANDBOOK.md`: design principles,
+systems map, and the future vision. Read it once per session before
+touching gameplay code.)
 
 ## The four load-bearing rules
 
@@ -15,8 +16,10 @@ session before touching gameplay code.)
    `release: v{version} - {Patch Name}`. Use the `release` project skill
    for the details. **Minor (0.X.0) is ONLY for a full designed pass** (own
    brainstorm/spec: "Juice Pass", "Benedictions"); live-playtest follow-up
-   rounds are PATCH bumps even when they add real mechanics (user corrected
-   v0.28/v0.29 prefires back to v0.27.1/.2 — don't repeat that).
+   rounds are PATCH bumps even when they add real mechanics (a past round of
+   prefires got corrected back to patch bumps — don't repeat that). Minors
+   earn their number: v0.28.0 Fire Drill and v0.29.0 Water Meter each had a
+   spec; v0.29.1 Do-Over was a follow-up patch.
 3. **Never force-push main.** It's live for external playtesters (GitHub
    Pages deploys from it). If a merge fast-forwards past the ritual title,
    add an empty release-marker commit instead of rewriting history.
@@ -58,6 +61,18 @@ returns -1..3): SPRINKLE.counts, TICKETS.budgets, WAVEFLOW.fieldCap,
 SUPER_TUNE.hpByAct. Attack tickets meter ATTACKERS, not spawns; spawn flow
 is JH.WAVEFLOW (field cap + trickle + 3-5 batch surges).
 
+The fire-truck set-piece keeps its tunables in `JH.TRUCKRUN` (still in
+config.js), with the pure math in `js/truckrun.balance.js` — a second
+side-effect-free module parallel to balance.js (dual-export, reads only the
+passed cfg; hardcodes nothing).
+
+## Telemetry + leaderboard
+
+Opt-in run telemetry and the in-game FASTEST WINS board live in
+`js/telemetry.js`, backed by a Google Apps Script (`tools/telemetry.gs`) +
+Sheet. The whole system is INERT until an endpoint is configured — safe to
+leave unset locally. One-time setup in `docs/telemetry-setup.md`.
+
 ## Art pipeline — HARD safety rules
 
 - `sprites/mook/*` (12-frame idle, wind1-4) and `sprites/fuse/walk0-3.png`
@@ -67,7 +82,9 @@ is JH.WAVEFLOW (field cap + trickle + 3-5 batch surges).
 - `registerBaked()` in assets.js is the wiring pattern (poseFn + procedural
   fallback + overlay; overlays skip the silhouette offscreen). Switch/GK
   use baked chassis + runtime LEDs (tools/boss-sprites.mjs). Firewall
-  (wall boss) is still procedural.
+  (Air World wall boss) is still procedural — drawn in js/truck.js
+  (_drawFirewallCables/Slam/Tentacle), not the main entity pipeline. The
+  fire-truck/rig art bakes via tools/truck-sprite.mjs (sprites/firetruck/*).
 - Canvas sizing: `JH.VIEW_W/H` (480×270) and per-entity heights are LOGICAL
   units; the buffer is devicePixelRatio-scaled to native. Generate art at
   ~4x+ the logical target (JON_H 53 → ~212 real px at 1080p).
@@ -75,8 +92,9 @@ is JH.WAVEFLOW (field cap + trickle + 3-5 batch surges).
 
 ## Test suite
 
-`npm test` (node --test, ~214 tests). Tests import modules directly
-(`require("../js/benedictions.js")` — dual-export pattern like balance.js);
+`npm test` (node --test, ~236 tests). Tests import modules directly
+(`require("../js/benedictions.js")` — dual-export pattern like balance.js,
+truckrun.balance.js, telemetry.js);
 game.js/entities.js tests go through `global.window = globalThis` stubs
 (see tests/entities.test.js makeThinkGame). If a test stubs
 `document.getElementById`, the fake element needs `style: {}` (banner()
@@ -85,10 +103,10 @@ touches it). When a config number moves, tests should derive from config
 
 ## Branch chain
 
-Historic chain: main ← curve-pass ← switch-gk-art ← progression-pass, with
-fixes committed on the lowest applicable branch and merged upward. All are
-currently synced to main; new passes get new branches off main. After any
-release, sync the working branch back (`git merge main`).
+New passes get their own branch off main; fixes land on the lowest
+applicable branch and merge upward. After any release, sync the working
+branch back (`git merge main`). (The old curve-pass/switch-gk-art/
+progression-pass chain is long since merged and gone — main is the base.)
 
 ## Working with this user
 
