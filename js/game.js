@@ -248,6 +248,10 @@
       ];
       // Isolated dummy for basic pierce / splash testing
       this.spawnEnemy("dummy", 320, py);
+      // Charge-cycling dummy: state flips to "charge" 1.2s of every 4s so the
+      // Dog Leash bonus window is visible on demand (no real charger AI).
+      const cd = this.spawnEnemy("dummy", 390, py);
+      cd.rangeChargeCycle = true;
       // Group of three: two in-line (pierce) + one off-depth (split stream)
       const gx = 460, gy = py;
       this.spawnEnemy("dummy", gx,      gy);       // front  — primary target
@@ -1320,6 +1324,10 @@
     // Only exist in devGotoRange (rangeStations stays null in real runs).
     tickRangeStations() {
       if (!this.rangeStations) return;
+      for (const e of this.enemies) {
+        if (!e.rangeChargeCycle || e.dead) continue;
+        e.state = (e.t % 4) < 1.2 ? "charge" : "idle";
+      }
       const pl = this.player;
       // Near-boxes of the two rack rows overlap between rows; E acts on the
       // Euclidean-nearest near station so the toggle always matches the card.
@@ -2157,11 +2165,15 @@
       ctx.save();
       ctx.font = "bold 5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#7fa0c0";
       for (const e of this.enemies) {
-        if (!e.isGallery) continue;
+        if (!e.isGallery && !e.rangeChargeCycle) continue;
         const sx = Math.round(e.x - cam);
         if (sx < -30 || sx > JH.VIEW_W + 30) continue;
-        ctx.fillText(e.type.toUpperCase(), sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
+        const label = e.rangeChargeCycle ? (e.state === "charge" ? "CHARGING!" : "CHARGE DUMMY") : e.type.toUpperCase();
+        const color = (e.rangeChargeCycle && e.state === "charge") ? "#ff5a5a" : "#7fa0c0";
+        ctx.fillStyle = color;
+        ctx.fillText(label, sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
       }
+      ctx.fillStyle = "#7fa0c0";
       ctx.textAlign = "left";
       ctx.restore();
     },
