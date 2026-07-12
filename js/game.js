@@ -1414,9 +1414,14 @@
         return;
       }
       tv.videoT += JH.FIXED_DT;   // scaled steps make this race on their own
+      // Dash bails and is NOT consumed here: Player.update runs earlier in the
+      // step and consumes the buffered edge itself when the dash fires (dash is
+      // never movement-gated), so a started dash is detected via dashTimer;
+      // buffered("dash") covers a press held off by cooldown.
       const bail = this.input.pressed("up") || this.input.pressed("down")
                 || this.input.pressed("left") || this.input.pressed("right")
-                || this.input.buffered("confirm");
+                || this.input.buffered("confirm")
+                || this.input.buffered("dash") || pl.dashTimer > 0;
       if (bail || pl.kibbleTimer <= 0) {
         if (this.input.buffered("confirm")) this.input.consume("confirm");
         this.deepdiving = false;
@@ -1675,6 +1680,10 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
+      // Death ends a deepdive: tickDeepdive stops running outside "play", so
+      // without this the world stays at ~maxScale through the death sequence
+      // and Church visit. The frame() ramp eases timeScale back to 1.
+      this.deepdiving = false;
       // First death of the RUN: cue Father Jon's line; the pity Essence is a
       // cross he sets down in the church scene itself (church.js pityCross).
       this.deathCount = (this.deathCount || 0) + 1;

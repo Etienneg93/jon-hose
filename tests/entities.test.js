@@ -1907,6 +1907,21 @@ test("deepdive: auto-ends when kibble empties; move key bails", () => {
   g.deepdiving = true; g.player.kibbleTimer = 5; g.input = mkInput([], ["left"]);
   JH.Game.tickDeepdive.call(g);
   assert.strictEqual(g.deepdiving, false, "move key bails");
+  g.deepdiving = true; g.input = mkInput(["confirm"], []);
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "second confirm bails");
+  let dashConsumed = false;
+  g.deepdiving = true;
+  g.input = { buffered: (k) => k === "dash", pressed: () => false,
+              consume: (k) => { if (k === "dash") dashConsumed = true; } };
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "dash bails");
+  assert.strictEqual(dashConsumed, false, "dash not consumed — it executes as the stand-up move");
+  // Real frame order: Player.update consumes the buffered dash BEFORE
+  // tickDeepdive runs — the started dash must still bail via dashTimer.
+  g.deepdiving = true; g.input = mkInput([], []); g.player.dashTimer = 0.2;
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "in-flight dash (already-consumed edge) bails");
 });
 
 test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {
