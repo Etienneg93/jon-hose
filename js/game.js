@@ -1298,26 +1298,32 @@
     tickRangeStations() {
       if (!this.rangeStations) return;
       const pl = this.player;
+      // Near-boxes of the two rack rows overlap between rows; E acts on the
+      // Euclidean-nearest near station so the toggle always matches the card.
+      let act = null, actD = Infinity;
       for (const st of this.rangeStations) {
         st.near = Math.abs(pl.x - st.x) < 20 && Math.abs(pl.y - st.y) < 24;
-        if (st.near && this.input.buffered("confirm")) {
-          this.input.consume("confirm");
-          if (st.kind === "kibble") {
-            // Drop a real health pickup at Jon's feet — exercises the actual
-            // collect path (incl. kibble stacking).
-            this.spawnPickup("health", pl.x, pl.y, 25);
-            this.audio.play("buy");
-          } else if (st.kind === "gush") {
-            // Jump the combo to the next multiple of 5 and run the real
-            // milestone path — repeat presses climb x5 → x10 → x20…
-            this.combo = Math.floor(this.combo / 5) * 5 + 4;
-            this.onEnemyKilled(null);
-          } else if (st.kind === "relic") {
-            const on = this.toggleRelic(st.relic);
-            this.audio.play(on ? "buy" : "hurt", { pitch: on ? 1 : 0.8 });
-            const rd = JH.RELICS.find((r) => r.id === st.relic);
-            if (this.float) this.float(st.x, st.y - 30, (on ? "+ " : "− ") + rd.name.toUpperCase(), on ? "#80ff80" : "#8fa8c8");
-          }
+        if (!st.near) continue;
+        const d = Math.hypot(pl.x - st.x, pl.y - st.y);
+        if (d < actD) { actD = d; act = st; }
+      }
+      if (act && this.input.buffered("confirm")) {
+        this.input.consume("confirm");
+        if (act.kind === "kibble") {
+          // Drop a real health pickup at Jon's feet — exercises the actual
+          // collect path (incl. kibble stacking).
+          this.spawnPickup("health", pl.x, pl.y, 25);
+          this.audio.play("buy");
+        } else if (act.kind === "gush") {
+          // Jump the combo to the next multiple of 5 and run the real
+          // milestone path — repeat presses climb x5 → x10 → x20…
+          this.combo = Math.floor(this.combo / 5) * 5 + 4;
+          this.onEnemyKilled(null);
+        } else if (act.kind === "relic") {
+          const on = this.toggleRelic(act.relic);
+          this.audio.play(on ? "buy" : "hurt", { pitch: on ? 1 : 0.8 });
+          const rd = JH.RELICS.find((r) => r.id === act.relic);
+          if (this.float) this.float(act.x, act.y - 30, (on ? "+ " : "− ") + rd.name.toUpperCase(), on ? "#80ff80" : "#8fa8c8");
         }
       }
     },
