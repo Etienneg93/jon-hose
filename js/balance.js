@@ -343,6 +343,17 @@
       const step = rate * dtReal;
       return target > cur ? Math.min(target, cur + step) : Math.max(target, cur - step);
     },
+
+    // Solid-prop pushout: elliptical feet footprint, depth flattened like the
+    // hit band (dy counts 2.4x). Returns {x, y} on the rim if (px,py) is inside,
+    // else null. Player-only; enemies never collide with props.
+    propPushout(px, py, propX, propY, r) {
+      const dx = px - propX, dyS = (py - propY) * 2.4;
+      const d = Math.hypot(dx, dyS);
+      if (d >= r) return null;
+      const ang = d > 0.01 ? Math.atan2(dyS, dx) : 0;
+      return { x: propX + Math.cos(ang) * r, y: propY + (Math.sin(ang) * r) / 2.4 };
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

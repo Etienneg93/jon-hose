@@ -612,6 +612,19 @@
       this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
       this.y = Geo.clampDepth(this.y);
 
+      // ---- solid shop props (vendor, deepdive TV): elliptical feet pushout,
+      // player-only. Re-clamp after so the rim never shoves Jon out of bounds.
+      const props = [];
+      if (game.shopNpc) props.push([game.shopNpc, JH.SHOP.vendorCollideR]);
+      if (game.deepdiveTV) props.push([game.deepdiveTV, JH.DEEPDIVE.tvCollideR]);
+      for (const [pr, r] of props) {
+        const out = JH.Balance.propPushout(this.x, this.y, pr.x, pr.y, r);
+        if (out) {
+          this.x = clamp(out.x, game.bounds.minX, game.bounds.maxX);
+          this.y = Geo.clampDepth(out.y);
+        }
+      }
+
       // ---- animation
       const moving = (mx || my) && this.dashTimer <= 0;
       this.walking = moving;

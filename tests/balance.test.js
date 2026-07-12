@@ -55,6 +55,34 @@ test("DEEPDIVE config shape", () => {
   assert.ok(D.laneGap > JH.SHOP.range + 22, "TV interact zone must clear the shop-open zone");
 });
 
+test("propPushout: inside pushed to rim, outside null, depth flattened 2.4x", () => {
+  // Straight-left approach, well inside r=13: pushed to the rim along -x.
+  let p = Balance.propPushout(95, 40, 100, 40, 13);
+  assert.ok(p, "inside horizontally -> pushout");
+  assert.ok(Math.abs(p.x - 87) < 1e-9, "rim at propX - r, got " + p.x);
+  assert.ok(Math.abs(p.y - 40) < 1e-9, "no depth change on a pure-x approach");
+  // Exactly on the rim or beyond: no pushout.
+  assert.strictEqual(Balance.propPushout(87, 40, 100, 40, 13), null, "on-rim is outside");
+  assert.strictEqual(Balance.propPushout(60, 40, 100, 40, 13), null, "far away is outside");
+  // Depth flatten: 10px below at r=13 is OUTSIDE (10*2.4=24 > 13)...
+  assert.strictEqual(Balance.propPushout(100, 50, 100, 40, 13), null, "flattened depth escapes the ellipse");
+  // ...but 4px below is inside (4*2.4=9.6 < 13) and pushes to the depth rim r/2.4.
+  p = Balance.propPushout(100, 44, 100, 40, 13);
+  assert.ok(p, "4px below -> inside");
+  assert.ok(Math.abs(p.x - 100) < 1e-9, "pure-depth approach keeps x");
+  assert.ok(Math.abs(p.y - (40 + 13 / 2.4)) < 1e-9, "depth rim at propY + r/2.4, got " + p.y);
+  // Dead-center degenerate: still returns a rim point, never NaN.
+  p = Balance.propPushout(100, 40, 100, 40, 13);
+  assert.ok(p && Number.isFinite(p.x) && Number.isFinite(p.y), "center pushout is finite");
+});
+
+test("prop collide radii present and smaller than their interact zones", () => {
+  assert.strictEqual(typeof JH.SHOP.vendorCollideR, "number");
+  assert.strictEqual(typeof JH.DEEPDIVE.tvCollideR, "number");
+  assert.ok(JH.SHOP.vendorCollideR < JH.SHOP.range, "vendor rim inside shop-open range");
+  assert.ok(JH.DEEPDIVE.tvCollideR < 22, "TV rim inside the sit near-zone (+/-22)");
+});
+
 test("dropThresholds caps so drops are never guaranteed", () => {
   const t = Balance.dropThresholds(10);
   assert.ok(t.health <= 0.45);

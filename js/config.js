@@ -67,6 +67,7 @@
   // Walk-up shop vendor between fights.
   JH.SHOP = {
     range: 28,
+    vendorCollideR: 13,   // solid feet radius (Balance.propPushout, player-only)
     relicGradeOdds: [0, 0.25, 0.5, 0.75],  // slot-3 upgrade chance by actLevel+1
   };
 
@@ -80,7 +81,8 @@
     rampDown: 0.6,    // s of REAL time to ramp back to 1
     stepCap:  12,     // MAX_STEPS override while ramped (default 5 caps speed ~5x)
     titleSwap: 2.5,   // s of SCALED time between fake-video title swaps
-    laneGap:  70,     // px further down-lane than the vendor (> SHOP.range + 22)
+    laneGap:  130,    // px down-lane of the vendor (> SHOP.range + 22; clears the chalkboard, which spans vendor x -103..-63)
+    tvCollideR: 12,   // solid feet radius (Balance.propPushout, player-only)
     titles: [
       "Are FIRE HYDRANTS conscious? (they answered)",
       "I ate only KIBBLE for 30 days",
