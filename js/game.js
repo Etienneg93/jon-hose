@@ -1700,6 +1700,12 @@
       this.timeScale = JH.Balance.deepdiveRamp(this.timeScale, this.deepdiving, dt, JH.DEEPDIVE);
       this.acc += dt * this.timeScale;
       const cap = (this.deepdiving || this.timeScale > 1.01) ? JH.DEEPDIVE.stepCap : JH.MAX_STEPS;
+      // While ramped, a dt-clamped stall can inject seconds of backlog that the
+      // step cap can't drain — drop the excess instead of replaying it (the world
+      // was paused mid-binge; kibble pauses with it). At rest this never fires,
+      // keeping stall catch-up behavior identical to the pre-deepdive loop.
+      if (this.deepdiving || this.timeScale > 1.01)
+        this.acc = Math.min(this.acc, cap * JH.FIXED_DT);
       let steps = 0;
       while (this.acc >= JH.FIXED_DT && steps < cap) {
         this.update(JH.FIXED_DT);
