@@ -1565,6 +1565,86 @@ test("Rosary Chain: banked bonus adds flat dmg while the relic is owned", () => 
     "rosary bonus adds flat dmg: loss ratio == (sprayDamage+bonus)/sprayDamage, got " + (bonusLoss / plainLoss));
 });
 
+test("Boiler Coil: sustained spray on one target superheats — flat bonus dps + splash on a neighbor", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.facing = 1;
+  g.relics = { boiler_coil: true };
+  const T = JH.RELIC_TUNE;
+  const dt = 0.05;
+
+  const primary = new JH.Enemy("mook", p.x + 20, p.y);
+  primary.hp = 1e6;
+  const neighbor = new JH.Enemy("mook", primary.x + 10, primary.y);   // within boilerSplashR (24)
+  neighbor.hp = 1e6;
+  g.enemies = [primary, neighbor];
+
+  p.water = p.stats.maxWater;
+  p.doSpray(dt, g);   // frame 1: locks onto primary, heat starts at 0
+  assert.strictEqual(p.boilerTarget, primary, "nearest hit enemy is tracked");
+
+  // Just under threshold: normal spray damage only, no splash yet.
+  p.boilerHeat = T.boilerHeatTime - 0.1;
+  p.water = p.stats.maxWater;
+  let p0 = primary.hp, n0 = neighbor.hp;
+  p.doSpray(dt, g);
+  const baseLoss = p0 - primary.hp;
+  assert.strictEqual(neighbor.hp, n0, "no splash before the superheat threshold");
+
+  // This frame's dt crosses the threshold — bonus + splash both land.
+  p.boilerHeat = T.boilerHeatTime - dt + 0.001;
+  p.water = p.stats.maxWater;
+  p0 = primary.hp; n0 = neighbor.hp;
+  p.doSpray(dt, g);
+  const heatedLoss = p0 - primary.hp;
+  const neighborLoss = n0 - neighbor.hp;
+  const dmgScale = 1.2;   // full-pressure tier both frames (water topped off each call)
+  assert.ok(Math.abs((heatedLoss - baseLoss) - T.boilerBonus * dmgScale * dt) < 1e-6,
+    "heated frame adds flat boilerBonus dps on top of the base hit, got delta " + (heatedLoss - baseLoss));
+  assert.ok(Math.abs(neighborLoss - T.boilerSplash * dmgScale * dt) < 1e-6,
+    "neighbor within boilerSplashR takes boilerSplash dps once superheated, got " + neighborLoss);
+});
+
+test("Boiler Coil: switching the hit target resets the heat build-up", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.facing = 1;
+  g.relics = { boiler_coil: true };
+  const T = JH.RELIC_TUNE;
+  const dt = 0.05;
+
+  const a = new JH.Enemy("mook", p.x + 20, p.y);
+  a.hp = 1e6;
+  g.enemies = [a];
+  for (let t = 0; t < 1.0; t += dt) { p.water = p.stats.maxWater; p.doSpray(dt, g); }
+  assert.strictEqual(p.boilerTarget, a);
+  assert.ok(p.boilerHeat > 0 && p.boilerHeat < T.boilerHeatTime, "accumulated heat, still under threshold");
+
+  const b = new JH.Enemy("mook", p.x + 20, p.y);
+  b.hp = 1e6;
+  g.enemies = [b];
+  p.water = p.stats.maxWater;
+  p.doSpray(dt, g);
+  assert.strictEqual(p.boilerTarget, b, "new nearest hit becomes the tracked target");
+  assert.strictEqual(p.boilerHeat, 0, "heat resets on target switch");
+});
+
+test("Boiler Coil: a boilerGap pause with no spray resets the heat", () => {
+  const p = makePlayer();
+  p.boilerTarget = {};   // stand-in for a previously tracked enemy
+  p.boilerHeat = 1.5;
+  p.boilerGapT = 0;
+  const g = {
+    relics: {}, enemies: [], particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  };
+  const dt = 1 / 60;
+  const total = JH.RELIC_TUNE.boilerGap + 0.1;
+  for (let t = 0; t < total; t += dt) p.update(dt, g);
+  assert.strictEqual(p.boilerTarget, null, "gap pause clears the tracked target");
+  assert.strictEqual(p.boilerHeat, 0, "gap pause clears the heat");
+});
+
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
   const pull = new JH.Pickup("water_can", 0, 0, 10);
   const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60

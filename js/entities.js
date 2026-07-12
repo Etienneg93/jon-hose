@@ -191,6 +191,9 @@
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
       this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
+      this.boilerTarget = null;    // Boiler Coil: enemy the stream has stayed on
+      this.boilerHeat = 0;         // s of continuous same-target spray, resets on switch/gap
+      this.boilerGapT = 0;         // s since the stream last touched boilerTarget (resets heat past boilerGap)
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
@@ -265,6 +268,7 @@
       this.freeSprayT = 0;
       this.stormT = 0; this.vigorT = 0;
       this.douseCdT = 0; this.dashGraceT = 0;
+      this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
     }
 
     // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
@@ -308,6 +312,12 @@
       if (this.xpFlashT > 0) this.xpFlashT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
       if (this.vigorT > 0) this.vigorT -= dt;
+      // Boiler Coil: a gap in the stream longer than boilerGap drops the heat
+      // (doSpray zeroes boilerGapT every frame it fires; this only fires it up).
+      if (this.boilerGapT != null) {
+        this.boilerGapT += dt;
+        if (this.boilerGapT > JH.RELIC_TUNE.boilerGap) { this.boilerTarget = null; this.boilerHeat = 0; }
+      }
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
@@ -859,6 +869,23 @@
         if (ssRank) hitEnemies.push(e);
       });
       const primary = targets.length ? targets[0].e : null;  // nearest hit enemy (Boiler Coil hooks this)
+      // Boiler Coil: heat builds while the stream stays on one target.
+      if (!dry && game.relics && game.relics.boiler_coil) {
+        const T = JH.RELIC_TUNE;
+        if (primary === this.boilerTarget && primary) this.boilerHeat += dt;
+        else { this.boilerTarget = primary; this.boilerHeat = 0; }
+        this.boilerGapT = 0;
+        if (primary && this.boilerHeat >= T.boilerHeatTime) {
+          primary.takeDamage(T.boilerBonus * dmgScale * dt, game, this.facing, 0);
+          for (const e of game.enemies) {                    // splash: same radius the FX shows
+            if (e.dead || e === primary) continue;
+            if (Geo.inGroundEllipse(e.x, e.y, primary.x, primary.y, T.boilerSplashR, T.boilerSplashR * 0.34))
+              e.takeDamage(T.boilerSplash * dmgScale * dt, game, this.facing, 0);
+          }
+          if (Math.random() < 12 * dt)                       // steam/ember flecks mark the superheat
+            burst(game, primary.x, primary.y, primary.z + 14, JH.PAL.flame, 2, { speed: 40, life: 0.3, up: 30 });
+        }
+      }
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
       // Split Stream: 50% damage arc from each hit enemy to its closest
