@@ -793,7 +793,9 @@
           burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
         }) : 1;
         const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
-        const flatDmg = S.sprayDamage + (e === nozzleTarget ? nozzleAdd : 0);
+        const leashAdd = (game.relics && game.relics.dog_leash && (e.state === "charge" || e.state === "lunge"))
+          ? JH.RELIC_TUNE.leashLungeBonus : 0;
+        const flatDmg = S.sprayDamage + (e === nozzleTarget ? nozzleAdd : 0) + leashAdd;
         const dmg = flatDmg * falloff * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the

@@ -631,6 +631,29 @@ test("sweepCrosses banks live crosses so win/respawn can't lose essence", () => 
   if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
 });
 
+test("Squeegee: a kill standing in a fire patch douses it; owned only", () => {
+  const g = makeKillGame();
+  g.relics.squeegee = true;
+  const onPatch = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g.firePatches = [onPatch];
+  JH.Game.onEnemyKilled.call(g, { x: 0, y: 0 });
+  assert.strictEqual(onPatch.sprayProgress, onPatch.extinguishDur, "kill on the patch snuffs it");
+
+  const farPatch = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g.firePatches = [farPatch];
+  JH.Game.onEnemyKilled.call(g, { x: 200, y: 0 });
+  assert.strictEqual(farPatch.sprayProgress, 0, "kill far from the patch leaves it lit");
+
+  const g2 = makeKillGame();   // no relic: never touches the patch
+  const noRelicPatch = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g2.firePatches = [noRelicPatch];
+  JH.Game.onEnemyKilled.call(g2, { x: 0, y: 0 });
+  assert.strictEqual(noRelicPatch.sprayProgress, 0, "no Squeegee: patch untouched");
+});
+
 test("priceOf: Punch Card discounts 20%, rounded; absent relic charges full price", () => {
   assert.strictEqual(JH.Game.priceOf.call({ relics: {} }, 150), 150);
   assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 150), 120);
@@ -1430,6 +1453,42 @@ test("Brass Nozzle: beam 0 — bonus still lands on the blocker (regression)", (
   const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / p.stats.sprayDamage;
   assert.ok(Math.abs(nozzleLoss / plainLoss - expected) < 1e-9,
     "blocker takes the nozzle bonus: loss ratio == (sprayDamage+add)/sprayDamage, got " + (nozzleLoss / plainLoss));
+});
+
+test("Dog Leash: flat dmg bonus vs a charging or lunging enemy, not a walking one", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  g.relics = { dog_leash: true };
+
+  const charging = new JH.Enemy("mook", p.x + 20, p.y);
+  charging.state = "charge";
+  g.enemies = [charging];
+  const c0 = charging.hp;
+  p.doSpray(0.05, g);
+  const chargeLoss = c0 - charging.hp;
+
+  p.water = p.stats.maxWater;
+  const lunging = new JH.Enemy("mook", p.x + 20, p.y);
+  lunging.state = "lunge";
+  g.enemies = [lunging];
+  const l0 = lunging.hp;
+  p.doSpray(0.05, g);
+  const lungeLoss = l0 - lunging.hp;
+
+  p.water = p.stats.maxWater;
+  const walking = new JH.Enemy("mook", p.x + 20, p.y);
+  walking.state = "walk";
+  g.enemies = [walking];
+  const w0 = walking.hp;
+  p.doSpray(0.05, g);
+  const walkLoss = w0 - walking.hp;
+
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.leashLungeBonus) / p.stats.sprayDamage;
+  assert.ok(Math.abs(chargeLoss / walkLoss - expected) < 1e-9,
+    "charging enemy takes the flat bonus: loss ratio charge/walk == (sprayDamage+bonus)/sprayDamage, got " + (chargeLoss / walkLoss));
+  assert.ok(Math.abs(lungeLoss / walkLoss - expected) < 1e-9,
+    "lunging enemy takes the same flat bonus, got " + (lungeLoss / walkLoss));
 });
 
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {

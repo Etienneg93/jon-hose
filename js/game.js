@@ -1113,6 +1113,17 @@
       if (this.relics && this.relics.collection_plate && p && p.alive) {
         p.suds += 2; p.sudsEarned += 2;
       }
+      // Squeegee: a kill standing in a fire patch snuffs that patch.
+      if (e && this.relics && this.relics.squeegee && this.firePatches) {
+        for (const fp of this.firePatches) {
+          if (fp.dead) continue;
+          const f = fp.footprint();
+          if (JH.Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, f.rx, f.ry)) {
+            fp.sprayProgress = fp.extinguishDur;
+            this.audio.play("sizzle");
+          }
+        }
+      }
       if (e && e.isBoss && JH.Church) {
         JH.Church.markBossDefeated(e.type);
         this.spawnPickup("cross", e.x, e.y, 1);
