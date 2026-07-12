@@ -68,7 +68,7 @@
   JH.SHOP = {
     range: 28,
     vendorCollideR: 13,   // solid feet radius (Balance.propPushout, player-only)
-    relicGradeOdds: [0, 0.25, 0.5, 0.75],  // slot-3 upgrade chance by actLevel+1
+    relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
   };
 
   // Deepdive TV: kibble-accelerator shop prop. Sitting fast-forwards the WHOLE

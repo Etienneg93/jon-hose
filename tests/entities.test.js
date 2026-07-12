@@ -71,6 +71,21 @@ test("Player.applyBurn: burn stacks have i-frames like hits", () => {
   assert.strictEqual(p.burnStacks, 2);
 });
 
+test("Player.applyBurn: burnGraceT is exactly stats.invuln, +socksGraceBonus with Asbestos Socks", () => {
+  const p = makePlayer();
+  p.applyBurn(1);
+  assert.strictEqual(p.burnGraceT, p.stats.invuln, "no socks: grace window is exactly stats.invuln");
+
+  const p2 = makePlayer();
+  const realGame = JH.Game;
+  JH.Game = { relics: { asbestos_socks: true } };   // applyBurn reads JH.Game.relics (known idiom)
+  try {
+    p2.applyBurn(1);
+    assert.strictEqual(p2.burnGraceT, p2.stats.invuln + JH.RELIC_TUNE.socksGraceBonus,
+      "socks owned: grace window is exactly stats.invuln + socksGraceBonus");
+  } finally { JH.Game = realGame; }
+});
+
 test("Player.clearBurn: wipes all burn state (church respawn must not keep DoT)", () => {
   const p = makePlayer();
   p.applyBurn(2);
@@ -655,6 +670,30 @@ test("Squeegee: a kill standing in a fire patch douses it; owned only", () => {
   assert.strictEqual(noRelicPatch.sprayProgress, 0, "no Squeegee: patch untouched");
 });
 
+test("Squeegee: a dead patch on the kill's footprint is skipped; two overlapping live patches both snuff", () => {
+  const g = makeKillGame();
+  g.relics.squeegee = true;
+  const deadPatch = { x: 0, y: 0, dead: true, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  const liveElsewhere = { x: 200, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g.firePatches = [deadPatch, liveElsewhere];
+  JH.Game.onEnemyKilled.call(g, { x: 0, y: 0 });
+  assert.strictEqual(deadPatch.sprayProgress, 0, "dead patch untouched even though the kill sits on its footprint");
+  assert.strictEqual(liveElsewhere.sprayProgress, 0, "live patch out of range is untouched");
+
+  const g2 = makeKillGame();
+  g2.relics.squeegee = true;
+  const patchA = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  const patchB = { x: 5, y: 0, dead: false, sprayProgress: 0, extinguishDur: 4,
+    footprint: () => ({ rx: 20, ry: 8 }) };   // overlaps the same kill spot
+  g2.firePatches = [patchA, patchB];
+  JH.Game.onEnemyKilled.call(g2, { x: 0, y: 0 });
+  assert.strictEqual(patchA.sprayProgress, patchA.extinguishDur, "first overlapping patch is snuffed");
+  assert.strictEqual(patchB.sprayProgress, patchB.extinguishDur, "second overlapping patch is also snuffed, not just the first");
+});
+
 test("Rosary Chain: banks +1 dmg per combo kill up to cap; chain break zeroes it; absent relic stays 0", () => {
   const g = makeKillGame();
   g.relics.rosary_chain = true;
@@ -681,6 +720,21 @@ test("spawnGushPulse: ring dmg/kb reflect owned relics; neither relic spawns no 
   const g2 = { pulseRings: [], relics: {}, player: { x: 0, y: 0 }, audio: { play() {} } };
   JH.Game.spawnGushPulse.call(g2);
   assert.strictEqual(g2.pulseRings.length, 0, "no relic, no ring");
+});
+
+test("spawnGushPulse: valve alone gives knockback with no damage; spigot alone gives damage with no knockback", () => {
+  const T = JH.RELIC_TUNE;
+  const gValve = { pulseRings: [], relics: { backdraft_valve: true }, player: { x: 10, y: 20 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(gValve);
+  assert.strictEqual(gValve.pulseRings.length, 1);
+  assert.strictEqual(gValve.pulseRings[0].dmg, 0, "valve-only: no damage");
+  assert.strictEqual(gValve.pulseRings[0].kb, T.valveKnockback, "valve-only: full knockback");
+
+  const gSpigot = { pulseRings: [], relics: { big_spigot: true }, player: { x: 10, y: 20 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(gSpigot);
+  assert.strictEqual(gSpigot.pulseRings.length, 1);
+  assert.strictEqual(gSpigot.pulseRings[0].dmg, T.spigotDamage, "spigot-only: full damage");
+  assert.strictEqual(gSpigot.pulseRings[0].kb, 0, "spigot-only: no knockback");
 });
 
 test("updatePulseRings: rim-is-hitbox — near enemy hit exactly once, far enemy untouched, patch doused", () => {
@@ -1395,6 +1449,32 @@ test("lance falloff: pierce damage fades down the line per RELIC_TUNE.lanceFallo
   assert.ok(Math.abs(lossC / lossA - L[2]) < 0.01, "3rd hit scales by lanceFalloff[2]");
 });
 
+test("lance falloff: hit indices past the ladder's length repeat the LAST entry", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;   // Hydro Lance tier: pierce
+  const L = JH.RELIC_TUNE.lanceFalloff;
+  const n = L.length + 1;   // one more enemy than the ladder has entries
+  const enemies = [];
+  for (let i = 0; i < n; i++) enemies.push(new JH.Enemy("mook", p.x + 30 * (i + 1), p.y));
+  g.enemies = enemies.slice().reverse();   // scrambled order — sort must go by depth
+  const hp0 = enemies.map((e) => e.hp);
+  p.doSpray(0.1, g);
+  const loss = enemies.map((e, i) => hp0[i] - e.hp);
+  const lossA = loss[0];
+  for (let i = 0; i < n; i++) {
+    const expected = L[Math.min(i, L.length - 1)];
+    assert.ok(Math.abs(loss[i] / lossA - expected) < 0.01,
+      "hit index " + i + " scales by lanceFalloff[" + Math.min(i, L.length - 1) + "]");
+  }
+  // The untested branch this pins: idx >= L.length must repeat L's last
+  // entry (Math.min(idx, L.length-1)), not fall off to undefined/NaN.
+  assert.ok(Math.abs(loss[n - 1] / lossA - L[L.length - 1]) < 0.01,
+    "the extra hit past the ladder's length repeats the last falloff entry");
+});
+
 // ---- Dome shelter contract (Bulwark's planted dome blocks/shelters the stream) ----
 
 test("dome shelter: enemy inside an active dome is immune while Jon is outside; hittable once the dome fades", () => {
@@ -1646,6 +1726,43 @@ test("Boiler Coil: a boilerGap pause with no spray resets the heat", () => {
   assert.strictEqual(p.boilerHeat, 0, "gap pause clears the heat");
 });
 
+test("Boiler Coil: real per-frame order — heat survives while spraying via update(), gap only fires after real dry frames", () => {
+  const dt = 1 / 60;
+  const spraying = { v: true };
+  const g = Object.assign(makeThinkGame(60, 40), {
+    input: { held: (k) => k === "spray" && spraying.v, pressed: () => false, buffered: () => false, consume() {} },
+  });
+  const p = g.player;
+  p.facing = 1;
+  g.relics = { boiler_coil: true };
+  const T = JH.RELIC_TUNE;
+  const target = new JH.Enemy("mook", p.x + 20, p.y);
+  target.hp = 1e6;
+  g.enemies = [target];
+
+  // Drive the real per-step order: player.update() ticks boilerGapT up FIRST,
+  // then (still inside the same update) doSpray fires and zeroes it back to 0.
+  // The regression this pins: that same-frame incr-then-reset order must
+  // never let the gap threshold trip mid-stream, and heat must climb, not reset.
+  let lastHeat = -1;
+  for (let i = 0; i < 10; i++) {
+    p.water = p.stats.maxWater;   // keep the tank topped so pressure tier stays constant
+    p.update(dt, g);
+    assert.strictEqual(p.boilerGapT, 0, "gap timer stays zeroed while actively spraying, frame " + i);
+    assert.ok(p.boilerHeat >= lastHeat, "heat never resets mid-stream, frame " + i);
+    lastHeat = p.boilerHeat;
+  }
+  assert.strictEqual(p.boilerTarget, target, "boiler target tracked through the real update() path");
+  assert.ok(lastHeat > 0, "heat actually accumulated while spraying");
+
+  // Stop spraying and let real (non-spray) update() frames pass beyond boilerGap.
+  spraying.v = false;
+  const total = T.boilerGap + 0.1;
+  for (let t = 0; t < total; t += dt) p.update(dt, g);
+  assert.strictEqual(p.boilerTarget, null, "gap after real dry frames clears the target");
+  assert.strictEqual(p.boilerHeat, 0, "gap after real dry frames clears the heat");
+});
+
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
   const pull = new JH.Pickup("water_can", 0, 0, 10);
   const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60
@@ -1762,16 +1879,61 @@ test("Deputy Sprinkler: enemy sheltered inside an active dome takes no auto-jet 
   assert.ok(unsheltered.hp < hpBefore2, "unsheltered twin at close range takes sprinkler damage");
 });
 
+test("Deputy Sprinkler: nearest of two in-range enemies drains; dead/dropping skipped; dead player never drains", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, enemies) => ({
+    relics, enemies, particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
+  // Two live enemies in range — only the nearer one drains this frame.
+  const p = makePlayer();
+  p.facing = 1;
+  const near = new JH.Enemy("mook", p.x + 20, p.y);
+  const far = new JH.Enemy("mook", p.x + 50, p.y);
+  const nearHp0 = near.hp, farHp0 = far.hp;
+  p.update(dt, mkGame({ deputy_sprinkler: true }, [near, far]));
+  assert.ok(near.hp < nearHp0, "nearest enemy drains");
+  assert.strictEqual(far.hp, farHp0, "farther enemy is untouched while a nearer one is in range");
+
+  // Dead/dropping enemies are skipped even when nearer than the only live target.
+  const p2 = makePlayer();
+  p2.facing = 1;
+  const deadNear = new JH.Enemy("mook", p2.x + 10, p2.y);
+  deadNear.dead = true;
+  const deadHp0 = deadNear.hp;
+  const droppingNear = new JH.Enemy("mook", p2.x + 15, p2.y);
+  droppingNear.dropping = true;
+  const droppingHp0 = droppingNear.hp;
+  const liveFar = new JH.Enemy("mook", p2.x + 40, p2.y);
+  const liveFarHp0 = liveFar.hp;
+  p2.update(dt, mkGame({ deputy_sprinkler: true }, [deadNear, droppingNear, liveFar]));
+  assert.strictEqual(deadNear.hp, deadHp0, "dead enemy never takes auto-jet damage");
+  assert.strictEqual(droppingNear.hp, droppingHp0, "dropping (airborne) enemy never takes auto-jet damage");
+  assert.ok(liveFar.hp < liveFarHp0, "the only live enemy drains despite being farthest");
+
+  // alive=false player: no drain at all.
+  const p3 = makePlayer();
+  p3.facing = 1;
+  p3.alive = false;
+  const target = new JH.Enemy("mook", p3.x + 10, p3.y);
+  const targetHp0 = target.hp;
+  p3.update(dt, mkGame({ deputy_sprinkler: true }, [target]));
+  assert.strictEqual(target.hp, targetHp0, "dead player: no auto-jet drain");
+});
+
 test("shopSelectables carries the relic wheel as one row; buyRelic spends suds, flags ownership, and clears stock", () => {
   const g = Object.create(JH.Game);
   g.player = makePlayer();
   g.player.suds = 300;
   g.relics = {};
   g.relicStock = ["brass_nozzle", "spigot_key"];
+  g.wheelStock = g.relicStock.slice(0, 3);   // spawnVendor's snapshot — production always reads THIS, not relicStock
   const sel = g.shopSelectables();
   const wheelRows = sel.filter((s) => s.kind === "wheelRow");
   assert.strictEqual(wheelRows.length, 1, "the whole relic stock collapses to a single wheel row");
-  const entries = JH.Balance.shopWheelEntries(g.relicStock);
+  // Production always calls this with the (wheelStock, relics) two-arg form (game.js drawHoverShop) — match it here.
+  const entries = JH.Balance.shopWheelEntries(g.wheelStock, g.relics);
   assert.deepStrictEqual(entries.map((e) => e.id), ["brass_nozzle", "spigot_key", null, "kibble"]);
 
   assert.strictEqual(g.buyRelic("dowsing_rod"), false, "not in stock: rejected");
