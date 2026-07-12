@@ -2981,8 +2981,14 @@
             ctx.fillStyle = en.id && !en.sold ? "#dfe8f5" : "#556070";
             ctx.fillText(label.slice(0, 12), cx + 22, cy2 + 23);
             if (price != null) {
-              ctx.fillStyle = rd && rd.tier === "relic" ? "#ffd23f" : rd && rd.tier === "rare" ? "#c9924a" : (pl.suds >= price ? "#ffd23f" : "#775533");
+              // Tier hues (relic gold / rare bronze) stay hued even when unaffordable —
+              // dim via alpha instead of swapping to the common path's grey-brown.
+              const tierColor = rd && rd.tier === "relic" ? "#ffd23f" : rd && rd.tier === "rare" ? "#c9924a" : null;
+              const afford = pl.suds >= price;
+              ctx.fillStyle = tierColor || (afford ? "#ffd23f" : "#775533");
+              ctx.globalAlpha = tierColor && !afford ? 0.45 : 1;
               ctx.fillText(price + "", cx + 22, cy2 + 29);
+              ctx.globalAlpha = 1;
             }
           });
           ctx.textAlign = "left";

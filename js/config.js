@@ -384,8 +384,8 @@
   // Effects are either hook-checks scattered across game.js/entities.js (grep
   // the id) or an apply(s) stat fold run by Upgrades.computeStats; apply-
   // bearing relics also count toward Balance.powerCount. A rotating stock of
-  // 3 is rolled per vendor visit from the still-unowned pool
-  // (Balance.pickRelics over Balance.relicPoolIds).
+  // 3 is rolled per vendor visit from the still-unowned pool via
+  // Balance.rollWheelStock (tiered odds, gated by minAct).
   // Three tiers: common (steel, 60-100, one honest felt effect), rare
   // (brass, 250-350, a combat-moment mechanic), relic (gold, 500+, a
   // minAct-gated build-around). minAct (replaces the old boolean actGate):
@@ -401,7 +401,7 @@
     { id: "rubber_boots",  tier: "common", name: "Rubber Boots",   cost: 90,
       desc: "+20 max HP; slow zones and puddles don't slow you",
       apply: (s) => { s.maxHp += JH.RELIC_TUNE.bootsHp; } },
-    { id: "asbestos_socks",tier: "common", name: "Asbestos Socks", cost: 80,  desc: "Burn ticks hurt less; burn i-frames last +1s" },
+    { id: "asbestos_socks", tier: "common", name: "Asbestos Socks", cost: 80,  desc: "Burn ticks hurt less; burn i-frames last +1s" },
     { id: "squeegee",      tier: "common", name: "Squeegee",       cost: 80,  desc: "An enemy killed on a fire patch douses the patch" },
     // -- rare (brass frame, 250-350): a combat-moment mechanic -------------
     { id: "punch_card",    tier: "rare", name: "Punch Card",       cost: 250, desc: "All shop prices are 20% cheaper" },

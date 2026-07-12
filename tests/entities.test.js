@@ -1734,6 +1734,33 @@ test("Deputy Sprinkler: auto-jets flat dps on the nearest enemy in range, gated 
   assert.strictEqual(close.hp, closeHp, "no relic: no auto-jet damage");
 });
 
+test("Deputy Sprinkler: enemy sheltered inside an active dome takes no auto-jet damage; unsheltered twin does", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, enemies, shields) => ({
+    relics, enemies, shields: shields || [], particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
+  // Dome center 70 units out (inside sprinklerRange 80, outside domeRadius 58) —
+  // Jon is outside the dome, the enemy sitting at its center is sheltered.
+  const p = makePlayer();
+  p.facing = 1;
+  const dome = new JH.DeployedShield(p.x + 70, p.y, null);
+  const sheltered = new JH.Enemy("mook", dome.x, dome.y);
+  const hpBefore = sheltered.hp;
+  p.update(dt, mkGame({ deputy_sprinkler: true }, [sheltered], [dome]));
+  assert.strictEqual(sheltered.hp, hpBefore,
+    "enemy sheltered inside an active dome takes no auto-jet damage");
+
+  // Same relic, no dome: an unsheltered twin at close range takes the damage.
+  const p2 = makePlayer();
+  p2.facing = 1;
+  const unsheltered = new JH.Enemy("mook", p2.x + 20, p2.y);
+  const hpBefore2 = unsheltered.hp;
+  p2.update(dt, mkGame({ deputy_sprinkler: true }, [unsheltered], []));
+  assert.ok(unsheltered.hp < hpBefore2, "unsheltered twin at close range takes sprinkler damage");
+});
+
 test("shopSelectables carries the relic wheel as one row; buyRelic spends suds, flags ownership, and clears stock", () => {
   const g = Object.create(JH.Game);
   g.player = makePlayer();

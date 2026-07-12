@@ -329,6 +329,17 @@
         let best = null, bestD = T.sprinklerRange;
         for (const e of game.enemies) {
           if (e.dead || e.dropping) continue;
+          // Dome shelter: an enemy inside an active dome is immune while you're
+          // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
+          if (game.shields) {
+            let sheltered = false;
+            for (const s of game.shields) {
+              if (s.dead || !s.radius || !s.active) continue;
+              if (!insideDome(s, e.x, e.y)) continue;                          // enemy not in this dome
+              if (!insideDome(s, this.x, this.y)) { sheltered = true; break; } // ...and you're outside it
+            }
+            if (sheltered) continue;
+          }
           const d = Math.hypot(e.x - this.x, (e.y - this.y) * 2.4);
           if (d < bestD) { bestD = d; best = e; }
         }
@@ -879,8 +890,19 @@
           primary.takeDamage(T.boilerBonus * dmgScale * dt, game, this.facing, 0);
           for (const e of game.enemies) {                    // splash: same radius the FX shows
             if (e.dead || e === primary) continue;
-            if (Geo.inGroundEllipse(e.x, e.y, primary.x, primary.y, T.boilerSplashR, T.boilerSplashR * 0.34))
-              e.takeDamage(T.boilerSplash * dmgScale * dt, game, this.facing, 0);
+            if (!Geo.inGroundEllipse(e.x, e.y, primary.x, primary.y, T.boilerSplashR, T.boilerSplashR * 0.34)) continue;
+            // Dome shelter: an enemy inside an active dome is immune while you're
+            // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
+            if (game.shields) {
+              let sheltered = false;
+              for (const s of game.shields) {
+                if (s.dead || !s.radius || !s.active) continue;
+                if (!insideDome(s, e.x, e.y)) continue;                          // enemy not in this dome
+                if (!insideDome(s, this.x, this.y)) { sheltered = true; break; } // ...and you're outside it
+              }
+              if (sheltered) continue;
+            }
+            e.takeDamage(T.boilerSplash * dmgScale * dt, game, this.facing, 0);
           }
           if (Math.random() < 12 * dt)                       // steam/ember flecks mark the superheat
             burst(game, primary.x, primary.y, primary.z + 14, JH.PAL.flame, 2, { speed: 40, life: 0.3, up: 30 });
