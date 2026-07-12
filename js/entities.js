@@ -280,7 +280,7 @@
       if (this.burnTickT >= F.burnTickInterval || expired) {
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
         const hpBefore = this.hp;
-        const socksOwned = !!(JH.Game && JH.Game.relics && JH.Game.relics.asbestos_socks);
+        const socksOwned = !!(game.relics && game.relics.asbestos_socks);
         this.hp = Math.max(0, this.hp - JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
