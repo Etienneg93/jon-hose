@@ -322,13 +322,18 @@ const BAKERS = {
     l(5, 5, 2, 2, RED_HI);                               // hub
     l(5, 10, 2, 2, STEEL_DK);                            // pipe stub
   },
-  // Collar ring (leather-dark, high contrast vs the bright tag) drawn as 4
-  // edge strips — the `l` helper has no eraser — + tag + taut lead.
+  // Open collar RING (6px outer, genuinely transparent 4px center — the
+  // hole is the load-bearing feature) + gold tag hanging BELOW the ring +
+  // taut diagonal lead off the top-right. The `l` helper has no eraser, so
+  // the ring is 4 edge strips around an untouched center.
   dog_leash(l) {
-    l(2, 6, 4, 1, EARTH_DK); l(2, 9, 4, 1, EARTH_DK);    // collar top/bottom edge
-    l(2, 6, 1, 4, EARTH_DK); l(5, 6, 1, 4, EARTH_DK);    // collar left/right edge
-    l(3, 7, 2, 2, GOLD); l(4, 7, 1, 1, GOLD_HI);         // tag + shine
-    l(6, 5, 1, 1, WOOD); l(7, 4, 1, 1, WOOD); l(8, 3, 1, 1, WOOD); l(9, 2, 1, 1, WOOD); l(10, 1, 1, 1, WOOD); // taut lead
+    l(2, 4, 4, 1, EARTH);                                // ring top edge
+    l(2, 9, 4, 1, EARTH_DK);                             // ring bottom edge (shade)
+    l(1, 5, 1, 4, EARTH); l(6, 5, 1, 4, EARTH);          // ring left/right edge
+    // corner gaps left open on purpose: the rim pass bevels them, rounding
+    // the square frame into a ring
+    l(3, 10, 2, 2, GOLD); l(3, 10, 1, 1, GOLD_HI);       // tag hung below + shine
+    l(7, 3, 1, 1, WOOD); l(8, 2, 1, 1, WOOD); l(9, 1, 1, 1, WOOD); l(10, 0, 1, 1, WOOD); // taut lead
   },
   // Sprinkler head block + fanned droplet spray (boxy, not a teardrop).
   deputy_sprinkler(l) {
@@ -343,11 +348,18 @@ const BAKERS = {
     l(3, 3, 6, 1, "#f4f8ff");                            // top edge shine
     l(8, 8, 2, 3, WATER); l(7, 10, 4, 1, WATER_HI);
   },
-  // Zigzag heating coil (offset rungs + rails) + a flame cap on top.
+  // Open S-serpentine of hot wire: three 1px runs with 2px of EMPTY space
+  // between them, joined by alternating end connectors — the gaps between
+  // the turns are the load-bearing feature (no solid body). Steel terminal
+  // stubs at entry/exit; the entry end glows hottest.
   boiler_coil(l) {
-    for (let i = 0; i < 3; i++) l(3, 3 + i * 2, 6, 1, FIRE);
-    l(3, 3, 1, 5, FIRE); l(8, 4, 1, 5, FIRE);
-    l(5, 1, 2, 2, FIRE_HI); l(4, 9, 4, 1, RED_DK);
+    l(1, 2, 1, 1, STEEL_DK);                             // entry terminal
+    l(2, 2, 7, 1, FIRE); l(2, 2, 2, 1, FIRE_HI);         // top run + hot end
+    l(8, 3, 1, 2, FIRE);                                 // right connector down
+    l(2, 5, 7, 1, FIRE);                                 // middle run
+    l(2, 6, 1, 2, FIRE);                                 // left connector down
+    l(2, 8, 7, 1, FIRE);                                 // bottom run
+    l(9, 8, 1, 1, STEEL_DK);                             // exit terminal
   },
 };
 
