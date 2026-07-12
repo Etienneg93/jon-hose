@@ -654,6 +654,21 @@ test("Squeegee: a kill standing in a fire patch douses it; owned only", () => {
   assert.strictEqual(noRelicPatch.sprayProgress, 0, "no Squeegee: patch untouched");
 });
 
+test("Rosary Chain: banks +1 dmg per combo kill up to cap; chain break zeroes it; absent relic stays 0", () => {
+  const g = makeKillGame();
+  g.relics.rosary_chain = true;
+  for (let i = 0; i < 12; i++) JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.rosaryBonus, JH.RELIC_TUNE.rosaryCap, "banked bonus caps at rosaryCap");
+
+  JH.Game.decayCombo.call(g, JH.COMBO_WINDOW + 1);   // force the chain to expire
+  assert.strictEqual(g.combo, 0, "combo resets on expiry");
+  assert.strictEqual(g.rosaryBonus, 0, "banked bonus clears when the chain breaks");
+
+  const g2 = makeKillGame();
+  for (let i = 0; i < 12; i++) JH.Game.onEnemyKilled.call(g2, null);
+  assert.strictEqual(g2.rosaryBonus || 0, 0, "no relic, no bonus");
+});
+
 test("priceOf: Punch Card discounts 20%, rounded; absent relic charges full price", () => {
   assert.strictEqual(JH.Game.priceOf.call({ relics: {} }, 150), 150);
   assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 150), 120);
@@ -1489,6 +1504,32 @@ test("Dog Leash: flat dmg bonus vs a charging or lunging enemy, not a walking on
     "charging enemy takes the flat bonus: loss ratio charge/walk == (sprayDamage+bonus)/sprayDamage, got " + (chargeLoss / walkLoss));
   assert.ok(Math.abs(lungeLoss / walkLoss - expected) < 1e-9,
     "lunging enemy takes the same flat bonus, got " + (lungeLoss / walkLoss));
+});
+
+test("Rosary Chain: banked bonus adds flat dmg while the relic is owned", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  g.relics = { rosary_chain: true };
+  g.rosaryBonus = 5;
+
+  const target = new JH.Enemy("mook", p.x + 20, p.y);
+  g.enemies = [target];
+  const t0 = target.hp;
+  p.doSpray(0.05, g);
+  const bonusLoss = t0 - target.hp;
+
+  p.water = p.stats.maxWater;
+  g.rosaryBonus = 0;
+  const plain = new JH.Enemy("mook", p.x + 20, p.y);
+  g.enemies = [plain];
+  const p0 = plain.hp;
+  p.doSpray(0.05, g);
+  const plainLoss = p0 - plain.hp;
+
+  const expected = (p.stats.sprayDamage + 5) / p.stats.sprayDamage;
+  assert.ok(Math.abs(bonusLoss / plainLoss - expected) < 1e-9,
+    "rosary bonus adds flat dmg: loss ratio == (sprayDamage+bonus)/sprayDamage, got " + (bonusLoss / plainLoss));
 });
 
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {

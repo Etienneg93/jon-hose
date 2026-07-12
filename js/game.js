@@ -437,7 +437,7 @@
       this.playerXp = 0; this.playerLevel = 0;
       this.elapsed = 0; this.kills = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
-      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
+      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0; this.rosaryBonus = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
       // Flush a restarted-but-unfinished run as "abandoned" before starting the
@@ -1075,6 +1075,10 @@
       this.combo++;
       this.comboTimer = JH.COMBO_WINDOW;
       this.comboFlash = 0.18;
+      // Rosary Chain: each chained kill banks flat spray dmg, capped, until
+      // the chain breaks (see decayCombo).
+      if (this.relics && this.relics.rosary_chain)
+        this.rosaryBonus = Math.min(JH.RELIC_TUNE.rosaryCap, (this.rosaryBonus || 0) + JH.RELIC_TUNE.rosaryPerKill);
       // Tiers: x3 arms a minor water-regen window (blue glow on Jon while
       // live); every 5th kill bumps the regen + refunds a splash of water.
       const p = this.player;
@@ -1132,6 +1136,16 @@
         // it neither stacks nor lifts until BOTH crosses are collected.
         if (this.relics && this.relics.sunday_suit)
           this.spawnPickup("cross", e.x - 26, e.y, 1);
+      }
+    },
+
+    // GUSH combo decay: ticks the chain window down and the flash pop out;
+    // when the timer runs dry the chain (and Rosary Chain's banked dmg) resets.
+    decayCombo(dt) {
+      if (this.comboFlash > 0) this.comboFlash = Math.max(0, this.comboFlash - dt);
+      if (this.comboTimer > 0) {
+        this.comboTimer -= dt;
+        if (this.comboTimer <= 0) { this.combo = 0; this.comboTimer = 0; this.rosaryBonus = 0; }
       }
     },
 
@@ -1401,7 +1415,7 @@
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
-      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
+      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0; this.rosaryBonus = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
@@ -1655,11 +1669,7 @@
       this.elapsed += dt;
 
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
-      if (this.comboFlash > 0) this.comboFlash = Math.max(0, this.comboFlash - dt);
-      if (this.comboTimer > 0) {
-        this.comboTimer -= dt;
-        if (this.comboTimer <= 0) { this.combo = 0; this.comboTimer = 0; }
-      }
+      this.decayCombo(dt);
 
       // --- entities
       this.player.update(dt, this);
@@ -3041,6 +3051,18 @@
       ctx.fillRect(JH.VIEW_W - 8 - 46 * frac, 44, 46 * frac, 2);
       ctx.restore();
       ctx.textAlign = "left";
+
+      // Rosary Chain: banked flat-dmg readout, one row under the GUSH label.
+      if (this.rosaryBonus > 0) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#ffd23f";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("+" + this.rosaryBonus + " DMG", JH.VIEW_W - 8, 66);
+        ctx.restore();
+        ctx.textAlign = "left";
+      }
     },
 
     // Active-benediction readout: one 8px pip per owned boon, under the
