@@ -2806,8 +2806,9 @@
           const gridTop = by + 12;
           relicIds.forEach((id, i) => {
             const gx = X + 10 + (i % 9) * 16, gy = gridTop + 8 + Math.floor(i / 9) * 16;
+            const rd = JH.RELICS.find((x) => x.id === id);
             JH.Assets.icon(ctx, id, gx, gy, 1);
-            JH.Assets.gearFrame(ctx, gx, gy, 1);
+            JH.Assets.gearFrame(ctx, gx, gy, 1, rd && rd.tier, this.elapsed);
           });
           by += relicH;
         }
@@ -2961,10 +2962,10 @@
             // cycling icon instead of the real one (staggered left->right).
             const settle = 0.6 + i * 0.3;
             let iconKey = en.id === "kibble" ? "kibble" : en.id;
-            let label, price;
+            let label, price, rd = null;
             if (en.id === "kibble") { label = "KIBBLE PACK"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
             else if (en.sold) { label = "SOLD"; price = null; }
-            else if (en.id) { const rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
+            else if (en.id) { rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
             else { label = "SOLD OUT"; price = null; iconKey = "sold_out"; }
             if (i < 3 && this.wheelSpinT < settle && en.id && !en.sold) {
               const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
@@ -2972,13 +2973,17 @@
             }
             if (iconKey) {
               ctx.globalAlpha = en.sold ? 0.35 : iconKey === "sold_out" ? 0.6 : 1;
-              JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1); JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1);
+              JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1);
+              JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1, rd && rd.tier, this.elapsed);
               ctx.globalAlpha = 1;
             }
             ctx.font = "5px monospace"; ctx.textAlign = "center";
             ctx.fillStyle = en.id && !en.sold ? "#dfe8f5" : "#556070";
             ctx.fillText(label.slice(0, 12), cx + 22, cy2 + 23);
-            if (price != null) { ctx.fillStyle = pl.suds >= price ? "#ffd23f" : "#775533"; ctx.fillText(price + "", cx + 22, cy2 + 29); }
+            if (price != null) {
+              ctx.fillStyle = rd && rd.tier === "relic" ? "#ffd23f" : rd && rd.tier === "rare" ? "#c9924a" : (pl.suds >= price ? "#ffd23f" : "#775533");
+              ctx.fillText(price + "", cx + 22, cy2 + 29);
+            }
           });
           ctx.textAlign = "left";
           return;

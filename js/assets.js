@@ -552,13 +552,27 @@
     return parseInt(h.slice(1, 3), 16) + "," + parseInt(h.slice(3, 5), 16) + "," + parseInt(h.slice(5, 7), 16);
   }
 
-  // Relic gear frame: uniform steel square with bronze corners, no glow.
-  Assets.gearFrame = function (ctx, x, y, scale) {
+  // Relic gear frame, graded by rarity tier. Riveted metal — deliberately
+  // square/industrial so it never reads as a benediction tier frame:
+  // common = steel edge + bronze rivets; rare = brass edge + light rivets;
+  // relic = double gold edge, slow shimmer, NO pulse glow (that's legendary's).
+  Assets.gearFrame = function (ctx, x, y, scale, tier, t) {
     const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;
+    const grades = {
+      common: { edge: "#8fa8c8", rivet: "#b08a5c" },
+      rare:   { edge: "#c9924a", rivet: "#ffd9a0" },
+      relic:  { edge: "#d4af37", rivet: "#fff7c2" },
+    };
+    const g = grades[tier] || grades.common;
     ctx.save();
-    ctx.lineWidth = 1; ctx.strokeStyle = "#8fa8c8";
+    ctx.lineWidth = 1; ctx.strokeStyle = g.edge;
     ctx.strokeRect(x - s, y - s, s * 2, s * 2);
-    ctx.fillStyle = "#b08a5c";
+    if (tier === "relic") {
+      ctx.globalAlpha = 0.55 + 0.25 * Math.sin((t || 0) * 2);   // slow shimmer
+      ctx.strokeRect(x - s - 2, y - s - 2, s * 2 + 4, s * 2 + 4);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = g.rivet;
     [[-s, -s], [s - 1, -s], [-s, s - 1], [s - 1, s - 1]].forEach(([dx, dy]) =>
       ctx.fillRect(x + dx, y + dy, 1, 1));
     ctx.restore();
