@@ -312,6 +312,31 @@
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
 
+      // Deputy Sprinkler: tank-mounted auto-jet — flat dps on the nearest enemy
+      // in short range. Free (no water); depth counts double like the hit band.
+      if (game.relics && game.relics.deputy_sprinkler && this.alive) {
+        const T = JH.RELIC_TUNE;
+        let best = null, bestD = T.sprinklerRange;
+        for (const e of game.enemies) {
+          if (e.dead || e.dropping) continue;
+          const d = Math.hypot(e.x - this.x, (e.y - this.y) * 2.4);
+          if (d < bestD) { bestD = d; best = e; }
+        }
+        if (best) {
+          best.takeDamage(T.sprinklerDps * (best.def ? (best.def.waterMult || 1) : 1) * dt,
+            game, Math.sign(best.x - this.x) || 1, 0);
+          this.sprinklerT = (this.sprinklerT || 0) + dt;
+          if (this.sprinklerT > 0.06) {                     // droplet arc toward the target
+            this.sprinklerT = 0;
+            game.particles.push(new Particle({
+              x: this.x - this.facing * 6, y: this.y, z: this.z + 36,
+              vx: (best.x - this.x) * 2.2, vy: (best.y - this.y) * 2.2,
+              vz: 30, life: 0.4, color: JH.PAL.water, size: 2, grav: 160,
+            }));
+          }
+        }
+      }
+
       // Upgrade sequence: pending stat gains play one at a time — chime up a
       // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
       if (this.upgradeQ.length) {

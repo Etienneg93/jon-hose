@@ -1619,6 +1619,41 @@ test("Spigot Key: standing at a hydrant heals HP at the configured rate while it
   assert.strictEqual(p3.hp, p3.stats.maxHp, "heal clamps at maxHp");
 });
 
+test("Deputy Sprinkler: auto-jets flat dps on the nearest enemy in range, gated on the relic", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, enemies) => ({
+    relics, enemies, particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
+  // In range, relic owned: pyro (waterMult 1.5) drains sprinklerDps*dt*waterMult.
+  const p = makePlayer();
+  p.facing = 1;
+  const near = new JH.Enemy("pyro", p.x + 20, p.y);
+  const hpBefore = near.hp;
+  p.update(dt, mkGame({ deputy_sprinkler: true }, [near]));
+  const loss = hpBefore - near.hp;
+  const expected = JH.RELIC_TUNE.sprinklerDps * dt * 1.5;
+  assert.ok(Math.abs(loss - expected) < 1e-9,
+    "in-range pyro takes sprinklerDps*dt*waterMult, got " + loss);
+
+  // Beyond sprinklerRange: untouched (no spraying involved either way).
+  const p2 = makePlayer();
+  p2.facing = 1;
+  const far = new JH.Enemy("mook", p2.x + JH.RELIC_TUNE.sprinklerRange + 10, p2.y);
+  const farHp = far.hp;
+  p2.update(dt, mkGame({ deputy_sprinkler: true }, [far]));
+  assert.strictEqual(far.hp, farHp, "enemy beyond sprinklerRange is untouched");
+
+  // No relic: nothing happens even at close range.
+  const p3b = makePlayer();
+  p3b.facing = 1;
+  const close = new JH.Enemy("mook", p3b.x + 20, p3b.y);
+  const closeHp = close.hp;
+  p3b.update(dt, mkGame({}, [close]));
+  assert.strictEqual(close.hp, closeHp, "no relic: no auto-jet damage");
+});
+
 test("shopSelectables carries the relic wheel as one row; buyRelic spends suds, flags ownership, and clears stock", () => {
   const g = Object.create(JH.Game);
   g.player = makePlayer();
