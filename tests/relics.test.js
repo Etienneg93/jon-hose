@@ -94,6 +94,16 @@ test("asbestos socks: per-stack burn dps cut with floor", () => {
     3 * Math.max(T.socksBurnDpsFloor, F.burnDpsPerStack - T.socksBurnDpsCut));
 });
 
+test("asbestos socks: the floor actually clamps when the cut would drive the rate below it", () => {
+  const T = JH.RELIC_TUNE;
+  const origCut = T.socksBurnDpsCut;
+  T.socksBurnDpsCut = JH.FIRE.burnDpsPerStack + 5;   // cut exceeds the base rate entirely
+  try {
+    assert.strictEqual(JH.Balance.burnTickDps(4, true), 4 * T.socksBurnDpsFloor,
+      "per-stack rate clamps at socksBurnDpsFloor, never goes to 0 or negative");
+  } finally { T.socksBurnDpsCut = origCut; }
+});
+
 test("prayerBeadProc tops up pressureBuffT without shortening it", () => {
   const pl = { pressureBuffT: 2 };
   JH.Balance.prayerBeadProc(pl, JH.RELIC_TUNE);
@@ -104,9 +114,16 @@ test("prayerBeadProc tops up pressureBuffT without shortening it", () => {
 });
 
 test("JH.KIBBLE_PACK is shaped as the shop expects", () => {
-  assert.strictEqual(JH.KIBBLE_PACK.cost, 30);
-  assert.strictEqual(JH.KIBBLE_PACK.heal, 25);
-  assert.strictEqual(JH.KIBBLE_PACK.dur, 6);
+  // Pin the SHAPE the shop relies on, not config's current balance numbers —
+  // a tuning pass shouldn't break this test for no functional reason.
+  const K = JH.KIBBLE_PACK;
+  assert.strictEqual(typeof K.name, "string");
+  assert.strictEqual(typeof K.cost, "number");
+  assert.strictEqual(typeof K.heal, "number");
+  assert.strictEqual(typeof K.dur, "number");
+  assert.ok(K.cost > 0, "cost is a positive price");
+  assert.ok(K.heal > 0, "heal is a positive amount");
+  assert.ok(K.dur > 0, "dur is a positive duration");
 });
 
 test("powerCount counts stat relics via 5th arg", () => {
