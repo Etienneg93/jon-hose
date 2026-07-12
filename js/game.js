@@ -1414,6 +1414,10 @@
         return;
       }
       tv.videoT += JH.FIXED_DT;   // scaled steps make this race on their own
+      // Quip floats: rare per scaled step, so they land roughly every ~4s of
+      // sat-there time regardless of how fast the world is currently running.
+      if (Math.random() < JH.FIXED_DT / 4)
+        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff");
       // Dash bails and is NOT consumed here: Player.update runs earlier in the
       // step and consumes the buffered edge itself when the dash fires (dash is
       // never movement-gated), so a started dash is detected via dashTimer;
@@ -2364,6 +2368,13 @@
             }
             e.draw(ctx, cam);
             ctx.restore();
+          } else if (e === this.player && this.deepdiving && this.deepdiveTV) {
+            // Seated at the TV: face it regardless of the last move direction
+            // (no bespoke sitting pose — his existing idle reads fine parked).
+            const savedFacing = e.facing;
+            e.facing = this.deepdiveTV.x >= e.x ? 1 : -1;
+            e.draw(ctx, cam);
+            e.facing = savedFacing;
           } else {
             e.draw(ctx, cam);
           }
@@ -2486,6 +2497,28 @@
         ctx.restore();
       }
 
+      // Deepdive time-distortion: vignette + jittering speed-lines that scale
+      // with how fast the world is currently running (Balance.deepdiveRamp's
+      // timeScale, 1..maxScale). Same draw budget as essenceDim above — one
+      // full-screen fill plus a handful of rects, no per-pixel work.
+      const ddk = (this.timeScale - 1) / (JH.DEEPDIVE.maxScale - 1);
+      if (ddk > 0.01 && this.state === "play") {
+        ctx.save();
+        const vg = ctx.createRadialGradient(
+          JH.VIEW_W / 2, JH.VIEW_H / 2, JH.VIEW_H * 0.2,
+          JH.VIEW_W / 2, JH.VIEW_H / 2, JH.VIEW_H * 0.7);
+        vg.addColorStop(0, "rgba(4,6,16,0)");
+        vg.addColorStop(1, "rgba(4,6,16," + (0.25 * ddk).toFixed(3) + ")");
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        ctx.fillStyle = "rgba(220,240,255," + (0.15 * ddk).toFixed(3) + ")";
+        for (let i = 0; i < 4; i++) {
+          const ly = (i + 0.5) * (JH.VIEW_H / 4) + (Math.random() - 0.5) * 8;
+          ctx.fillRect(0, ly, JH.VIEW_W, 1.5);
+        }
+        ctx.restore();
+      }
+
       // World floating text (essence/level-up/shop-buy feedback): drawn after
       // the essence-dim overlay so it always reads at full brightness.
       if (this.floaters && this.floaters.length && this.state === "play") {
@@ -2525,6 +2558,15 @@
         this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
         this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E  SHOP", psx + 1, psy + 1);
         this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E  SHOP", psx, psy);
+        this.ctx.textAlign = "left";
+      }
+      // Walk-up prompt over the Deepdive TV while it's parked (not sat down).
+      if (this.state === "play" && this.deepdiveTV && this.deepdiveTV.near && !this.deepdiving) {
+        const tsx = Math.round(this.deepdiveTV.x - JH.Camera.x);
+        const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 48;
+        this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E: DEEPDIVE", tsx + 1, tsy + 1);
+        this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E: DEEPDIVE", tsx, tsy);
         this.ctx.textAlign = "left";
       }
       if (this.nearShop && this.state === "play") {

@@ -2874,16 +2874,65 @@
       this.t = 0; this.bodyW = 16; this.near = false;
       this.videoT = 0; this.titleIdx = 0;
     }
-    update(dt) { this.t += dt; }
+    update(dt) {
+      this.t += dt;
+      // Title cycling rides videoT, which tickDeepdive only advances while
+      // sitting (scaled steps) — this no-ops while parked.
+      if (this.videoT >= JH.DEEPDIVE.titleSwap) {
+        this.videoT = 0;
+        this.titleIdx = (this.titleIdx + 1) % JH.DEEPDIVE.titles.length;
+      }
+    }
     draw(ctx, cam) {
-      // Task 2 placeholder: dark TV box on legs + lit screen. Task 3 replaces
-      // this body with the fake-YouTube render.
+      const D = JH.DEEPDIVE;
+      const on = !!(JH.Game && JH.Game.deepdiving);
       const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
-      Assets.shadow(ctx, sx, sy, 10);
+      Assets.shadow(ctx, sx, sy, 11);
       ctx.save();
-      ctx.fillStyle = "#1a2030"; ctx.fillRect(sx - 9, sy - 22, 18, 14);   // set
-      ctx.fillStyle = "#3a4a66"; ctx.fillRect(sx - 7, sy - 20, 14, 10);   // screen
-      ctx.fillStyle = "#0d1420"; ctx.fillRect(sx - 6, sy - 8, 2, 8); ctx.fillRect(sx + 4, sy - 8, 2, 8); // legs
+      // Screen glow halo is the differentiator from the vendor's chalkboard
+      // sign (same dark-navy palette, no light source of its own) — the TV
+      // reads as a lit display even parked, and flares while deepdiving.
+      Assets.glow(ctx, sx, sy - 29, on ? 24 : 16, "#7ff0ff", on ? 0.6 : 0.32);
+
+      ctx.fillStyle = "#12161f"; ctx.fillRect(sx - 18, sy - 42, 36, 26);   // cabinet
+      ctx.fillStyle = "#232c3d"; ctx.fillRect(sx - 16, sy - 40, 32, 22);   // bezel
+      const screenX = sx - 15, screenY = sy - 39, screenW = 30, screenH = 20;
+      ctx.fillStyle = on ? "#c8f6ff" : "#5fd3ec";
+      ctx.fillRect(screenX, screenY, screenW, screenH);
+
+      // Fake-YouTube content, clipped to the screen so text/bars never bleed
+      // past the bezel at this tiny size.
+      ctx.save();
+      ctx.beginPath(); ctx.rect(screenX, screenY, screenW, screenH); ctx.clip();
+      ctx.fillStyle = "#0b2530";
+      ctx.fillRect(screenX, screenY, screenW, screenH - 6);   // video pane above the scrub row
+
+      ctx.textAlign = "left";
+      ctx.font = "bold 5px monospace"; ctx.fillStyle = "#eafcff";
+      ctx.fillText(D.titles[this.titleIdx] || "", screenX + 1, screenY + 6);
+
+      const views = (3 + this.titleIdx * 7) % 10;   // stable-per-title, no RNG
+      ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
+      ctx.fillText(views + "M views", screenX + 1, screenY + 13);
+
+      // Scrub bar races over D.titleSwap scaled seconds — visible proof the
+      // video (and the world behind it) is running fast.
+      const frac = Math.max(0, Math.min(1, this.videoT / D.titleSwap));
+      ctx.fillStyle = "#1a3a44"; ctx.fillRect(screenX + 1, screenY + screenH - 4, screenW - 2, 2);
+      ctx.fillStyle = "#ff3b3b"; ctx.fillRect(screenX + 1, screenY + screenH - 4, (screenW - 2) * frac, 2);
+
+      // "UP NEXT" thumbnail nub, top-right corner of the screen.
+      ctx.fillStyle = "#1a2230"; ctx.fillRect(screenX + screenW - 9, screenY + 1, 8, 6);
+      ctx.fillStyle = on ? "#7ff0ff" : "#4a8a9a";
+      ctx.beginPath();
+      ctx.moveTo(screenX + screenW - 6, screenY + 2.5);
+      ctx.lineTo(screenX + screenW - 6, screenY + 5.5);
+      ctx.lineTo(screenX + screenW - 3, screenY + 4);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = "#0d1420";
+      ctx.fillRect(sx - 11, sy - 16, 3, 16); ctx.fillRect(sx + 8, sy - 16, 3, 16);   // legs
       ctx.restore();
     }
   }
