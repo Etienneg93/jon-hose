@@ -1542,6 +1542,8 @@
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       this.dropBudget = { suds: 0, items: 0 };
+      this.rangeStations = null;   // a range death degrades to a normal respawn
+      this.rangeMode = false;
       this.waveIndex = next - 1;
       // Act gate keyed to the wave being re-fought, not the decremented index.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(next, JH.ACT_STARTS);
