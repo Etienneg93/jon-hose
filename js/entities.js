@@ -241,7 +241,7 @@
       // new stacks for the invuln window (overlapping fire can't insta-max).
       // Returns whether the stack landed so sources can retry, not skip ahead.
       if (this.burnGraceT > 0) return false;
-      this.burnGraceT = this.stats.invuln;
+      this.burnGraceT = this.stats.invuln + ((JH.Game && JH.Game.relics && JH.Game.relics.asbestos_socks) ? JH.RELIC_TUNE.socksGraceBonus : 0);
       this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
       this.burnTimer = JH.FIRE.burnDuration;
       return true;
@@ -280,7 +280,8 @@
       if (this.burnTickT >= F.burnTickInterval || expired) {
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
         const hpBefore = this.hp;
-        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT * (this.stats.burnTakenMult || 1));
+        const socksOwned = !!(JH.Game && JH.Game.relics && JH.Game.relics.asbestos_socks);
+        this.hp = Math.max(0, this.hp - JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
@@ -2324,7 +2325,8 @@
         return true;
       }
       const pl = game.player;
-      if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r))
+      if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r) &&
+          !(game.relics && game.relics.rubber_boots))
         pl.zoneSlow = this.slowMult;
       return true;
     }

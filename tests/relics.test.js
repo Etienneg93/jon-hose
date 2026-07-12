@@ -80,6 +80,20 @@ test("kibble grant matches pickup semantics", () => {
   assert.ok(Math.abs(pl.kibbleRegen - JH.KIBBLE_PACK.heal / JH.KIBBLE_PACK.dur) < 1e-9);
 });
 
+test("rubber boots: +bootsHp maxHp via computeStats", () => {
+  JH.Game = { relics: { rubber_boots: true } };
+  const s = JH.Upgrades.computeStats({});
+  assert.strictEqual(s.maxHp, JH.PLAYER.maxHp + JH.RELIC_TUNE.bootsHp);
+  JH.Game = null;
+});
+
+test("asbestos socks: per-stack burn dps cut with floor", () => {
+  const F = JH.FIRE, T = JH.RELIC_TUNE;
+  assert.strictEqual(JH.Balance.burnTickDps(3, false), 3 * F.burnDpsPerStack);
+  assert.strictEqual(JH.Balance.burnTickDps(3, true),
+    3 * Math.max(T.socksBurnDpsFloor, F.burnDpsPerStack - T.socksBurnDpsCut));
+});
+
 test("prayerBeadProc tops up pressureBuffT without shortening it", () => {
   const pl = { pressureBuffT: 2 };
   JH.Balance.prayerBeadProc(pl, JH.RELIC_TUNE);

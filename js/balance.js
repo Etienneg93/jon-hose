@@ -325,6 +325,14 @@
     prayerBeadProc(pl, tune) {
       pl.pressureBuffT = Math.max(pl.pressureBuffT || 0, (tune || root.JH.RELIC_TUNE).prayerBeadDur);
     },
+
+    // Burn dps on the player: per-stack rate, Asbestos Socks flat cut (floored).
+    burnTickDps(stacks, socksOwned) {
+      const per = socksOwned
+        ? Math.max(root.JH.RELIC_TUNE.socksBurnDpsFloor, root.JH.FIRE.burnDpsPerStack - root.JH.RELIC_TUNE.socksBurnDpsCut)
+        : root.JH.FIRE.burnDpsPerStack;
+      return stacks * per;
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;
