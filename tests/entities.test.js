@@ -1880,6 +1880,35 @@ test("toggleRelic: grant folds apply() stats in, revoke folds out + clamps hp + 
   } finally { JH.Game = realGame; }
 });
 
+test("deepdive: TV spawns at threshold, not below; sits down-lane of the vendor", () => {
+  const mk = (kib) => {
+    const g = { relics: {}, player: { kibbleTimer: kib, x: 0, y: 0 },
+                shopWheelEntries: () => [], };
+    JH.Game.spawnVendor.call(g, 300);
+    return g;
+  };
+  const D = JH.DEEPDIVE;
+  const at = mk(D.threshold);
+  assert.ok(at.deepdiveTV, "TV at exactly threshold");
+  assert.strictEqual(at.deepdiveTV.x, 300 - D.laneGap, "down-lane by laneGap");
+  assert.strictEqual(mk(D.threshold - 1).deepdiveTV, null, "no TV below threshold");
+});
+
+test("deepdive: auto-ends when kibble empties; move key bails", () => {
+  const mkInput = (bufferedKeys, pressedKeys) => ({
+    buffered: (k) => bufferedKeys.includes(k), consume: () => {},
+    pressed: (k) => pressedKeys.includes(k),
+  });
+  const g = { deepdiving: true, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
+              player: { x: 0, y: 0, kibbleTimer: 0 },
+              input: mkInput([], []), audio: { play() {} } };
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "kibble 0 auto-ends");
+  g.deepdiving = true; g.player.kibbleTimer = 5; g.input = mkInput([], ["left"]);
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "move key bails");
+});
+
 test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {
   const p = makePlayer();
   p.upgradeQ.length = 0;

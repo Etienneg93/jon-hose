@@ -29,7 +29,7 @@
     enemies: [], embers: [], pickups: [], particles: [], floaters: [], sigils: [],
     beneUsedOnce: {},
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
-    hydrants: [], shopNpc: null, nearShop: false, nearVendor: false, shopOpen: false,
+    hydrants: [], shopNpc: null, deepdiveTV: null, nearShop: false, nearVendor: false, shopOpen: false,
     timeScale: 1, deepdiving: false,   // Deepdive TV: world fixed-step rate; ramped by Balance.deepdiveRamp
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
@@ -468,7 +468,7 @@
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
-      this.shopNpc = null; this.nearShop = false; this.nearVendor = false;
+      this.shopNpc = null; this.deepdiveTV = null; this.nearShop = false; this.nearVendor = false;
       this.shopOpen = false; this.shopCursor = 0;
       this.timeScale = 1; this.deepdiving = false;
       this.wall = null; this.gardens = [];
@@ -533,6 +533,7 @@
       this.waveCleared = false;
       this.wavePool = [];   // reinforcement queue — only regular waves fill it
       this.shopNpc = null;          // vendor gets left behind once the fight starts
+      this.deepdiveTV = null; this.deepdiving = false;   // belt-and-suspenders — the TV is gone
       this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       if (this.player.beneRank("eye_of_storm"))
         this.player.stormT = this.player.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
@@ -1057,6 +1058,10 @@
     // vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
+      // Deepdive TV: only when Jon arrives at the shop with a big kibble bank.
+      this.deepdiveTV = (this.player && this.player.kibbleTimer >= JH.DEEPDIVE.threshold)
+        ? new JH.DeepdiveTV(x - JH.DEEPDIVE.laneGap, JH.DEPTH_MIN + 6)
+        : null;
       this.relicStock = JH.Balance.rollWheelStock(JH.RELICS, this.relics, JH.Upgrades.currentActLevel, Math.random);
       // Wheel slots render from this fixed snapshot (bought cards go SOLD in
       // place, never shift); the reel spin arms on the first walk-up instead
@@ -1392,6 +1397,33 @@
       }
     },
 
+    // Deepdive TV interaction: sit (E) to fast-forward the world while banked
+    // kibble drains; any move key or a second E stands Jon back up. Auto-ends
+    // when the kibble bank empties.
+    tickDeepdive() {
+      const tv = this.deepdiveTV;
+      if (!tv) return;
+      const pl = this.player;
+      tv.near = Math.abs(pl.x - tv.x) < 22 && Math.abs(pl.y - tv.y) < 28;
+      if (!this.deepdiving) {
+        if (tv.near && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          this.deepdiving = true;
+          this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
+        }
+        return;
+      }
+      tv.videoT += JH.FIXED_DT;   // scaled steps make this race on their own
+      const bail = this.input.pressed("up") || this.input.pressed("down")
+                || this.input.pressed("left") || this.input.pressed("right")
+                || this.input.buffered("confirm");
+      if (bail || pl.kibbleTimer <= 0) {
+        if (this.input.buffered("confirm")) this.input.consume("confirm");
+        this.deepdiving = false;
+        this.audio.play("upgrade", { pitch: 1.6 });      // spin-down
+      }
+    },
+
     killJuice(e) {
       const J = JH.JUICE;
       const heavy = !!e.elite || J.heavyTypes.includes(e.type);
@@ -1542,7 +1574,7 @@
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0; this.rosaryBonus = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
-      this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
+      this.shopNpc = null; this.deepdiveTV = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       this.timeScale = 1; this.deepdiving = false;
       this.dropBudget = { suds: 0, items: 0 };
       this.rangeStations = null;   // a range death degrades to a normal respawn
@@ -1833,6 +1865,7 @@
       for (const h of this.hydrants) h.t += dt;
       this.tickRangeStations();
       this.tickSigils();
+      this.tickDeepdive();
       // Remember the last hydrant visited — death returns Jon here.
       if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
       // Victory portal (post-Slayer): walk in and confirm to finish the run.
@@ -1894,6 +1927,7 @@
           return;
         }
       }
+      if (this.deepdiveTV) this.deepdiveTV.update(dt);
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
         this.nearVendor = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
@@ -2291,6 +2325,7 @@
         // Jon rides in the cab during the departure beat — don't double-draw him.
         if (!(this.truckBoard && this.truckBoard.departing)) actors.push(this.player);
         if (this.shopNpc) actors.push(this.shopNpc);
+        if (this.deepdiveTV) actors.push(this.deepdiveTV);
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
           // Dead entities can linger in the list while a death sequence has

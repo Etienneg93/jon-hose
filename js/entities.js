@@ -377,13 +377,15 @@
       this.tickBurn(dt, game);
 
       // ---- movement vector
-      const wantSpray = In.held("spray") && this.dashTimer <= 0;
+      // Deepdive TV: seated Jon doesn't walk or spray (tickDeepdive still
+      // reads the raw move/confirm keys directly to detect the bail).
+      const wantSpray = !game.deepdiving && In.held("spray") && this.dashTimer <= 0;
       // Suppress horizontal movement while the shop cursor is on the wheel
       // row — left/right is card navigation there. Off the wheel row, walking
       // out of the shop with left/right still works. Dash is never suppressed.
-      let mx = this.shopWheelFocus ? 0 : ((In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0));
+      let mx = (this.shopWheelFocus || game.deepdiving) ? 0 : ((In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0));
       // Suppress vertical movement when near shop — up/down is used for shop navigation.
-      let my = this.nearShop ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
+      let my = (this.nearShop || game.deepdiving) ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
       // Facing is LOCKED while spraying so you can back-pedal and keep aim.
       if (mx !== 0 && !wantSpray) this.facing = mx > 0 ? 1 : -1;
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
@@ -2861,6 +2863,31 @@
     }
   }
   JH.ShopNPC = ShopNPC;
+
+  // ====================================================== DEEPDIVE TV
+  // Shop-interlude prop: spawns down-lane of the vendor when Jon arrives with
+  // a big banked kibble buff. Sitting at it (game.deepdiving) fast-forwards
+  // the whole world; see JH.DEEPDIVE and Game.tickDeepdive.
+  class DeepdiveTV {
+    constructor(x, y) {
+      this.x = x; this.y = y; this.z = 0; this.facing = 1;
+      this.t = 0; this.bodyW = 16; this.near = false;
+      this.videoT = 0; this.titleIdx = 0;
+    }
+    update(dt) { this.t += dt; }
+    draw(ctx, cam) {
+      // Task 2 placeholder: dark TV box on legs + lit screen. Task 3 replaces
+      // this body with the fake-YouTube render.
+      const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
+      Assets.shadow(ctx, sx, sy, 10);
+      ctx.save();
+      ctx.fillStyle = "#1a2030"; ctx.fillRect(sx - 9, sy - 22, 18, 14);   // set
+      ctx.fillStyle = "#3a4a66"; ctx.fillRect(sx - 7, sy - 20, 14, 10);   // screen
+      ctx.fillStyle = "#0d1420"; ctx.fillRect(sx - 6, sy - 8, 2, 8); ctx.fillRect(sx + 4, sy - 8, 2, 8); // legs
+      ctx.restore();
+    }
+  }
+  JH.DeepdiveTV = DeepdiveTV;
 
   // ============================================ SWITCH OF DOOM (boss 2)
   // 8-port switch with Doc-Ock cable tentacles. Fires telegraphed FULL-WIDTH
