@@ -1,6 +1,9 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert");
+global.window = global.window || {};
+require("../js/config.js");
+const JH = global.window.JH;
 const Balance = require("../js/balance.js");
 
 test("actLevelForWave maps wave index to elite act tier", () => {
@@ -26,6 +29,30 @@ test("dropThresholds scales item chances by mult and stays cumulative", () => {
   assert.ok(Math.abs(t.health - 0.324) < 1e-9); // 0.18 * 1.8
   assert.ok(Math.abs(t.water - 0.81) < 1e-9);   // 0.324 + 0.27*1.8 (0.486)
   assert.ok(t.water > t.health);
+});
+
+test("deepdiveRamp: reaches maxScale in ~rampUp s, returns in ~rampDown s, clamps, never overshoots", () => {
+  const D = JH.DEEPDIVE;
+  let s = 1, t = 0;
+  while (s < D.maxScale && t < 5) { s = JH.Balance.deepdiveRamp(s, true, 1 / 60, D); t += 1 / 60; }
+  assert.ok(Math.abs(t - D.rampUp) < 0.05, "ramp-up time ~" + D.rampUp + ", got " + t.toFixed(2));
+  assert.strictEqual(s, D.maxScale, "clamps at maxScale exactly");
+  s = JH.Balance.deepdiveRamp(s, true, 1, D);
+  assert.strictEqual(s, D.maxScale, "no overshoot while held");
+  t = 0;
+  while (s > 1 && t < 5) { s = JH.Balance.deepdiveRamp(s, false, 1 / 60, D); t += 1 / 60; }
+  assert.ok(Math.abs(t - D.rampDown) < 0.05, "ramp-down time ~" + D.rampDown);
+  assert.strictEqual(s, 1, "clamps at 1 exactly");
+});
+
+test("DEEPDIVE config shape", () => {
+  const D = JH.DEEPDIVE;
+  for (const k of ["threshold", "maxScale", "rampUp", "rampDown", "stepCap", "titleSwap", "laneGap"])
+    assert.strictEqual(typeof D[k], "number", k);
+  assert.ok(D.stepCap > JH.MAX_STEPS, "stepCap must exceed MAX_STEPS or 10x can't run");
+  assert.ok(Array.isArray(D.titles) && D.titles.length >= 5);
+  assert.ok(Array.isArray(D.quips) && D.quips.length >= 3);
+  assert.ok(D.laneGap > JH.SHOP.range + 22, "TV interact zone must clear the shop-open zone");
 });
 
 test("dropThresholds caps so drops are never guaranteed", () => {

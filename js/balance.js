@@ -333,6 +333,16 @@
         : root.JH.FIRE.burnDpsPerStack;
       return stacks * per;
     },
+
+    // Deepdive time-scale ramp: advances toward maxScale (deepdiving) or 1 (not)
+    // at the constant rate that crosses the full span in rampUp/rampDown seconds
+    // of REAL time. Pure; clamps at both ends.
+    deepdiveRamp(cur, deepdiving, dtReal, D) {
+      const target = deepdiving ? D.maxScale : 1;
+      const rate = (D.maxScale - 1) / (deepdiving ? D.rampUp : D.rampDown);
+      const step = rate * dtReal;
+      return target > cur ? Math.min(target, cur + step) : Math.max(target, cur - step);
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;

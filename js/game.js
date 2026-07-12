@@ -30,6 +30,7 @@
     beneUsedOnce: {},
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
     hydrants: [], shopNpc: null, nearShop: false, nearVendor: false, shopOpen: false,
+    timeScale: 1, deepdiving: false,   // Deepdive TV: world fixed-step rate; ramped by Balance.deepdiveRamp
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
@@ -469,6 +470,7 @@
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.shopNpc = null; this.nearShop = false; this.nearVendor = false;
       this.shopOpen = false; this.shopCursor = 0;
+      this.timeScale = 1; this.deepdiving = false;
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
@@ -1541,6 +1543,7 @@
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
       this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
+      this.timeScale = 1; this.deepdiving = false;
       this.dropBudget = { suds: 0, items: 0 };
       this.rangeStations = null;   // a range death degrades to a normal respawn
       this.rangeMode = false;
@@ -1693,9 +1696,12 @@
       let dt = (now - this.lastT) / 1000;
       this.lastT = now;
       if (dt > 0.25) dt = 0.25;          // tab-switch guard
-      this.acc += dt;
+      // Ramp advances on REAL dt so sim speed never feeds back into ramp rate.
+      this.timeScale = JH.Balance.deepdiveRamp(this.timeScale, this.deepdiving, dt, JH.DEEPDIVE);
+      this.acc += dt * this.timeScale;
+      const cap = (this.deepdiving || this.timeScale > 1.01) ? JH.DEEPDIVE.stepCap : JH.MAX_STEPS;
       let steps = 0;
-      while (this.acc >= JH.FIXED_DT && steps < JH.MAX_STEPS) {
+      while (this.acc >= JH.FIXED_DT && steps < cap) {
         this.update(JH.FIXED_DT);
         this.acc -= JH.FIXED_DT;
         steps++;

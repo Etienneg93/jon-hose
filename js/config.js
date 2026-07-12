@@ -70,6 +70,34 @@
     relicGradeOdds: [0, 0.25, 0.5, 0.75],  // slot-3 upgrade chance by actLevel+1
   };
 
+  // Deepdive TV: kibble-accelerator shop prop. Sitting fast-forwards the WHOLE
+  // world (fixed-step count scales, per-step dt stays FIXED_DT). The run clock
+  // (elapsed) rides scaled time on purpose — a binge costs leaderboard seconds.
+  JH.DEEPDIVE = {
+    threshold: 20,    // s of banked kibble required at vendor-spawn to spawn the TV
+    maxScale: 10,     // peak world time multiplier
+    rampUp:   0.8,    // s of REAL time to ramp 1 -> maxScale
+    rampDown: 0.6,    // s of REAL time to ramp back to 1
+    stepCap:  12,     // MAX_STEPS override while ramped (default 5 caps speed ~5x)
+    titleSwap: 2.5,   // s of SCALED time between fake-video title swaps
+    laneGap:  70,     // px further down-lane than the vendor (> SHOP.range + 22)
+    titles: [
+      "Are FIRE HYDRANTS conscious? (they answered)",
+      "I ate only KIBBLE for 30 days",
+      "The DARK TRUTH about municipal water pressure",
+      "POV: you're a dog at 3am",
+      "This ONE hose trick BROKE the game",
+      "Why do I keep RESPAWNING? (existential)",
+      "Top 10 hydrants that ATTACKED back",
+    ],
+    quips: [
+      "wait — it's ALL kibble?",
+      "liked & subscribed",
+      "just one more video",
+      "the algorithm knows me",
+    ],
+  };
+
   // Colour palette (kept central so procedural art + UI stay in sync).
   JH.PAL = {
     skin: "#f1c08a", skinDark: "#c98f5a",
