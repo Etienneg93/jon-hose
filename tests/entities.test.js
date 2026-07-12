@@ -1301,6 +1301,28 @@ test("Brass Nozzle: +10 flat dmg to the primary (blocker) target only; never a s
   assert.strictEqual(far2.hp, hpFar2, "Brass Nozzle: second-closest enemy is never hit");
 });
 
+// ---- Hydro Lance: pierce damage fades down the line ----
+
+test("lance falloff: pierce damage fades down the line per RELIC_TUNE.lanceFalloff", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;   // Hydro Lance tier: pierce
+  const a = new JH.Enemy("mook", p.x + 30, p.y);
+  const b = new JH.Enemy("mook", p.x + 60, p.y);
+  const c = new JH.Enemy("mook", p.x + 90, p.y);
+  g.enemies = [c, a, b];   // scrambled order — sort must go by depth, not array order
+
+  const a0 = a.hp, b0 = b.hp, c0 = c.hp;
+  p.doSpray(0.1, g);
+  const L = JH.RELIC_TUNE.lanceFalloff;
+  const lossA = a0 - a.hp, lossB = b0 - b.hp, lossC = c0 - c.hp;
+  assert.ok(lossA > 0, "nearest enemy is hit");
+  assert.ok(Math.abs(lossB / lossA - L[1]) < 0.01, "2nd hit scales by lanceFalloff[1]");
+  assert.ok(Math.abs(lossC / lossA - L[2]) < 0.01, "3rd hit scales by lanceFalloff[2]");
+});
+
 // ---- Dome shelter contract (Bulwark's planted dome blocks/shelters the stream) ----
 
 test("dome shelter: enemy inside an active dome is immune while Jon is outside; hittable once the dome fades", () => {
@@ -1376,9 +1398,13 @@ test("Brass Nozzle: pierce beam (Hydro Lance) — bonus lands on the nearest ene
   p.doSpray(0.05, g);
   const nearLoss = n0 - near.hp, farLoss = f0 - far.hp;
   assert.ok(farLoss > 0, "pierce: far enemy is hit too");
-  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / p.stats.sprayDamage;
+  // Ratio folds in the lance falloff ladder (near = hit index 0 → LF[0]=1,
+  // far = hit index 1 → LF[1]) on top of the nozzle's flat add on near only.
+  const LF = JH.RELIC_TUNE.lanceFalloff;
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / (p.stats.sprayDamage * LF[1]);
   assert.ok(Math.abs(nearLoss / farLoss - expected) < 1e-9,
-    "near enemy takes the nozzle bonus: loss ratio near/far == (sprayDamage+add)/sprayDamage, got " + (nearLoss / farLoss));
+    "near enemy takes the nozzle bonus, both scaled by lanceFalloff: loss ratio near/far == "
+    + "(sprayDamage+add)/(sprayDamage*LF[1]), got " + (nearLoss / farLoss));
 });
 
 test("Brass Nozzle: beam 0 — bonus still lands on the blocker (regression)", () => {

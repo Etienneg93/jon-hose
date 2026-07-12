@@ -754,12 +754,18 @@
           }
         }
       }
+      // Gather pass: every filter (dead/dropping/arc/blocker/dome-shelter)
+      // decides WHO gets hit; the apply pass below decides HOW HARD. Pierce
+      // sorts nearest-first so the falloff ladder (Hydro Lance) reads off
+      // hit order regardless of game.enemies' array order.
+      const targets = [];
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
         if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
-        if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
+        const fwd = (e.x - ox) * this.facing;
+        if (pierce && blocker && fwd > blockerFwd) continue;
         // Dome shelter: an enemy inside an active dome is immune while you're
         // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
         if (game.shields) {
@@ -771,6 +777,14 @@
           }
           if (sheltered) continue;
         }
+        targets.push({ e, fwd });
+      }
+      if (pierce) targets.sort((p, q) => p.fwd - q.fwd);
+      const LF = JH.RELIC_TUNE.lanceFalloff;
+      targets.forEach(({ e }, idx) => {
+        // Hydro Lance: pierce damage fades down the hit line (ladder repeats
+        // its last entry past its length); non-pierce hits take falloff 1.
+        const falloff = pierce ? LF[Math.min(idx, LF.length - 1)] : 1;
         const mult = e.def ? (e.def.waterMult || 1) : 1;
         const pressureMult = this.pressureBuffT > 0 ? JH.RELIC_TUNE.prayerBeadMult : 1;
         const beneMult = anyBene ? JH.Balance.beneDmgMult(beneRanks, {
@@ -779,7 +793,7 @@
         }) : 1;
         const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
         const flatDmg = S.sprayDamage + (e === nozzleTarget ? nozzleAdd : 0);
-        const dmg = flatDmg * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
+        const dmg = flatDmg * falloff * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
         // fire pillar's baseline capstone are independent sources — both can land.
@@ -814,7 +828,8 @@
         // huge HP pools gave full-rate sustain near-permanent uptime.
         if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
         if (ssRank) hitEnemies.push(e);
-      }
+      });
+      const primary = targets.length ? targets[0].e : null;  // nearest hit enemy (Boiler Coil hooks this)
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
       // Split Stream: 50% damage arc from each hit enemy to its closest
