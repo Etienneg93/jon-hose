@@ -92,6 +92,7 @@ function killStub(waveActive) {
     waveActive: !!waveActive, combo: 0, kills: 0,
     comboTimer: 0, comboFlash: 0,
     enemies: [], embers: [], particles: [], pickups: [], floaters: [],
+    pulseRings: [], firePatches: [],
     player: {
       x: 0, y: 0, z: 0, alive: true, hp: 100, water: 50, regenLock: 1,
       stats: { maxWater: 100, maxHp: 100 },
@@ -109,6 +110,7 @@ function killStub(waveActive) {
     hitStop(s) { this.hitStopTimer = Math.max(this.hitStopTimer, s); },
     shake(n, d) { JH.Game.shake.call(this, n, d); },
     killJuice(e) { JH.Game.killJuice.call(this, e); },
+    spawnGushPulse() { JH.Game.spawnGushPulse.call(this); },
   };
   return g;
 }

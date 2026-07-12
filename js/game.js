@@ -409,6 +409,7 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
+      this.pulseRings = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
       this.voucher50 = false;
@@ -1090,6 +1091,7 @@
           p.gushRegenT = J.gushRegenDur + winBonus;
           p.gushRegenRate = J.gushRegen3;
           this.audio.play("upgrade");
+          this.spawnGushPulse();
         } else if (this.combo >= 5 && this.combo % 5 === 0) {
           // Regen scales with the milestone, uncapped — x5 pays 8/s, x10 16/s,
           // x20 32/s: absurd chains deserve absurd water.
@@ -1111,6 +1113,7 @@
               vz: 60 + Math.random() * 60,
               life: 0.5 + Math.random() * 0.3, color: JH.PAL.water, size: 2, grav: 220,
             }));
+          this.spawnGushPulse();
         }
       }
       // Collection Plate: flat suds bonus per kill.
@@ -1137,6 +1140,44 @@
         if (this.relics && this.relics.sunday_suit)
           this.spawnPickup("cross", e.x - 26, e.y, 1);
       }
+    },
+
+    // GUSH milestone pulse (Backdraft Valve / Big Spigot). Rim is hitbox: the
+    // ring damages/knocks each target the frame its expanding rim reaches it.
+    spawnGushPulse() {
+      const valve = this.relics && this.relics.backdraft_valve;
+      const spigot = this.relics && this.relics.big_spigot;
+      if (!valve && !spigot) return;
+      const T = JH.RELIC_TUNE, p = this.player;
+      this.pulseRings.push({
+        x: p.x, y: p.y, r: 0, targetR: T.pulseRadius, dur: 0.25, t: 0,
+        dmg: spigot ? T.spigotDamage : 0, kb: valve ? T.valveKnockback : 0,
+        douse: true, hit: new Set(),
+      });
+      this.audio.play("gush");
+    },
+    updatePulseRings(dt) {
+      if (!this.pulseRings || !this.pulseRings.length) return;
+      for (const ring of this.pulseRings) {
+        ring.t += dt;
+        ring.r = Math.min(ring.targetR, ring.targetR * (ring.t / ring.dur));
+        const ry = ring.r * 0.34;                       // same ground flatten as shadows
+        for (const e of this.enemies) {
+          if (e.dead || ring.hit.has(e)) continue;
+          if (!JH.Geo.inGroundEllipse(e.x, e.y, ring.x, ring.y, ring.r, ry)) continue;
+          ring.hit.add(e);
+          const dir = Math.sign(e.x - ring.x) || 1;
+          if (ring.dmg) e.takeDamage(ring.dmg, this, dir, 0);
+          if (ring.kb) e.applyKnockback(dir, ring.kb, (e.y - ring.y) * 0.02);
+        }
+        if (ring.douse && this.firePatches)
+          for (const fp of this.firePatches) {
+            if (fp.dead || ring.hit.has(fp)) continue;
+            if (!JH.Geo.inGroundEllipse(fp.x, fp.y, ring.x, ring.y, ring.r, ry)) continue;
+            ring.hit.add(fp); fp.sprayProgress = fp.extinguishDur;
+          }
+      }
+      this.pulseRings = this.pulseRings.filter((r) => r.t < r.dur + 0.15);  // brief fade tail
     },
 
     // GUSH combo decay: ticks the chain window down and the flash pop out;
@@ -1410,6 +1451,7 @@
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
+      this.pulseRings = [];
       this.floaters = [];
       this.sigils = [];   // usedOnce survives death; active boons are whatever the Reliquary gave back
       this.deferredQueue = [];
@@ -1670,6 +1712,7 @@
 
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
       this.decayCombo(dt);
+      this.updatePulseRings(dt);
 
       // --- entities
       this.player.update(dt, this);
@@ -2091,6 +2134,19 @@
 
         // slow zones (super-Bulwark's landed shield)
         for (const z of this.slowZones) z.draw(ctx, cam);
+
+        // GUSH pulse rings (Backdraft Valve / Big Spigot) — drawn rim IS the hit rim.
+        if (this.pulseRings) for (const ring of this.pulseRings) {
+          const sx = ring.x - cam, sy = JH.Geo.feetScreenY(ring.y, 0);
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, 1 - ring.t / (ring.dur + 0.15));
+          ctx.strokeStyle = JH.PAL.waterHi;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);

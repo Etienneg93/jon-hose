@@ -669,6 +669,38 @@ test("Rosary Chain: banks +1 dmg per combo kill up to cap; chain break zeroes it
   assert.strictEqual(g2.rosaryBonus || 0, 0, "no relic, no bonus");
 });
 
+test("spawnGushPulse: ring dmg/kb reflect owned relics; neither relic spawns no ring", () => {
+  const g = { pulseRings: [], relics: { backdraft_valve: true, big_spigot: true },
+    player: { x: 50, y: 60 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(g);
+  assert.strictEqual(g.pulseRings.length, 1);
+  assert.strictEqual(g.pulseRings[0].dmg, JH.RELIC_TUNE.spigotDamage);
+  assert.strictEqual(g.pulseRings[0].kb, JH.RELIC_TUNE.valveKnockback);
+
+  const g2 = { pulseRings: [], relics: {}, player: { x: 0, y: 0 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(g2);
+  assert.strictEqual(g2.pulseRings.length, 0, "no relic, no ring");
+});
+
+test("updatePulseRings: rim-is-hitbox — near enemy hit exactly once, far enemy untouched, patch doused", () => {
+  const T = JH.RELIC_TUNE;
+  const near = new JH.Enemy("mook", 50 + (T.pulseRadius - 30), 60);   // inside pulseRadius
+  const far = new JH.Enemy("mook", 50 + T.pulseRadius + 40, 60);      // beyond pulseRadius
+  const nearStartHp = near.hp, farStartHp = far.hp;
+  const patch = { x: 55, y: 60, dead: false, sprayProgress: 0, extinguishDur: 5 };
+  const g = {
+    pulseRings: [{ x: 50, y: 60, r: 0, targetR: T.pulseRadius, dur: 0.25, t: 0,
+      dmg: T.spigotDamage, kb: T.valveKnockback, douse: true, hit: new Set() }],
+    enemies: [near, far], firePatches: [patch],
+  };
+  for (let i = 0; i < 30; i++) JH.Game.updatePulseRings.call(g, 0.02);   // past full expansion + fade tail
+  assert.strictEqual(nearStartHp - near.hp, T.spigotDamage, "near enemy takes exactly one pulse hit");
+  assert.notStrictEqual(near.knockVX, 0, "near enemy knocked back");
+  assert.strictEqual(far.hp, farStartHp, "far enemy beyond pulseRadius untouched");
+  assert.strictEqual(patch.sprayProgress, patch.extinguishDur, "patch inside the ring is doused");
+  assert.strictEqual(g.pulseRings.length, 0, "ring is culled after its fade tail");
+});
+
 test("priceOf: Punch Card discounts 20%, rounded; absent relic charges full price", () => {
   assert.strictEqual(JH.Game.priceOf.call({ relics: {} }, 150), 150);
   assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 150), 120);
@@ -682,8 +714,9 @@ function makeKillGame() {
   return {
     kills: 0, combo: 0, comboTimer: 0, comboFlash: 0,
     grantXp() {}, audio: { play() {} }, shake() {}, particles: [],
-    pickups: [],
+    pickups: [], pulseRings: [], firePatches: [],
     spawnPickup(kind, x, y, value) { this.pickups.push({ kind, x, y, value }); },
+    spawnGushPulse() { JH.Game.spawnGushPulse.call(this); },
     player: makePlayer(),
     relics: {},
   };
