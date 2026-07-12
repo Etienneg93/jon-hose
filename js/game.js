@@ -2969,7 +2969,7 @@
             else { label = "SOLD OUT"; price = null; iconKey = "sold_out"; }
             if (i < 3 && this.wheelSpinT < settle && en.id && !en.sold) {
               const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
-              label = "· · ·"; price = null;
+              label = "· · ·"; price = null; rd = null;   // mask tier too: steel frame until the reel settles
             }
             if (iconKey) {
               ctx.globalAlpha = en.sold ? 0.35 : iconKey === "sold_out" ? 0.6 : 1;
