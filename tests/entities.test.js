@@ -11,6 +11,7 @@ global.window.JH.Loader = { img: () => ({}) };
 require("../js/world.js");
 require("../js/upgrades.js");
 require("../js/entities.js");
+require("../js/game.js");
 const JH = global.window.JH;
 
 test("applyKnockback still knocks back regular enemies", () => {
@@ -1843,6 +1844,40 @@ test("death wash: benedictions clear, levels/relics survive respawn refresh", ()
   assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // relic survived
   JH.Upgrades.reset(); JH.Benedictions.reset();
   JH.Game = prevGame;
+});
+
+test("toggleRelic: grant folds apply() stats in, revoke folds out + clamps hp + clears relic state", () => {
+  const stats = [];
+  const g = {
+    relics: {}, rosaryBonus: 7,
+    player: {
+      hp: 120, stats: { maxHp: 100 },
+      boilerTarget: {}, boilerHeat: 1.5, boilerGapT: 0.1,
+      applyStats(s) { this.stats = s; stats.push(s); },
+    },
+  };
+  const toggleMethod = JH.Game.toggleRelic;
+  const toggle = (id) => toggleMethod.call(g, id);
+  const realGame = JH.Game;
+  JH.Game = g;                                  // computeStats reads JH.Game.relics (known idiom)
+  try {
+    assert.strictEqual(toggle("rubber_boots"), true);
+    assert.strictEqual(g.relics.rubber_boots, true);
+    assert.strictEqual(g.player.stats.maxHp, JH.PLAYER.maxHp + JH.RELIC_TUNE.bootsHp);
+    g.player.hp = g.player.stats.maxHp;         // full hp with boots on
+    assert.strictEqual(toggle("rubber_boots"), false);
+    assert.ok(!g.relics.rubber_boots);
+    assert.strictEqual(g.player.stats.maxHp, JH.PLAYER.maxHp);
+    assert.ok(g.player.hp <= g.player.stats.maxHp, "hp clamped after boots revoke");
+    // relic-state cleanup on revoke
+    g.relics.rosary_chain = true; g.rosaryBonus = 7;
+    toggle("rosary_chain");                     // revoke
+    assert.strictEqual(g.rosaryBonus, 0);
+    g.relics.boiler_coil = true; g.player.boilerHeat = 2;
+    toggle("boiler_coil");                      // revoke
+    assert.strictEqual(g.player.boilerTarget, null);
+    assert.strictEqual(g.player.boilerHeat, 0);
+  } finally { JH.Game = realGame; }
 });
 
 test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {

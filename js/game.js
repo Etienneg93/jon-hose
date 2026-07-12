@@ -287,9 +287,34 @@
         beneMaxX = Math.max(beneMaxX, bxp);
       });
       this.bounds.maxX = Math.max(this.bounds.maxX, beneMaxX + 50);
+      // Relic rack: one toggle station per relic, roster order (common → rare →
+      // relic-grade reads left to right), two rows right of the sigil rows.
+      const rackX0 = 700, rackDX = 36, rackRowY = [58, 80];
+      let rackMaxX = 0;
+      JH.RELICS.forEach((r, i) => {
+        const rx = rackX0 + (i % 11) * rackDX;
+        this.rangeStations.push({ kind: "relic", relic: r.id, x: rx, y: rackRowY[i < 11 ? 0 : 1], near: false });
+        rackMaxX = Math.max(rackMaxX, rx);
+      });
+      this.bounds.maxX = Math.max(this.bounds.maxX, rackMaxX + 80);
       this.rangeMode = true;
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
+    },
+
+    // Dev range: toggle a relic on/off and re-fold stats (apply() relics need
+    // computeStats to run both ways). Revoking also clears the relic's live
+    // state so an A/B toggle can't leave stale bonuses behind.
+    toggleRelic(id) {
+      const owned = !!this.relics[id];
+      if (owned) delete this.relics[id];
+      else this.relics[id] = true;
+      const p = this.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      if (p.hp > p.stats.maxHp) p.hp = p.stats.maxHp;
+      if (!this.relics.rosary_chain) this.rosaryBonus = 0;
+      if (!this.relics.boiler_coil) { p.boilerTarget = null; p.boilerHeat = 0; p.boilerGapT = 0; }
+      return !owned;
     },
 
     // Standalone test arena for the wall boss (not in the wave list yet).
@@ -1287,6 +1312,11 @@
             // milestone path — repeat presses climb x5 → x10 → x20…
             this.combo = Math.floor(this.combo / 5) * 5 + 4;
             this.onEnemyKilled(null);
+          } else if (st.kind === "relic") {
+            const on = this.toggleRelic(st.relic);
+            this.audio.play(on ? "buy" : "hurt", { pitch: on ? 1 : 0.8 });
+            const rd = JH.RELICS.find((r) => r.id === st.relic);
+            if (this.float) this.float(st.x, st.y - 30, (on ? "+ " : "− ") + rd.name.toUpperCase(), on ? "#80ff80" : "#8fa8c8");
           }
         }
       }
@@ -2039,21 +2069,31 @@
       for (const st of this.rangeStations) {
         const sx = Math.round(st.x - cam), sy = Math.round(JH.Geo.feetScreenY(st.y, 0));
         ctx.save();
-        // pedestal + ground pad
-        ctx.fillStyle = "#0d1420";
-        ctx.beginPath(); ctx.ellipse(sx, sy, 9, 9 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#2a3548";
-        ctx.fillRect(sx - 7, sy - 10, 14, 10);
-        if (st.kind === "kibble") {
-          ctx.fillStyle = "#44ee66";
-          ctx.fillRect(sx - 4, sy - 15, 8, 6);
+        if (st.kind === "relic") {
+          const rd = JH.RELICS.find((r) => r.id === st.relic);
+          const owned = !!this.relics[st.relic];
+          ctx.globalAlpha = owned ? 1 : 0.5;
+          JH.Assets.gearFrame(ctx, sx, sy - 12, 1, rd && rd.tier, this.player ? this.player.t : 0);
+          JH.Assets.icon(ctx, st.relic, sx, sy - 12, 1);
+          ctx.globalAlpha = 1;
+          if (owned) { ctx.fillStyle = "#80ff80"; ctx.fillRect(sx + 7, sy - 20, 2, 2); }
         } else {
-          ctx.fillStyle = "#55c8ff";
-          ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
+          // pedestal + ground pad
+          ctx.fillStyle = "#0d1420";
+          ctx.beginPath(); ctx.ellipse(sx, sy, 9, 9 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#2a3548";
+          ctx.fillRect(sx - 7, sy - 10, 14, 10);
+          if (st.kind === "kibble") {
+            ctx.fillStyle = "#44ee66";
+            ctx.fillRect(sx - 4, sy - 15, 8, 6);
+          } else {
+            ctx.fillStyle = "#55c8ff";
+            ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+          ctx.fillStyle = "#9be8ff";
+          ctx.fillText(st.kind === "kibble" ? "KIBBLE" : "GUSH", sx, sy - 20);
         }
-        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
-        ctx.fillStyle = "#9be8ff";
-        ctx.fillText(st.kind === "kibble" ? "KIBBLE" : "GUSH", sx, sy - 20);
         if (st.near) {
           ctx.fillStyle = "#ffd23f"; ctx.font = "bold 7px monospace";
           ctx.fillText("E", sx, sy - 27 + Math.sin((this.player ? this.player.t : 0) * 6) * 1.5);
@@ -2371,6 +2411,7 @@
         for (const s of this.sigils) if (!s.dead) s.draw(this.ctx, JH.Camera.x);
       }
       if (this.state === "play") this.drawSigilCard(this.ctx);
+      if (this.rangeMode) this.drawRelicRackCard(this.ctx);
       // Cutscene overlay (drawn after everything else).
       if (this.state === "cutscene" && this.cutscene) this.drawCutscene(this.ctx);
       // Dev menu drawn last so it's always on top.
@@ -2860,6 +2901,61 @@
       }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
       ctx.fillText("E: CHOOSE BENEDICTION", X + W - 6, Y + H - 6);
+      ctx.restore();
+    },
+
+    drawRelicRackCard(ctx) {
+      const RANGE_GAP = { alarm_bell: 1, sunday_suit: 1, censer: 1 };
+      const pl = this.player;
+      let near = null, best = 30;
+      for (const st of this.rangeStations) {
+        if (st.kind !== "relic") continue;
+        const d = Math.hypot(pl.x - st.x, pl.y - st.y);
+        if (d < best) { best = d; near = st; }
+      }
+      if (!near) return;
+      // Sigil wins ties (compare sigil to rack station distance)
+      if (this.sigils && this.sigils.length > 0) {
+        let sigilBest = 30;
+        for (const s of this.sigils) {
+          if (s.dead) continue;
+          const d = Math.hypot(pl.x - s.x, pl.y - s.y);
+          if (d < sigilBest) sigilBest = d;
+        }
+        if (sigilBest <= best) return;
+      }
+      const rd = JH.RELICS.find((r) => r.id === near.relic);
+      if (!rd) return;
+      const owned = !!this.relics[near.relic];
+      const tierColors = { common: "#8fa8c8", rare: "#c9924a", relic: "#ffd23f" };
+      const tierColor = tierColors[rd.tier] || "#8fa8c8";
+      const desc = rd.desc + (RANGE_GAP[rd.id] ? "  (needs real run)" : "");
+      const W = 300, H = 34, X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.92)";
+      ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = tierColor;
+      ctx.strokeRect(X, Y, W, H);
+      ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#dfe8f5";
+      ctx.fillText(rd.name + (owned ? "  [ON]" : ""), X + 6, Y + 10);
+      ctx.textAlign = "right";
+      ctx.fillStyle = tierColor;
+      ctx.fillText(rd.tier.toUpperCase(), X + W - 6, Y + 10);
+      ctx.textAlign = "left";
+      ctx.font = "6px monospace";
+      ctx.fillStyle = "#aebdd4";
+      // Two-line wrap: split near the middle on a space.
+      if (desc.length > 52) {
+        let cut = desc.lastIndexOf(" ", 52);
+        if (cut < 20) cut = 52;
+        ctx.fillText(desc.slice(0, cut), X + 6, Y + 20);
+        ctx.fillText(desc.slice(cut + 1), X + 6, Y + 28);
+      } else {
+        ctx.fillText(desc, X + 6, Y + 22);
+      }
+      ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
+      ctx.fillText("E: TOGGLE RELIC", X + W - 6, Y + H - 6);
       ctx.restore();
     },
 
