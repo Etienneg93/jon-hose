@@ -277,6 +277,78 @@ const BAKERS = {
     l(2, 9, 8, 1, "#5c4530");                            // base shade
     l(1, 9, 2, 2, RED); l(3, 7, 2, 2, RED); l(5, 5, 2, 2, RED); l(7, 3, 2, 2, RED); l(9, 1, 2, 2, RED_HI); // diagonal slash
   },
+
+  // ------------------------------------------------------ relics (rarity) --
+  // Full green welly, folded cuff band, pale sole. No motion lines — this is
+  // armor, not the speed/hydro_dash stat boots (which reserve left-edge space
+  // for wind streaks and sit smaller at x=6); this one fills the icon.
+  rubber_boots(l) {
+    l(3, 1, 6, 2, "#5fd45f");                            // folded cuff
+    l(3, 3, 6, 5, GREEN);                                // shaft
+    l(3, 8, 7, 2, GREEN);                                // foot
+    l(3, 10, 7, 1, STEEL_DK);                             // sole
+    l(3, 3, 1, 5, "#b0ffb0");                            // shine
+  },
+  // Grey sock pair, red heat flecks (fire resist).
+  asbestos_socks(l) {
+    l(3, 2, 2, 5, STEEL); l(2, 7, 3, 3, STEEL_DK);
+    l(7, 2, 2, 5, STEEL); l(8, 7, 3, 3, STEEL_DK);
+    l(4, 4, 1, 1, RED); l(8, 5, 1, 1, RED);
+  },
+  // T-handle + wide blade + water streaks squeegeed below.
+  squeegee(l) {
+    l(5, 1, 2, 5, WOOD); l(2, 6, 8, 2, STEEL); l(2, 8, 8, 1, STEEL_DK);
+    l(3, 10, 1, 1, WATER); l(6, 10, 1, 1, WATER); l(9, 10, 1, 1, WATER);
+  },
+  // Beaded strand across the top, dropping via a link to a big, isolated
+  // cross below — vertically separated from the beads (unlike an earlier
+  // draft where crossbar+upright overlapped into a single row and baked
+  // into a torch-shaped blob). Deliberately NOT prayer_bead's closed bead
+  // loop + tiny pendant dot.
+  rosary_chain(l) {
+    for (const x of [2, 4, 6, 8]) l(x, 1, 1, 1, GOLD);   // beaded strand, top
+    l(9, 2, 1, 1, GOLD_DK); l(9, 3, 1, 1, GOLD_DK);      // drop link to the cross
+    l(5, 4, 2, 7, GOLD);                                 // upright (pokes above crossbar)
+    l(3, 6, 6, 2, GOLD);                                 // crossbar
+    l(3, 8, 6, 1, GOLD_DK);                              // crossbar underside shade
+    l(5, 10, 2, 1, GOLD_DK);                              // base shade
+  },
+  // Solid octagon disc (the wheel) with a darker embossed spoke-cross and a
+  // bright hub — the OUTER silhouette is a round disc, not a plus/cross, so
+  // it can't be mistaken for rosary_chain's pendant even before color reads.
+  backdraft_valve(l) {
+    l(4, 2, 4, 1, RED); l(3, 3, 6, 1, RED); l(2, 4, 8, 4, RED); l(3, 8, 6, 1, RED); l(4, 9, 4, 1, RED); // disc
+    l(5, 2, 2, 8, RED_DK); l(2, 5, 8, 2, RED_DK);        // embossed spoke cross
+    l(5, 5, 2, 2, RED_HI);                               // hub
+    l(5, 10, 2, 2, STEEL_DK);                            // pipe stub
+  },
+  // Collar ring (leather-dark, high contrast vs the bright tag) drawn as 4
+  // edge strips — the `l` helper has no eraser — + tag + taut lead.
+  dog_leash(l) {
+    l(2, 6, 4, 1, EARTH_DK); l(2, 9, 4, 1, EARTH_DK);    // collar top/bottom edge
+    l(2, 6, 1, 4, EARTH_DK); l(5, 6, 1, 4, EARTH_DK);    // collar left/right edge
+    l(3, 7, 2, 2, GOLD); l(4, 7, 1, 1, GOLD_HI);         // tag + shine
+    l(6, 5, 1, 1, WOOD); l(7, 4, 1, 1, WOOD); l(8, 3, 1, 1, WOOD); l(9, 2, 1, 1, WOOD); l(10, 1, 1, 1, WOOD); // taut lead
+  },
+  // Sprinkler head block + fanned droplet spray (boxy, not a teardrop).
+  deputy_sprinkler(l) {
+    l(4, 6, 4, 4, STEEL); l(5, 4, 2, 2, STEEL_DK);
+    l(2, 2, 1, 1, WATER); l(5, 1, 1, 1, WATER); l(9, 2, 1, 1, WATER);
+    l(1, 4, 1, 1, WATER_HI); l(10, 4, 1, 1, WATER_HI);
+  },
+  // Blocky wall-mount faucet body + knob + heavy gush (squat, not the
+  // tapered hose-cone of brass_nozzle or the horizontal shaft of hydro_lance).
+  big_spigot(l) {
+    l(3, 3, 6, 3, STEEL); l(8, 6, 2, 2, STEEL_DK); l(5, 1, 2, 2, STEEL_DK);
+    l(3, 3, 6, 1, "#f4f8ff");                            // top edge shine
+    l(8, 8, 2, 3, WATER); l(7, 10, 4, 1, WATER_HI);
+  },
+  // Zigzag heating coil (offset rungs + rails) + a flame cap on top.
+  boiler_coil(l) {
+    for (let i = 0; i < 3; i++) l(3, 3 + i * 2, 6, 1, FIRE);
+    l(3, 3, 1, 5, FIRE); l(8, 4, 1, 5, FIRE);
+    l(5, 1, 2, 2, FIRE_HI); l(4, 9, 4, 1, RED_DK);
+  },
 };
 
 // ---------------------------------------------------------------------------
