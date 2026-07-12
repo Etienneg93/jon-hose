@@ -1928,3 +1928,17 @@ test("spray-douse speed scales with spray damage, never below the flat rate", ()
   assert.ok(base >= 0.1 - 1e-9, "base damage is at least the flat rate");
   assert.ok(Math.abs(weak - 0.1) < 1e-9, "well-below-base damage clamps to exactly the flat rate");
 });
+
+test("procSuperEliteArrival: grants pressure buff + floater only with prayer_bead and a live player", () => {
+  const floats = [];
+  const g = { relics: { prayer_bead: true },
+              player: { alive: true, x: 0, y: 0, pressureBuffT: 0 },
+              float(x, y, txt) { floats.push(txt); } };
+  JH.Game.procSuperEliteArrival.call(g);
+  assert.strictEqual(g.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+  assert.strictEqual(floats.length, 1);
+  const g2 = { relics: {}, player: { alive: true, pressureBuffT: 0 }, float() { floats.push("x"); } };
+  JH.Game.procSuperEliteArrival.call(g2);
+  assert.strictEqual(g2.player.pressureBuffT, 0);
+  assert.strictEqual(floats.length, 1);
+});

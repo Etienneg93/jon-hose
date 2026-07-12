@@ -297,6 +297,25 @@
         rackMaxX = Math.max(rackMaxX, rx);
       });
       this.bounds.maxX = Math.max(this.bounds.maxX, rackMaxX + 80);
+      // Scenario props (relic testing) --------------------------------------
+      // Slow puddle: permanent player-slow zone (rubber_boots immunity test).
+      this.slowZones.push(new JH.SlowZone(380, 70, 26, 1e9));
+      // Dome pair: permanent dome, one dummy sheltered + one outside
+      // (deputy_sprinkler shelter check, lance blocker feel).
+      const dome = new JH.DeployedShield(1220, py, null);
+      dome.domeDur = dome.domeT = 1e9;
+      this.shields.push(dome);
+      this.spawnEnemy("dummy", 1220, py);                       // sheltered
+      this.spawnEnemy("dummy", 1220 + dome.radius + 26, py);    // outside
+      this.bounds.maxX = Math.max(this.bounds.maxX, 1220 + dome.radius + 110);
+      // Generous drop budget so spawner-mook kills pay out (dowsing_rod / plate).
+      this.dropBudget = { suds: 999, items: 99 };
+      // Stations: super-elite proc button, mook spawner, fire patch spawner.
+      this.rangeStations.push(
+        { kind: "superelite", x: 140, y: py, near: false },
+        { kind: "mook",       x: 520, y: py, near: false },
+        { kind: "firepatch",  x: 600, y: py, near: false },
+      );
       this.rangeMode = true;
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
@@ -618,11 +637,7 @@
             superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
           });
           se.spawnGrace = 0.6;
-          // Prayer Bead: a super-elite's arrival also grants the pressure buff.
-          if (this.relics && this.relics.prayer_bead && this.player && this.player.alive) {
-            JH.Balance.prayerBeadProc(this.player, JH.RELIC_TUNE);
-            this.float(this.player.x, this.player.y - 40, "PRESSURE", "#ffd23f");
-          }
+          this.procSuperEliteArrival();
         }
       }
     },
@@ -1093,6 +1108,14 @@
           p.dead = true;
         }
     },
+
+    procSuperEliteArrival() {
+      if (this.relics && this.relics.prayer_bead && this.player && this.player.alive) {
+        JH.Balance.prayerBeadProc(this.player, JH.RELIC_TUNE);
+        this.float(this.player.x, this.player.y - 40, "PRESSURE", "#ffd23f");
+      }
+    },
+
     onEnemyKilled(e) {
       this.kills++;
       this.grantXp((e && e.def && e.def.suds) || 0);
@@ -1324,6 +1347,19 @@
           this.audio.play(on ? "buy" : "hurt", { pitch: on ? 1 : 0.8 });
           const rd = JH.RELICS.find((r) => r.id === act.relic);
           if (this.float) this.float(act.x, act.y - 30, (on ? "+ " : "− ") + rd.name.toUpperCase(), on ? "#80ff80" : "#8fa8c8");
+        } else if (act.kind === "superelite") {
+          this.procSuperEliteArrival();
+          this.audio.play("buy");
+        } else if (act.kind === "mook") {
+          // Real killable enemy: on-kill relics (squeegee/rosary/plate/dowsing) need
+          // actual deaths — TargetDummy is unkillable by design.
+          const m = this.spawnEnemy("mook", 560, act.y);
+          m.spawnGrace = 0.5;
+          this.audio.play("buy");
+        } else if (act.kind === "firepatch") {
+          // Lands where spawner mooks stand, so a kill-on-patch is easy to stage.
+          JH.spawnFirePatch(this, 560, act.y, 16, 3);
+          this.audio.play("sizzle");
         }
       }
     },
@@ -2072,6 +2108,7 @@
     },
 
     drawRangeStations(ctx, cam) {
+      const RANGE_LABELS = { kibble: "KIBBLE", gush: "GUSH", superelite: "SUPER-ELITE", mook: "SPAWN MOOK", firepatch: "FIRE PATCH" };
       for (const st of this.rangeStations) {
         const sx = Math.round(st.x - cam), sy = Math.round(JH.Geo.feetScreenY(st.y, 0));
         ctx.save();
@@ -2091,14 +2128,23 @@
           ctx.fillRect(sx - 7, sy - 10, 14, 10);
           if (st.kind === "kibble") {
             ctx.fillStyle = "#44ee66";
+          } else if (st.kind === "gush") {
+            ctx.fillStyle = "#55c8ff";
+          } else if (st.kind === "superelite") {
+            ctx.fillStyle = "#ff5a5a";
+          } else if (st.kind === "mook") {
+            ctx.fillStyle = "#cc5c18";
+          } else if (st.kind === "firepatch") {
+            ctx.fillStyle = "#ff9040";
+          }
+          if (st.kind === "kibble") {
             ctx.fillRect(sx - 4, sy - 15, 8, 6);
           } else {
-            ctx.fillStyle = "#55c8ff";
             ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
           }
           ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
           ctx.fillStyle = "#9be8ff";
-          ctx.fillText(st.kind === "kibble" ? "KIBBLE" : "GUSH", sx, sy - 20);
+          ctx.fillText(RANGE_LABELS[st.kind] || st.kind.toUpperCase(), sx, sy - 20);
         }
         if (st.near) {
           ctx.fillStyle = "#ffd23f"; ctx.font = "bold 7px monospace";
