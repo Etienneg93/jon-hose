@@ -26,10 +26,12 @@ boss-phase language from the handbook queue).
   built as.
 - **Ass Man is a hero**, not a villain. Fight shape: misunderstanding brawl →
   alliance. At 0 HP he takes a knee — mutual respect, never death.
-- **The dog is Ass Man's dog.** Entry beat: plain-clothes Jon, dog pees on
-  the holy hydrant, rage suit-up. Outro: NO boot-pee gag — the reveal that
-  it's his dog IS the resolution; Ass Man deputizes the dog to Jon as
-  apology (→ K-9 Unit relic).
+- **The dog is Ass Man's dog, and Ass Man is walking it at the entry**
+  (original 2026-07-02 beat, user-confirmed over the draft's Jon-suits-up
+  variant): a plain-clothes stranger's dog desecrates the holy hydrant; Jon
+  rages; the STRANGER suits up — the transformation is Ass Man's power
+  reveal, and the feud is declared face-to-face. Outro: NO boot-pee gag —
+  Ass Man deputizes the dog to Jon as apology (→ K-9 Unit relic).
 - **Roster fantasy:** "the crap he fights" — the sanitation-horror menagerie
   from the posters. Jon looks like more crap to fight; that's the
   misunderstanding.
@@ -138,18 +140,21 @@ BACK."). Enrage latch = phase-3 entry (prayer_bead interacts normally).
 
 - **Entry (replaces the current post-gate victory):** gate walk-in → sky
   suburb vista (clouds below the walkway, drifting TP, distant golden
-  porcelain per the Ass Man 3 poster) → peace beat: Jon in plain clothes,
-  relaxing — first time the player sees him out of uniform → the dog trots
-  in, pees on the holy hydrant → eye-twitch close-up → RAGE SUIT-UP
-  (transformation flourish; hose rig slams on) → wave 30 banner. Sight-gag
+  porcelain per the Ass Man 3 poster) → a plain-clothes stranger strolls
+  the walkway walking his dog → the dog stops at the holy hydrant and pees
+  on it → Jon eye-twitch close-up, rage → the STRANGER calmly drops the
+  leash (the dog wanders off into his warzone), and SUITS UP — transformation
+  flourish reveals ASS MAN (cape snap, chest lettering glint; his power
+  reveal) → he declares the feud with a poster bark and takes off down-lane
+  → wave 30 banner: his warzone now stands between Jon and him. Sight-gag
   driven, minimal dialogue; reuses the cutscene/boarding-beat tech from the
   truck finale.
-- **Outro:** Ass Man kneels → the dog trots to HIM → beat: it's his dog →
-  Jon's rage deflates (he fought a hero over the dog's crime) → Ass Man
-  apologizes and DEPUTIZES the dog to Jon → Assvengers tease card (Quake
-  Walker + Jon + Ass Man; the poster alien silhouetted — the long-game
-  hook; no gameplay attached) → victory flow ("Visits to Father Jon" stats)
-  runs after.
+- **Outro:** Ass Man kneels → the dog trots back to HIM → Jon's rage
+  deflates (he fought a hero over the dog's crime — and the hero knew it) →
+  Ass Man apologizes and DEPUTIZES the dog to Jon → Assvengers tease card
+  (Quake Walker + Jon + Ass Man; the poster alien silhouetted — the
+  long-game hook; no gameplay attached) → victory flow ("Visits to Father
+  Jon" stats) runs after.
 
 ## K-9 Unit relic (the act's payoff)
 
