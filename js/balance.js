@@ -70,7 +70,7 @@
       };
       const shop = (root.JH && root.JH.SHOP) || {};
       const oddsArr = shop.relicGradeOdds || [0, 0, 0, 0];
-      const odds = oddsArr[Math.max(0, Math.min(3, actLevel + 1))] || 0;
+      const odds = oddsArr[Math.max(0, Math.min(oddsArr.length - 1, actLevel + 1))] || 0;
       const slot3Chain = (pools.relic.length && r() < odds)
         ? ["relic", "rare", "common"] : ["rare", "common", "relic"];
       const s1 = draw(["common", "rare", "relic"]);

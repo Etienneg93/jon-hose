@@ -67,7 +67,7 @@
   // Walk-up shop vendor between fights.
   JH.SHOP = {
     range: 28,
-    relicGradeOdds: [0, 0.25, 0.5, 0.75],  // slot-3 upgrade chance by actLevel+1
+    relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
   };
 
   // Colour palette (kept central so procedural art + UI stay in sync).
