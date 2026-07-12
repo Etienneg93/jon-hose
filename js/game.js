@@ -862,6 +862,7 @@
     // Dev/headless entry straight into the truck run (see main.js ?truck=1).
     debugEnterTruck() {
       if (!this.player) this.startGame();
+      this.deepdiving = false;
       JH.TruckRun.enter(this);
     },
 
@@ -1417,7 +1418,7 @@
       // Quip floats: rare per scaled step, so they land roughly every ~4s of
       // sat-there time regardless of how fast the world is currently running.
       if (Math.random() < JH.FIXED_DT / 4)
-        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff");
+        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff", { life: 0.9 * this.timeScale });
       // Dash bails and is NOT consumed here: Player.update runs earlier in the
       // step and consumes the buffered edge itself when the dash fires (dash is
       // never movement-gated), so a started dash is detected via dashTimer;
@@ -1676,6 +1677,7 @@
     // Retired from the death path (death now routes to the Church via
     // startPlayerDeathSeq); kept for a future manual quit/give-up affordance.
     gameOver() {
+      this.deepdiving = false;
       this.state = "over";
       document.getElementById("over-stats").textContent =
         "You reached " + (JH.LEVEL1.waves[Math.max(0, this.waveIndex)].name) +
