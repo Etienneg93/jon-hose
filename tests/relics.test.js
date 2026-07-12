@@ -80,6 +80,15 @@ test("kibble grant matches pickup semantics", () => {
   assert.ok(Math.abs(pl.kibbleRegen - JH.KIBBLE_PACK.heal / JH.KIBBLE_PACK.dur) < 1e-9);
 });
 
+test("prayerBeadProc tops up pressureBuffT without shortening it", () => {
+  const pl = { pressureBuffT: 2 };
+  JH.Balance.prayerBeadProc(pl, JH.RELIC_TUNE);
+  assert.strictEqual(pl.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+  pl.pressureBuffT = 20;
+  JH.Balance.prayerBeadProc(pl, JH.RELIC_TUNE);
+  assert.strictEqual(pl.pressureBuffT, 20);
+});
+
 test("JH.KIBBLE_PACK is shaped as the shop expects", () => {
   assert.strictEqual(JH.KIBBLE_PACK.cost, 30);
   assert.strictEqual(JH.KIBBLE_PACK.heal, 25);

@@ -2496,7 +2496,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       const spd = enraged ? d.speed * 1.6 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -2812,7 +2812,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       if (this.fireFx > 0) this.fireFx -= dt;
 
@@ -3417,7 +3417,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       const spd = enraged ? d.speed * 1.4 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -3963,7 +3963,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       if (this.fireFx > 0) this.fireFx -= dt;
 
@@ -4167,7 +4167,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       // Pin to the right edge of the arena; never moves.
       this.x = game.bounds.maxX - 6;
@@ -4609,7 +4609,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       if (this.strikeFx > 0) this.strikeFx -= dt;
       if (this.shootPoseT > 0) this.shootPoseT -= dt;

@@ -592,6 +592,11 @@
             superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
           });
           se.spawnGrace = 0.6;
+          // Prayer Bead: a super-elite's arrival also grants the pressure buff.
+          if (this.relics && this.relics.prayer_bead && this.player && this.player.alive) {
+            JH.Balance.prayerBeadProc(this.player, JH.RELIC_TUNE);
+            this.float(this.player.x, this.player.y - 40, "PRESSURE", "#ffd23f");
+          }
         }
       }
     },

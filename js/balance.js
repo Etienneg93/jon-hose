@@ -320,6 +320,11 @@
       pl.kibbleTimer += pack.dur;
       pl.kibbleRegen = pack.heal / pack.dur;
     },
+
+    // Prayer Bead grant: extend-only pressure buff (boss enrage + super-elite arrival).
+    prayerBeadProc(pl, tune) {
+      pl.pressureBuffT = Math.max(pl.pressureBuffT || 0, (tune || root.JH.RELIC_TUNE).prayerBeadDur);
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;
