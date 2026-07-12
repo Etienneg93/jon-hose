@@ -2872,14 +2872,19 @@
     constructor(x, y) {
       this.x = x; this.y = y; this.z = 0; this.facing = 1;
       this.t = 0; this.bodyW = 16; this.near = false;
-      this.videoT = 0; this.titleIdx = 0;
+      this.videoT = 0; this.titleIdx = 0; this.marqueeT = 0;
     }
     update(dt) {
       this.t += dt;
+      // Marquee clock: advances every sim step (scaled while deepdiving, 1x
+      // parked) so the title always scrolls; per-title reset below makes each
+      // new title enter from the right edge.
+      this.marqueeT += dt;
       // Title cycling rides videoT, which tickDeepdive only advances while
       // sitting (scaled steps) — this no-ops while parked.
       if (this.videoT >= JH.DEEPDIVE.titleSwap) {
         this.videoT = 0;
+        this.marqueeT = 0;
         this.titleIdx = (this.titleIdx + 1) % JH.DEEPDIVE.titles.length;
       }
     }
@@ -2887,16 +2892,16 @@
       const D = JH.DEEPDIVE;
       const on = !!(JH.Game && JH.Game.deepdiving);
       const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
-      Assets.shadow(ctx, sx, sy, 11);
+      Assets.shadow(ctx, sx, sy, 12);
       ctx.save();
       // Screen glow halo is the differentiator from the vendor's chalkboard
       // sign (same dark-navy palette, no light source of its own) — the TV
       // reads as a lit display even parked, and flares while deepdiving.
-      Assets.glow(ctx, sx, sy - 29, on ? 24 : 16, "#7ff0ff", on ? 0.6 : 0.32);
+      Assets.glow(ctx, sx, sy - 31, on ? 26 : 17, "#7ff0ff", on ? 0.6 : 0.32);
 
-      ctx.fillStyle = "#12161f"; ctx.fillRect(sx - 18, sy - 42, 36, 26);   // cabinet
-      ctx.fillStyle = "#232c3d"; ctx.fillRect(sx - 16, sy - 40, 32, 22);   // bezel
-      const screenX = sx - 15, screenY = sy - 39, screenW = 30, screenH = 20;
+      ctx.fillStyle = "#12161f"; ctx.fillRect(sx - 21, sy - 45, 42, 29);   // cabinet
+      ctx.fillStyle = "#232c3d"; ctx.fillRect(sx - 19, sy - 43, 38, 25);   // bezel
+      const screenX = sx - 18, screenY = sy - 42, screenW = 36, screenH = 23;
       ctx.fillStyle = on ? "#c8f6ff" : "#5fd3ec";
       ctx.fillRect(screenX, screenY, screenW, screenH);
 
@@ -2907,13 +2912,21 @@
       ctx.fillStyle = "#0b2530";
       ctx.fillRect(screenX, screenY, screenW, screenH - 6);   // video pane above the scrub row
 
+      // Title marquee: full string scrolls right-to-left on marqueeT (scaled
+      // time — races at ramp, which is the joke), looping with a gap; two
+      // copies one period apart keep the loop seamless under the clip.
       ctx.textAlign = "left";
       ctx.font = "bold 5px monospace"; ctx.fillStyle = "#eafcff";
-      ctx.fillText(D.titles[this.titleIdx] || "", screenX + 1, screenY + 6);
+      const title = D.titles[this.titleIdx] || "";
+      const tw = ctx.measureText(title).width;
+      const period = tw + 24;                               // 24px inter-loop gap
+      const mx = screenX + screenW - ((this.marqueeT * 40) % period);
+      ctx.fillText(title, mx, screenY + 7);
+      ctx.fillText(title, mx + period, screenY + 7);
 
       const views = (3 + this.titleIdx * 7) % 10;   // stable-per-title, no RNG
       ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
-      ctx.fillText(views + "M views", screenX + 1, screenY + 13);
+      ctx.fillText(views + "M views", screenX + 1, screenY + 14);
 
       // Scrub bar races over D.titleSwap scaled seconds — visible proof the
       // video (and the world behind it) is running fast.
@@ -2921,18 +2934,20 @@
       ctx.fillStyle = "#1a3a44"; ctx.fillRect(screenX + 1, screenY + screenH - 4, screenW - 2, 2);
       ctx.fillStyle = "#ff3b3b"; ctx.fillRect(screenX + 1, screenY + screenH - 4, (screenW - 2) * frac, 2);
 
-      // "UP NEXT" thumbnail nub, top-right corner of the screen.
-      ctx.fillStyle = "#1a2230"; ctx.fillRect(screenX + screenW - 9, screenY + 1, 8, 6);
+      // Up-next nub: bottom-right, below the title band so it never overdraws
+      // the marquee; sits just above the scrub row.
+      const nx = screenX + screenW - 9, ny = screenY + screenH - 11;
+      ctx.fillStyle = "#1a2230"; ctx.fillRect(nx, ny, 8, 6);
       ctx.fillStyle = on ? "#7ff0ff" : "#4a8a9a";
       ctx.beginPath();
-      ctx.moveTo(screenX + screenW - 6, screenY + 2.5);
-      ctx.lineTo(screenX + screenW - 6, screenY + 5.5);
-      ctx.lineTo(screenX + screenW - 3, screenY + 4);
+      ctx.moveTo(nx + 3, ny + 1.5);
+      ctx.lineTo(nx + 3, ny + 4.5);
+      ctx.lineTo(nx + 6, ny + 3);
       ctx.closePath(); ctx.fill();
       ctx.restore();
 
       ctx.fillStyle = "#0d1420";
-      ctx.fillRect(sx - 11, sy - 16, 3, 16); ctx.fillRect(sx + 8, sy - 16, 3, 16);   // legs
+      ctx.fillRect(sx - 13, sy - 16, 3, 16); ctx.fillRect(sx + 10, sy - 16, 3, 16);   // legs
       ctx.restore();
     }
   }

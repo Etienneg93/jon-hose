@@ -2563,7 +2563,7 @@
       // Walk-up prompt over the Deepdive TV while it's parked (not sat down).
       if (this.state === "play" && this.deepdiveTV && this.deepdiveTV.near && !this.deepdiving) {
         const tsx = Math.round(this.deepdiveTV.x - JH.Camera.x);
-        const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 48;
+        const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 51;   // clears the 45px cabinet top
         this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
         this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E: DEEPDIVE", tsx + 1, tsy + 1);
         this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E: DEEPDIVE", tsx, tsy);
