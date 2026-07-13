@@ -62,6 +62,37 @@ test("beamCovers: forward, in-range, within the depth swath", () => {
   assert.ok(!TB.beamCovers(43, hoseBand, 43, hoseRange + 1, hoseRange), "beyond range out");
 });
 
+test("hoseStreamY: leaves the cannon at cannonH, 0 at/beyond aimDist, monotonic between", () => {
+  assert.strictEqual(TB.hoseStreamY(0, CFG), CFG.cannonH);
+  assert.strictEqual(TB.hoseStreamY(CFG.aimDist, CFG), 0);
+  assert.strictEqual(TB.hoseStreamY(CFG.aimDist + 40, CFG), 0, "clamped at 0 past aimDist");
+  let prev = TB.hoseStreamY(0, CFG);
+  for (let dx = 5; dx <= CFG.aimDist; dx += 5) {
+    const y = TB.hoseStreamY(dx, CFG);
+    assert.ok(y <= prev, "non-increasing as dx grows");
+    prev = y;
+  }
+});
+
+test("hoseDpsMult: full before the taper, floors at range, 0 past range, linear midpoint", () => {
+  const range = CFG.hoseRange;
+  const taperStart = range * (1 - CFG.endFalloff);
+  assert.strictEqual(TB.hoseDpsMult(taperStart - 1, range, CFG), 1);
+  assert.strictEqual(TB.hoseDpsMult(range, range, CFG), CFG.endFalloffFloor);
+  assert.strictEqual(TB.hoseDpsMult(range + 1, range, CFG), 0);
+  const mid = TB.hoseDpsMult(taperStart + (range - taperStart) / 2, range, CFG);
+  const expectedMid = 1 - 0.5 * (1 - CFG.endFalloffFloor);
+  assert.ok(Math.abs(mid - expectedMid) < 1e-9, "midpoint of the taper is halfway to the floor");
+});
+
+test("hose hit window: first-hit dx for a given body height matches the closed form", () => {
+  const bodyH = 24;
+  const closedForm = CFG.aimDist * (1 - (bodyH + CFG.hoseBand * 0.5) / CFG.cannonH);
+  // Just below the closed-form dx the stream is still too high to touch the body.
+  assert.ok(TB.hoseStreamY(closedForm - 1, CFG) - CFG.hoseBand * 0.5 > bodyH, "misses just before first-hit dx");
+  assert.ok(TB.hoseStreamY(closedForm + 1, CFG) - CFG.hoseBand * 0.5 <= bodyH, "hits just after first-hit dx");
+});
+
 test("buildTimeline: deterministic for a fixed seed", () => {
   const a = TB.buildTimeline(CFG, seeded(1234));
   const b = TB.buildTimeline(CFG, seeded(1234));

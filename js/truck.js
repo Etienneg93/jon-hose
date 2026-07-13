@@ -23,8 +23,10 @@
   // Hero truck sprite lives in the "truck" painter (assets.js): a 5-frame
   // wheel-spin strip. CANNON_* is the spray origin offset from the draw anchor
   // (horizontal centre, feet on the road) to the roof cannon's barrel tip; the
-  // wheel frame advances every DRIVE_STEP px of scroll.
-  const CANNON_DX = 26, CANNON_DY = -69, DRIVE_STEP = 12;
+  // wheel frame advances every DRIVE_STEP px of scroll. CANNON_DY mirrors
+  // JH.TRUCKRUN.cannonH (config.js loads first) — one number for the sprite's
+  // visual cannon height AND the balance math's stream-leave height.
+  const CANNON_DX = 26, CANNON_DY = -JH.TRUCKRUN.cannonH, DRIVE_STEP = 12;
   // Visual-only downward nudge for the hero sprite (no shadow now anchors it).
   const TRUCK_DRAW_DY = 5;
 
@@ -238,14 +240,20 @@
       const dps = C.hoseDps * pr.dmgScale;
       const nozzleX = this._nozzleWorldX(sc);
 
-      // The hose clears the road: any shootable enemy IN FRONT dies, across all
-      // lanes (no lane-match needed). Wrecks are obstacles (dodge them) and
-      // hydrants are positional (pop on contact) — both beam-immune.
+      // The hose clears the road, but WYSIWYG: it only bites where the drawn
+      // stream is actually low enough to touch the hazard's body — the jet
+      // dives from the roof cannon and only hugs the ground past aimDist (see
+      // TruckBalance.hoseStreamY). No lane-match needed (depth is ignored,
+      // same as before — the stream sweeps every lane). Wrecks are obstacles
+      // (dodge them) and hydrants are positional (pop on contact) — both
+      // beam-immune. Damage tapers over the last stretch of range (hoseDpsMult).
+      const TB = JH.TruckBalance;
       for (const h of sc.hazards) {
         if (h.kind === "wreck" || h.kind === "hydrant") continue;
         const dx = h.worldX - nozzleX;
-        if (dx >= 0 && dx <= range) {
-          h.hp -= dps * dt;
+        const bodyH = (JH.ENEMIES[h.kind] && JH.ENEMIES[h.kind].bodyH) || 24;
+        if (dx >= 0 && dx <= range && TB.hoseStreamY(dx, C) - C.hoseBand * 0.5 <= bodyH) {
+          h.hp -= dps * TB.hoseDpsMult(dx, range, C) * dt;
           // Same feedback as Jon's hose: wetness soak + hurt flash + knockback
           // (stronger here — truck-mounted cannon). Shoves the enemy forward.
           h.wet = Math.min(1, h.wet + JH.JUICE.wetPerHit);
@@ -279,27 +287,41 @@
       }
 
       // Emit the hose cone from the TOP-mounted cannon — same water-droplet
-      // stream as Jon's hose (JH.PAL colours, cone spread), arcing forward down
-      // onto the road ahead.
+      // stream as Jon's hose (JH.PAL colours, cone spread), diving forward
+      // onto the road ahead (steep enough to land around aimDist, matching
+      // the hit-test dive — see hoseStreamY).
       const gunX = t.screenX + CANNON_DX, gunY = JH.Geo.feetScreenY(t.depth, 0) + CANNON_DY;
+      const groundY = JH.Geo.feetScreenY(t.depth, 0);   // this lane's road line — droplets skim here, not below
       const sputter = pr.dmgScale < 1;
       const spread = sputter ? 0.5 : 1;
       const count = sputter ? 2 : 4;
       for (let i = 0; i < count; i++) {
         const perp = (Math.random() - 0.5) * C.hoseBand * 1.5 * spread;
+        const vx = 210 + Math.random() * 150;
         sc.spray.push({
           x: gunX + Math.random() * 4, y: gunY + perp * 0.35,
-          vx: 210 + Math.random() * 150, vy: perp * 0.9 + 18,   // downward bias → arcs onto the lane
+          vx: vx, vy: (C.cannonH / C.aimDist) * vx + perp * 0.9,   // dive slope matches hoseStreamY's descent
           life: range / 260 + Math.random() * 0.05,
           size: Math.random() > 0.5 ? 3 : 2,
           color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
+          groundY: groundY,
         });
       }
     },
 
     _updateSpray(dt) {
       const sc = this.scene;
-      for (const d of sc.spray) { d.x += d.vx * dt; d.y += d.vy * dt; d.vy += 60 * dt; d.life -= dt; }
+      for (const d of sc.spray) {
+        d.x += d.vx * dt;
+        // Dive then run: once the droplet reaches its lane's road line, skim
+        // it instead of sinking through (no more fall).
+        if (d.groundY != null && d.vy > 0 && d.y + d.vy * dt >= d.groundY) {
+          d.y = d.groundY; d.vy = 0;
+        } else {
+          d.y += d.vy * dt; d.vy += 60 * dt;
+        }
+        d.life -= dt;
+      }
       sc.spray = sc.spray.filter((d) => d.life > 0);
     },
 
@@ -1308,9 +1330,12 @@
       // KeyH dev overlay — the run's REAL hit variables:
       // magenta = the truck's collide rect (screenX ± hitHX, depth ± hitHD —
       // the exact _collide test); red squares = hazard anchors (points vs
-      // that rect; gold = beam-immune wreck/hydrant); cyan = hose swath while
-      // spraying (nozzle → live range, ALL lanes — _hose has no depth test);
-      // orange = fire-patch radii; green = Firewall weak-spot depth band.
+      // that rect; gold = beam-immune wreck/hydrant); cyan = the REAL hose
+      // stream band while spraying — WYSIWYG: heights are above-ground per
+      // lane (the dive/road-hug profile from hoseStreamY is shared across
+      // all lanes), filled ±hoseBand/2 around the centerline, nozzle→range;
+      // amber ticks mark where dps starts tapering and max range; orange =
+      // fire-patch radii; green = Firewall weak-spot depth band.
       if (JH.DEBUG_HITBOX) {
         ctx.save(); ctx.lineWidth = 1;
         const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0);
@@ -1324,13 +1349,27 @@
           ctx.strokeRect(hx - 3, hy - 3, 6, 6);
         }
         if (t.spraying) {
-          const pr = JH.TruckBalance.truckPressure(C, t.water / C.tank);
+          const TB = JH.TruckBalance;
+          const pr = TB.truckPressure(C, t.water / C.tank);
           const nx = this._nozzleWorldX(sc) - sc.scrollX;
           const range = C.hoseRange * pr.rangeMult;
-          const top = JH.Geo.feetScreenY(C.lanes[0], 0) - 24;
-          const bot = JH.Geo.feetScreenY(C.lanes[C.lanes.length - 1], 0) + 6;
-          ctx.strokeStyle = "#00e5ff";
-          ctx.strokeRect(nx, top, range, bot - top);
+          const groundY = JH.Geo.feetScreenY(t.depth, 0);
+          const steps = 24;
+          const topY = (dx) => groundY - (TB.hoseStreamY(dx, C) + C.hoseBand * 0.5);
+          const botY = (dx) => groundY - Math.max(0, TB.hoseStreamY(dx, C) - C.hoseBand * 0.5);
+          ctx.beginPath();
+          for (let i = 0; i <= steps; i++) {
+            const dx = (range * i) / steps, y = topY(dx);
+            if (i === 0) ctx.moveTo(nx + dx, y); else ctx.lineTo(nx + dx, y);
+          }
+          for (let i = steps; i >= 0; i--) { const dx = (range * i) / steps; ctx.lineTo(nx + dx, botY(dx)); }
+          ctx.closePath();
+          ctx.globalAlpha = 0.3; ctx.fillStyle = "#00e5ff"; ctx.fill();
+          ctx.globalAlpha = 1; ctx.strokeStyle = "#00e5ff"; ctx.stroke();
+          const taperX = nx + range * (1 - C.endFalloff);
+          ctx.strokeStyle = "#ffe6a0";
+          ctx.beginPath(); ctx.moveTo(taperX, groundY - 5); ctx.lineTo(taperX, groundY + 5); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(nx + range, groundY - 5); ctx.lineTo(nx + range, groundY + 5); ctx.stroke();
         }
         for (const p of sc.firePatches) {
           const px = p.worldX - sc.scrollX, py = JH.Geo.feetScreenY(p.depth, 0);

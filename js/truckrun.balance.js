@@ -38,6 +38,25 @@
       return dx >= 0 && dx <= range && Math.abs(targetDepth - truckDepth) <= hoseBand;
     },
 
+    // WYSIWYG stream centerline height above the road at forward distance dx
+    // (dx = target.worldX - nozzleX). Leaves the roof cannon at cfg.cannonH,
+    // dives linearly to the road by cfg.aimDist, then hugs the ground (0) the
+    // rest of the way — matches the ground-hazard hose hit test 1:1.
+    hoseStreamY(dx, cfg) {
+      return Math.max(0, cfg.cannonH * (1 - dx / cfg.aimDist));
+    },
+
+    // Damage falloff along the stream: full dps out to range*(1-endFalloff),
+    // then linear down to endFalloffFloor exactly at range, 0 beyond.
+    hoseDpsMult(dx, range, cfg) {
+      if (dx < 0 || dx > range) return 0;
+      const taperStart = range * (1 - cfg.endFalloff);
+      if (dx <= taperStart) return 1;
+      const span = range - taperStart;
+      const k = span > 0 ? (dx - taperStart) / span : 1;
+      return 1 - k * (1 - cfg.endFalloffFloor);
+    },
+
     // Deterministic ~60s spawn schedule, sorted by `at`. rng is injectable for
     // tests (defaults to Math.random). Combat hazards ramp across three windows
     // and stop before the arrival tail; hydrants and crosses are laid over the
