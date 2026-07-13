@@ -2946,7 +2946,7 @@
       ctx.fillText(title, mx, screenY + 7);
       ctx.fillText(title, mx + period, screenY + 7);
 
-      const views = (3 + this.titleIdx * 7) % 10;   // stable-per-title, no RNG
+      const views = (3 + this.titleIdx * 7) % 9 + 1;   // stable-per-title, no RNG, never 0M
       ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
       ctx.fillText(views + "M views", screenX + 1, screenY + 14);
 
