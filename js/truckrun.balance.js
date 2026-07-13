@@ -39,15 +39,14 @@
     },
 
     // WYSIWYG stream centerline height above the road at forward distance dx
-    // (dx = target.worldX - nozzleX). Straight-then-droop: level at cannonH
-    // until range*(1-endFalloff), then a parabolic gravity droop from
-    // cannonH to 0 at exactly range.
+    // (dx = target.worldX - nozzleX). One ballistic parabola from the muzzle
+    // to the road at exactly range — near-flat early (gravity is quadratic:
+    // only ~6% dropped by quarter range), sagging mid-flight, diving at the
+    // tail. No piecewise knee — the bend IS gravity.
     // Matches the ground-hazard hose hit test 1:1 (see truck.js _hose).
     hoseStreamY(dx, range, cfg) {
-      const droopStart = range * (1 - cfg.endFalloff);
-      if (dx <= droopStart) return cfg.cannonH;
-      const k = Math.min(1, (dx - droopStart) / (range - droopStart));
-      return Math.max(0, cfg.cannonH * (1 - k * k));   // parabolic — gravity bites at the tail
+      const k = Math.min(1, Math.max(0, dx) / range);
+      return Math.max(0, cfg.cannonH * (1 - k * k));
     },
 
     // Damage falloff along the stream: full dps out to range*(1-endFalloff),

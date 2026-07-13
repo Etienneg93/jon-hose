@@ -62,25 +62,24 @@ test("beamCovers: forward, in-range, within the depth swath", () => {
   assert.ok(!TB.beamCovers(43, hoseBand, 43, hoseRange + 1, hoseRange), "beyond range out");
 });
 
-test("hoseStreamY: dead level at cannonH until the droop, gravity droop to 0 at range", () => {
+test("hoseStreamY: one ballistic parabola — near-flat early, road at exactly range, no knee", () => {
   const range = CFG.hoseRange;
-  const droopStart = range * (1 - CFG.endFalloff);
-  // Straight-then-droop (user spec): NO settle, NO cruise-height drop — the
-  // stream holds the cannon's own height for the whole straight stretch.
-  for (let dx = 0; dx <= droopStart; dx += 10)
-    assert.strictEqual(TB.hoseStreamY(dx, range, CFG), CFG.cannonH, "level at dx=" + dx);
+  assert.strictEqual(TB.hoseStreamY(0, range, CFG), CFG.cannonH, "leaves at cannon height");
   assert.strictEqual(TB.hoseStreamY(range, range, CFG), 0, "on the road at exactly range");
-  // Droop never rises.
-  let prev = TB.hoseStreamY(droopStart, range, CFG);
-  for (let dx = droopStart + 2; dx <= range; dx += 2) {
+  // Quadratic gravity signature: quarter range has shed only 1/16 of the
+  // height, half range exactly a quarter.
+  assert.ok(Math.abs(TB.hoseStreamY(range * 0.25, range, CFG) - CFG.cannonH * (1 - 0.0625)) < 1e-9);
+  assert.ok(Math.abs(TB.hoseStreamY(range * 0.5, range, CFG) - CFG.cannonH * 0.75) < 1e-9);
+  // Smooth + monotonic: never rises, and adjacent-step drops grow gradually
+  // (no piecewise knee — second differences stay tiny and constant-signed).
+  let prev = TB.hoseStreamY(0, range, CFG), prevDrop = 0;
+  for (let dx = 4; dx <= range; dx += 4) {
     const y = TB.hoseStreamY(dx, range, CFG);
-    assert.ok(y <= prev, "droop non-increasing at dx=" + dx);
-    prev = y;
+    const drop = prev - y;
+    assert.ok(drop >= 0, "non-increasing at dx=" + dx);
+    assert.ok(drop >= prevDrop - 1e-9, "bend only steepens (no knee) at dx=" + dx);
+    prev = y; prevDrop = drop;
   }
-  // Parabolic tail: a quarter into the droop it has shed well under a quarter
-  // of cannonH (gravity starts shallow — quadratic, not linear).
-  const early = TB.hoseStreamY(droopStart + (range - droopStart) * 0.25, range, CFG);
-  assert.ok(CFG.cannonH - early < CFG.cannonH * 0.25, "droop starts shallow");
 });
 
 test("hoseDpsMult: full before the taper, floors at range, 0 past range, linear midpoint", () => {
@@ -94,20 +93,14 @@ test("hoseDpsMult: full before the taper, floors at range, 0 past range, linear 
   assert.ok(Math.abs(mid - expectedMid) < 1e-9, "midpoint of the taper is halfway to the floor");
 });
 
-test("hose hit window: straight stretch clears ground bodies; hits land in the droop", () => {
+test("hose hit window: first-hit dx solves the ballistic closed form", () => {
   const range = CFG.hoseRange;
-  const droopStart = range * (1 - CFG.endFalloff);
   const bodyH = 28;
-  // Straight stretch: band bottom = cannonH - hoseBandH, above every roster
-  // bodyH — the water visibly flies over ground enemies until the droop.
-  assert.ok(CFG.cannonH - CFG.hoseBandH > 36, "level stream clears even the tallest roster body");
-  assert.ok(TB.hoseStreamY(droopStart - 1, range, CFG) - CFG.hoseBandH > bodyH, "no hit just before the droop");
-  // First-hit dx solves cannonH*(1-k^2) - hoseBandH = bodyH inside the droop.
-  const k = Math.sqrt(1 - (bodyH + CFG.hoseBandH) / CFG.cannonH);
-  const firstHit = droopStart + k * (range - droopStart);
+  // Hit when cannonH*(1-(dx/range)^2) - hoseBandH <= bodyH:
+  const firstHit = range * Math.sqrt(1 - (bodyH + CFG.hoseBandH) / CFG.cannonH);
   assert.ok(TB.hoseStreamY(firstHit - 1, range, CFG) - CFG.hoseBandH > bodyH, "misses just before first-hit dx");
   assert.ok(TB.hoseStreamY(firstHit + 1, range, CFG) - CFG.hoseBandH <= bodyH, "hits just after first-hit dx");
-  assert.ok(firstHit < range, "the landing window exists before max range");
+  assert.ok(firstHit > 0 && firstHit < range, "a landing window exists before max range");
 });
 
 test("buildTimeline: deterministic for a fixed seed", () => {
