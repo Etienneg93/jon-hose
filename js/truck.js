@@ -62,6 +62,10 @@
         // Hazards/patches/embers, hydrants, pickups; firewall is the climax.
         hazards: [], firePatches: [], embers: [], spray: [],
         hydrants: [], pickups: [], firewall: null,
+        // Scripted chase sequences unrolled from the "rockrain"/"fusevolley"
+        // timeline container events — each entry ticks its own timer and
+        // spawns into `hazards` via the normal drop-in/movement machinery.
+        rockrains: [], fuseVolleys: [],
         waves: [], floaters: [],   // hydrant water waves + floating popups
         lowWaterCd: 0,             // low-tank hydrant-lifeline cooldown
         slowT: 0, shakeT: 0,
@@ -377,6 +381,8 @@
           this._spawnHazard(ev);
         else if (ev.kind === "cross")
           this._spawnCross(sc.scrollX + JH.VIEW_W + 24, ev.depth, ev.value);
+        else if (ev.kind === "rockrain") this._startRockrain();
+        else if (ev.kind === "fusevolley") this._startFuseVolley(ev.flavor);
       }
     },
 
@@ -389,8 +395,11 @@
       };
       if (ev.kind === "wreck") {
         // Debris drops in ahead of the truck (telegraphed), then lands solid.
+        // dropIn flags the airborne-fall branch in _updateHazards (also used
+        // by rockrain drops and drop-in-flavor volley fuses).
         h.hp = C.wreckHp; h.dmg = C.wreckDmg;
         const D = C.debris;
+        h.dropIn = true;
         h.dropScreenX = C.truckScreenX + D.dropAhead;
         h.worldX = sc.scrollX + h.dropScreenX;
         h.z = D.dropHeight; h.dropT = D.fallDur; h.landed = false;
@@ -402,6 +411,109 @@
       else if (ev.kind === "hydrant") { h.hp = C.hydrantHp; h.dmg = 0; }
       h.maxHp = h.hp;
       sc.hazards.push(h);
+    },
+
+    // ---- Rock-rain / fuse-volley: chase sequences unrolled from the
+    // "rockrain"/"fusevolley" timeline container events. Each active
+    // sequence ticks in _updateSequences (called alongside _updateHazards)
+    // and spawns real hazards through the normal drop-in/movement paths —
+    // random per-drop lane picks are runtime (like fuse wander direction
+    // elsewhere in this file), not part of buildTimeline's determinism.
+    _startRockrain() {
+      const sc = this.scene, RR = JH.TRUCKRUN.rockrain;
+      const n = RR.dropsMin + Math.floor(Math.random() * (RR.dropsMax - RR.dropsMin + 1));
+      sc.rockrains.push({ t: 0, nextAt: 0, left: n, lastLane: null });
+      sc.banner = "ROCK SLIDE!"; sc.bannerT = 1.4;
+    },
+
+    _startFuseVolley(flavor) {
+      const sc = this.scene, FV = JH.TRUCKRUN.fusevolley;
+      const n = FV.countMin + Math.floor(Math.random() * (FV.countMax - FV.countMin + 1));
+      sc.fuseVolleys.push({ t: 0, nextAt: 0, left: n, flavor: flavor });
+      sc.banner = flavor === "fling" ? "INCOMING!" : "FUSES ABOVE!"; sc.bannerT = 1.4;
+    },
+
+    // Ticks active rockrain/fuse-volley sequences, spawning their drops on
+    // schedule. Called every non-intro frame alongside _updateHazards.
+    _updateSequences(dt) {
+      const sc = this.scene, C = JH.TRUCKRUN;
+      for (const rr of sc.rockrains) {
+        rr.t += dt;
+        if (rr.left > 0 && rr.t >= rr.nextAt) {
+          const RR = C.rockrain;
+          const choices = C.lanes.filter((d) => d !== rr.lastLane);
+          const depth = choices.length ? choices[(Math.random() * choices.length) | 0] : C.lanes[(Math.random() * C.lanes.length) | 0];
+          rr.lastLane = depth;
+          this._spawnHazard({ kind: "wreck", depth: depth });
+          rr.left--;
+          rr.nextAt = rr.t + RR.gapMin + Math.random() * (RR.gapMax - RR.gapMin);
+        }
+      }
+      sc.rockrains = sc.rockrains.filter((rr) => rr.left > 0);
+
+      for (const fv of sc.fuseVolleys) {
+        fv.t += dt;
+        if (fv.left > 0 && fv.t >= fv.nextAt) {
+          const FV = C.fusevolley;
+          this._spawnVolleyFuse(fv.flavor);
+          fv.left--;
+          fv.nextAt = fv.t + FV.gapMin + Math.random() * (FV.gapMax - FV.gapMin);
+        }
+      }
+      sc.fuseVolleys = sc.fuseVolleys.filter((fv) => fv.left > 0);
+    },
+
+    // One fuse from a volley — either drop-in (mirrors the debris telegraphy:
+    // fixed screen-x ahead of the truck, falls, lands solid) or flung in from
+    // the left edge in an arc that lands at the truck's CURRENT depth (aimed
+    // where you were at spawn time). Both stay airborne/no-collide until
+    // landed (see the dropIn/arc gate in _updateHazards), then behave as a
+    // normal wandering fuse.
+    _spawnVolleyFuse(flavor) {
+      const sc = this.scene, C = JH.TRUCKRUN, E = JH.ENEMIES;
+      const h = {
+        kind: "fuse", dead: false, cd: 0, landed: false,
+        hp: E.fuse.hp * C.fuseHpMult, dmg: E.fuse.blastDmg, speed: E.fuse.speed,
+        wet: 0, knockVX: 0, hurtT: 0,
+      };
+      if (flavor === "drop") {
+        const D = C.debris;
+        h.depth = C.lanes[(Math.random() * C.lanes.length) | 0];
+        h.dropIn = true;
+        h.dropScreenX = C.truckScreenX + D.dropAhead;
+        h.worldX = sc.scrollX + h.dropScreenX;
+        h.z = D.dropHeight; h.dropT = D.fallDur;
+      } else {
+        const FV = C.fusevolley;
+        h.depth = sc.truck.depth;                       // aimed at where you are NOW
+        h.arc = true;
+        h.flingStartX = FV.flingFromX;
+        h.flingLandX = C.truckScreenX + C.debris.dropAhead;
+        h.worldX = sc.scrollX + h.flingStartX;
+        h.z = 0; h.dropT = FV.flingDur;
+      }
+      h.maxHp = h.hp;
+      sc.hazards.push(h);
+    },
+
+    // Fuse contact = an actual small blast: screen shake, a "blast" sting,
+    // and a radial burst of cosmetic embers (dud: true — the ember-vs-truck
+    // hit test in _updateEmbers skips them, so the burst can't double-damage
+    // on top of the contact hit already applied by the caller).
+    _fuseExplode(h) {
+      const sc = this.scene, FB = JH.TRUCKRUN.fuseBlast;
+      sc.shakeT = Math.max(sc.shakeT, FB.shake);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
+      for (let i = 0; i < FB.count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = FB.speedMin + Math.random() * (FB.speedMax - FB.speedMin);
+        sc.embers.push({
+          worldX: h.worldX, depth: h.depth,
+          vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          dmg: 0, life: FB.lifeMin + Math.random() * (FB.lifeMax - FB.lifeMin),
+          dud: true,
+        });
+      }
     },
 
     _updateHazards(dt, C) {
@@ -418,17 +530,27 @@
         if (h.wet > 0) h.wet = Math.max(0, h.wet - JH.JUICE.wetDryPerSec * dt);
         if (h.hurtT > 0) h.hurtT -= dt;
 
-        // Debris still falling in: hold its telegraphed screen-x ahead of the
-        // truck, accelerate down, land solid (shake + thud). No collision while
-        // airborne — the shadow is the "get out of this lane" tell.
-        if (h.kind === "wreck" && !h.landed) {
+        // Still arriving in: either a straight drop-in (dropIn — wrecks +
+        // drop-flavor volley fuses; holds the telegraphed screen-x ahead of
+        // the truck, accelerates down) or a flung arc (arc — fling-flavor
+        // volley fuses; sails in from the left edge to their landing point).
+        // Lands solid (shake + thud). No collision while airborne — the
+        // shadow/arc IS the "get out of this lane" tell.
+        if (!h.landed && (h.dropIn || h.arc)) {
           h.dropT -= dt;
-          const k = Math.max(0, h.dropT / C.debris.fallDur);
-          h.z = C.debris.dropHeight * k * k;
-          h.worldX = sc.scrollX + h.dropScreenX;
-          h.spin *= Math.pow(0.02, dt);
+          if (h.arc) {
+            const FV = C.fusevolley;
+            const p = 1 - Math.max(0, Math.min(1, h.dropT / FV.flingDur));   // 0 at launch → 1 at landing
+            h.worldX = sc.scrollX + h.flingStartX + (h.flingLandX - h.flingStartX) * p;
+            h.z = FV.flingHeight * 4 * p * (1 - p);                          // arcs up then down
+          } else {
+            const k = Math.max(0, h.dropT / C.debris.fallDur);
+            h.z = C.debris.dropHeight * k * k;
+            h.worldX = sc.scrollX + h.dropScreenX;
+            if (h.spin != null) h.spin *= Math.pow(0.02, dt);
+          }
           if (h.dropT <= 0) {
-            h.landed = true; h.z = 0; h.spin = 0;
+            h.landed = true; h.z = 0; if (h.spin != null) h.spin = 0;
             sc.shakeT = Math.max(sc.shakeT, 0.26);
             if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("whack");
           }
@@ -461,19 +583,25 @@
 
         // Collision with the truck. Hydrants pop friendly (refuel, no damage);
         // other hazards deal damage + a brief slow unless dashing/i-frames.
-        if (Math.abs((h.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(h.depth - t.depth) < C.hitHD) {
+        // Wrecks NEVER die here — they're obstacles, not hits, and stay alive
+        // to scroll past (invulnT already blocks a re-hit while they overlap).
+        if (Math.abs((h.worldX - sc.scrollX) - (t.screenX + C.hitOX)) < C.hitHX && Math.abs(h.depth - t.depth) < C.hitHD) {
           if (h.kind === "hydrant") {
             this._popHydrant(h);
           } else if (t.invulnT <= 0) {
             this._damageTruck(h.dmg);
-            if (h.kind === "fuse") this._spawnPatch(h.worldX, h.depth, E.fuse.blastPatchRadius, E.fuse.blastPatchDur);
+            if (h.kind === "fuse") {
+              this._spawnPatch(h.worldX, h.depth, E.fuse.blastPatchRadius, E.fuse.blastPatchDur);
+              this._fuseExplode(h);
+            }
             this._collide(C);
           }
-          h.dead = true;
+          if (h.kind !== "wreck") h.dead = true;
         }
         if (h.worldX < sc.scrollX - 60) h.dead = true;    // passed behind
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
+      this._updateSequences(dt);
     },
 
     // Low-water lifeline: while the tank is under lowWaterFrac, drop extra
@@ -519,7 +647,9 @@
       const sc = this.scene, t = sc.truck;
       for (const e of sc.embers) {
         e.worldX += e.vx * dt; e.depth += e.vy * dt; e.life -= dt;
-        if (Math.abs((e.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(e.depth - t.depth) < C.hitHD) {
+        // dud embers are the cosmetic fuse-explosion burst (_fuseExplode) —
+        // no damage, so they skip the hit test entirely.
+        if (!e.dud && Math.abs((e.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(e.depth - t.depth) < C.hitHD) {
           if (t.invulnT <= 0) this._damageTruck(e.dmg);
           e.life = 0;
         }
@@ -782,6 +912,7 @@
       fin.staged = true;
       sc.hazards = []; sc.firePatches = []; sc.embers = []; sc.spray = [];
       sc.pickups = []; sc.waves = []; sc.floaters = []; sc.firewall = null;
+      sc.rockrains = []; sc.fuseVolleys = [];
       fin.truckX = F.truckStartX;
       fin.jon = { state: "air", x: F.throw.startX, y: 0, rot: 0 };
       fin.jonT = 0;
@@ -849,7 +980,7 @@
       const sc = this.scene, t = sc.truck;
       for (const p of sc.pickups) {
         p.bob += dt;
-        if (Math.abs((p.worldX - sc.scrollX) - t.screenX) < 20 && Math.abs(p.depth - t.depth) < 16) {
+        if (Math.abs((p.worldX - sc.scrollX) - t.screenX) < C.crossGrabX && Math.abs(p.depth - t.depth) < C.crossGrabD) {
           sc.essence += p.value;
           if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(p.value);
           if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin", { pitch: 1.5 });   // Holy Essence pickup
@@ -862,13 +993,29 @@
 
     // Smashed hydrant: refuel the tank AND launch a forward WATER WAVE that
     // shoots down the road, clearing debris + enemies and dousing fire in its
-    // path (see _updateWaves). Shows a +WATER popup.
+    // path (see _updateWaves). Shows a +WATER popup + a small upward burst of
+    // water droplets (splashed: true — skips the splashback hit test in
+    // _updateSpray, cosmetic only).
     _popHydrant(h) {
-      const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck;
+      const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck, HB = C.hydrantBurst;
       t.water = Math.min(C.tank, t.water + C.hydrantRefill);
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin");
       sc.waves.push({ worldX: h.worldX, startX: h.worldX, t: 0 });
       this._floater("+WATER", h.worldX, h.depth, "#9be8ff");
+      const hx = h.worldX - sc.scrollX, groundY = JH.Geo.feetScreenY(h.depth, 0);
+      for (let i = 0; i < HB.count; i++) {
+        const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * HB.spread;   // up-biased cone
+        const spd = HB.speedMin + Math.random() * (HB.speedMax - HB.speedMin);
+        sc.spray.push({
+          x: hx, y: groundY - 6,
+          vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          g: 320, groundY: groundY,
+          life: HB.lifeMin + Math.random() * (HB.lifeMax - HB.lifeMin),
+          size: Math.random() > 0.5 ? 3 : 2,
+          color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
+          splashed: true,
+        });
+      }
     },
 
     // Floating popup text (rises + fades over ~1s), anchored in world-x/depth.
@@ -1155,7 +1302,11 @@
         if (h.kind === "hydrant") {
           A.shadow(ctx, hx, hy, 10); A.draw(ctx, "hydrant", hx, hy, 1, { scale: 1.5 });
         } else if (SPR[h.kind]) {
-          A.shadow(ctx, hx, hy, 7); A.draw(ctx, SPR[h.kind], hx, hy, -1, { t: sc.t, wet: h.wet });
+          // Airborne (drop-in/fling volley fuses): shrink the ground shadow
+          // and lift the sprite by z — the generic baked-sprite painter has
+          // no opt.z, so the caller offsets y directly (unlike "debris").
+          A.shadow(ctx, hx, hy, h.z ? 4 : 7);
+          A.draw(ctx, SPR[h.kind], hx, hy - (h.z || 0), -1, { t: sc.t, wet: h.wet });
         } else {
           // Debris (wreck): real sprite. Falling → growing ground shadow + a
           // lifted, tumbling chunk; landed → a solid obstacle on the road.
@@ -1370,21 +1521,24 @@
       }
 
       // KeyH dev overlay — the run's REAL hit variables:
-      // magenta = the truck's collide rect (screenX ± hitHX, depth ± hitHD —
-      // the exact _collide test); red squares = hazard anchors (points vs
-      // that rect; gold = beam-immune wreck/hydrant); cyan = the REAL hose
-      // stream band while spraying — WYSIWYG: heights are above-ground per
-      // lane (the settle/cruise/droop profile from hoseStreamY is shared
-      // across all lanes), filled ± hoseBandH around the centerline,
-      // nozzle→range; amber ticks mark where the dps taper + droop start
-      // and max range; orange = fire-patch radii; green = Firewall
-      // weak-spot depth band.
+      // magenta = the truck's collide rect ((screenX+hitOX) ± hitHX, depth ±
+      // hitHD — the exact _collide test; drawn hitUpDraw px taller than the
+      // hit test so the box visually covers the sprite's body — collision
+      // itself stays ground-band, grounded hazards only, since airborne
+      // debris/fuses already skip collision via their own landed gate);
+      // red squares = hazard anchors (points vs that rect; gold = beam-immune
+      // wreck/hydrant); cyan = the REAL hose stream band while spraying —
+      // WYSIWYG: heights are above-ground per lane (the settle/cruise/droop
+      // profile from hoseStreamY is shared across all lanes), filled ±
+      // hoseBandH around the centerline, nozzle→range; amber ticks mark
+      // where the dps taper + droop start and max range; orange = fire-patch
+      // radii; green = Firewall weak-spot depth band.
       if (JH.DEBUG_HITBOX) {
         ctx.save(); ctx.lineWidth = 1;
-        const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0);
+        const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0) - C.hitUpDraw;
         const y1 = JH.Geo.feetScreenY(t.depth + C.hitHD, 0);
         ctx.strokeStyle = "#ff00ff";
-        ctx.strokeRect(t.screenX - C.hitHX, y0, C.hitHX * 2, y1 - y0);
+        ctx.strokeRect(t.screenX + C.hitOX - C.hitHX, y0, C.hitHX * 2, y1 - y0);
         for (const h of sc.hazards) {
           const hx = h.worldX - sc.scrollX;
           const hy = JH.Geo.feetScreenY(h.depth, 0) - (h.z || 0);

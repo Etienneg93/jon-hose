@@ -126,6 +126,21 @@
         events.push({ at: round2(10 + r() * 38), kind: "cross", depth: pick(lanes), value: cfg.crossVal });
       }
 
+      // Rock-rain — container events; the runtime scene unrolls each into a
+      // burst of timed wreck drops (own lane per drop), see cfg.rockrain.
+      for (const at of cfg.rockrain.at) {
+        events.push({ at: round2(at + (r() - 0.5) * 2), kind: "rockrain", depth: null });
+      }
+
+      // Fuse volley — container events; flavor (drop-in vs flung-in) is
+      // picked once per volley here so it's reproducible from the seed.
+      for (const at of cfg.fusevolley.at) {
+        events.push({
+          at: round2(at + (r() - 0.5) * 2), kind: "fusevolley", depth: null,
+          flavor: r() < 0.5 ? "drop" : "fling",
+        });
+      }
+
       events.sort((a, b) => a.at - b.at);
       return events;
     },
