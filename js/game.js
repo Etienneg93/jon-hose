@@ -734,7 +734,15 @@
         const nx = this.waveIndex + 1;
         const trig = nx < WAVE_TRIGGERS.length ? this.gatedTriggerX(nx, this.player.x) : Infinity;
         let sx0 = this.player.x + 50;
-        const maxRight = trig - JH.WAVE_GATE.sigilGap;
+        // Clamp the row inside the CURRENT walkable bounds too, not just
+        // clear of the next trigger: a boss killed at the arena's right edge
+        // (locked camera, bounds at the frame) otherwise spawns the lineup
+        // past the level end — invisible AND unreachable (softlocks the
+        // post-Slayer beat, which waits on the pick).
+        const maxRight = Math.min(
+          trig - JH.WAVE_GATE.sigilGap,
+          (this.bounds ? this.bounds.maxX : JH.LEVEL_LEN - 8) - 24
+        );
         if (sx0 + (offers.length - 1) * 46 > maxRight)
           sx0 = maxRight - (offers.length - 1) * 46;
         this.sigils = offers.map((o, i) => new JH.Sigil(sx0 + i * 46, 56, o));
