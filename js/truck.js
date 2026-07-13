@@ -760,7 +760,12 @@
       if (!fw.surge && (fw.surgeT -= dt) <= 0) { fw.surgeT = FW.surgeCd; fw.surge = { x: fw.screenX, depth: fw.wsDepth }; this._flash("SURGE!", 0.7); }
       if (fw.surge) {
         const s = fw.surge; s.x -= FW.surgeSpeed * dt;
-        if (Math.abs(s.x - t.screenX) < FW.surgeHitHX && Math.abs(s.depth - t.depth) < FW.surgeHitHD && t.invulnT <= 0) {
+        // Box-vs-box on x: the bolt connects when its box touches the truck's
+        // BODY rect (not the center point — a 14px bolt vs a 112px sprite
+        // made visible pass-throughs deal nothing). Depth stays the bolt's
+        // own ±surgeHitHD lane band.
+        if (Math.abs(s.x - (t.screenX + C.hitOX)) < FW.surgeHitHX + C.hitHX
+            && Math.abs(s.depth - t.depth) < FW.surgeHitHD && t.invulnT <= 0) {
           this._damageTruck(FW.surgeDmg); this._collide(C); fw.surge = null;
         } else if (s.x < -10) fw.surge = null;
       }
