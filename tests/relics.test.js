@@ -185,9 +185,13 @@ test("rollWheelStock: slot tiers, upgrade odds, no dupes", () => {
   // rng -> 0: upgrade always procs at act 3 => slot 3 is relic-grade
   s = JH.Balance.rollWheelStock(JH.RELICS, {}, 3, () => 0);
   assert.strictEqual(tierOf(s[2]), "relic");
-  // act -1: odds[0] = 0, so even rng 0 stays rare AND no relic-grade exists anyway
+  // act -1 (below SHOP.wheelAllCommonsBelowAct): the whole wheel is commons —
+  // nothing unbuyable on the first wallet's shelf.
   s = JH.Balance.rollWheelStock(JH.RELICS, {}, -1, () => 0);
-  assert.notStrictEqual(tierOf(s[2]), "relic");
+  assert.deepStrictEqual(s.map(tierOf), ["common", "common", "common"]);
+  assert.strictEqual(new Set(s).size, 3, "three distinct commons");
+  // knob shape: the gate is config-driven
+  assert.strictEqual(typeof JH.SHOP.wheelAllCommonsBelowAct, "number");
 });
 
 test("rollWheelStock: exhaustion falls back across tiers, then null", () => {

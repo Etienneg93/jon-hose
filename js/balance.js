@@ -69,6 +69,11 @@
         return null;
       };
       const shop = (root.JH && root.JH.SHOP) || {};
+      // Act 1 wheel: commons only — the first wallet can't touch rares, so
+      // nothing unbuyable sits on the shelf. No fallback past common: the
+      // 8-common pool can't exhaust across 3 slots.
+      if (shop.wheelAllCommonsBelowAct != null && actLevel < shop.wheelAllCommonsBelowAct)
+        return [draw(["common"]), draw(["common"]), draw(["common"])];
       const oddsArr = shop.relicGradeOdds || [0, 0, 0, 0];
       const odds = oddsArr[Math.max(0, Math.min(oddsArr.length - 1, actLevel + 1))] || 0;
       const slot3Chain = (pools.relic.length && r() < odds)

@@ -69,6 +69,19 @@
     range: 28,
     vendorCollideR: 13,   // solid feet radius (Balance.propPushout, player-only)
     relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
+    wheelAllCommonsBelowAct: 0,   // actLevel < this: every wheel slot rolls common (Act 1 wallets can't touch rares)
+  };
+
+  // Pressure Sermon (water legendary): spraying `charge` seconds arms it
+  // (pip on Jon); releasing the hose looses a forward-traveling water wave.
+  // The wavefront is the hitbox: each enemy is hit once as the front passes.
+  JH.SERMON = {
+    charge: 0.8,     // s of continuous (non-dry) spray to arm
+    dmg: 15,         // flat damage as the front passes
+    kb: 220,         // knockback impulse
+    speed: 260,      // px/s wavefront travel
+    range: 190,      // px before the wave dissipates
+    halfDepth: 26,   // depth half-band the front covers
   };
 
   // Deepdive TV: kibble-accelerator shop prop. Sitting fast-forwards the WHOLE
@@ -317,7 +330,7 @@
     touchDmg: 14, contactCd: 0.9, suds: 120, color: "boss",
     slamDmg: 20, slamRange: 40, slamWind: 0.85,
     sweepDmg: 16, sweepRange: 56, sweepWind: 1.0,
-    summonCd: 6.5, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks
+    summonCd: 9, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks; summons also stop once dropBudget is dry
   };
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable
