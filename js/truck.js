@@ -461,19 +461,44 @@
 
         // Collision with the truck. Hydrants pop friendly (refuel, no damage);
         // other hazards deal damage + a brief slow unless dashing/i-frames.
-        if (Math.abs((h.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(h.depth - t.depth) < C.hitHD) {
+        // Wrecks NEVER die here — they're obstacles, not hits, and stay alive
+        // to scroll past (invulnT already blocks a re-hit while they overlap).
+        if (Math.abs((h.worldX - sc.scrollX) - (t.screenX + C.hitOX)) < C.hitHX && Math.abs(h.depth - t.depth) < C.hitHD) {
           if (h.kind === "hydrant") {
             this._popHydrant(h);
           } else if (t.invulnT <= 0) {
             this._damageTruck(h.dmg);
-            if (h.kind === "fuse") this._spawnPatch(h.worldX, h.depth, E.fuse.blastPatchRadius, E.fuse.blastPatchDur);
+            if (h.kind === "fuse") {
+              this._spawnPatch(h.worldX, h.depth, E.fuse.blastPatchRadius, E.fuse.blastPatchDur);
+              this._fuseExplode(h);
+            }
             this._collide(C);
           }
-          h.dead = true;
+          if (h.kind !== "wreck") h.dead = true;
         }
         if (h.worldX < sc.scrollX - 60) h.dead = true;    // passed behind
       }
       sc.hazards = sc.hazards.filter((h) => !h.dead);
+    },
+
+    // Fuse contact = an actual small blast: screen shake, a "blast" sting,
+    // and a radial burst of cosmetic embers (dud: true — the ember-vs-truck
+    // hit test in _updateEmbers skips them, so the burst can't double-damage
+    // on top of the contact hit already applied by the caller).
+    _fuseExplode(h) {
+      const sc = this.scene, FB = JH.TRUCKRUN.fuseBlast;
+      sc.shakeT = Math.max(sc.shakeT, FB.shake);
+      if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("blast");
+      for (let i = 0; i < FB.count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = FB.speedMin + Math.random() * (FB.speedMax - FB.speedMin);
+        sc.embers.push({
+          worldX: h.worldX, depth: h.depth,
+          vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          dmg: 0, life: FB.lifeMin + Math.random() * (FB.lifeMax - FB.lifeMin),
+          dud: true,
+        });
+      }
     },
 
     // Low-water lifeline: while the tank is under lowWaterFrac, drop extra
@@ -519,7 +544,9 @@
       const sc = this.scene, t = sc.truck;
       for (const e of sc.embers) {
         e.worldX += e.vx * dt; e.depth += e.vy * dt; e.life -= dt;
-        if (Math.abs((e.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(e.depth - t.depth) < C.hitHD) {
+        // dud embers are the cosmetic fuse-explosion burst (_fuseExplode) —
+        // no damage, so they skip the hit test entirely.
+        if (!e.dud && Math.abs((e.worldX - sc.scrollX) - t.screenX) < C.hitHX && Math.abs(e.depth - t.depth) < C.hitHD) {
           if (t.invulnT <= 0) this._damageTruck(e.dmg);
           e.life = 0;
         }
@@ -849,7 +876,7 @@
       const sc = this.scene, t = sc.truck;
       for (const p of sc.pickups) {
         p.bob += dt;
-        if (Math.abs((p.worldX - sc.scrollX) - t.screenX) < 20 && Math.abs(p.depth - t.depth) < 16) {
+        if (Math.abs((p.worldX - sc.scrollX) - t.screenX) < C.crossGrabX && Math.abs(p.depth - t.depth) < C.crossGrabD) {
           sc.essence += p.value;
           if (JH.Church && JH.Church.addEssence) JH.Church.addEssence(p.value);
           if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin", { pitch: 1.5 });   // Holy Essence pickup
@@ -862,13 +889,29 @@
 
     // Smashed hydrant: refuel the tank AND launch a forward WATER WAVE that
     // shoots down the road, clearing debris + enemies and dousing fire in its
-    // path (see _updateWaves). Shows a +WATER popup.
+    // path (see _updateWaves). Shows a +WATER popup + a small upward burst of
+    // water droplets (splashed: true — skips the splashback hit test in
+    // _updateSpray, cosmetic only).
     _popHydrant(h) {
-      const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck;
+      const sc = this.scene, C = JH.TRUCKRUN, t = sc.truck, HB = C.hydrantBurst;
       t.water = Math.min(C.tank, t.water + C.hydrantRefill);
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("coin");
       sc.waves.push({ worldX: h.worldX, startX: h.worldX, t: 0 });
       this._floater("+WATER", h.worldX, h.depth, "#9be8ff");
+      const hx = h.worldX - sc.scrollX, groundY = JH.Geo.feetScreenY(h.depth, 0);
+      for (let i = 0; i < HB.count; i++) {
+        const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * HB.spread;   // up-biased cone
+        const spd = HB.speedMin + Math.random() * (HB.speedMax - HB.speedMin);
+        sc.spray.push({
+          x: hx, y: groundY - 6,
+          vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          g: 320, groundY: groundY,
+          life: HB.lifeMin + Math.random() * (HB.lifeMax - HB.lifeMin),
+          size: Math.random() > 0.5 ? 3 : 2,
+          color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
+          splashed: true,
+        });
+      }
     },
 
     // Floating popup text (rises + fades over ~1s), anchored in world-x/depth.
@@ -1370,21 +1413,24 @@
       }
 
       // KeyH dev overlay — the run's REAL hit variables:
-      // magenta = the truck's collide rect (screenX ± hitHX, depth ± hitHD —
-      // the exact _collide test); red squares = hazard anchors (points vs
-      // that rect; gold = beam-immune wreck/hydrant); cyan = the REAL hose
-      // stream band while spraying — WYSIWYG: heights are above-ground per
-      // lane (the settle/cruise/droop profile from hoseStreamY is shared
-      // across all lanes), filled ± hoseBandH around the centerline,
-      // nozzle→range; amber ticks mark where the dps taper + droop start
-      // and max range; orange = fire-patch radii; green = Firewall
-      // weak-spot depth band.
+      // magenta = the truck's collide rect ((screenX+hitOX) ± hitHX, depth ±
+      // hitHD — the exact _collide test; drawn hitUpDraw px taller than the
+      // hit test so the box visually covers the sprite's body — collision
+      // itself stays ground-band, grounded hazards only, since airborne
+      // debris/fuses already skip collision via their own landed gate);
+      // red squares = hazard anchors (points vs that rect; gold = beam-immune
+      // wreck/hydrant); cyan = the REAL hose stream band while spraying —
+      // WYSIWYG: heights are above-ground per lane (the settle/cruise/droop
+      // profile from hoseStreamY is shared across all lanes), filled ±
+      // hoseBandH around the centerline, nozzle→range; amber ticks mark
+      // where the dps taper + droop start and max range; orange = fire-patch
+      // radii; green = Firewall weak-spot depth band.
       if (JH.DEBUG_HITBOX) {
         ctx.save(); ctx.lineWidth = 1;
-        const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0);
+        const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0) - C.hitUpDraw;
         const y1 = JH.Geo.feetScreenY(t.depth + C.hitHD, 0);
         ctx.strokeStyle = "#ff00ff";
-        ctx.strokeRect(t.screenX - C.hitHX, y0, C.hitHX * 2, y1 - y0);
+        ctx.strokeRect(t.screenX + C.hitOX - C.hitHX, y0, C.hitHX * 2, y1 - y0);
         for (const h of sc.hazards) {
           const hx = h.worldX - sc.scrollX;
           const hy = JH.Geo.feetScreenY(h.depth, 0) - (h.z || 0);

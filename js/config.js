@@ -734,6 +734,8 @@
     // sprite's chassis so hazards hit when they visibly touch the truck; depth
     // stays under the ~27px lane spacing so a lane change still dodges.
     hitHX: 42, hitHD: 13,
+    hitOX: 30,        // forward offset of the collide rect's CENTER (t.screenX+hitOX) — the sprite's cab+body, not the trailing chassis
+    hitUpDraw: 34,     // KeyH overlay only: extends the drawn box upward to visually cover the truck body (collision stays ground-band)
 
     // Truck integrity — VISIBLE bar. hp 0 wrecks the truck: short blast beat,
     // fade out, and the run restarts fresh (the escape never routes to the
@@ -791,6 +793,25 @@
     collideSlow: 0.8,    // scroll-speed mult applied briefly on any collision
     collideSlowDur: 0.6, // s the slow lasts (lets the wall creep up)
 
+    // Fuse contact: an actual small blast (shake + sound + a cosmetic ember
+    // burst) instead of the fuse just vanishing. Burst particles carry no
+    // damage (see truck.js _fuseExplode / the ember `dud` flag).
+    fuseBlast: {
+      shake: 0.3, count: 10,
+      lifeMin: 0.3, lifeMax: 0.4,
+      speedMin: 60, speedMax: 140,
+    },
+
+    // Hydrant pop: a small upward water-droplet burst (cosmetic, reuses the
+    // spray droplet list — `splashed: true` so they skip the splashback hit
+    // test in _updateSpray).
+    hydrantBurst: {
+      count: 12,
+      lifeMin: 0.25, lifeMax: 0.4,
+      speedMin: 60, speedMax: 160,
+      spread: 0.9,   // fraction of PI either side of straight-up
+    },
+
     // Collapse wall — non-lethal rubber-band pressure.
     wall: {
       startGap: 220,     // world px behind the truck at start
@@ -832,6 +853,7 @@
     // Essence economy (kept in-band with normal run income).
     crossVal: 1,
     crossCount: 6,
+    crossGrabX: 26, crossGrabD: 21,   // pickup box (~+30% over the truck's own hitHX/hitHD)
     cleanBonusTiers: [1, 2], // [decent run, flawless (full HP + no wall touch)]
 
     // Gate Crash finale — the authored beat after the Firewall breaks:
