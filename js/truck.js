@@ -368,7 +368,7 @@
         h.z = D.dropHeight; h.dropT = D.fallDur; h.landed = false;
         h.spin = (Math.random() - 0.5) * 2.4;
       }
-      else if (ev.kind === "fuse") { h.hp = E.fuse.hp; h.dmg = E.fuse.blastDmg; h.speed = E.fuse.speed; }
+      else if (ev.kind === "fuse") { h.hp = E.fuse.hp * C.fuseHpMult; h.dmg = E.fuse.blastDmg; h.speed = E.fuse.speed; }
       else if (ev.kind === "smelt") { h.hp = E.smelt.hp; h.dmg = E.smelt.touchDmg; }
       else if (ev.kind === "pyro") { h.hp = E.pyro.hp; h.dmg = E.pyro.touchDmg; }
       else if (ev.kind === "hydrant") { h.hp = C.hydrantHp; h.dmg = 0; }

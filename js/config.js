@@ -788,9 +788,10 @@
     // their body; damage also tapers over the same tail down to
     // endFalloffFloor (hoseDpsMult).
     cannonH: 69,         // stream height above ground (|truck.js CANNON_DY|), held level until the droop
-    hoseBandH: 16,       // stream half-thickness (px above/below the centerline)
+    hoseBandH: 21,       // stream half-thickness (px above/below the centerline; +30% 2026-07-13 feel round)
     endFalloff: 0.25,    // final fraction of range: dps tapers + gravity droop
     endFalloffFloor: 0.4, // dps multiplier at max range
+    fuseHpMult: 0.5,     // truck-section fuse hp only (street fuse untouched)
 
     // Big tank — passive regen is a trickle; HYDRANTS are the real refill.
     tank: 180,
