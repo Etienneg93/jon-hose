@@ -132,7 +132,11 @@ BACK."). Enrage latch = phase-3 entry (prayer_bead interacts normally).
   rings from his position with moving safe gaps (rings are drawn rims = hit
   rims, GUSH-pulse tech reused); each storm burst ends in a long exhaustion
   window (bent over, hands on knees — the big honest opening).
-- **At 0 HP:** takes a knee. No death sequence. Flows into the outro beat.
+- **At 0 HP:** takes a knee. Not new plumbing — the Slayer's defeat already
+  routes to a cutscene instead of a death; Ass Man reuses that
+  defeated-not-dead path. This act also lands the owed shared fix:
+  **defeated-but-surviving bosses must not play the corpse/explosion death
+  VFX** — one gate covering Slayer (retroactively) and Ass Man both.
 - HP scales with the existing boss formula (`1 + 0.02·power`); phase moves
   gate on hp fraction, not timers, so the fight length tracks player power.
 
