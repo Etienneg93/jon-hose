@@ -124,18 +124,37 @@ test("buildTimeline: deterministic for a fixed seed", () => {
 
 test("buildTimeline: sorted, within run, only known kinds/lanes", () => {
   const ev = TB.buildTimeline(CFG, seeded(7));
-  const kinds = new Set(["wreck", "fuse", "smelt", "pyro", "hydrant", "cross"]);
+  const kinds = new Set(["wreck", "fuse", "smelt", "pyro", "hydrant", "cross", "rockrain", "fusevolley"]);
+  // rockrain/fusevolley are container events — the runtime scene picks a
+  // lane per unrolled drop, so the container itself carries no single lane.
+  const laneless = new Set(["rockrain", "fusevolley"]);
   for (let i = 0; i < ev.length; i++) {
     assert.ok(ev[i].at >= 0 && ev[i].at <= CFG.runDuration, "within run");
     assert.ok(kinds.has(ev[i].kind), "known kind: " + ev[i].kind);
-    assert.ok(CFG.lanes.includes(ev[i].depth), "on a lane");
+    if (!laneless.has(ev[i].kind)) assert.ok(CFG.lanes.includes(ev[i].depth), "on a lane");
     if (i) assert.ok(ev[i].at >= ev[i - 1].at, "sorted by at");
   }
 });
 
+test("buildTimeline: rockrain + fusevolley windows present, in-run, deterministic", () => {
+  const ev = TB.buildTimeline(CFG, seeded(21));
+  const rr = ev.filter((e) => e.kind === "rockrain");
+  const fv = ev.filter((e) => e.kind === "fusevolley");
+  assert.strictEqual(rr.length, CFG.rockrain.at.length);
+  assert.strictEqual(fv.length, CFG.fusevolley.at.length);
+  for (const e of rr.concat(fv)) assert.ok(e.at >= 0 && e.at <= CFG.runDuration, "window within run");
+  for (const e of fv) assert.ok(e.flavor === "drop" || e.flavor === "fling", "flavor is one of the two arrivals");
+  const ev2 = TB.buildTimeline(CFG, seeded(21));
+  assert.deepStrictEqual(ev.filter((e) => e.kind === "fusevolley"), ev2.filter((e) => e.kind === "fusevolley"),
+    "flavor pick is reproducible from the seed");
+});
+
 test("buildTimeline: density builds then goes quiet at the arrival tail", () => {
   const ev = TB.buildTimeline(CFG, seeded(99));
-  const inWin = (s, e) => ev.filter((x) => x.kind !== "hydrant" && x.kind !== "cross" && x.at >= s && x.at < e).length;
+  // rockrain/fusevolley are scripted chase beats layered on top of the
+  // organic ramp, not part of it — exclude them like hydrant/cross.
+  const scripted = new Set(["hydrant", "cross", "rockrain", "fusevolley"]);
+  const inWin = (s, e) => ev.filter((x) => !scripted.has(x.kind) && x.at >= s && x.at < e).length;
   const intro = inWin(0, 12), build = inWin(12, 35), dense = inWin(35, 52), tail = inWin(52, 60);
   assert.ok(build > intro, "build denser than intro");
   assert.ok(dense > build, "climax denser than build");

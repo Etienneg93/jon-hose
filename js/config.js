@@ -856,6 +856,31 @@
     crossGrabX: 26, crossGrabD: 21,   // pickup box (~+30% over the truck's own hitHX/hitHD)
     cleanBonusTiers: [1, 2], // [decent run, flawless (full HP + no wall touch)]
 
+    // Rock-rain: a short chase beat of rapid consecutive debris drops (reuses
+    // the wreck drop-in telegraphy — shadow + fall + land solid). `at` are
+    // container-event times in buildTimeline; each window's actual drops are
+    // scheduled at runtime (TruckRun._startRockrain/_updateSequences) since a
+    // fixed count of individually-timelined wrecks would fight the
+    // never-block-every-lane guard built for the steady-state schedule.
+    rockrain: {
+      at: [16, 28],          // s into the run (jittered ±1s in buildTimeline)
+      dur: 4,                 // s the window stays live
+      dropsMin: 5, dropsMax: 7,
+      gapMin: 0.5, gapMax: 0.7,
+    },
+
+    // Fuse volley: 3-4 fuses arrive together, either drop-in (mirrors the
+    // debris telegraphy) or flung in from the left edge in an arc, landing at
+    // the truck's CURRENT depth (aimed where you were at spawn time).
+    fusevolley: {
+      at: [20, 32],           // s into the run (jittered ±1s in buildTimeline)
+      countMin: 3, countMax: 4,
+      gapMin: 0.2, gapMax: 0.35,   // stagger between each fuse's arrival within a volley
+      flingFromX: -40,        // screen-x the flung fuse launches from (off the left edge)
+      flingDur: 0.5,           // s flight time
+      flingHeight: 90,         // arc peak height (px) above the landing point
+    },
+
     // Gate Crash finale — the authored beat after the Firewall breaks:
     // detonate (growing booms) → whiteout → reveal (cloud walkway) → crash
     // (the empty truck rams the Air World gate) → walk (Jon enters on foot).
