@@ -765,7 +765,7 @@
     // stays under the ~27px lane spacing so a lane change still dodges.
     hitHX: 56, hitHD: 13,   // half-extents of the collide rect: hitHX matches the 117px sprite (drawn centered), tiny inset
     hitOX: 0,         // collide rect center = t.screenX = the sprite's center (drawImage anchors at -TRUCK_FW/2) — box stays true to the model
-    hitUpDraw: 34,     // KeyH overlay only: extends the drawn box upward to visually cover the truck body (collision stays ground-band)
+    hitUpDraw: 78,     // KeyH overlay only: drawn box height off the ground line (≈ sprite height; collision stays the ground depth-band)
 
     // Truck integrity — VISIBLE bar. hp 0 wrecks the truck: short blast beat,
     // fade out, and the run restarts fresh (the escape never routes to the
@@ -860,6 +860,7 @@
       wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8, wsShut: 0.5,  // weak-spot cycle (s): closed→wind(opening)→open→shut(closing)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
       surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
+      surgeHitHX: 14, surgeHitHD: 12,               // bolt hit half-extents (screen-x / depth) — shared by test + KeyH overlay
       // PORT SLAM: a forward crush that SWEEPS across depth — the zone splits
       // into slamSections bands that slam one after another (slamSweepGap
       // apart). Be on a band that already fired (or hasn't yet) when each lands.
@@ -907,7 +908,8 @@
       countMin: 3, countMax: 4,
       gapMin: 0.2, gapMax: 0.35,   // stagger between each fuse's arrival within a volley
       flingFromX: -40,        // screen-x the flung fuse launches from (off the left edge)
-      flingDur: 0.5,           // s flight time
+      flingLandAhead: 170,    // landing distance ahead of the truck anchor (further than drop-ins: dodgeable)
+      flingDur: 0.65,          // s flight time (longer arc to the farther landing)
       flingHeight: 90,         // arc peak height (px) above the landing point
     },
 

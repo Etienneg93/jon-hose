@@ -376,6 +376,12 @@
       while (sc.cursor < sc.timeline.length && sc.t >= sc.timeline[sc.cursor].at) {
         const ev = sc.timeline[sc.cursor++];
         // Combat kinds + hydrants spawn here; cross pickups are wired in Task 7.
+        // Sequence exclusivity: an active rock rain silences ordinary fuse
+        // traffic, and an active fuse volley silences ordinary debris — the
+        // set-pieces never stack into an unfair wall (events are dropped,
+        // not deferred).
+        if (ev.kind === "fuse" && sc.rockrains.length) continue;
+        if (ev.kind === "wreck" && sc.fuseVolleys.length) continue;
         if (ev.kind === "wreck" || ev.kind === "fuse" || ev.kind === "smelt" ||
             ev.kind === "pyro" || ev.kind === "hydrant")
           this._spawnHazard(ev);
@@ -488,7 +494,7 @@
         h.depth = sc.truck.depth;                       // aimed at where you are NOW
         h.arc = true;
         h.flingStartX = FV.flingFromX;
-        h.flingLandX = C.truckScreenX + C.debris.dropAhead;
+        h.flingLandX = C.truckScreenX + FV.flingLandAhead;
         h.worldX = sc.scrollX + h.flingStartX;
         h.z = 0; h.dropT = FV.flingDur;
       }
@@ -754,7 +760,7 @@
       if (!fw.surge && (fw.surgeT -= dt) <= 0) { fw.surgeT = FW.surgeCd; fw.surge = { x: fw.screenX, depth: fw.wsDepth }; this._flash("SURGE!", 0.7); }
       if (fw.surge) {
         const s = fw.surge; s.x -= FW.surgeSpeed * dt;
-        if (Math.abs(s.x - t.screenX) < 14 && Math.abs(s.depth - t.depth) < 12 && t.invulnT <= 0) {
+        if (Math.abs(s.x - t.screenX) < FW.surgeHitHX && Math.abs(s.depth - t.depth) < FW.surgeHitHD && t.invulnT <= 0) {
           this._damageTruck(FW.surgeDmg); this._collide(C); fw.surge = null;
         } else if (s.x < -10) fw.surge = null;
       }
@@ -1535,10 +1541,22 @@
       // radii; green = Firewall weak-spot depth band.
       if (JH.DEBUG_HITBOX) {
         ctx.save(); ctx.lineWidth = 1;
-        const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0) - C.hitUpDraw;
-        const y1 = JH.Geo.feetScreenY(t.depth + C.hitHD, 0);
+        // Truck rect drawn sprite-true: bottom sits on the ground line, top
+        // hitUpDraw above it (≈ sprite height). The ±hitHD depth tolerance
+        // stays a numeric lane-band — drawing it below the wheels double-
+        // counted it visually.
+        const yBot = JH.Geo.feetScreenY(t.depth, 0) + 2;
         ctx.strokeStyle = "#ff00ff";
-        ctx.strokeRect(t.screenX + C.hitOX - C.hitHX, y0, C.hitHX * 2, y1 - y0);
+        ctx.strokeRect(t.screenX + C.hitOX - C.hitHX, yBot - C.hitUpDraw, C.hitHX * 2, C.hitUpDraw);
+        // SURGE bolt hit box (the firewall's lightning projectile) — the
+        // exact surgeHitHX/HD test.
+        if (sc.firewall && sc.firewall.surge) {
+          const s = sc.firewall.surge;
+          const sy0 = JH.Geo.feetScreenY(s.depth - C.firewall.surgeHitHD, 0);
+          const sy1 = JH.Geo.feetScreenY(s.depth + C.firewall.surgeHitHD, 0);
+          ctx.strokeStyle = "#ffe066";
+          ctx.strokeRect(s.x - C.firewall.surgeHitHX, sy0, C.firewall.surgeHitHX * 2, sy1 - sy0);
+        }
         for (const h of sc.hazards) {
           const hx = h.worldX - sc.scrollX;
           const hy = JH.Geo.feetScreenY(h.depth, 0) - (h.z || 0);
