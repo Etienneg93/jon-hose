@@ -46,18 +46,21 @@
       return true;
     },
 
-    // Spray hit path — anchored at the NOZZLE, not the sprayer's center:
-    // no behind-the-nozzle tolerance (the stream only leaves forward), and
-    // the depth band is the stream's real thickness. Range is measured to
-    // the target's near edge; z window matches inHitArc's.
+    // Spray hit path — WYSIWYG: the stream rectangle (nozzle → reach,
+    // centered on the jet's SCREEN line at nozzle height, ± band px) tested
+    // against the target's BODY rectangle. If the drawn water crosses a
+    // body it hits; depth and height count exactly as much as the screen
+    // shows (airborne targets rise out of the band for free). oy/oz are the
+    // sprayer's depth and NOZZLE height (not base z).
     inSprayPath(ox, oy, oz, target, dir, range, band) {
       const tgtHalf = (target.bodyW || 14) * 0.5;
       const forward = (target.x - ox) * dir;        // + = downstream of the nozzle
       if (forward < -tgtHalf) return false;         // near edge behind the nozzle
       if (forward - tgtHalf > range) return false;  // out of reach
-      if (Math.abs(target.y - oy) > band) return false;             // depth band
-      if (Math.abs((target.z || 0) - (oz || 0)) > 22) return false; // height
-      return true;
+      const jetY = this.feetScreenY(oy, oz || 0);   // stream centerline on screen
+      const feetY = this.feetScreenY(target.y, target.z || 0);
+      return feetY >= jetY - band                          // feet below the jet's top
+          && feetY - (target.bodyH || 20) <= jetY + band;  // head above the jet's bottom
     },
 
     // Is world point (px,py) inside the ground ellipse centred at (cx,cy)?
