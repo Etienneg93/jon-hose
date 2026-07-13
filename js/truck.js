@@ -1305,6 +1305,48 @@
         this._bar(ctx, 8, 20, 90, t.water / C.tank, "#4aa3ff", "H2O");
       }
 
+      // KeyH dev overlay — the run's REAL hit variables:
+      // magenta = the truck's collide rect (screenX ± hitHX, depth ± hitHD —
+      // the exact _collide test); red squares = hazard anchors (points vs
+      // that rect; gold = beam-immune wreck/hydrant); cyan = hose swath while
+      // spraying (nozzle → live range, ALL lanes — _hose has no depth test);
+      // orange = fire-patch radii; green = Firewall weak-spot depth band.
+      if (JH.DEBUG_HITBOX) {
+        ctx.save(); ctx.lineWidth = 1;
+        const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0);
+        const y1 = JH.Geo.feetScreenY(t.depth + C.hitHD, 0);
+        ctx.strokeStyle = "#ff00ff";
+        ctx.strokeRect(t.screenX - C.hitHX, y0, C.hitHX * 2, y1 - y0);
+        for (const h of sc.hazards) {
+          const hx = h.worldX - sc.scrollX;
+          const hy = JH.Geo.feetScreenY(h.depth, 0) - (h.z || 0);
+          ctx.strokeStyle = (h.kind === "wreck" || h.kind === "hydrant") ? "#ffd23f" : "#ff5a5a";
+          ctx.strokeRect(hx - 3, hy - 3, 6, 6);
+        }
+        if (t.spraying) {
+          const pr = JH.TruckBalance.truckPressure(C, t.water / C.tank);
+          const nx = this._nozzleWorldX(sc) - sc.scrollX;
+          const range = C.hoseRange * pr.rangeMult;
+          const top = JH.Geo.feetScreenY(C.lanes[0], 0) - 24;
+          const bot = JH.Geo.feetScreenY(C.lanes[C.lanes.length - 1], 0) + 6;
+          ctx.strokeStyle = "#00e5ff";
+          ctx.strokeRect(nx, top, range, bot - top);
+        }
+        for (const p of sc.firePatches) {
+          const px = p.worldX - sc.scrollX, py = JH.Geo.feetScreenY(p.depth, 0);
+          ctx.strokeStyle = "#ff9040";
+          ctx.beginPath(); ctx.ellipse(px, py, p.r, p.r * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+        }
+        const fw = sc.firewall;
+        if (fw && fw.wsDepth != null) {
+          const wy0 = JH.Geo.feetScreenY(fw.wsDepth - C.firewall.wsBand, 0);
+          const wy1 = JH.Geo.feetScreenY(fw.wsDepth + C.firewall.wsBand, 0);
+          ctx.strokeStyle = "#80ff80";
+          ctx.strokeRect(fw.screenX - 6, wy0, 12, wy1 - wy0);
+        }
+        ctx.restore();
+      }
+
       // Transient banner (phase call-outs + attack tells) — mid-screen, sized
       // to fit, with a drop shadow so it reads over the road without a bar.
       if (sc.bannerT > 0 && sc.banner) {

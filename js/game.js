@@ -177,6 +177,14 @@
           if (this.devMenu) this.devCursor = 0;
           return;
         }
+        // H — toggle the hitbox overlay (street + truck run): the REAL hit
+        // variables drawn live, for auditing bands that feel off.
+        if (e.code === "KeyH") {
+          e.preventDefault();
+          JH.DEBUG_HITBOX = !JH.DEBUG_HITBOX;
+          this.banner("HITBOXES " + (JH.DEBUG_HITBOX ? "ON" : "OFF"), 1.0);
+          return;
+        }
         // K — instantly kill the active boss to test the death sequence
         if (e.code === "KeyK" && this.state === "play") {
           const b = this.enemies.find((en) => en.isBoss && !en.dead && !en.dying);
@@ -2160,6 +2168,49 @@
       // sole job of this method's player-independent half.
     },
 
+    // KeyH dev overlay — draws the REAL hit variables, never approximations:
+    // magenta = enemy bodies (bodyW x bodyH at the feet; inHitArc measures
+    // edge-to-edge, so effective reach extends half a body past each rect),
+    // cyan = Jon's spray band while spraying (nozzle -> live reach, ±sprayHitBand
+    // depth), gold = prop feet ellipses (dy counts 2.4x, same as propPushout).
+    drawDebugHitboxes(ctx, cam) {
+      const pl = this.player; if (!pl) return;
+      ctx.save();
+      ctx.lineWidth = 1; ctx.font = "5px monospace";
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const sx = e.x - cam, sy = JH.Geo.feetScreenY(e.y, 0);
+        const bw = e.bodyW || 14, bh = e.bodyH || 20;
+        ctx.strokeStyle = e.isBoss ? "#ff5aff" : "#ff00ff";
+        ctx.strokeRect(Math.round(sx - bw / 2), Math.round(sy - bh - 3), bw, bh);
+        ctx.fillStyle = "#ff00ff";
+        ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2);   // feet anchor
+      }
+      if (pl.spraying && pl._dbgReach != null) {
+        const S = pl.stats, dir = pl.facing;
+        const ox = pl.x + dir * 12 - cam;
+        const yT = JH.Geo.feetScreenY(pl.y - S.sprayHitBand, 0);
+        const yB = JH.Geo.feetScreenY(pl.y + S.sprayHitBand, 0);
+        ctx.strokeStyle = "#00e5ff";
+        ctx.strokeRect(Math.round(Math.min(ox, ox + dir * pl._dbgReach)), Math.round(yT),
+          Math.round(pl._dbgReach), Math.round(yB - yT));
+        ctx.fillStyle = "#00e5ff";
+        ctx.fillText("SPRAY " + Math.round(pl._dbgReach) + "px  ±" + S.sprayHitBand,
+          Math.round(ox + dir * 8), Math.round(yT) - 2);
+      }
+      const props = [
+        [this.shopNpc, JH.SHOP && JH.SHOP.vendorCollideR],
+        [this.deepdiveTV, JH.DEEPDIVE && JH.DEEPDIVE.tvCollideR],
+      ];
+      for (const [prop, r] of props) {
+        if (!prop || !r) continue;
+        const px = prop.x - cam, py = JH.Geo.feetScreenY(prop.y, 0);
+        ctx.strokeStyle = "#ffd23f";
+        ctx.beginPath(); ctx.ellipse(px, py, r, r / 2.4, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    },
+
     drawRangeStations(ctx, cam) {
       const RANGE_LABELS = { kibble: "KIBBLE", gush: "GUSH", superelite: "SUPER-ELITE", mook: "SPAWN MOOK", firepatch: "FIRE PATCH" };
       for (const st of this.rangeStations) {
@@ -2265,6 +2316,7 @@
         // hydrants (static world props, behind actors)
         this.drawHydrants(ctx, cam);
         if (this.rangeStations) this.drawRangeStations(ctx, cam);
+        if (JH.DEBUG_HITBOX) this.drawDebugHitboxes(ctx, cam);
         if (this.victoryPortal) this.drawVictoryPortal(ctx, cam);
         if (this.truckBoard) this.drawTruckBoard(ctx, cam);
         if (this.worldCrumble) this.drawCrumble(ctx);

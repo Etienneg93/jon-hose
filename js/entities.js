@@ -651,6 +651,7 @@
       const oy = this.y;                       // nozzle depth
       const oz = this.z + 30;                  // nozzle height — static, matches new sprite
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
+      this._dbgReach = reach;   // live value for the KeyH hitbox overlay
       const beam = S.beam | 0;                 // concentration tier 0..3
 
       // Hydro Lance (beam=3) pierces the whole line; default stops at first
