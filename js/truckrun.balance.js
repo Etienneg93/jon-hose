@@ -32,10 +32,16 @@
     },
 
     // Does the forward hose swath cover a target? dx = target.worldX - nozzleX.
-    // ONE shape shared with the beam render (rim-is-hitbox): a forward band of
-    // half-width hoseBand in depth, out to hoseRange.
-    beamCovers(truckDepth, hoseBand, targetDepth, dx, range) {
-      return dx >= 0 && dx <= range && Math.abs(targetDepth - truckDepth) <= hoseBand;
+    // Boss weak-spot hit: the SPRAY decides — does the ballistic band, where
+    // it crosses the wall (dxWall from the nozzle), overlap the eye's drawn
+    // box? All inputs in screen-y: truckRoadY = the truck lane's ground line,
+    // coreY = the eye's center. Lane choice IS vertical aim (deeper lane =
+    // lower band at the wall), and the ballistic drop offsets it.
+    beamHitsCore(dxWall, range, cfg, bandH, truckRoadY, coreY, coreHalfH) {
+      if (dxWall < 0 || dxWall > range) return false;
+      const streamY = truckRoadY - this.hoseStreamY(dxWall, range, cfg);
+      return streamY - bandH <= coreY + coreHalfH
+          && streamY + bandH >= coreY - coreHalfH;
     },
 
     // WYSIWYG stream centerline height above the road at forward distance dx

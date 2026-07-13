@@ -53,13 +53,26 @@ test("cleanBonus: flawless > decent > none, wall touch caps the top tier", () =>
   assert.strictEqual(TB.cleanBonus(CFG, 0.3, false), 0, "low HP → none");
 });
 
-test("beamCovers: forward, in-range, within the depth swath", () => {
-  const { hoseBand, hoseRange } = CFG;
-  assert.ok(TB.beamCovers(43, hoseBand, 43, 50, hoseRange), "same lane, ahead");
-  assert.ok(TB.beamCovers(43, hoseBand, 43 + hoseBand, 50, hoseRange), "swath edge in");
-  assert.ok(!TB.beamCovers(43, hoseBand, 43 + hoseBand + 1, 50, hoseRange), "past swath out");
-  assert.ok(!TB.beamCovers(43, hoseBand, 43, -5, hoseRange), "behind the nozzle out");
-  assert.ok(!TB.beamCovers(43, hoseBand, 43, hoseRange + 1, hoseRange), "beyond range out");
+test("beamHitsCore: the spray band at the wall decides, ballistic drop included", () => {
+  const range = CFG.hoseRange, bandH = CFG.hoseBandH;
+  const dxWall = 200;                                   // wall distance from the nozzle
+  const truckRoadY = 230;                               // this lane's ground line (screen)
+  const streamY = truckRoadY - TB.hoseStreamY(dxWall, range, CFG);  // band center at the wall
+  const halfH = 12;
+  // Eye centered exactly on the band: hit.
+  assert.ok(TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, streamY, halfH), "band on the eye");
+  // Eye just past band+eye reach: miss (and just inside: hit).
+  assert.ok(!TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, streamY + bandH + halfH + 1, halfH), "past the band: miss");
+  assert.ok(TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, streamY + bandH + halfH - 1, halfH), "edge overlap: hit");
+  // The ballistic drop matters: an eye at the MUZZLE's height hits at this
+  // wall distance only if the curve's sag is still within band+eye reach.
+  const drop = CFG.cannonH - TB.hoseStreamY(dxWall, range, CFG);
+  const muzzleY = truckRoadY - CFG.cannonH;
+  assert.strictEqual(TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, muzzleY, halfH),
+    drop <= bandH + halfH, "drop vs reach agree with the closed form");
+  // Range gates unchanged.
+  assert.ok(!TB.beamHitsCore(-5, range, CFG, bandH, truckRoadY, streamY, halfH), "behind the nozzle out");
+  assert.ok(!TB.beamHitsCore(range + 1, range, CFG, bandH, truckRoadY, streamY, halfH), "beyond range out");
 });
 
 test("hoseStreamY: one ballistic parabola — near-flat early, road at exactly range, no knee", () => {
