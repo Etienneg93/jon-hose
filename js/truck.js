@@ -308,7 +308,10 @@
         const vx = 210 + Math.random() * 150;
         const tFlight = range / vx;                 // s from muzzle to max range
         sc.spray.push({
-          x: gunX + Math.random() * 4, y: gunY + perp * 0.35,
+          // Spawn offset uses the FULL perp so the pixels fill the hit band
+          // (± hoseBandH) — the drawn water and the damage band are the same
+          // thickness, and splashback happens exactly where damage does.
+          x: gunX + Math.random() * 4, y: gunY + perp,
           vx: vx,
           vy: perp * 0.15,                          // launch level — scatter only
           // Constant gravity from launch, sized so THIS droplet lands at
@@ -323,7 +326,7 @@
     },
 
     _updateSpray(dt) {
-      const sc = this.scene;
+      const sc = this.scene, E = JH.ENEMIES, fw = sc.firewall;
       for (const d of sc.spray) {
         d.x += d.vx * dt;
         // Ballistic from launch: constant per-droplet gravity (sized to land
@@ -332,6 +335,27 @@
         d.vy += (d.g || 60) * dt;
         d.y += d.vy * dt;
         if (d.groundY != null && d.y >= d.groundY) { d.y = d.groundY; d.vy = 0; }
+        // Pixels stop on what they hit: the first shootable body (screen-
+        // space sprite box) or the Firewall's face kills the droplet into a
+        // brief backward splash — water never passes through a target.
+        if (!d.splashed && d.vx > 0) {
+          let hit = fw && !fw.dying && d.x >= fw.screenX - 4;
+          if (!hit) for (const h of sc.hazards) {
+            if (h.kind === "wreck" || h.kind === "hydrant") continue;
+            const hx = h.worldX - sc.scrollX;
+            const half = ((E[h.kind] && E[h.kind].bodyW) || 14) * 0.5;
+            if (d.x < hx - half || d.x > hx + half) continue;
+            const gy = JH.Geo.feetScreenY(h.depth, 0) - (h.z || 0);
+            const bh = (E[h.kind] && E[h.kind].bodyH) || 24;
+            if (d.y <= gy && d.y >= gy - bh) { hit = true; break; }
+          }
+          if (hit) {
+            d.splashed = true;
+            d.vx = -Math.abs(d.vx) * 0.12;
+            d.vy = -20 - Math.random() * 30;
+            d.life = Math.min(d.life, 0.18 + Math.random() * 0.08);
+          }
+        }
         d.life -= dt;
       }
       sc.spray = sc.spray.filter((d) => d.life > 0);
