@@ -780,16 +780,14 @@
     knockback: 300,      // strong shove — it's a truck-mounted cannon
     douseRate: 4.5,      // fire-patch life/s the beam burns off (shoot out fires)
 
-    // WYSIWYG spray stream: leaves the ROOF cannon (truck.js CANNON_DY),
-    // settles to a straight chest-height jet over the first muzzleDrop px,
-    // cruises level, then a gravity droop drops it to the road at exactly
-    // hoseRange (TruckBalance.hoseStreamY — three-phase centerline). Ground
-    // hazards only take damage where the stream band (± hoseBandH) is low
-    // enough to touch their body; damage also tapers over the final
-    // endFalloff fraction of range down to endFalloffFloor (hoseDpsMult).
-    cannonH: 69,         // stream leave height above ground (|truck.js CANNON_DY|)
-    muzzleDrop: 40,      // px of travel for the stream to settle from cannonH to cruiseH
-    cruiseH: 22,         // level cruise height of the stream centerline above the road
+    // WYSIWYG spray stream: fires STRAIGHT ahead from the ROOF cannon at its
+    // real height (truck.js CANNON_DY), then gravity droops it to the road
+    // across the final endFalloff fraction of hoseRange
+    // (TruckBalance.hoseStreamY — straight-then-droop). Ground hazards only
+    // take damage where the stream band (± hoseBandH) is low enough to touch
+    // their body; damage also tapers over the same tail down to
+    // endFalloffFloor (hoseDpsMult).
+    cannonH: 69,         // stream height above ground (|truck.js CANNON_DY|), held level until the droop
     hoseBandH: 16,       // stream half-thickness (px above/below the centerline)
     endFalloff: 0.25,    // final fraction of range: dps tapers + gravity droop
     endFalloffFloor: 0.4, // dps multiplier at max range

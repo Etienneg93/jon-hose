@@ -39,18 +39,15 @@
     },
 
     // WYSIWYG stream centerline height above the road at forward distance dx
-    // (dx = target.worldX - nozzleX). Three phases, range-relative droop:
-    //   1. muzzle settle: cannonH → cruiseH over the first muzzleDrop px;
-    //   2. cruise: level at cruiseH until range*(1-endFalloff);
-    //   3. gravity tail: parabolic drop from cruiseH to 0 at exactly range.
+    // (dx = target.worldX - nozzleX). Straight-then-droop: level at cannonH
+    // until range*(1-endFalloff), then a parabolic gravity droop from
+    // cannonH to 0 at exactly range.
     // Matches the ground-hazard hose hit test 1:1 (see truck.js _hose).
     hoseStreamY(dx, range, cfg) {
-      if (dx <= cfg.muzzleDrop)
-        return cfg.cannonH + (cfg.cruiseH - cfg.cannonH) * Math.max(0, dx) / cfg.muzzleDrop;
       const droopStart = range * (1 - cfg.endFalloff);
-      if (dx <= droopStart) return cfg.cruiseH;
+      if (dx <= droopStart) return cfg.cannonH;
       const k = Math.min(1, (dx - droopStart) / (range - droopStart));
-      return Math.max(0, cfg.cruiseH * (1 - k * k));   // parabolic — gravity bites at the tail
+      return Math.max(0, cfg.cannonH * (1 - k * k));   // parabolic — gravity bites at the tail
     },
 
     // Damage falloff along the stream: full dps out to range*(1-endFalloff),
