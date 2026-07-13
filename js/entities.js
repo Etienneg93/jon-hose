@@ -205,7 +205,7 @@
       this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
       this.xpFlashT = 0;      // overhead XP bar visibility: set on XP gain, fades out
-      this.sermonFullPressure = false;  // Pressure Sermon: hit full pressure during THIS spray hold
+      this.sermonReady = false;  // Pressure Sermon: this hold has sprayed >= SERMON.charge s (pip shown)
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
@@ -545,30 +545,22 @@
       this.spraying = false;
       if (wantSpray) this.doSpray(dt, game);
       else {
-        // Pressure Sermon: releasing after >=0.8s of continuous full-pressure
-        // spray emits a knockback cone. Checked here, before sprayHeldT is
+        // Pressure Sermon: releasing an armed hold (>= SERMON.charge seconds
+        // of continuous non-dry spray — the pip shows the armed state) looses
+        // a forward-traveling water wave. Checked here, before sprayHeldT is
         // zeroed below, so it fires exactly once per qualifying hold/release.
-        if (this.beneRank("pressure_sermon") && this.sprayHeldT >= 0.8
-            && this.sermonFullPressure && this.water >= 10) {
-          this.water -= 10;
-          for (const e of game.enemies) {
-            if (e.dead || e.dropping) continue;
-            const dx = e.x - this.x, dy = e.y - this.y;
-            if (Math.hypot(dx, dy) > 70) continue;
-            if (Math.abs(Math.atan2(dy, dx * this.facing)) > 0.6) continue;
-            e.takeDamage(15, game, this.facing, 0);
-            e.applyKnockback(this.facing, 200, (e.y - this.y) * 0.02);
-          }
-          // A clear cone blast so the cast reads: a wide fan of water thrown
-          // forward + a punchy shake. (Polished cone telegraph is a TODO.)
-          const bx = this.x + this.facing * 24;
-          burst(game, bx, this.y, 22, JH.PAL.waterHi, 26, { speed: 175, life: 0.45, up: 55, size: 2 });
-          burst(game, bx, this.y, 8, JH.PAL.water, 14, { speed: 110, life: 0.4, up: 22 });
-          game.shake(4);
+        if (this.beneRank("pressure_sermon") && this.sermonReady) {
+          game.sermonWaves.push({
+            x: this.x + this.facing * 12, y: this.y, dir: this.facing,
+            traveled: 0, hit: new Set(),
+          });
+          burst(game, this.x + this.facing * 20, this.y, 16, JH.PAL.waterHi, 18,
+            { speed: 150, life: 0.35, up: 40, size: 2 });
+          game.shake(3);
           game.audio.play("blast");
         }
         this.sprayHeldT = 0;   // reset the stream-front timer on release
-        this.sermonFullPressure = false;
+        this.sermonReady = false;
       }
 
       // ---- water regen (after a short delay since last spray)
@@ -641,12 +633,12 @@
       // while any water remains — dry still sputters, 80%+ still gets bonus.
       else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      // Pressure Sermon: once this hold reaches full pressure (top tier) the
-      // sermon is armed for the whole hold — the release check can't require
-      // full pressure ON the release frame, since 0.8s of spraying always
-      // drains the tank below 80% (100 tank / 36 drain → full pressure lasts
-      // ~0.56s), which made the cone effectively never fire.
-      if (dmgScale >= 1.2) this.sermonFullPressure = true;
+      // Pressure Sermon: arms after SERMON.charge seconds of continuous
+      // non-dry spray — no pressure-tier requirement (a tier gate made it
+      // near-unfireable: 100 tank / 36 drain keeps the top tier only ~0.56s).
+      // The pip in draw() shows the armed state; release fires the wave.
+      if (this.beneRank("pressure_sermon") && !dry && this.sprayHeldT >= JH.SERMON.charge)
+        this.sermonReady = true;
       if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
 
@@ -1094,6 +1086,18 @@
         ctx.restore();
       }
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
+
+      // Pressure Sermon pip: pulsing water diamond at the nozzle side while
+      // the hold is armed — "release now" reads at a glance.
+      if (this.sermonReady) {
+        const px2 = sx + this.facing * 15, py2 = spriteSy - 30;
+        const p = 2.5 + Math.sin(this.t * 10) * 0.8;
+        ctx.save();
+        ctx.translate(px2, py2); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = JH.PAL.waterHi; ctx.fillRect(-p, -p, p * 2, p * 2);
+        ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 1; ctx.strokeRect(-p, -p, p * 2, p * 2);
+        ctx.restore();
+      }
 
       // DEBUG: collision box
       if (JH.DEBUG_HITBOX) {

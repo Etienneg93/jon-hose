@@ -1127,20 +1127,33 @@ test("Scalding Faith: full-pressure spray applies scald", () => {
   B.reset();
 });
 
-test("Pressure Sermon: arms across a full-pressure hold even after the tank drains below 80%", () => {
+test("Pressure Sermon: SERMON.charge seconds of spray arms the pip regardless of pressure tier", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("pressure_sermon");
   const g = makeThinkGame(60, 40);
   const p = g.player;
-  p.water = p.stats.maxWater;   // start full → top pressure tier this hold
+  p.water = p.stats.maxWater * 0.5;   // MID tier the whole hold — no tier gate
   p.facing = 1;
-  for (let i = 0; i < 17; i++) p.doSpray(0.05, g);   // ~0.85s continuous
-  assert.ok(p.sprayHeldT >= 0.8, "held long enough to qualify");
-  assert.ok(p.sermonFullPressure, "armed by hitting full pressure during the hold");
-  // The tank has drained under the 80% full-pressure tier by now — the old
-  // release-frame check (dmgScale >= 1.2 on the last frame) was unreachable.
-  assert.ok(p.water < p.stats.maxWater * 0.8, "tank below 80% (old check would fail here)");
+  const steps = Math.ceil(JH.SERMON.charge / 0.05) + 1;
+  for (let i = 0; i < steps; i++) p.doSpray(0.05, g);
+  assert.ok(p.sprayHeldT >= JH.SERMON.charge, "held long enough to qualify");
+  assert.ok(p.sermonReady, "armed at the charge threshold without full pressure");
   B.reset();
+});
+
+test("Pressure Sermon wave: front hits each enemy once with SERMON.dmg, band-gated", () => {
+  const C = JH.SERMON;
+  const mk = (x, y) => ({ x, y, dead: false, dropping: false, hp: 100,
+    takeDamage(d) { this.hp -= d; }, applyKnockback() {} });
+  const near = mk(60, 40), deep = mk(60, 40 + C.halfDepth + 5), far = mk(60 + C.range + 50, 40);
+  const g = { sermonWaves: [{ x: 20, y: 40, dir: 1, traveled: 0, hit: new Set() }],
+              enemies: [near, deep, far] };
+  for (let i = 0; i < 120 && g.sermonWaves.length; i++)
+    JH.Game.updateSermonWaves.call(g, 1 / 60);
+  assert.strictEqual(near.hp, 100 - C.dmg, "in-band enemy hit exactly once");
+  assert.strictEqual(deep.hp, 100, "outside the depth band: untouched");
+  assert.strictEqual(far.hp, 100, "beyond range: wave dissipated first");
+  assert.strictEqual(g.sermonWaves.length, 0, "wave culled at range");
 });
 
 // ---- Benedictions: Backdraft + Ash Walk ----

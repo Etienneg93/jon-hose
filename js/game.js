@@ -457,7 +457,7 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
-      this.pulseRings = [];
+      this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
       this.voucher50 = false;
@@ -1234,6 +1234,31 @@
       this.pulseRings = this.pulseRings.filter((r) => r.t < r.dur + 0.15);  // brief fade tail
     },
 
+    // Pressure Sermon wave: the drawn wavefront IS the hitbox — each enemy
+    // is hit exactly once as the front passes its x inside the depth band.
+    // The pass window equals this step's travel, so a fast front can't skip
+    // an enemy between frames.
+    updateSermonWaves(dt) {
+      if (!this.sermonWaves || !this.sermonWaves.length) return;
+      const C = JH.SERMON;
+      for (const w of this.sermonWaves) {
+        const step = C.speed * dt;
+        w.x += w.dir * step; w.traveled += step;
+        for (const e of this.enemies) {
+          if (e.dead || e.dropping || w.hit.has(e)) continue;
+          if (Math.abs(e.y - w.y) > C.halfDepth) continue;
+          const passed = (w.dir > 0)
+            ? (e.x >= w.x - step && e.x <= w.x + 4)
+            : (e.x <= w.x + step && e.x >= w.x - 4);
+          if (!passed) continue;
+          w.hit.add(e);
+          e.takeDamage(C.dmg, this, w.dir, 0);
+          e.applyKnockback(w.dir, C.kb, (e.y - w.y) * 0.02);
+        }
+      }
+      this.sermonWaves = this.sermonWaves.filter((w) => w.traveled < C.range);
+    },
+
     // GUSH combo decay: ticks the chain window down and the flash pop out;
     // when the timer runs dry the chain (and Rosary Chain's banked dmg) resets.
     decayCombo(dt) {
@@ -1533,7 +1558,7 @@
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
-      this.pulseRings = [];
+      this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = [];   // usedOnce survives death; active boons are whatever the Reliquary gave back
       this.deferredQueue = [];
@@ -1797,6 +1822,7 @@
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
       this.decayCombo(dt);
       this.updatePulseRings(dt);
+      this.updateSermonWaves(dt);
 
       // --- entities
       this.player.update(dt, this);
@@ -2249,6 +2275,30 @@
 
         // slow zones (super-Bulwark's landed shield)
         for (const z of this.slowZones) z.draw(ctx, cam);
+
+        // Pressure Sermon waves — the drawn crescent front IS the hit front
+        // (leading edge ≈ +4px of the wave x, matching updateSermonWaves).
+        if (this.sermonWaves) for (const w of this.sermonWaves) {
+          const C = JH.SERMON;
+          const wx = w.x - cam;
+          const topY = JH.Geo.feetScreenY(w.y - C.halfDepth, 0);
+          const botY = JH.Geo.feetScreenY(w.y + C.halfDepth, 0);
+          const k = Math.max(0, 1 - w.traveled / C.range);
+          ctx.save();
+          ctx.globalAlpha = 0.35 + 0.45 * k;
+          ctx.strokeStyle = JH.PAL.waterHi; ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(wx - w.dir * 6, topY);
+          ctx.quadraticCurveTo(wx + w.dir * 8, (topY + botY) / 2, wx - w.dir * 6, botY);
+          ctx.stroke();
+          ctx.globalAlpha *= 0.6;
+          ctx.strokeStyle = JH.PAL.water; ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(wx - w.dir * 11, topY + 2);
+          ctx.quadraticCurveTo(wx + w.dir * 2, (topY + botY) / 2, wx - w.dir * 11, botY - 2);
+          ctx.stroke();
+          ctx.restore();
+        }
 
         // GUSH pulse rings (Backdraft Valve / Big Spigot) — drawn rim IS the hit rim.
         if (this.pulseRings) for (const ring of this.pulseRings) {

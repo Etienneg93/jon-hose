@@ -71,6 +71,18 @@
     wheelAllCommonsBelowAct: 0,   // actLevel < this: every wheel slot rolls common (Act 1 wallets can't touch rares)
   };
 
+  // Pressure Sermon (water legendary): spraying `charge` seconds arms it
+  // (pip on Jon); releasing the hose looses a forward-traveling water wave.
+  // The wavefront is the hitbox: each enemy is hit once as the front passes.
+  JH.SERMON = {
+    charge: 0.8,     // s of continuous (non-dry) spray to arm
+    dmg: 15,         // flat damage as the front passes
+    kb: 220,         // knockback impulse
+    speed: 260,      // px/s wavefront travel
+    range: 190,      // px before the wave dissipates
+    halfDepth: 26,   // depth half-band the front covers
+  };
+
   // Colour palette (kept central so procedural art + UI stay in sync).
   JH.PAL = {
     skin: "#f1c08a", skinDark: "#c98f5a",
