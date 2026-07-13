@@ -1392,10 +1392,18 @@
         }
         const fw = sc.firewall;
         if (fw && fw.wsDepth != null) {
+          // The weak spot is a DEPTH gate (beamCovers compares the TRUCK's
+          // lane to wsDepth) — the eye is drawn up the wall, but the thing
+          // to match is your lane. Draw it as the road strip to occupy.
           const wy0 = JH.Geo.feetScreenY(fw.wsDepth - C.firewall.wsBand, 0);
           const wy1 = JH.Geo.feetScreenY(fw.wsDepth + C.firewall.wsBand, 0);
+          const lx = Math.max(0, t.screenX - 40);
+          ctx.fillStyle = "rgba(128,255,128,0.12)";
+          ctx.fillRect(lx, wy0, fw.screenX - lx, wy1 - wy0);
           ctx.strokeStyle = "#80ff80";
-          ctx.strokeRect(fw.screenX - 6, wy0, 12, wy1 - wy0);
+          ctx.strokeRect(lx, wy0, fw.screenX - lx, wy1 - wy0);
+          ctx.font = "bold 5px monospace"; ctx.fillStyle = "#80ff80";
+          ctx.fillText("MATCH THIS LANE", lx + 4, wy0 - 2);
         }
         ctx.restore();
       }
