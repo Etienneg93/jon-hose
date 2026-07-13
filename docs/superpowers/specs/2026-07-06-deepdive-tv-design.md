@@ -42,6 +42,11 @@ the visibly-accelerated world *is* the joke.
   SIT-time (the TV always spawns; short bank shows [REQUIRES KIBBLE] in
   red), and the leaderboard clock counts REAL seconds during a dive
   (deepdive is a net positive).
+  **SIMPLIFIED 2026-07-13 (same round):** the world time-scaling is now
+  COSMETIC only — the sim always runs 1x; `timeScale` drives the overlay/
+  marquee animation while the seated KIBBLE drains at maxScale with its
+  healing converting (HP first, spill to overshield). All 10x sim edge
+  cases are gone by construction.
 - No minigame, no scrubbing, no channel selection — sit, binge, heal, stand.
 - No persistence across runs or shops; the TV is a per-interlude prop.
 - Not armable outside a shop. It can never overlap combat because shop

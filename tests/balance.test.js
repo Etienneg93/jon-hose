@@ -47,9 +47,8 @@ test("deepdiveRamp: reaches maxScale in ~rampUp s, returns in ~rampDown s, clamp
 
 test("DEEPDIVE config shape", () => {
   const D = JH.DEEPDIVE;
-  for (const k of ["threshold", "maxScale", "rampUp", "rampDown", "stepCap", "titleSwap", "laneGap"])
+  for (const k of ["threshold", "maxScale", "rampUp", "rampDown", "titleSwap", "laneGap"])
     assert.strictEqual(typeof D[k], "number", k);
-  assert.ok(D.stepCap > JH.MAX_STEPS, "stepCap must exceed MAX_STEPS or 10x can't run");
   assert.ok(Array.isArray(D.titles) && D.titles.length >= 5);
   assert.ok(Array.isArray(D.quips) && D.quips.length >= 3);
   assert.ok(D.laneGap > JH.SHOP.range + 22, "TV interact zone must clear the shop-open zone");

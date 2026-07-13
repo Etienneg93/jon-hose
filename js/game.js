@@ -1468,11 +1468,11 @@
         }
         return;
       }
-      tv.videoT += JH.FIXED_DT;   // scaled steps make this race on their own
+      tv.videoT += JH.FIXED_DT * this.timeScale;   // cosmetic ramp makes the marquee race
       // Quip floats: rare per scaled step, so they land roughly every ~4s of
       // sat-there time regardless of how fast the world is currently running.
-      if (Math.random() < JH.FIXED_DT / 4)
-        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff", { life: 0.9 * this.timeScale });
+      if (Math.random() < JH.FIXED_DT * this.timeScale / 4)
+        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff", { life: 0.9 });
       // Dash bails and is NOT consumed here: Player.update runs earlier in the
       // step and consumes the buffered edge itself when the dash fires (dash is
       // never movement-gated), so a started dash is detected via dashTimer;
@@ -1797,18 +1797,13 @@
       let dt = (now - this.lastT) / 1000;
       this.lastT = now;
       if (dt > 0.25) dt = 0.25;          // tab-switch guard
-      // Ramp advances on REAL dt so sim speed never feeds back into ramp rate.
+      // Deepdive's timeScale is COSMETIC only (overlay intensity, marquee
+      // race, kibble accel factor) — the world sim always runs at 1x, so
+      // none of the 10x edge cases (death seq, church, stalls) can exist.
       this.timeScale = JH.Balance.deepdiveRamp(this.timeScale, this.deepdiving, dt, JH.DEEPDIVE);
-      this.acc += dt * this.timeScale;
-      const cap = (this.deepdiving || this.timeScale > 1.01) ? JH.DEEPDIVE.stepCap : JH.MAX_STEPS;
-      // While ramped, a dt-clamped stall can inject seconds of backlog that the
-      // step cap can't drain — drop the excess instead of replaying it (the world
-      // was paused mid-binge; kibble pauses with it). At rest this never fires,
-      // keeping stall catch-up behavior identical to the pre-deepdive loop.
-      if (this.deepdiving || this.timeScale > 1.01)
-        this.acc = Math.min(this.acc, cap * JH.FIXED_DT);
+      this.acc += dt;
       let steps = 0;
-      while (this.acc >= JH.FIXED_DT && steps < cap) {
+      while (this.acc >= JH.FIXED_DT && steps < JH.MAX_STEPS) {
         this.update(JH.FIXED_DT);
         this.acc -= JH.FIXED_DT;
         steps++;
@@ -1903,10 +1898,9 @@
         return;
       }
 
-      // Run clock counts REAL seconds even mid-deepdive: each fixed step is
-      // dt of sim but only dt/timeScale of wall time, so dividing keeps the
-      // leaderboard neutral to the binge (deepdive is a net positive).
-      this.elapsed += dt / (this.timeScale > 1 ? this.timeScale : 1);
+      // Sim runs at 1x always (deepdive's speedup is cosmetic), so the run
+      // clock is plain real time again.
+      this.elapsed += dt;
 
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
       this.decayCombo(dt);
