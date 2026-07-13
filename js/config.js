@@ -763,8 +763,8 @@
     // Truck collision footprint (screen-x half, depth half). Widened to the
     // sprite's chassis so hazards hit when they visibly touch the truck; depth
     // stays under the ~27px lane spacing so a lane change still dodges.
-    hitHX: 42, hitHD: 13,
-    hitOX: 30,        // forward offset of the collide rect's CENTER (t.screenX+hitOX) — the sprite's cab+body, not the trailing chassis
+    hitHX: 56, hitHD: 13,   // half-extents of the collide rect: hitHX matches the 117px sprite (drawn centered), tiny inset
+    hitOX: 0,         // collide rect center = t.screenX = the sprite's center (drawImage anchors at -TRUCK_FW/2) — box stays true to the model
     hitUpDraw: 34,     // KeyH overlay only: extends the drawn box upward to visually cover the truck body (collision stays ground-band)
 
     // Truck integrity — VISIBLE bar. hp 0 wrecks the truck: short blast beat,
