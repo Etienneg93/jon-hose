@@ -750,15 +750,18 @@
     knockback: 300,      // strong shove — it's a truck-mounted cannon
     douseRate: 4.5,      // fire-patch life/s the beam burns off (shoot out fires)
 
-    // WYSIWYG spray arc: the stream leaves the ROOF cannon (truck.js
-    // CANNON_DY) and dives onto the road, reaching ground level at aimDist,
-    // then hugs the road out to hoseRange (see TruckBalance.hoseStreamY).
-    // Ground hazards only take damage where the drawn stream is low enough
-    // to touch their body; damage tapers over the final endFalloff fraction
-    // of range down to endFalloffFloor (TruckBalance.hoseDpsMult).
+    // WYSIWYG spray stream: leaves the ROOF cannon (truck.js CANNON_DY),
+    // settles to a straight chest-height jet over the first muzzleDrop px,
+    // cruises level, then a gravity droop drops it to the road at exactly
+    // hoseRange (TruckBalance.hoseStreamY — three-phase centerline). Ground
+    // hazards only take damage where the stream band (± hoseBandH) is low
+    // enough to touch their body; damage also tapers over the final
+    // endFalloff fraction of range down to endFalloffFloor (hoseDpsMult).
     cannonH: 69,         // stream leave height above ground (|truck.js CANNON_DY|)
-    aimDist: 100,        // px: stream centerline reaches the road here
-    endFalloff: 0.25,    // final fraction of range where dps tapers
+    muzzleDrop: 40,      // px of travel for the stream to settle from cannonH to cruiseH
+    cruiseH: 22,         // level cruise height of the stream centerline above the road
+    hoseBandH: 16,       // stream half-thickness (px above/below the centerline)
+    endFalloff: 0.25,    // final fraction of range: dps tapers + gravity droop
     endFalloffFloor: 0.4, // dps multiplier at max range
 
     // Big tank — passive regen is a trickle; HYDRANTS are the real refill.

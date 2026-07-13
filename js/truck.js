@@ -240,19 +240,22 @@
       const dps = C.hoseDps * pr.dmgScale;
       const nozzleX = this._nozzleWorldX(sc);
 
-      // The hose clears the road, but WYSIWYG: it only bites where the drawn
-      // stream is actually low enough to touch the hazard's body — the jet
-      // dives from the roof cannon and only hugs the ground past aimDist (see
-      // TruckBalance.hoseStreamY). No lane-match needed (depth is ignored,
-      // same as before — the stream sweeps every lane). Wrecks are obstacles
-      // (dodge them) and hydrants are positional (pop on contact) — both
-      // beam-immune. Damage tapers over the last stretch of range (hoseDpsMult).
+      // The hose clears the road, but WYSIWYG: it fires STRAIGHT ahead like
+      // Jon's street hose (generous ± hoseBandH band) and only bites where
+      // the drawn stream is low enough to touch the hazard's body — right at
+      // the muzzle it's still settling down from the roof cannon, so very
+      // close SHORT enemies duck under it; the gravity droop at the far end
+      // brings it onto the road (TruckBalance.hoseStreamY). No lane-match
+      // needed (depth is ignored, same as before — the stream sweeps every
+      // lane). Wrecks are obstacles (dodge them) and hydrants are positional
+      // (pop on contact) — both beam-immune. Damage tapers over the last
+      // stretch of range (hoseDpsMult).
       const TB = JH.TruckBalance;
       for (const h of sc.hazards) {
         if (h.kind === "wreck" || h.kind === "hydrant") continue;
         const dx = h.worldX - nozzleX;
         const bodyH = (JH.ENEMIES[h.kind] && JH.ENEMIES[h.kind].bodyH) || 24;
-        if (dx >= 0 && dx <= range && TB.hoseStreamY(dx, C) - C.hoseBand * 0.5 <= bodyH) {
+        if (dx >= 0 && dx <= range && TB.hoseStreamY(dx, range, C) - C.hoseBandH <= bodyH) {
           h.hp -= dps * TB.hoseDpsMult(dx, range, C) * dt;
           // Same feedback as Jon's hose: wetness soak + hurt flash + knockback
           // (stronger here — truck-mounted cannon). Shoves the enemy forward.
@@ -287,24 +290,30 @@
       }
 
       // Emit the hose cone from the TOP-mounted cannon — same water-droplet
-      // stream as Jon's hose (JH.PAL colours, cone spread), diving forward
-      // onto the road ahead (steep enough to land around aimDist, matching
-      // the hit-test dive — see hoseStreamY).
+      // stream as Jon's hose (JH.PAL colours, cone spread). Traces the SAME
+      // curve as the hit test (hoseStreamY): a quick shed from the cannon to
+      // the cruise line over ~muzzleDrop of travel, then near-level with mild
+      // accumulating gravity so the stream sags at the tail and meets the
+      // road around range.
       const gunX = t.screenX + CANNON_DX, gunY = JH.Geo.feetScreenY(t.depth, 0) + CANNON_DY;
       const groundY = JH.Geo.feetScreenY(t.depth, 0);   // this lane's road line — droplets skim here, not below
       const sputter = pr.dmgScale < 1;
       const spread = sputter ? 0.5 : 1;
       const count = sputter ? 2 : 4;
       for (let i = 0; i < count; i++) {
-        const perp = (Math.random() - 0.5) * C.hoseBand * 1.5 * spread;
+        const perp = (Math.random() - 0.5) * C.hoseBandH * 2 * spread;   // droplet scatter fills ± hoseBandH
         const vx = 210 + Math.random() * 150;
+        const tTail = Math.max(0.12, (range - C.muzzleDrop) / vx);   // s from cruise entry to max range
         sc.spray.push({
           x: gunX + Math.random() * 4, y: gunY + perp * 0.35,
-          vx: vx, vy: (C.cannonH / C.aimDist) * vx + perp * 0.9,   // dive slope matches hoseStreamY's descent
+          vx: vx,
+          vy: ((C.cannonH - C.cruiseH) / C.muzzleDrop) * vx + perp * 0.9,  // sheds cannonH→cruiseH over ~muzzleDrop px
+          g: 2 * C.cruiseH / (tTail * tTail),   // mild gravity: parabola meets the road ~range
+          cruiseY: groundY - C.cruiseH + perp * 0.5,
+          groundY: groundY,
           life: range / 260 + Math.random() * 0.05,
           size: Math.random() > 0.5 ? 3 : 2,
           color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
-          groundY: groundY,
         });
       }
     },
@@ -313,12 +322,16 @@
       const sc = this.scene;
       for (const d of sc.spray) {
         d.x += d.vx * dt;
-        // Dive then run: once the droplet reaches its lane's road line, skim
-        // it instead of sinking through (no more fall).
-        if (d.groundY != null && d.vy > 0 && d.y + d.vy * dt >= d.groundY) {
-          d.y = d.groundY; d.vy = 0;
+        if (d.cruiseY != null && d.y < d.cruiseY) {
+          // Muzzle settle: steep initial shed, level off at the cruise line.
+          d.y += d.vy * dt;
+          if (d.y >= d.cruiseY) { d.y = d.cruiseY; d.vy = 0; }
         } else {
-          d.y += d.vy * dt; d.vy += 60 * dt;
+          // Cruise + tail: mild gravity accumulates — near-level midflight,
+          // visible sag at the tail; skim the road line, never sink through.
+          d.vy += (d.g || 60) * dt;
+          d.y += d.vy * dt;
+          if (d.groundY != null && d.y >= d.groundY) { d.y = d.groundY; d.vy = 0; }
         }
         d.life -= dt;
       }
@@ -1332,10 +1345,11 @@
       // the exact _collide test); red squares = hazard anchors (points vs
       // that rect; gold = beam-immune wreck/hydrant); cyan = the REAL hose
       // stream band while spraying — WYSIWYG: heights are above-ground per
-      // lane (the dive/road-hug profile from hoseStreamY is shared across
-      // all lanes), filled ±hoseBand/2 around the centerline, nozzle→range;
-      // amber ticks mark where dps starts tapering and max range; orange =
-      // fire-patch radii; green = Firewall weak-spot depth band.
+      // lane (the settle/cruise/droop profile from hoseStreamY is shared
+      // across all lanes), filled ± hoseBandH around the centerline,
+      // nozzle→range; amber ticks mark where the dps taper + droop start
+      // and max range; orange = fire-patch radii; green = Firewall
+      // weak-spot depth band.
       if (JH.DEBUG_HITBOX) {
         ctx.save(); ctx.lineWidth = 1;
         const y0 = JH.Geo.feetScreenY(t.depth - C.hitHD, 0);
@@ -1355,8 +1369,8 @@
           const range = C.hoseRange * pr.rangeMult;
           const groundY = JH.Geo.feetScreenY(t.depth, 0);
           const steps = 24;
-          const topY = (dx) => groundY - (TB.hoseStreamY(dx, C) + C.hoseBand * 0.5);
-          const botY = (dx) => groundY - Math.max(0, TB.hoseStreamY(dx, C) - C.hoseBand * 0.5);
+          const topY = (dx) => groundY - (TB.hoseStreamY(dx, range, C) + C.hoseBandH);
+          const botY = (dx) => groundY - Math.max(0, TB.hoseStreamY(dx, range, C) - C.hoseBandH);
           ctx.beginPath();
           for (let i = 0; i <= steps; i++) {
             const dx = (range * i) / steps, y = topY(dx);

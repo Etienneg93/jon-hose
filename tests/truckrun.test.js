@@ -62,16 +62,32 @@ test("beamCovers: forward, in-range, within the depth swath", () => {
   assert.ok(!TB.beamCovers(43, hoseBand, 43, hoseRange + 1, hoseRange), "beyond range out");
 });
 
-test("hoseStreamY: leaves the cannon at cannonH, 0 at/beyond aimDist, monotonic between", () => {
-  assert.strictEqual(TB.hoseStreamY(0, CFG), CFG.cannonH);
-  assert.strictEqual(TB.hoseStreamY(CFG.aimDist, CFG), 0);
-  assert.strictEqual(TB.hoseStreamY(CFG.aimDist + 40, CFG), 0, "clamped at 0 past aimDist");
-  let prev = TB.hoseStreamY(0, CFG);
-  for (let dx = 5; dx <= CFG.aimDist; dx += 5) {
-    const y = TB.hoseStreamY(dx, CFG);
-    assert.ok(y <= prev, "non-increasing as dx grows");
+test("hoseStreamY: cannonH at the muzzle, level cruiseH midflight, gravity droop to 0 at range", () => {
+  const range = CFG.hoseRange;
+  const droopStart = range * (1 - CFG.endFalloff);
+  assert.strictEqual(TB.hoseStreamY(0, range, CFG), CFG.cannonH);
+  assert.strictEqual(TB.hoseStreamY(CFG.muzzleDrop, range, CFG), CFG.cruiseH, "settled by muzzleDrop");
+  // Whole cruise stretch is dead level at cruiseH.
+  for (let dx = CFG.muzzleDrop; dx <= droopStart; dx += 10)
+    assert.strictEqual(TB.hoseStreamY(dx, range, CFG), CFG.cruiseH, "level cruise at dx=" + dx);
+  assert.strictEqual(TB.hoseStreamY(range, range, CFG), 0, "on the road at exactly range");
+  // Monotonic pieces: settle never rises, droop never rises.
+  let prev = TB.hoseStreamY(0, range, CFG);
+  for (let dx = 2; dx <= CFG.muzzleDrop; dx += 2) {
+    const y = TB.hoseStreamY(dx, range, CFG);
+    assert.ok(y <= prev, "settle non-increasing at dx=" + dx);
     prev = y;
   }
+  prev = TB.hoseStreamY(droopStart, range, CFG);
+  for (let dx = droopStart + 2; dx <= range; dx += 2) {
+    const y = TB.hoseStreamY(dx, range, CFG);
+    assert.ok(y <= prev, "droop non-increasing at dx=" + dx);
+    prev = y;
+  }
+  // Parabolic tail: a quarter into the droop it has shed well under a quarter
+  // of cruiseH (gravity starts shallow — quadratic, not linear).
+  const early = TB.hoseStreamY(droopStart + (range - droopStart) * 0.25, range, CFG);
+  assert.ok(CFG.cruiseH - early < CFG.cruiseH * 0.25, "droop starts shallow");
 });
 
 test("hoseDpsMult: full before the taper, floors at range, 0 past range, linear midpoint", () => {
@@ -85,12 +101,18 @@ test("hoseDpsMult: full before the taper, floors at range, 0 past range, linear 
   assert.ok(Math.abs(mid - expectedMid) < 1e-9, "midpoint of the taper is halfway to the floor");
 });
 
-test("hose hit window: first-hit dx for a given body height matches the closed form", () => {
-  const bodyH = 24;
-  const closedForm = CFG.aimDist * (1 - (bodyH + CFG.hoseBand * 0.5) / CFG.cannonH);
-  // Just below the closed-form dx the stream is still too high to touch the body.
-  assert.ok(TB.hoseStreamY(closedForm - 1, CFG) - CFG.hoseBand * 0.5 > bodyH, "misses just before first-hit dx");
-  assert.ok(TB.hoseStreamY(closedForm + 1, CFG) - CFG.hoseBand * 0.5 <= bodyH, "hits just after first-hit dx");
+test("hose hit window: first-hit dx in the muzzle settle matches the closed form", () => {
+  const range = CFG.hoseRange;
+  const bodyH = 28;
+  // Hit when streamY - hoseBandH <= bodyH; in the settle phase streamY lerps
+  // cannonH -> cruiseH over muzzleDrop px, so the first-hit dx solves to:
+  const firstHit = CFG.muzzleDrop * (CFG.cannonH - CFG.hoseBandH - bodyH) / (CFG.cannonH - CFG.cruiseH);
+  assert.ok(firstHit > 0 && firstHit < CFG.muzzleDrop, "bodyH 28 first-hit falls inside the settle");
+  assert.ok(TB.hoseStreamY(firstHit - 1, range, CFG) - CFG.hoseBandH > bodyH, "misses just before first-hit dx");
+  assert.ok(TB.hoseStreamY(firstHit + 1, range, CFG) - CFG.hoseBandH <= bodyH, "hits just after first-hit dx");
+  // Anything ground-anchored is hittable through the whole cruise (band
+  // bottom = cruiseH - hoseBandH = ankle height).
+  assert.ok(CFG.cruiseH - CFG.hoseBandH <= 24, "cruise band bottom reaches even the shortest bodies");
 });
 
 test("buildTimeline: deterministic for a fixed seed", () => {
