@@ -35,7 +35,13 @@ the visibly-accelerated world *is* the joke.
 
 ## Non-goals (YAGNI)
 
-- No overflow conversion (no temp shield / suds from healing past full).
+- ~~No overflow conversion (no temp shield / suds from healing past full)~~
+  **OVERTURNED by user 2026-07-13:** while diving, kibble healing past full
+  HP banks as an OVERSHIELD (cap `DEEPDIVE.shieldCap`) that soaks damage
+  first and never recharges. Same round: threshold 20→10 and gated at
+  SIT-time (the TV always spawns; short bank shows [REQUIRES KIBBLE] in
+  red), and the leaderboard clock counts REAL seconds during a dive
+  (deepdive is a net positive).
 - No minigame, no scrubbing, no channel selection — sit, binge, heal, stand.
 - No persistence across runs or shops; the TV is a per-interlude prop.
 - Not armable outside a shop. It can never overlap combat because shop

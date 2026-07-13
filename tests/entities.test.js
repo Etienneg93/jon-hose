@@ -2069,18 +2069,39 @@ test("toggleRelic: grant folds apply() stats in, revoke folds out + clamps hp + 
   } finally { JH.Game = realGame; }
 });
 
-test("deepdive: TV spawns at threshold, not below; sits down-lane of the vendor", () => {
-  const mk = (kib) => {
-    const g = { relics: {}, player: { kibbleTimer: kib, x: 0, y: 0 },
-                shopWheelEntries: () => [], };
-    JH.Game.spawnVendor.call(g, 300);
-    return g;
-  };
+test("deepdive: TV always spawns down-lane; SITTING is gated on kibble > threshold", () => {
   const D = JH.DEEPDIVE;
-  const at = mk(D.threshold);
-  assert.ok(at.deepdiveTV, "TV at exactly threshold");
-  assert.strictEqual(at.deepdiveTV.x, 300 - D.laneGap, "down-lane by laneGap");
-  assert.strictEqual(mk(D.threshold - 1).deepdiveTV, null, "no TV below threshold");
+  const g = { relics: {}, player: { kibbleTimer: 0, x: 0, y: 0 },
+              shopWheelEntries: () => [], };
+  JH.Game.spawnVendor.call(g, 300);
+  assert.ok(g.deepdiveTV, "TV present with zero kibble (label carries the gate)");
+  assert.strictEqual(g.deepdiveTV.x, 300 - D.laneGap, "down-lane by laneGap");
+  // Sit gate: E near the TV only arms above the threshold.
+  const mkInput = (buffered) => ({ buffered: (k) => buffered.includes(k), consume: () => {}, pressed: () => false });
+  const sit = (kib) => {
+    const s = { deepdiving: false, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
+                player: { x: 0, y: 0, kibbleTimer: kib },
+                input: mkInput(["confirm"]), audio: { play() {} } };
+    JH.Game.tickDeepdive.call(s);
+    return s.deepdiving;
+  };
+  assert.strictEqual(sit(D.threshold - 1), false, "short bank: E refused");
+  assert.strictEqual(sit(D.threshold + 1), true, "banked: sits");
+});
+
+test("deepdive overshield: soaks hits first, depletes, never recharges", () => {
+  const p = makePlayer();
+  const g = dashStubGame(makeBufferedInput().In);
+  p.overshield = 20;
+  const hp0 = p.hp;
+  p.takeHit(30, g, p.x + 10);
+  assert.strictEqual(p.overshield, 0, "shield fully spent");
+  assert.strictEqual(p.hp, hp0 - 10, "only the overflow reaches HP");
+  p.invulnTimer = 0;
+  p.takeHit(10, g, p.x + 10);
+  assert.strictEqual(p.hp, hp0 - 20, "no shield left: full damage (no recharge)");
+  p.clearBuffs();
+  assert.strictEqual(p.overshield, 0, "death path clears it");
 });
 
 test("deepdive: auto-ends when kibble empties; move key bails", () => {

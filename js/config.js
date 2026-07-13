@@ -88,7 +88,8 @@
   // world (fixed-step count scales, per-step dt stays FIXED_DT). The run clock
   // (elapsed) rides scaled time on purpose — a binge costs leaderboard seconds.
   JH.DEEPDIVE = {
-    threshold: 20,    // s of banked kibble required at vendor-spawn to spawn the TV
+    threshold: 10,    // s of banked kibble required to SIT (the TV always spawns; short bank shows [REQUIRES KIBBLE])
+    shieldCap: 50,    // max overshield banked from kibble healing past full HP while diving (absorbs damage, never recharges)
     maxScale: 10,     // peak world time multiplier
     rampUp:   0.8,    // s of REAL time to ramp 1 -> maxScale
     rampDown: 0.6,    // s of REAL time to ramp back to 1

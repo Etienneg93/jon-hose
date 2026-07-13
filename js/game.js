@@ -1086,10 +1086,9 @@
     // vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
-      // Deepdive TV: only when Jon arrives at the shop with a big kibble bank.
-      this.deepdiveTV = (this.player && this.player.kibbleTimer >= JH.DEEPDIVE.threshold)
-        ? new JH.DeepdiveTV(x - JH.DEEPDIVE.laneGap, JH.DEPTH_MIN + 6)
-        : null;
+      // Deepdive TV: always at the shop — sitting is gated live on the kibble
+      // bank (> DEEPDIVE.threshold), and a short bank reads [REQUIRES KIBBLE].
+      this.deepdiveTV = new JH.DeepdiveTV(x - JH.DEEPDIVE.laneGap, JH.DEPTH_MIN + 6);
       this.relicStock = JH.Balance.rollWheelStock(JH.RELICS, this.relics, JH.Upgrades.currentActLevel, Math.random);
       // Wheel slots render from this fixed snapshot (bought cards go SOLD in
       // place, never shift); the reel spin arms on the first walk-up instead
@@ -1459,7 +1458,10 @@
       const pl = this.player;
       tv.near = Math.abs(pl.x - tv.x) < 22 && Math.abs(pl.y - tv.y) < 28;
       if (!this.deepdiving) {
-        if (tv.near && this.input.buffered("confirm")) {
+        // Sitting needs a real kibble bank (> threshold); a short bank shows
+        // [REQUIRES KIBBLE] at the prompt instead and E does nothing.
+        if (tv.near && this.input.buffered("confirm")
+            && pl.kibbleTimer > JH.DEEPDIVE.threshold) {
           this.input.consume("confirm");
           this.deepdiving = true;
           this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
@@ -1901,7 +1903,10 @@
         return;
       }
 
-      this.elapsed += dt;
+      // Run clock counts REAL seconds even mid-deepdive: each fixed step is
+      // dt of sim but only dt/timeScale of wall time, so dividing keeps the
+      // leaderboard neutral to the binge (deepdive is a net positive).
+      this.elapsed += dt / (this.timeScale > 1 ? this.timeScale : 1);
 
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
       this.decayCombo(dt);
@@ -2699,9 +2704,12 @@
       if (this.state === "play" && this.deepdiveTV && this.deepdiveTV.near && !this.deepdiving) {
         const tsx = Math.round(this.deepdiveTV.x - JH.Camera.x);
         const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 51;   // clears the 45px cabinet top
+        const armed = this.player.kibbleTimer > JH.DEEPDIVE.threshold;
+        const label = armed ? "E: DEEPDIVE" : "[REQUIRES KIBBLE]";
         this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
-        this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E: DEEPDIVE", tsx + 1, tsy + 1);
-        this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E: DEEPDIVE", tsx, tsy);
+        this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText(label, tsx + 1, tsy + 1);
+        this.ctx.fillStyle = armed ? "#ffd23f" : "#ff5a5a";
+        this.ctx.fillText(label, tsx, tsy);
         this.ctx.textAlign = "left";
       }
       if (this.nearShop && this.state === "play") {

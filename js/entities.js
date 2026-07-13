@@ -206,6 +206,7 @@
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
       this.xpFlashT = 0;      // overhead XP bar visibility: set on XP gain, fades out
       this.sermonReady = false;  // Pressure Sermon: this hold has sprayed >= SERMON.charge s (pip shown)
+      this.overshield = 0;       // Deepdive shield: banked past-full kibble healing; soaks damage, never recharges
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
@@ -269,6 +270,16 @@
       this.stormT = 0; this.vigorT = 0;
       this.douseCdT = 0; this.dashGraceT = 0;
       this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
+      this.overshield = 0;   // dive shield doesn't survive death
+    }
+
+    // Deepdive overshield soaks damage first — depletes, never recharges.
+    // Returns the damage remaining after the soak.
+    soakOvershield(dmg) {
+      if (!(this.overshield > 0) || dmg <= 0) return dmg;
+      const soak = Math.min(this.overshield, dmg);
+      this.overshield -= soak;
+      return dmg - soak;
     }
 
     // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
@@ -285,7 +296,8 @@
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
         const hpBefore = this.hp;
         const socksOwned = !!(game.relics && game.relics.asbestos_socks);
-        this.hp = Math.max(0, this.hp - JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1));
+        this.hp = Math.max(0, this.hp - this.soakOvershield(
+          JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1)));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
@@ -410,6 +422,13 @@
         const before = this.hp;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
         this.kibbleTickAcc += this.hp - before;
+        // Deepdive overshield: while diving, kibble healing that would spill
+        // past full HP banks as shield instead (absorbs damage first, never
+        // recharges) — capped at DEEPDIVE.shieldCap.
+        if (game.deepdiving) {
+          const spill = Math.max(0, this.kibbleRegen * dt - (this.hp - before));
+          this.overshield = Math.min(JH.DEEPDIVE.shieldCap, (this.overshield || 0) + spill);
+        }
         this.kibbleTickT -= dt;
         if (this.kibbleTickT <= 0) {
           this.kibbleTickT += 0.5;
@@ -1044,6 +1063,7 @@
         this.invulnTimer = 0.3;
         return;
       }
+      dmg = this.soakOvershield(dmg);
       this.hp -= dmg;
       this.invulnTimer = this.stats.invuln;
       this.hurt();
@@ -1153,6 +1173,13 @@
           ctx.fillRect(bx + i, barTop, 1, 3);
         }
         ctx.restore();
+      }
+      // Deepdive overshield: cyan cap continuing past the HP fill (clamped
+      // to the bar) — a visibly separate, non-recharging layer.
+      if (this.overshield > 0) {
+        const fw = Math.round(barW * hpFrac);
+        const sw = Math.min(barW - fw, Math.max(1, Math.round(barW * this.overshield / this.stats.maxHp)));
+        if (sw > 0) { ctx.fillStyle = "#7ff7ff"; ctx.fillRect(bx + fw, barTop, sw, 3); }
       }
       // H₂O
       ctx.fillStyle = "#1a3344";
