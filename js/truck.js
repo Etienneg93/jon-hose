@@ -274,12 +274,16 @@
       }
 
       // Firewall: the beam only bites the WEAK SPOT, and only while it's OPEN
-      // and lane-matched (armored body is immune) — the boss keeps its strict
-      // depth-match skill. dx in screen space.
+      // (armored body is immune). The SPRAY decides: the ballistic band where
+      // it crosses the wall must overlap the eye's drawn box — your lane sets
+      // the band's height at the wall, so lane choice is vertical aim with
+      // the gravity drop included. dx in screen space.
       const fw = sc.firewall;
       if (fw && (fw.wsState === "open" || fw.wsState === "shut")) {   // shut = closing, still a last-chance hit
         const dx = fw.screenX - (t.screenX + 20);
-        if (JH.TruckBalance.beamCovers(t.depth, C.firewall.wsBand, fw.wsDepth, dx, range)) {
+        const coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - C.firewall.coreRaise;
+        if (JH.TruckBalance.beamHitsCore(dx, range, C, C.hoseBandH,
+              JH.Geo.feetScreenY(t.depth, 0), coreY, C.firewall.coreHalfH)) {
           fw.hp -= dps * C.firewall.dmgMult * dt;
           fw.hitFlash = 0.1;
           if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("hit");   // throttled by the anti-stack guard
@@ -1177,7 +1181,7 @@
         // Roaming weak-spot EYE — the shared boss reactor-core glyph. Hidden
         // once the wall is dying (it's splitting apart, not staring).
         if (!fw.dying) {
-        const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - 30;
+        const coreX = wx, coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - FW.coreRaise;
         const openAmt = fw.wsState === "open" ? 1
           : fw.wsState === "wind" ? Math.max(0, 1 - fw.wsT / FW.wsWind)   // 0→1 opening
           : fw.wsState === "shut" ? Math.max(0, fw.wsT / FW.wsShut)       // 1→0 closing
@@ -1387,18 +1391,13 @@
         }
         const fw = sc.firewall;
         if (fw && fw.wsDepth != null) {
-          // The weak spot is a DEPTH gate (beamCovers compares the TRUCK's
-          // lane to wsDepth) — the eye is drawn up the wall, but the thing
-          // to match is your lane. Draw it as the road strip to occupy.
-          const wy0 = JH.Geo.feetScreenY(fw.wsDepth - C.firewall.wsBand, 0);
-          const wy1 = JH.Geo.feetScreenY(fw.wsDepth + C.firewall.wsBand, 0);
-          const lx = Math.max(0, t.screenX - 40);
-          ctx.fillStyle = "rgba(128,255,128,0.12)";
-          ctx.fillRect(lx, wy0, fw.screenX - lx, wy1 - wy0);
+          // The weak-spot hit is the SPRAY BAND overlapping the eye's box
+          // where the band crosses the wall — draw exactly that box (same
+          // coreRaise/coreHalfH the render and beamHitsCore use). Line the
+          // cyan band up with this box and the beam bites.
+          const coreY = JH.Geo.feetScreenY(fw.wsDepth, 0) - C.firewall.coreRaise;
           ctx.strokeStyle = "#80ff80";
-          ctx.strokeRect(lx, wy0, fw.screenX - lx, wy1 - wy0);
-          ctx.font = "bold 5px monospace"; ctx.fillStyle = "#80ff80";
-          ctx.fillText("MATCH THIS LANE", lx + 4, wy0 - 2);
+          ctx.strokeRect(fw.screenX - 9, coreY - C.firewall.coreHalfH, 18, C.firewall.coreHalfH * 2);
         }
         ctx.restore();
       }
