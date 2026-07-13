@@ -164,6 +164,15 @@
       // combat verb). Tab / gamepad Back route through JH.Input as the
       // "toggleStats" action, handled in update().
 
+      // Tab-away auto-pause: hidden tabs throttle rAF, and the return burst
+      // (dt clamp + accumulator drain) reads as rubberbanding — pausing on
+      // visibility loss sidesteps the whole class. Resume stays manual.
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden &&
+            (this.state === "play" || this.state === "church" || this.state === "truck"))
+          this.togglePause();
+      });
+
       // ---- dev menu: localhost-only, backtick toggles wave-select overlay ----
       const h = window.location.hostname;
       const isDev = h === "localhost" || h === "127.0.0.1" || h === "";
@@ -2518,7 +2527,9 @@
         const boss = this.enemies.find((e) => e.isBoss && !e.dying && !e.isGallery);
         if (boss) this.drawBossBar(ctx, boss);
 
-        // (benediction pips moved into the stat panel's rail — drawStatPanel)
+        // HUD benediction rail: the canonical at-a-glance icon row. The stat
+        // box anchors below it (game panel Y=40) so the two never overlap.
+        if (this.state === "play") this.drawSigilStrip(ctx, 10, 16, 99);
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
       }
       ctx.restore();
@@ -3049,7 +3060,10 @@
       const relicIds = expanded ? Object.keys(this.relics || {}) : [];
       const relicRows = relicIds.length ? Math.ceil(relicIds.length / RELIC_COLS) : 0;
 
-      const X = 10, Y = 30, ROW = 9;
+      // Y anchors the box top (Y-10) below the HUD benediction rail: rail
+      // pips sit at y 13.5..26.5 (drawSigilStrip at Y=16, rank ring ±2.5),
+      // so the box top at 30 clears them — the two must never overlap.
+      const X = 10, Y = 40, ROW = 9;
       // Width follows expansion: benediction names + the relic grid need the
       // full 152 even when the shop suppresses desc text. The shop overlay
       // starts at PX=280, so the wide panel (x 6..158) never reaches it.
@@ -3061,13 +3075,11 @@
       const maxBottom = JH.VIEW_H - 4;
       const budget = maxBottom - (Y - 10);      // total box height allowed
 
-      // Collapsed/named rail: owned-benediction pips INSIDE the frame below
-      // the stat rows (the expanded sheet shows full rows instead). Wraps at
-      // the panel width; pitch 13 x 16 clears the rank-2 ring (pip ±2.5).
-      const railIds = (!expanded && JH.Benedictions) ? Object.keys(JH.Benedictions.active) : [];
-      const railPerRow = Math.max(1, Math.floor((W - 17) / 13) + 1);
-      const railRowsN = railIds.length ? Math.ceil(railIds.length / railPerRow) : 0;
-      const railH = railRowsN ? 6 + railRowsN * 16 : 0;
+      // Collapsed/named summary: ONE compact line — an element-colored pip
+      // per owned benediction plus the total count. Details live in the
+      // expanded sheet; the HUD rail above the box carries the icons.
+      const sumIds = (!expanded && JH.Benedictions) ? Object.keys(JH.Benedictions.active) : [];
+      const summaryH = sumIds.length ? 11 : 0;
 
       // Rewraps every benediction desc at maxLines and returns the bene
       // block height. A name-only row (0 lines) still costs the 24px icon
@@ -3099,7 +3111,7 @@
         if (contentH > contentBudget) scroll = true;
       }
       const H = expanded ? (scroll ? budget : statH + 6 + contentH)
-                         : statH + railH;
+                         : statH + summaryH;
       this.statPanelBottom = Y - 10 + H;   // screen-fit probe for tests
 
       ctx.save();
@@ -3134,9 +3146,26 @@
         }
       });
 
-      // Collapsed/named: draw the benediction pip rail inside the frame.
-      if (!expanded && railIds.length)
-        this.drawSigilStrip(ctx, X, Y - 10 + statH + 6, railPerRow);
+      // Collapsed/named benediction summary line: 4px pips grouped by
+      // element (SIGIL_COLORS) + total count, right-aligned. Overflow past
+      // the pip budget is carried by the count alone.
+      if (!expanded && sumIds.length) {
+        const order = { water: 0, fire: 1, earth: 2, air: 3 };
+        const els = sumIds.map((id) => {
+          const d = JH.Benedictions.byId(id);
+          return (d && (d.element || (d.needs && d.needs[0]))) || "water";
+        }).sort((a, b) => (order[a] | 0) - (order[b] | 0));
+        const py = Y - 10 + statH + 2;
+        const maxPips = Math.max(1, Math.floor((W - 26) / 5));
+        els.slice(0, maxPips).forEach((el, i) => {
+          ctx.fillStyle = JH.SIGIL_COLORS[el] || "#ffd23f";
+          ctx.fillRect(X + i * 5, py, 4, 4);
+        });
+        ctx.font = "5px monospace"; ctx.textAlign = "right";
+        ctx.fillStyle = "#8fa8c8";
+        ctx.fillText("×" + sumIds.length, X + W - (named ? 10 : 6), py + 4);
+        ctx.textAlign = "left";
+      }
 
       let by = Y + 6 + rows.length * ROW + 6;
       if (expanded) {
@@ -3607,10 +3636,10 @@
       }
     },
 
-    // Active-benediction readout: one pip per owned boon, drawn inside the
-    // stat panel's rail slot (collapsed/named modes only — the expanded
-    // sheet shows full rows). Dim at rank 1, bright (full alpha) at rank 2.
-    // Wraps every `perRow` pips; pitch 13 x 16.
+    // HUD benediction rail: one icon pip per owned boon at the top-left —
+    // the canonical at-a-glance display (the stat box sits below it; the
+    // expanded sheet carries the details). Dim at rank 1, bright (full
+    // alpha) at rank 2. Wraps every `perRow` pips; pitch 13 x 16.
     drawSigilStrip(ctx, x0, y0, perRow) {
       if (!JH.Benedictions) return;
       const active = JH.Benedictions.active;

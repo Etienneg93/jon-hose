@@ -362,7 +362,7 @@
       // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
       if (this.upgradeQ.length) {
         if (this.upgradeT <= 0) {
-          this.upgradeT = 1.4;   // beat length — keep in sync with Player.draw's fade math
+          this.upgradeT = JH.JUICE.upgradeBeat;   // beat length (config; draw fade derives from the same knob)
           this.upgradeIdx++;
           game.audio.play("upgrade", { pitch: 1 + 0.12 * Math.min(5, this.upgradeIdx) });
           burst(game, this.x, this.y, this.z + 22, "#ffd23f", 8, { speed: 55, life: 0.4, up: 55, size: 2 });
@@ -1205,7 +1205,7 @@
       // KIBBLE/FOCUSED/BURN (never mid-sprite, never behind the body).
       if (this.upgradeQ.length && this.upgradeT > 0) {
         const e = this.upgradeQ[0];
-        const k = 1 - this.upgradeT / 1.4;                        // 0 → 1
+        const k = 1 - this.upgradeT / JH.JUICE.upgradeBeat;       // 0 → 1
         // Quick fade-in, long readable hold, fade-out only in the last ~15%
         // of the beat so the text finishes before it starts to go.
         const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
