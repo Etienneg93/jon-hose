@@ -1442,13 +1442,18 @@ test("Brass Nozzle: +10 flat dmg to the primary (blocker) target only; never a s
 
 // ---- Hydro Lance: pierce damage fades down the line ----
 
-test("inSprayPath: nozzle-anchored — nothing behind the nozzle, band from config", () => {
-  const G = global.window.JH.Geo, band = JH.PLAYER.sprayHitBand;
-  const mk = (x, y) => ({ x, y, bodyW: 14, z: 0 });
-  assert.ok(G.inSprayPath(100, 50, 0, mk(140, 50), 1, 78, band), "downstream in band");
-  assert.ok(!G.inSprayPath(100, 50, 0, mk(80, 50), 1, 78, band), "behind the nozzle: never hit");
-  assert.ok(G.inSprayPath(100, 50, 0, mk(140, 50 + band - 1), 1, 78, band), "inside the jet band");
-  assert.ok(!G.inSprayPath(100, 50, 0, mk(140, 50 + band + 3), 1, 78, band), "below the jet: no feet-hits");
+test("inSprayPath: WYSIWYG — stream rect at nozzle height vs body rect, from config", () => {
+  const G = global.window.JH.Geo;
+  const band = JH.PLAYER.sprayHitBand, nz = JH.PLAYER.nozzleZ;
+  const mk = (x, y, z, bodyH) => ({ x, y, z: z || 0, bodyW: 14, bodyH: bodyH || 28 });
+  const hit = (t) => G.inSprayPath(100, 50, nz, t, 1, 78, band);
+  assert.ok(hit(mk(140, 50)), "same-depth mook-height body crosses the jet");
+  assert.ok(!hit(mk(80, 50)), "behind the nozzle: never hit");
+  // deeper than bodyH - (nozzleZ - band): head no longer reaches the jet
+  assert.ok(hit(mk(140, 50 + (28 - (nz - band)) - 1)), "slightly deeper: head still in the jet");
+  assert.ok(!hit(mk(140, 50 + (28 - (nz - band)) + 2)), "too deep: water flies over the head");
+  // airborne: body lifts out of the band
+  assert.ok(!hit(mk(140, 50, nz + band + 30, 28)), "high airborne target: jet passes under");
 });
 
 test("lance falloff: pierce damage fades down the line per RELIC_TUNE.lanceFalloff", () => {

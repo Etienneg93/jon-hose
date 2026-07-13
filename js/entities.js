@@ -649,7 +649,7 @@
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
-      const oz = this.z + 30;                  // nozzle height — static, matches new sprite
+      const oz = this.z + JH.PLAYER.nozzleZ;   // nozzle height — static, matches new sprite
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       this._dbgReach = reach;   // live value for the KeyH hitbox overlay
       const beam = S.beam | 0;                 // concentration tier 0..3
@@ -665,7 +665,7 @@
           for (const e of game.enemies) {
             if (e.dead) continue;
             if (e.dropping) continue;   // airborne drop-ins can't block or be hit
-            if (!Geo.inSprayPath(ox, this.y, this.z, e, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, oz, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
             if (fwd < minFwd) { minFwd = fwd; blocker = e; }
           }
@@ -687,7 +687,7 @@
             if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
             if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
           } else {
-            if (!Geo.inSprayPath(ox, this.y, this.z, s, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, oz, s, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (s.x - ox) * this.facing;
             if (fwd < minFwd) { minFwd = fwd; blocker = s; }
           }
@@ -778,7 +778,7 @@
           let bestFwd = Infinity;
           for (const e of game.enemies) {
             if (e.dead || e.dropping) continue;
-            if (!Geo.inSprayPath(ox, this.y, this.z, e, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, oz, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
             if (blocker && fwd > blockerFwd) continue;
             if (game.shields) {
@@ -802,7 +802,7 @@
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
-        if (!Geo.inSprayPath(ox, this.y, this.z, e, this.facing, reach, S.sprayHitBand)) continue;
+        if (!Geo.inSprayPath(ox, this.y, oz, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
         const fwd = (e.x - ox) * this.facing;
         if (pierce && blocker && fwd > blockerFwd) continue;

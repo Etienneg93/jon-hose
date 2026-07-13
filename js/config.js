@@ -163,7 +163,7 @@
     sprayDamage: 50,        // dmg/sec at FULL pressure (80-100% tank = bonus tier)
     sprayRange: 78,         // stream reach (px)
     sprayWidth: 12,         // VISUAL depth half-band of the droplet spray (tightens with Pressure)
-    sprayHitBand: 9,        // DAMAGE depth half-band — matches the drawn jet; hit path is NOZZLE-anchored (Geo.inSprayPath)
+    sprayHitBand: 9,        // jet half-thickness in SCREEN px around the nozzle-height stream line (Geo.inSprayPath: stream rect vs BODY rect)
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
@@ -183,6 +183,7 @@
     dashBoostDur: 0,        // seconds the post-dash speed boost lasts
 
     bodyW: 20, bodyH: 34,   // collision box (px), feet-anchored
+    nozzleZ: 30,            // stream height off the feet — the spray hit band centers here
   };
 
   // ---- Enemy archetypes ----------------------------------------------

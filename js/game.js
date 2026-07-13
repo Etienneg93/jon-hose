@@ -2189,14 +2189,17 @@
       if (pl.spraying && pl._dbgReach != null) {
         const S = pl.stats, dir = pl.facing;
         const ox = pl.x + dir * 12 - cam;
-        const yT = JH.Geo.feetScreenY(pl.y - S.sprayHitBand, 0);
-        const yB = JH.Geo.feetScreenY(pl.y + S.sprayHitBand, 0);
+        // Stream rect exactly as inSprayPath tests it: jet centerline at
+        // nozzle height, ± band screen px. A magenta body crossing this
+        // rect (within the x range) IS a hit.
+        const jetY = JH.Geo.feetScreenY(pl.y, (pl.z || 0) + JH.PLAYER.nozzleZ);
         ctx.strokeStyle = "#00e5ff";
-        ctx.strokeRect(Math.round(Math.min(ox, ox + dir * pl._dbgReach)), Math.round(yT),
-          Math.round(pl._dbgReach), Math.round(yB - yT));
+        ctx.strokeRect(Math.round(Math.min(ox, ox + dir * pl._dbgReach)),
+          Math.round(jetY - S.sprayHitBand),
+          Math.round(pl._dbgReach), S.sprayHitBand * 2);
         ctx.fillStyle = "#00e5ff";
         ctx.fillText("SPRAY " + Math.round(pl._dbgReach) + "px  ±" + S.sprayHitBand,
-          Math.round(ox + dir * 8), Math.round(yT) - 2);
+          Math.round(ox + dir * 8), Math.round(jetY - S.sprayHitBand) - 2);
       }
       const props = [
         [this.shopNpc, JH.SHOP && JH.SHOP.vendorCollideR],
@@ -2856,17 +2859,26 @@
       return true;
     },
 
-    // Greedy word-wrap into up to `maxLines` lines of ~maxChars each (last line
-    // clipped past the cap). Shared by the shop + stat-panel benediction tips.
+    // Greedy word-wrap into up to `maxLines` lines of ~maxChars each. Breaks
+    // only on spaces; if words remain past the line cap the last kept line
+    // gets an ellipsis. Shared by the shop + stat-panel benediction tips.
     wrapText(str, maxChars, maxLines) {
       const words = String(str || "").split(" ");
       const lines = [];
       let line = "";
       for (const w of words) {
         const trial = line ? line + " " + w : w;
-        if (trial.length > maxChars && line) { lines.push(line); line = w; }
-        else line = trial;
-        if (lines.length >= maxLines) return lines;
+        if (trial.length > maxChars && line) {
+          lines.push(line); line = w;
+          if (lines.length >= maxLines) {
+            // Out of lines with words left: mark the cut.
+            let last = lines[maxLines - 1];
+            while (last.length + 1 > maxChars && last.includes(" "))
+              last = last.slice(0, last.lastIndexOf(" "));
+            lines[maxLines - 1] = last + "…";
+            return lines;
+          }
+        } else line = trial;
       }
       if (line && lines.length < maxLines) lines.push(line);
       return lines;
@@ -2942,13 +2954,25 @@
       // full 152 even when the shop suppresses desc text. The shop overlay
       // starts at PX=280, so the wide panel (x 6..158) never reaches it.
       const W = expanded ? 152 : named ? 74 : 46;
-      const relicH = relicRows ? 12 + relicRows * 16 : 0;
+      // Relic block: RELICS label (12) + icon rows at 16 pitch + 4 so the
+      // last row's gear frame (icon center ±9) clears the panel border.
+      const relicH = relicRows ? 12 + relicRows * 16 + 4 : 0;
       const statH = rows.length * ROW + 16;
+      const maxBottom = JH.VIEW_H - 4;
+      const budget = maxBottom - (Y - 10);      // total box height allowed
+
+      // Collapsed/named rail: owned-benediction pips INSIDE the frame below
+      // the stat rows (the expanded sheet shows full rows instead). Wraps at
+      // the panel width; pitch 13 x 16 clears the rank-2 ring (pip ±2.5).
+      const railIds = (!expanded && JH.Benedictions) ? Object.keys(JH.Benedictions.active) : [];
+      const railPerRow = Math.max(1, Math.floor((W - 17) / 13) + 1);
+      const railRowsN = railIds.length ? Math.ceil(railIds.length / railPerRow) : 0;
+      const railH = railRowsN ? 6 + railRowsN * 16 : 0;
 
       // Rewraps every benediction desc at maxLines and returns the bene
       // block height. A name-only row (0 lines) still costs the 24px icon
-      // floor, same as a 1-line row — so the old "degrade to 0" step saved
-      // no space while silently dropping every desc. Never called with 0.
+      // floor, same as a 1-line row — so degrading below 1 line saves no
+      // space while silently dropping every desc. Never called with 0.
       const measureBeneH = (maxLines) => {
         if (!beneRows.length) return 18;   // "no benedictions yet" hint + slack
         let h = 0;
@@ -2961,23 +2985,21 @@
         return h;
       };
 
-      // Panel must never draw past the screen. Ladder: try 2 desc lines,
-      // then 1 (never fewer — every benediction keeps at least one line at
-      // any count). If even 1 line + the full relic grid still overflows
-      // the box, the content block scrolls (see `scroll` below) instead of
-      // dropping any more info.
-      const maxBottom = JH.VIEW_H - 4;
-      const budget = maxBottom - (Y - 10);      // total box height allowed
-      const contentBudget = budget - statH;      // left for benedictions + relics
-      let beneH = measureBeneH(2);
-      let contentH = beneH + relicH;
-      let scroll = false;
-      if (contentH > contentBudget) {
-        beneH = measureBeneH(1);
-        contentH = beneH + relicH;
+      // Expanded content starts 6px below the stat block (`by` below), so H
+      // must carry statH + 6 + content — dropping the 6 was the clipped-grid
+      // bug. Ladder: 3 desc lines -> 2 -> 1 (never fewer). If 1-line descs +
+      // the full relic grid still overflow, the content block scrolls
+      // instead of dropping info.
+      const contentBudget = budget - statH - 6;
+      let contentH = 0, scroll = false;
+      if (expanded) {
+        contentH = measureBeneH(3) + relicH;
+        if (contentH > contentBudget) contentH = measureBeneH(2) + relicH;
+        if (contentH > contentBudget) contentH = measureBeneH(1) + relicH;
         if (contentH > contentBudget) scroll = true;
       }
-      const H = scroll ? budget : statH + contentH;
+      const H = expanded ? (scroll ? budget : statH + 6 + contentH)
+                         : statH + railH;
       this.statPanelBottom = Y - 10 + H;   // screen-fit probe for tests
 
       ctx.save();
