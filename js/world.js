@@ -46,6 +46,20 @@
       return true;
     },
 
+    // Spray hit path — anchored at the NOZZLE, not the sprayer's center:
+    // no behind-the-nozzle tolerance (the stream only leaves forward), and
+    // the depth band is the stream's real thickness. Range is measured to
+    // the target's near edge; z window matches inHitArc's.
+    inSprayPath(ox, oy, oz, target, dir, range, band) {
+      const tgtHalf = (target.bodyW || 14) * 0.5;
+      const forward = (target.x - ox) * dir;        // + = downstream of the nozzle
+      if (forward < -tgtHalf) return false;         // near edge behind the nozzle
+      if (forward - tgtHalf > range) return false;  // out of reach
+      if (Math.abs(target.y - oy) > band) return false;             // depth band
+      if (Math.abs((target.z || 0) - (oz || 0)) > 22) return false; // height
+      return true;
+    },
+
     // Is world point (px,py) inside the ground ellipse centred at (cx,cy)?
     // THE ground-hazard footprint test: x is 1:1 world→screen; depth compares
     // in screen space via feetScreenY, so a hazard affects exactly the ellipse

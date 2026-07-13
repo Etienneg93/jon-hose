@@ -665,7 +665,7 @@
           for (const e of game.enemies) {
             if (e.dead) continue;
             if (e.dropping) continue;   // airborne drop-ins can't block or be hit
-            if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, this.z, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
             if (fwd < minFwd) { minFwd = fwd; blocker = e; }
           }
@@ -687,7 +687,7 @@
             if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
             if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
           } else {
-            if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, this.z, s, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (s.x - ox) * this.facing;
             if (fwd < minFwd) { minFwd = fwd; blocker = s; }
           }
@@ -778,7 +778,7 @@
           let bestFwd = Infinity;
           for (const e of game.enemies) {
             if (e.dead || e.dropping) continue;
-            if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, this.z, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
             if (blocker && fwd > blockerFwd) continue;
             if (game.shields) {
@@ -802,7 +802,7 @@
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
-        if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+        if (!Geo.inSprayPath(ox, this.y, this.z, e, this.facing, reach, S.sprayHitBand)) continue;
         if (!pierce && e !== blocker) continue;
         const fwd = (e.x - ox) * this.facing;
         if (pierce && blocker && fwd > blockerFwd) continue;
@@ -958,7 +958,7 @@
           if (fp.dead) continue;
           const fwd = (fp.x - ox) * this.facing;
           if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
-              && Math.abs(fp.y - oy) < S.sprayHitBand) {
+              && Math.abs(fp.y - oy) < JH.FIRE.douseBand) {
             // Douse speed scales with spray damage (built-up hoses put fires
             // out faster); clamped so a weak/low-pressure stream never douses
             // slower than the old flat rate.
