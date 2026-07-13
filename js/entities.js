@@ -1053,26 +1053,6 @@
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
       const spriteSy = Geo.feetScreenY(this.y, this.z);
-      // Upgrade sequence: the current stat gain rises off Jon's head — icon
-      // + green delta, fading in fast and out at the end of its beat.
-      if (this.upgradeQ.length && this.upgradeT > 0) {
-        const e = this.upgradeQ[0];
-        const k = 1 - this.upgradeT / 1.4;                        // 0 → 1
-        // Quick fade-in, long readable hold, fade-out only in the last ~15%
-        // of the beat so the text finishes before it starts to go.
-        const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
-        // Sits in the gap between Jon's head and the overhead HP/H2O bars
-        // (bar bottom at bodyH+22); a short rise kept clear of the bar (12px
-        // icon centered here) so the gain text is never clipped behind it.
-        const iy = spriteSy - this.stats.bodyH - 8 - 4 * k;
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, a);
-        Assets.icon(ctx, e.icon, sx - 16, iy, 1);
-        ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
-        ctx.fillStyle = "#80ff80";
-        ctx.fillText(e.text, sx - 8, iy + 3);
-        ctx.restore();
-      }
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
       // that — active buffs stack visually instead of overwriting. Burn's
@@ -1199,6 +1179,27 @@
       // XP bar or each other.
       let indY = barTop - 2;
       if (xpShown) indY -= Math.round(6 * Math.min(1, this.xpFlashT / 0.5));
+      // Upgrade sequence: the current stat gain claims the first status row —
+      // icon + green delta ABOVE the bars, in front of everything, kept clear
+      // of the XP bar and other rows by the same indY cursor that stacks
+      // KIBBLE/FOCUSED/BURN (never mid-sprite, never behind the body).
+      if (this.upgradeQ.length && this.upgradeT > 0) {
+        const e = this.upgradeQ[0];
+        const k = 1 - this.upgradeT / 1.4;                        // 0 → 1
+        // Quick fade-in, long readable hold, fade-out only in the last ~15%
+        // of the beat so the text finishes before it starts to go.
+        const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
+        const gy = indY - 7;                  // 12px icon row centered here
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, a);
+        Assets.icon(ctx, e.icon, sx - 14, gy, 1);
+        ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+        ctx.fillStyle = "#80ff80";
+        ctx.fillText(e.text, sx - 6, gy + 3);
+        ctx.restore();
+        ctx.textAlign = "left";
+        indY -= 15;                           // icon row claims two slots
+      }
       if (this.kibbleTimer > 0) {
         ctx.fillStyle = "#44ff77";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
