@@ -2449,7 +2449,7 @@
         const boss = this.enemies.find((e) => e.isBoss && !e.dying && !e.isGallery);
         if (boss) this.drawBossBar(ctx, boss);
 
-        if (this.state === "play") this.drawSigilStrip(ctx);
+        // (benediction pips moved into the stat panel's rail — drawStatPanel)
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
       }
       ctx.restore();
@@ -3034,6 +3034,10 @@
         }
       });
 
+      // Collapsed/named: draw the benediction pip rail inside the frame.
+      if (!expanded && railIds.length)
+        this.drawSigilStrip(ctx, X, Y - 10 + statH + 6, railPerRow);
+
       let by = Y + 6 + rows.length * ROW + 6;
       if (expanded) {
         const contentTop = by, contentBottom = Y - 10 + H;
@@ -3049,7 +3053,10 @@
         }
         ctx.save();
         ctx.beginPath();
-        ctx.rect(X - 4, contentTop - 2, W, Math.max(0, contentBottom - contentTop + 2));
+        // Clip top sits 6 above the first row: tier frames extend 5 above
+        // rowStart (icon center rowStart+4, frame ±9). Bottom stays inside
+        // the border.
+        ctx.rect(X - 4, contentTop - 6, W, Math.max(0, (contentBottom - 1) - (contentTop - 6)));
         ctx.clip();
         ctx.translate(0, scrollY);
 
@@ -3500,14 +3507,15 @@
       }
     },
 
-    // Active-benediction readout: one 8px pip per owned boon, under the
-    // top-left LV/XP HUD. Dim at rank 1, bright (full alpha) at rank 2.
-    drawSigilStrip(ctx) {
+    // Active-benediction readout: one pip per owned boon, drawn inside the
+    // stat panel's rail slot (collapsed/named modes only — the expanded
+    // sheet shows full rows). Dim at rank 1, bright (full alpha) at rank 2.
+    // Wraps every `perRow` pips; pitch 13 x 16.
+    drawSigilStrip(ctx, x0, y0, perRow) {
       if (!JH.Benedictions) return;
       const active = JH.Benedictions.active;
       const ids = Object.keys(active);
       if (ids.length === 0) return;
-      const X = 10, Y = 16, GAP = 13;
       ctx.save();
       ids.forEach((id, i) => {
         const d = JH.Benedictions.byId(id);
@@ -3515,21 +3523,22 @@
         const rank = active[id] | 0;
         const el = d.element || (d.needs && d.needs[0]) || "water";
         const col = JH.SIGIL_COLORS[el] || "#ffd23f";
-        const x = X + i * GAP;
+        const x = x0 + (i % perRow) * 13;
+        const y = y0 + Math.floor(i / perRow) * 16;
         ctx.globalAlpha = rank >= 2 ? 1 : 0.55;
         // Baked element icon (procedural pip while it streams in).
-        if (!JH.Assets.icon(ctx, "el_" + el, x + 4, Y + 4, 1)) {
+        if (!JH.Assets.icon(ctx, "el_" + el, x + 4, y + 4, 1)) {
           ctx.fillStyle = col;
-          ctx.fillRect(x, Y, 8, 8);
+          ctx.fillRect(x, y, 8, 8);
           ctx.strokeStyle = "#0a0e18";
-          ctx.strokeRect(x, Y, 8, 8);
+          ctx.strokeRect(x, y, 8, 8);
         }
         // Verb corner mark tells same-element boons apart (boons only).
-        if (d.kind === "boon" && d.verb) JH.Assets.verbMark(ctx, d.verb, x + 10, Y - 2);
+        if (d.kind === "boon" && d.verb) JH.Assets.verbMark(ctx, d.verb, x + 10, y - 2);
         // Rank-2 boons keep the bright ring.
         if (rank >= 2) {
           ctx.strokeStyle = col;
-          ctx.strokeRect(x - 2.5, Y - 2.5, 13, 13);
+          ctx.strokeRect(x - 2.5, y - 2.5, 13, 13);
         }
       });
       ctx.globalAlpha = 1;
