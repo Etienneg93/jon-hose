@@ -90,12 +90,12 @@
   JH.DEEPDIVE = {
     threshold: 10,    // s of banked kibble required to SIT (the TV always spawns; short bank shows [REQUIRES KIBBLE])
     shieldCap: 50,    // max overshield banked from kibble healing past full HP while diving (absorbs damage, never recharges)
-    maxScale: 10,     // peak world time multiplier
+    maxScale: 2,      // peak of the COSMETIC ramp AND the seated kibble accel factor (sim never scales)
     rampUp:   0.8,    // s of REAL time to ramp 1 -> maxScale
     rampDown: 0.6,    // s of REAL time to ramp back to 1
     titleSwap: 2.5,   // s of SCALED time between fake-video title swaps
     laneGap:  130,    // px down-lane of the vendor (> SHOP.range + 22; clears the chalkboard, which spans vendor x -103..-63)
-    tvCollideR: 12,   // solid feet radius (Balance.propPushout, player-only)
+    tvCollideR: 14,   // solid feet radius (Balance.propPushout, player-only) — matches the bigger cabinet
     titles: [
       "Are FIRE HYDRANTS conscious? (they answered)",
       "I ate only KIBBLE for 30 days",

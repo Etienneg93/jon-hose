@@ -1104,15 +1104,20 @@
         const hot = flick > 0.75;   // color licks toward white-hot on peaks
         outlines.push([hot ? "#ffe070" : "#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
-      Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
-        state: this.state, frame: this.frame, t: this.t,
-        hurt: this.invulnTimer > 0 && this.flashTimer > 0,
-        hurtAlpha: this.flashTimer / 0.18,
-        squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
-        waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
-        walking: this.walking,
-        outlines,
-      });
+      if (JH.Game && JH.Game.deepdiving) {
+        // Seated pose while watching the deepdive TV (hand-supplied frame).
+        Assets.draw(ctx, "jonSit", sx, spriteSy, this.facing, { t: this.t });
+      } else {
+        Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
+          state: this.state, frame: this.frame, t: this.t,
+          hurt: this.invulnTimer > 0 && this.flashTimer > 0,
+          hurtAlpha: this.flashTimer / 0.18,
+          squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
+          waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
+          walking: this.walking,
+          outlines,
+        });
+      }
       if (this.burnStacks > 0) {
         // Draw flame tongues rising from feet to show burn stacks
         const stacks = this.burnStacks, t = this.t;
@@ -1177,12 +1182,19 @@
         }
         ctx.restore();
       }
-      // Deepdive overshield: cyan cap continuing past the HP fill (clamped
-      // to the bar) — a visibly separate, non-recharging layer.
+      // Deepdive overshield: translucent PURPLE halo laid over the healthbar
+      // from the left, width = shield fraction of maxHp — reads as an aura
+      // around the bar, not a second fill.
       if (this.overshield > 0) {
-        const fw = Math.round(barW * hpFrac);
-        const sw = Math.min(barW - fw, Math.max(1, Math.round(barW * this.overshield / this.stats.maxHp)));
-        if (sw > 0) { ctx.fillStyle = "#7ff7ff"; ctx.fillRect(bx + fw, barTop, sw, 3); }
+        const sw = Math.max(2, Math.round(barW * Math.min(1, this.overshield / this.stats.maxHp)));
+        ctx.save();
+        ctx.fillStyle = "rgba(196,110,255,0.22)";
+        ctx.fillRect(bx - 2, barTop - 3, sw + 4, 9);          // soft outer halo
+        ctx.fillStyle = "rgba(196,110,255,0.38)";
+        ctx.fillRect(bx - 1, barTop - 2, sw + 2, 7);          // brighter core wash
+        ctx.strokeStyle = "rgba(224,170,255,0.8)"; ctx.lineWidth = 1;
+        ctx.strokeRect(bx - 1.5, barTop - 2.5, sw + 3, 8);    // crisp rim so the extent reads
+        ctx.restore();
       }
       // H₂O
       ctx.fillStyle = "#1a3344";
@@ -2945,16 +2957,16 @@
       const D = JH.DEEPDIVE;
       const on = !!(JH.Game && JH.Game.deepdiving);
       const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
-      Assets.shadow(ctx, sx, sy, 12);
+      Assets.shadow(ctx, sx, sy, 15);
       ctx.save();
       // Screen glow halo is the differentiator from the vendor's chalkboard
       // sign (same dark-navy palette, no light source of its own) — the TV
       // reads as a lit display even parked, and flares while deepdiving.
-      Assets.glow(ctx, sx, sy - 31, on ? 26 : 17, "#7ff0ff", on ? 0.6 : 0.32);
+      Assets.glow(ctx, sx, sy - 40, on ? 32 : 21, "#7ff0ff", on ? 0.6 : 0.32);
 
-      ctx.fillStyle = "#12161f"; ctx.fillRect(sx - 21, sy - 45, 42, 29);   // cabinet
-      ctx.fillStyle = "#232c3d"; ctx.fillRect(sx - 19, sy - 43, 38, 25);   // bezel
-      const screenX = sx - 18, screenY = sy - 42, screenW = 36, screenH = 23;
+      ctx.fillStyle = "#12161f"; ctx.fillRect(sx - 27, sy - 58, 54, 38);   // cabinet
+      ctx.fillStyle = "#232c3d"; ctx.fillRect(sx - 24, sy - 55, 48, 32);   // bezel
+      const screenX = sx - 23, screenY = sy - 54, screenW = 46, screenH = 30;
       ctx.fillStyle = on ? "#c8f6ff" : "#5fd3ec";
       ctx.fillRect(screenX, screenY, screenW, screenH);
 
@@ -3000,7 +3012,7 @@
       ctx.restore();
 
       ctx.fillStyle = "#0d1420";
-      ctx.fillRect(sx - 13, sy - 16, 3, 16); ctx.fillRect(sx + 10, sy - 16, 3, 16);   // legs
+      ctx.fillRect(sx - 17, sy - 20, 4, 20); ctx.fillRect(sx + 13, sy - 20, 4, 20);   // legs
       ctx.restore();
     }
   }

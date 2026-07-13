@@ -2697,7 +2697,7 @@
       // Walk-up prompt over the Deepdive TV while it's parked (not sat down).
       if (this.state === "play" && this.deepdiveTV && this.deepdiveTV.near && !this.deepdiving) {
         const tsx = Math.round(this.deepdiveTV.x - JH.Camera.x);
-        const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 51;   // clears the 45px cabinet top
+        const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 64;   // clears the 58px cabinet top
         const armed = this.player.kibbleTimer > JH.DEEPDIVE.threshold;
         const label = armed ? "E: DEEPDIVE" : "[REQUIRES KIBBLE]";
         this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
