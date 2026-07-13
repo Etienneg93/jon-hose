@@ -291,10 +291,9 @@
 
       // Emit the hose cone from the TOP-mounted cannon — same water-droplet
       // stream as Jon's hose (JH.PAL colours, cone spread). Traces the SAME
-      // curve as the hit test (hoseStreamY): a quick shed from the cannon to
-      // the cruise line over ~muzzleDrop of travel, then near-level with mild
-      // accumulating gravity so the stream sags at the tail and meets the
-      // road around range.
+      // curve as the hit test (hoseStreamY): STRAIGHT at cannon height until
+      // the droop zone, where gravity kicks in and drops the stream to the
+      // road at range.
       const gunX = t.screenX + CANNON_DX, gunY = JH.Geo.feetScreenY(t.depth, 0) + CANNON_DY;
       const groundY = JH.Geo.feetScreenY(t.depth, 0);   // this lane's road line — droplets skim here, not below
       const sputter = pr.dmgScale < 1;
@@ -303,13 +302,14 @@
       for (let i = 0; i < count; i++) {
         const perp = (Math.random() - 0.5) * C.hoseBandH * 2 * spread;   // droplet scatter fills ± hoseBandH
         const vx = 210 + Math.random() * 150;
-        const tTail = Math.max(0.12, (range - C.muzzleDrop) / vx);   // s from cruise entry to max range
+        const droopStart = range * (1 - C.endFalloff);
+        const tDroop = Math.max(0.1, (range - droopStart) / vx);   // s inside the droop zone
         sc.spray.push({
           x: gunX + Math.random() * 4, y: gunY + perp * 0.35,
           vx: vx,
-          vy: ((C.cannonH - C.cruiseH) / C.muzzleDrop) * vx + perp * 0.9,  // sheds cannonH→cruiseH over ~muzzleDrop px
-          g: 2 * C.cruiseH / (tTail * tTail),   // mild gravity: parabola meets the road ~range
-          cruiseY: groundY - C.cruiseH + perp * 0.5,
+          vy: perp * 0.15,                          // level flight — scatter only
+          g: 2 * C.cannonH / (tDroop * tDroop),     // gravity sized to land at range once the droop starts
+          droopX: gunX + droopStart,                // gravity switches on past this screen x
           groundY: groundY,
           life: range / 260 + Math.random() * 0.05,
           size: Math.random() > 0.5 ? 3 : 2,
@@ -322,17 +322,12 @@
       const sc = this.scene;
       for (const d of sc.spray) {
         d.x += d.vx * dt;
-        if (d.cruiseY != null && d.y < d.cruiseY) {
-          // Muzzle settle: steep initial shed, level off at the cruise line.
-          d.y += d.vy * dt;
-          if (d.y >= d.cruiseY) { d.y = d.cruiseY; d.vy = 0; }
-        } else {
-          // Cruise + tail: mild gravity accumulates — near-level midflight,
-          // visible sag at the tail; skim the road line, never sink through.
-          d.vy += (d.g || 60) * dt;
-          d.y += d.vy * dt;
-          if (d.groundY != null && d.y >= d.groundY) { d.y = d.groundY; d.vy = 0; }
-        }
+        // Straight flight at cannon height; gravity only past the droop
+        // point, dropping the stream onto the road by max range; skim the
+        // road line, never sink through.
+        if (d.droopX == null || d.x >= d.droopX) d.vy += (d.g || 60) * dt;
+        d.y += d.vy * dt;
+        if (d.groundY != null && d.y >= d.groundY) { d.y = d.groundY; d.vy = 0; }
         d.life -= dt;
       }
       sc.spray = sc.spray.filter((d) => d.life > 0);
