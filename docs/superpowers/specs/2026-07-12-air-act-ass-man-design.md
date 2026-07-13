@@ -164,6 +164,23 @@ take +N flat spray damage (number at plan time, tuned against brass nozzle's
 +10). Appears in the relic panel with its own icon; survives death like all
 relics; listed in the test range with "(needs real run)" until granted.
 
+## Leaderboard (user decision, 2026-07-13)
+
+Extending the campaign to 36 waves invalidates pure FASTEST-WINS comparisons
+against 29-wave-era runs. New ranking, in order:
+
+1. **Game version priority:** runs from a newer game version rank above ALL
+   runs from older versions (old boards age out naturally as versions ship;
+   no manual reset needed).
+2. **Waves cleared, descending** — a 36-wave clear beats a 29-wave clear
+   regardless of time.
+3. **Fastest time** as the tiebreak within the same version + wave count.
+
+Client payload must carry `wavesCleared` and the game version (verify at
+plan time what the v0.29 telemetry rows already include; add whichever is
+missing). Sorting lives wherever it lives today (Apps Script/Sheets backend
++ client render) — same split, new comparator.
+
 ## Art & audio notes
 
 - Ass Man sprite: blue suit, gold cape/gloves/boots, gold chest lettering,
