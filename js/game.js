@@ -163,6 +163,15 @@
       // combat verb). Tab / gamepad Back route through JH.Input as the
       // "toggleStats" action, handled in update().
 
+      // Tab-away auto-pause: hidden tabs throttle rAF, and the return burst
+      // (dt clamp + accumulator drain) reads as rubberbanding — pausing on
+      // visibility loss sidesteps the whole class. Resume stays manual.
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden &&
+            (this.state === "play" || this.state === "church" || this.state === "truck"))
+          this.togglePause();
+      });
+
       // ---- dev menu: localhost-only, backtick toggles wave-select overlay ----
       const h = window.location.hostname;
       const isDev = h === "localhost" || h === "127.0.0.1" || h === "";

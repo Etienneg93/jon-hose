@@ -504,6 +504,7 @@
 
   // ---- Juice / game-feel tunables --------------------------------------
   JH.JUICE = {
+    upgradeBeat: 2.2,   // s each level-up stat-gain row holds (icon + delta above the bars)
     // Hit-stop tier table — every freeze routes through game.hitStop, which
     // takes the max of pending freezes (simultaneous kills never sum).
     // DESIGN RULE: moment-to-moment play NEVER freezes (it reads as clunk at
