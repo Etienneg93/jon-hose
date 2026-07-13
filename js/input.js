@@ -43,6 +43,11 @@
     _prev: {},   // action -> bool (held last frame)
     _keys: {},   // action -> bool (from keyboard)
     _bufAt: {},  // action -> _now() timestamp of the latest unconsumed edge
+    // Read-only pointer position in 480x270 logical space (mapped from the
+    // canvas's CSS bounding rect, not devicePixelRatio — the ctx transform
+    // already absorbs dpr, so client coords only need CSS-pixel scaling).
+    // Hover-only: no gameplay code should ever branch on a click here.
+    mouse: { x: -1, y: -1, inside: false },
     _now() { return performance.now(); },
 
     init() {
@@ -68,6 +73,21 @@
       window.addEventListener("blur", () => {
         for (const k in this._keys) this._keys[k] = false;
       });
+
+      // Mouse tracking (no `document` in the node test harness — guarded).
+      if (typeof document !== "undefined") {
+        const canvas = document.getElementById("game");
+        if (canvas && canvas.addEventListener) {
+          canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            this.mouse.x = (e.clientX - rect.left) / rect.width * JH.VIEW_W;
+            this.mouse.y = (e.clientY - rect.top) / rect.height * JH.VIEW_H;
+            this.mouse.inside = true;
+          });
+          canvas.addEventListener("mouseleave", () => { this.mouse.inside = false; });
+        }
+      }
     },
 
     // Call once per frame BEFORE reading state, to fold in gamepad + edges.

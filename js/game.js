@@ -2872,10 +2872,10 @@
           });
         }
       }
-      // Relic grid (expanded only): owned relic icons, 9 per row. The grid
-      // always participates in H — it is never truncated by degradation.
+      // Relic grid (expanded only): owned relic icons, RELIC_COLS per row.
+      const RELIC_COLS = 9;
       const relicIds = expanded ? Object.keys(this.relics || {}) : [];
-      const relicRows = relicIds.length ? Math.ceil(relicIds.length / 9) : 0;
+      const relicRows = relicIds.length ? Math.ceil(relicIds.length / RELIC_COLS) : 0;
 
       const X = 10, Y = 30, ROW = 9;
       // Width follows expansion: benediction names + the relic grid need the
@@ -2883,32 +2883,41 @@
       // starts at PX=280, so the wide panel (x 6..158) never reaches it.
       const W = expanded ? 152 : named ? 74 : 46;
       const relicH = relicRows ? 12 + relicRows * 16 : 0;
+      const statH = rows.length * ROW + 16;
 
-      // Rewraps every benediction desc at maxLines (0 = icon + name only)
-      // and returns the resulting total panel height.
-      const measure = (maxLines) => {
-        let beneH = 0;
-        if (expanded) {
-          if (beneRows.length) {
-            for (const b of beneRows) {
-              b.lines = (inlineDesc && maxLines)
-                ? this.wrapText(b.text, 34, maxLines) : [];
-              // Row height clears the framed icon (±9 with seat rim) or the
-              // text column, whichever is taller.
-              beneH += Math.max(24, 16 + b.lines.length * 6);
-            }
-          } else {
-            beneH = 18;   // "no benedictions yet" hint + slack below its baseline
-          }
+      // Rewraps every benediction desc at maxLines and returns the bene
+      // block height. A name-only row (0 lines) still costs the 24px icon
+      // floor, same as a 1-line row — so the old "degrade to 0" step saved
+      // no space while silently dropping every desc. Never called with 0.
+      const measureBeneH = (maxLines) => {
+        if (!beneRows.length) return 18;   // "no benedictions yet" hint + slack
+        let h = 0;
+        for (const b of beneRows) {
+          b.lines = (inlineDesc && maxLines) ? this.wrapText(b.text, 34, maxLines) : [];
+          // Row height clears the framed icon (±9 with seat rim) or the
+          // text column, whichever is taller.
+          h += Math.max(24, 16 + b.lines.length * 6);
         }
-        return rows.length * ROW + 16 + beneH + relicH;
+        return h;
       };
-      // Panel must never draw past the screen: degrade desc wrap 4 lines ->
-      // 2 lines -> none until the bottom edge fits inside VIEW_H - 4.
+
+      // Panel must never draw past the screen. Ladder: try 2 desc lines,
+      // then 1 (never fewer — every benediction keeps at least one line at
+      // any count). If even 1 line + the full relic grid still overflows
+      // the box, the content block scrolls (see `scroll` below) instead of
+      // dropping any more info.
       const maxBottom = JH.VIEW_H - 4;
-      let H = measure(4);
-      if (Y - 10 + H > maxBottom) H = measure(2);
-      if (Y - 10 + H > maxBottom) H = measure(0);
+      const budget = maxBottom - (Y - 10);      // total box height allowed
+      const contentBudget = budget - statH;      // left for benedictions + relics
+      let beneH = measureBeneH(2);
+      let contentH = beneH + relicH;
+      let scroll = false;
+      if (contentH > contentBudget) {
+        beneH = measureBeneH(1);
+        contentH = beneH + relicH;
+        if (contentH > contentBudget) scroll = true;
+      }
+      const H = scroll ? budget : statH + contentH;
       this.statPanelBottom = Y - 10 + H;   // screen-fit probe for tests
 
       ctx.save();
@@ -2945,6 +2954,23 @@
 
       let by = Y + 6 + rows.length * ROW + 6;
       if (expanded) {
+        const contentTop = by, contentBottom = Y - 10 + H;
+        // Ping-pong auto-scroll the bene+relic block when it's taller than
+        // the box (clip is the hard screen-fit guarantee; the scroll just
+        // brings the rest into view over time instead of cutting it off).
+        const overflow = Math.max(0, contentH - (contentBottom - contentTop));
+        let scrollY = 0;
+        if (scroll && overflow > 0) {
+          const period = 3.5;   // seconds one-way, ~7s full up-down cycle
+          const t = (this.elapsed % (period * 2)) / period;
+          scrollY = -overflow * (t < 1 ? t : 2 - t);
+        }
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(X - 4, contentTop - 2, W, Math.max(0, contentBottom - contentTop + 2));
+        ctx.clip();
+        ctx.translate(0, scrollY);
+
         for (const b of beneRows) {
           const rowStart = by;
           // Icon rail on the left; name + desc share the right column so the
@@ -2966,19 +2992,58 @@
           ctx.fillText("no benedictions yet", X, by + 6);
           by += 12;
         }
+        // Mouse hover-tests the relic grid while the panel is open (read-only:
+        // gates a tooltip, never a click). Position compared post-scroll so
+        // the hit box tracks the icon actually on screen.
+        const mouse = JH.Input && JH.Input.mouse && JH.Input.mouse.inside ? JH.Input.mouse : null;
+        let hoverRelic = null, hoverX = 0, hoverY = 0;
         if (relicIds.length) {
           ctx.font = "5px monospace"; ctx.fillStyle = "#667788"; ctx.textAlign = "left";
           ctx.fillText("RELICS", X, by + 6);
           const gridTop = by + 12;
           relicIds.forEach((id, i) => {
-            const gx = X + 10 + (i % 9) * 16, gy = gridTop + 8 + Math.floor(i / 9) * 16;
+            const gx = X + 10 + (i % RELIC_COLS) * 16, gy = gridTop + 8 + Math.floor(i / RELIC_COLS) * 16;
             const rd = JH.RELICS.find((x) => x.id === id);
             JH.Assets.icon(ctx, id, gx, gy, 1);
             JH.Assets.gearFrame(ctx, gx, gy, 1, rd && rd.tier, this.elapsed);
+            if (mouse && rd) {
+              const visY = gy + scrollY;
+              if (Math.abs(mouse.x - gx) <= 8 && Math.abs(mouse.y - visY) <= 8) {
+                hoverRelic = rd; hoverX = gx; hoverY = visY;
+              }
+            }
           });
           by += relicH;
         }
+        ctx.restore();   // drop the clip before the tooltip so it can spill past the panel box
+
+        if (hoverRelic) this.drawRelicTooltip(ctx, hoverRelic, hoverX, hoverY);
       }
+      ctx.restore();
+    },
+
+    // Relic-grid mouseover: name + desc, clamped fully on-screen near the
+    // hovered cell. Tier-colored border matches drawRelicRackCard's style.
+    drawRelicTooltip(ctx, rd, x, y) {
+      const lines = this.wrapText(rd.desc || "", 40, 3);
+      const W = 130, lineH = 7, H = 13 + lines.length * lineH + 3;
+      let tx = x + 10, ty = y - H - 4;
+      if (tx + W > JH.VIEW_W - 2) tx = JH.VIEW_W - 2 - W;
+      if (tx < 2) tx = 2;
+      if (ty < 2) ty = y + 12;
+      if (ty + H > JH.VIEW_H - 2) ty = JH.VIEW_H - 2 - H;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.95)";
+      ctx.fillRect(tx, ty, W, H);
+      const tierColors = { common: "#8fa8c8", rare: "#c9924a", relic: "#ffd23f" };
+      ctx.strokeStyle = tierColors[rd.tier] || "#8fa8c8";
+      ctx.strokeRect(tx, ty, W, H);
+      ctx.font = "bold 6px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#dfe8f5";
+      ctx.fillText(rd.name, tx + 5, ty + 9);
+      ctx.font = "5px monospace"; ctx.fillStyle = "#aebdd4";
+      let ly = ty + 17;
+      for (const ln of lines) { ctx.fillText(ln, tx + 5, ly); ly += lineH; }
       ctx.restore();
     },
 
