@@ -92,6 +92,7 @@ function killStub(waveActive) {
     waveActive: !!waveActive, combo: 0, kills: 0,
     comboTimer: 0, comboFlash: 0,
     enemies: [], embers: [], particles: [], pickups: [], floaters: [],
+    pulseRings: [], firePatches: [],
     player: {
       x: 0, y: 0, z: 0, alive: true, hp: 100, water: 50, regenLock: 1,
       stats: { maxWater: 100, maxHp: 100 },
@@ -109,6 +110,7 @@ function killStub(waveActive) {
     hitStop(s) { this.hitStopTimer = Math.max(this.hitStopTimer, s); },
     shake(n, d) { JH.Game.shake.call(this, n, d); },
     killJuice(e) { JH.Game.killJuice.call(this, e); },
+    spawnGushPulse() { JH.Game.spawnGushPulse.call(this); },
   };
   return g;
 }
@@ -317,6 +319,18 @@ test("GUSH x5 bumps the regen tier and refunds water", () => {
   assert.strictEqual(g.player.water, 40 + JH.JUICE.comboWaterRefund);
   assert.strictEqual(g.player.regenLock, 0);
   assert.ok(g.audio.played.some((s) => s.k === "upgrade"), "audible milestone");
+});
+
+test("Loaded Sponge: GUSH regen windows (x3 and x5+) run spongeWindowBonus seconds longer", () => {
+  const g = killStub(false);
+  g.relics = { loaded_sponge: true };
+  g.combo = 2;
+  JH.Game.onEnemyKilled.call(g, null);   // x3
+  assert.strictEqual(g.player.gushRegenT, JH.JUICE.gushRegenDur + JH.RELIC_TUNE.spongeWindowBonus);
+
+  g.combo = 4;
+  JH.Game.onEnemyKilled.call(g, null);   // x5
+  assert.strictEqual(g.player.gushRegenT, JH.JUICE.gushRegenDur + JH.RELIC_TUNE.spongeWindowBonus);
 });
 
 test("GUSH regen scales with the milestone — x20 pays 4x the x5 rate, uncapped", () => {

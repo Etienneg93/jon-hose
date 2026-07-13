@@ -32,10 +32,38 @@
     },
 
     // Does the forward hose swath cover a target? dx = target.worldX - nozzleX.
-    // ONE shape shared with the beam render (rim-is-hitbox): a forward band of
-    // half-width hoseBand in depth, out to hoseRange.
-    beamCovers(truckDepth, hoseBand, targetDepth, dx, range) {
-      return dx >= 0 && dx <= range && Math.abs(targetDepth - truckDepth) <= hoseBand;
+    // Boss weak-spot hit: the SPRAY decides — does the ballistic band, where
+    // it crosses the wall (dxWall from the nozzle), overlap the eye's drawn
+    // box? All inputs in screen-y: truckRoadY = the truck lane's ground line,
+    // coreY = the eye's center. Lane choice IS vertical aim (deeper lane =
+    // lower band at the wall), and the ballistic drop offsets it.
+    beamHitsCore(dxWall, range, cfg, bandH, truckRoadY, coreY, coreHalfH) {
+      if (dxWall < 0 || dxWall > range) return false;
+      const streamY = truckRoadY - this.hoseStreamY(dxWall, range, cfg);
+      return streamY - bandH <= coreY + coreHalfH
+          && streamY + bandH >= coreY - coreHalfH;
+    },
+
+    // WYSIWYG stream centerline height above the road at forward distance dx
+    // (dx = target.worldX - nozzleX). One ballistic parabola from the muzzle
+    // to the road at exactly range — near-flat early (gravity is quadratic:
+    // only ~6% dropped by quarter range), sagging mid-flight, diving at the
+    // tail. No piecewise knee — the bend IS gravity.
+    // Matches the ground-hazard hose hit test 1:1 (see truck.js _hose).
+    hoseStreamY(dx, range, cfg) {
+      const k = Math.min(1, Math.max(0, dx) / range);
+      return Math.max(0, cfg.cannonH * (1 - k * k));
+    },
+
+    // Damage falloff along the stream: full dps out to range*(1-endFalloff),
+    // then linear down to endFalloffFloor exactly at range, 0 beyond.
+    hoseDpsMult(dx, range, cfg) {
+      if (dx < 0 || dx > range) return 0;
+      const taperStart = range * (1 - cfg.endFalloff);
+      if (dx <= taperStart) return 1;
+      const span = range - taperStart;
+      const k = span > 0 ? (dx - taperStart) / span : 1;
+      return 1 - k * (1 - cfg.endFalloffFloor);
     },
 
     // Deterministic ~60s spawn schedule, sorted by `at`. rng is injectable for
@@ -96,6 +124,21 @@
       // Crosses — strewn across the build+climax stretch (the risky lanes).
       for (let i = 0; i < cfg.crossCount; i++) {
         events.push({ at: round2(10 + r() * 38), kind: "cross", depth: pick(lanes), value: cfg.crossVal });
+      }
+
+      // Rock-rain — container events; the runtime scene unrolls each into a
+      // burst of timed wreck drops (own lane per drop), see cfg.rockrain.
+      for (const at of cfg.rockrain.at) {
+        events.push({ at: round2(at + (r() - 0.5) * 2), kind: "rockrain", depth: null });
+      }
+
+      // Fuse volley — container events; flavor (drop-in vs flung-in) is
+      // picked once per volley here so it's reproducible from the seed.
+      for (const at of cfg.fusevolley.at) {
+        events.push({
+          at: round2(at + (r() - 0.5) * 2), kind: "fusevolley", depth: null,
+          flavor: r() < 0.5 ? "drop" : "fling",
+        });
       }
 
       events.sort((a, b) => a.at - b.at);

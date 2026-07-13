@@ -179,8 +179,7 @@
       this.sprayEmitAcc = 0;       // fractional particle emitter for the stream
       this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
-      this.pressureBuffT = 0;      // Pressure Charge damage buff, sec remaining
-      this.spigotT = 0;            // Spigot Key: +10% spray dmg window after a hydrant refill, sec remaining
+      this.pressureBuffT = 0;      // Prayer Bead pressure buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
       this.kibbleRegen = 0;        // HP/s during regen
       this.kibbleTickT = 0;        // seconds until the next +N floater tick
@@ -192,16 +191,21 @@
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
       this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
+      this.boilerTarget = null;    // Boiler Coil: enemy the stream has stayed on
+      this.boilerHeat = 0;         // s of continuous same-target spray, resets on switch/gap
+      this.boilerGapT = 0;         // s since the stream last touched boilerTarget (resets heat past boilerGap)
       this.bodyW = this.stats.bodyW;
       this.alive = true;
       this.nearShop = false;
+      this.shopWheelFocus = false;   // set by game.js: shop cursor is on the relic wheel row (left/right = card nav)
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
       this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
       this.upgradeQ = [];     // pending stat-gain sequence entries {icon, text}
       this.upgradeT = 0;      // time left on the entry currently showing
       this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
-      this.sermonFullPressure = false;  // Pressure Sermon: hit full pressure during THIS spray hold
+      this.xpFlashT = 0;      // overhead XP bar visibility: set on XP gain, fades out
+      this.sermonReady = false;  // Pressure Sermon: this hold has sprayed >= SERMON.charge s (pip shown)
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
@@ -240,7 +244,7 @@
       // new stacks for the invuln window (overlapping fire can't insta-max).
       // Returns whether the stack landed so sources can retry, not skip ahead.
       if (this.burnGraceT > 0) return false;
-      this.burnGraceT = this.stats.invuln;
+      this.burnGraceT = this.stats.invuln + ((JH.Game && JH.Game.relics && JH.Game.relics.asbestos_socks) ? JH.RELIC_TUNE.socksGraceBonus : 0);
       this.burnStacks = Math.min(this.burnStacks + n, JH.FIRE.maxBurnStacks);
       this.burnTimer = JH.FIRE.burnDuration;
       return true;
@@ -261,9 +265,10 @@
       this.kibbleTimer = 0; this.kibbleRegen = 0;
       this.concertaTimer = 0; this.pressureBuffT = 0;
       this.gushRegenT = 0; this.gushRegenRate = 0;
-      this.spigotT = 0; this.freeSprayT = 0;
+      this.freeSprayT = 0;
       this.stormT = 0; this.vigorT = 0;
       this.douseCdT = 0; this.dashGraceT = 0;
+      this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
     }
 
     // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
@@ -279,7 +284,8 @@
       if (this.burnTickT >= F.burnTickInterval || expired) {
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
         const hpBefore = this.hp;
-        this.hp = Math.max(0, this.hp - this.burnStacks * F.burnDpsPerStack * this.burnTickT * (this.stats.burnTakenMult || 1));
+        const socksOwned = !!(game.relics && game.relics.asbestos_socks);
+        this.hp = Math.max(0, this.hp - JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
@@ -301,20 +307,62 @@
       if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
-      if (this.spigotT > 0) this.spigotT -= dt;
       if (this.douseCdT > 0) this.douseCdT -= dt;
       if (this.freeSprayT > 0) this.freeSprayT -= dt;
+      if (this.xpFlashT > 0) this.xpFlashT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
       if (this.vigorT > 0) this.vigorT -= dt;
+      // Boiler Coil: a gap in the stream longer than boilerGap drops the heat
+      // (doSpray zeroes boilerGapT every frame it fires; this only fires it up).
+      if (this.boilerGapT != null) {
+        this.boilerGapT += dt;
+        if (this.boilerGapT > JH.RELIC_TUNE.boilerGap) { this.boilerTarget = null; this.boilerHeat = 0; }
+      }
       if (this.statFlash)
         for (const k in this.statFlash)
           if ((this.statFlash[k] -= dt) <= 0) delete this.statFlash[k];
+
+      // Deputy Sprinkler: tank-mounted auto-jet — flat dps on the nearest enemy
+      // in short range. Free (no water); depth counts double like the hit band.
+      if (game.relics && game.relics.deputy_sprinkler && this.alive) {
+        const T = JH.RELIC_TUNE;
+        let best = null, bestD = T.sprinklerRange;
+        for (const e of game.enemies) {
+          if (e.dead || e.dropping) continue;
+          // Dome shelter: an enemy inside an active dome is immune while you're
+          // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
+          if (game.shields) {
+            let sheltered = false;
+            for (const s of game.shields) {
+              if (s.dead || !s.radius || !s.active) continue;
+              if (!insideDome(s, e.x, e.y)) continue;                          // enemy not in this dome
+              if (!insideDome(s, this.x, this.y)) { sheltered = true; break; } // ...and you're outside it
+            }
+            if (sheltered) continue;
+          }
+          const d = Math.hypot(e.x - this.x, (e.y - this.y) * 2.4);
+          if (d < bestD) { bestD = d; best = e; }
+        }
+        if (best) {
+          best.takeDamage(T.sprinklerDps * (best.def ? (best.def.waterMult || 1) : 1) * dt,
+            game, Math.sign(best.x - this.x) || 1, 0);
+          this.sprinklerT = (this.sprinklerT || 0) + dt;
+          if (this.sprinklerT > 0.06) {                     // droplet arc toward the target
+            this.sprinklerT = 0;
+            game.particles.push(new Particle({
+              x: this.x - this.facing * 6, y: this.y, z: this.z + 36,
+              vx: (best.x - this.x) * 2.2, vy: (best.y - this.y) * 2.2,
+              vz: 30, life: 0.4, color: JH.PAL.water, size: 2, grav: 160,
+            }));
+          }
+        }
+      }
 
       // Upgrade sequence: pending stat gains play one at a time — chime up a
       // pitch ladder, gold sparks, icon + delta drawn in Player.draw.
       if (this.upgradeQ.length) {
         if (this.upgradeT <= 0) {
-          this.upgradeT = 1.4;   // beat length — keep in sync with Player.draw's fade math
+          this.upgradeT = JH.JUICE.upgradeBeat;   // beat length (config; draw fade derives from the same knob)
           this.upgradeIdx++;
           game.audio.play("upgrade", { pitch: 1 + 0.12 * Math.min(5, this.upgradeIdx) });
           burst(game, this.x, this.y, this.z + 22, "#ffd23f", 8, { speed: 55, life: 0.4, up: 55, size: 2 });
@@ -330,7 +378,10 @@
 
       // ---- movement vector
       const wantSpray = In.held("spray") && this.dashTimer <= 0;
-      let mx = (In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0);
+      // Suppress horizontal movement while the shop cursor is on the wheel
+      // row — left/right is card navigation there. Off the wheel row, walking
+      // out of the shop with left/right still works. Dash is never suppressed.
+      let mx = this.shopWheelFocus ? 0 : ((In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0));
       // Suppress vertical movement when near shop — up/down is used for shop navigation.
       let my = this.nearShop ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
       // Facing is LOCKED while spraying so you can back-pedal and keep aim.
@@ -408,8 +459,6 @@
         this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
-        if (S.dashPuddle)   // Hydro-Dash leaves a slick splash
-          burst(game, this.x, this.y, 1, JH.PAL.water, 7, { speed: 38, life: 0.55, up: 4, grav: 0, size: 2 });
         // Baptismal Wake: dash leaves an enemy-slowing puddle; rank II also
         // soaks enemies standing in it (see SlowZone's vsEnemies comment).
         const wakeRank = this.beneRank("baptismal_wake");
@@ -496,30 +545,22 @@
       this.spraying = false;
       if (wantSpray) this.doSpray(dt, game);
       else {
-        // Pressure Sermon: releasing after >=0.8s of continuous full-pressure
-        // spray emits a knockback cone. Checked here, before sprayHeldT is
+        // Pressure Sermon: releasing an armed hold (>= SERMON.charge seconds
+        // of continuous non-dry spray — the pip shows the armed state) looses
+        // a forward-traveling water wave. Checked here, before sprayHeldT is
         // zeroed below, so it fires exactly once per qualifying hold/release.
-        if (this.beneRank("pressure_sermon") && this.sprayHeldT >= 0.8
-            && this.sermonFullPressure && this.water >= 10) {
-          this.water -= 10;
-          for (const e of game.enemies) {
-            if (e.dead || e.dropping) continue;
-            const dx = e.x - this.x, dy = e.y - this.y;
-            if (Math.hypot(dx, dy) > 70) continue;
-            if (Math.abs(Math.atan2(dy, dx * this.facing)) > 0.6) continue;
-            e.takeDamage(15, game, this.facing, 0);
-            e.applyKnockback(this.facing, 200, (e.y - this.y) * 0.02);
-          }
-          // A clear cone blast so the cast reads: a wide fan of water thrown
-          // forward + a punchy shake. (Polished cone telegraph is a TODO.)
-          const bx = this.x + this.facing * 24;
-          burst(game, bx, this.y, 22, JH.PAL.waterHi, 26, { speed: 175, life: 0.45, up: 55, size: 2 });
-          burst(game, bx, this.y, 8, JH.PAL.water, 14, { speed: 110, life: 0.4, up: 22 });
-          game.shake(4);
+        if (this.beneRank("pressure_sermon") && this.sermonReady) {
+          game.sermonWaves.push({
+            x: this.x + this.facing * 12, y: this.y, dir: this.facing,
+            traveled: 0, hit: new Set(),
+          });
+          burst(game, this.x + this.facing * 20, this.y, 16, JH.PAL.waterHi, 18,
+            { speed: 150, life: 0.35, up: 40, size: 2 });
+          game.shake(3);
           game.audio.play("blast");
         }
         this.sprayHeldT = 0;   // reset the stream-front timer on release
-        this.sermonFullPressure = false;
+        this.sermonReady = false;
       }
 
       // ---- water regen (after a short delay since last spray)
@@ -536,9 +577,11 @@
         for (const h of game.hydrants) {
           if (Math.abs(this.x - h.x) < JH.HYDRANT.range && Math.abs(this.y - h.y) < 24) {
             this.nearHydrant = h;
-            // Spigot Key: a hydrant refill grants a brief spray-dmg buff.
-            if (game.relics && game.relics.spigot_key) this.spigotT = 15;
             if (this.water < S.maxWater) {
+              // Spigot Key: heals only while the hydrant is actively refilling
+              // (full tank = no heal, so hydrants can't be camped for HP).
+              if (game.relics && game.relics.spigot_key)
+                this.hp = Math.min(S.maxHp, this.hp + JH.RELIC_TUNE.spigotHealRate * dt);
               this.water = Math.min(S.maxWater, this.water + JH.HYDRANT.refill * dt);
               if (Math.random() < 0.5)
                 game.particles.push(new Particle({
@@ -590,12 +633,12 @@
       // while any water remains — dry still sputters, 80%+ still gets bonus.
       else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      // Pressure Sermon: once this hold reaches full pressure (top tier) the
-      // sermon is armed for the whole hold — the release check can't require
-      // full pressure ON the release frame, since 0.8s of spraying always
-      // drains the tank below 80% (100 tank / 36 drain → full pressure lasts
-      // ~0.56s), which made the cone effectively never fire.
-      if (dmgScale >= 1.2) this.sermonFullPressure = true;
+      // Pressure Sermon: arms after SERMON.charge seconds of continuous
+      // non-dry spray — no pressure-tier requirement (a tier gate made it
+      // near-unfireable: 100 tank / 36 drain keeps the top tier only ~0.56s).
+      // The pip in draw() shows the armed state; release fires the wave.
+      if (this.beneRank("pressure_sermon") && !dry && this.sprayHeldT >= JH.SERMON.charge)
+        this.sermonReady = true;
       if (!dry && this.concertaTimer <= 0 && this.freeSprayT <= 0) this.water = Math.max(0, this.water - S.waterDrain * dt);
       // (Concerta refill is handled in update() so the tank fills whether or not spraying.)
 
@@ -606,8 +649,9 @@
 
       const ox = this.x + this.facing * 12;   // nozzle x (world)
       const oy = this.y;                       // nozzle depth
-      const oz = this.z + 30;                  // nozzle height — static, matches new sprite
+      const oz = this.z + JH.PLAYER.nozzleZ;   // nozzle height — static, matches new sprite
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
+      this._dbgReach = reach;   // live value for the KeyH hitbox overlay
       const beam = S.beam | 0;                 // concentration tier 0..3
 
       // Hydro Lance (beam=3) pierces the whole line; default stops at first
@@ -616,16 +660,14 @@
       const pierce = beam >= 3;
       let blocker = null;
       let minFwd = Infinity;   // near-edge distance of the chosen blocker (used below)
-      let shieldFwd = Infinity;     // near edge of the CLOSEST blocking shield/dome in the stream
-      let blockerIsEnemy = false;   // final blocker came from game.enemies (not a shield/dome)
       {
         if (!pierce) {
           for (const e of game.enemies) {
             if (e.dead) continue;
             if (e.dropping) continue;   // airborne drop-ins can't block or be hit
-            if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, oz, e, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (e.x - ox) * this.facing;
-            if (fwd < minFwd) { minFwd = fwd; blocker = e; blockerIsEnemy = true; }
+            if (fwd < minFwd) { minFwd = fwd; blocker = e; }
           }
         }
         for (const s of game.shields) {
@@ -643,39 +685,12 @@
             const half = s.radius * Math.sqrt(1 - (dyS * dyS) / (ry * ry));// x half-width at this depth
             const edgeFwd = (s.x - ox) * this.facing - half;               // near edge along facing
             if (edgeFwd < 0 || edgeFwd > reach) continue;                  // behind the aim / out of reach
-            if (edgeFwd < shieldFwd) shieldFwd = edgeFwd;
-            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; blockerIsEnemy = false; }
+            if (edgeFwd < minFwd) { minFwd = edgeFwd; blocker = s; }
           } else {
-            if (!Geo.inHitArc(this, s, this.facing, reach, S.sprayHitBand)) continue;
+            if (!Geo.inSprayPath(ox, this.y, oz, s, this.facing, reach, S.sprayHitBand)) continue;
             const fwd = (s.x - ox) * this.facing;
-            if (fwd < shieldFwd) shieldFwd = fwd;
-            if (fwd < minFwd) { minFwd = fwd; blocker = s; blockerIsEnemy = false; }
+            if (fwd < minFwd) { minFwd = fwd; blocker = s; }
           }
-        }
-      }
-      // Brass Nozzle: the non-pierce stream also catches the next-closest
-      // enemy in arc (a second, independent blocker — not just splash off the
-      // first). Only when the primary blocker is an ENEMY (a shield/dome
-      // blocker means the stream is stopped by a wall — nothing gets promoted
-      // past it), and never a candidate at/past any blocking shield's near
-      // edge or sheltered inside an active dome.
-      let blocker2 = null;
-      if (!pierce && blockerIsEnemy && game.relics && game.relics.brass_nozzle) {
-        let minFwd2 = Infinity;
-        for (const e of game.enemies) {
-          if (e.dead || e.dropping || e === blocker) continue;
-          if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-          const fwd = (e.x - ox) * this.facing;
-          if (fwd >= shieldFwd) continue;   // the stream never reaches past a shield/dome
-          // Dome shelter mirrors the damage loop's rule: don't promote a
-          // target the loop would refuse to hit — pick a reachable one instead.
-          let sheltered = false;
-          for (const s of game.shields) {
-            if (s.dead || !s.radius || !s.active) continue;
-            if (insideDome(s, e.x, e.y) && !insideDome(s, this.x, this.y)) { sheltered = true; break; }
-          }
-          if (sheltered) continue;
-          if (fwd < minFwd2) { minFwd2 = fwd; blocker2 = e; }
         }
       }
       // Particles die at the blocker's near face so the stream visually stops there.
@@ -732,8 +747,7 @@
         }
       }
 
-      // Damage enemies: non-pierce hits only the closest (blocker) — plus a
-      // second, next-closest target (blocker2) when Brass Nozzle is owned;
+      // Damage enemies: non-pierce hits only the closest (blocker);
       // pierce hits everyone EXCEPT anyone standing behind a planted shield's wall.
       // (`blocker` can only ever be an enemy in non-pierce mode, or a
       // DeployedShield in pierce mode — see the blocker-finding block above,
@@ -754,12 +768,44 @@
       const anyBene = beneRanks.overflow || beneRanks.baptize || beneRanks.trial;
       const waterFrac = this.water / S.maxWater;
       const blockerFwd = blocker ? (blocker.x - ox) * this.facing : Infinity;
+      // Brass Nozzle: flat dmg add to the nearest-forward enemy hit this frame
+      // (in pierce mode `blocker` is shield-only, so scan with the loop's filters).
+      const nozzleAdd = (game.relics && game.relics.brass_nozzle) ? JH.RELIC_TUNE.brassNozzleAdd : 0;
+      let nozzleTarget = null;
+      if (nozzleAdd) {
+        if (!pierce) nozzleTarget = blocker;   // non-pierce: nearest in-arc enemy IS the blocker
+        else {
+          let bestFwd = Infinity;
+          for (const e of game.enemies) {
+            if (e.dead || e.dropping) continue;
+            if (!Geo.inSprayPath(ox, this.y, oz, e, this.facing, reach, S.sprayHitBand)) continue;
+            const fwd = (e.x - ox) * this.facing;
+            if (blocker && fwd > blockerFwd) continue;
+            if (game.shields) {
+              let sheltered = false;
+              for (const s of game.shields) {
+                if (s.dead || !s.radius || !s.active) continue;
+                if (!insideDome(s, e.x, e.y)) continue;
+                if (!insideDome(s, this.x, this.y)) { sheltered = true; break; }
+              }
+              if (sheltered) continue;
+            }
+            if (fwd < bestFwd) { bestFwd = fwd; nozzleTarget = e; }
+          }
+        }
+      }
+      // Gather pass: every filter (dead/dropping/arc/blocker/dome-shelter)
+      // decides WHO gets hit; the apply pass below decides HOW HARD. Pierce
+      // sorts nearest-first so the falloff ladder (Hydro Lance) reads off
+      // hit order regardless of game.enemies' array order.
+      const targets = [];
       for (const e of game.enemies) {
         if (e.dead) continue;
         if (e.dropping) continue;   // airborne drop-ins can't be hit
-        if (!Geo.inHitArc(this, e, this.facing, reach, S.sprayHitBand)) continue;
-        if (!pierce && e !== blocker && e !== blocker2) continue;
-        if (pierce && blocker && (e.x - ox) * this.facing > blockerFwd) continue;
+        if (!Geo.inSprayPath(ox, this.y, oz, e, this.facing, reach, S.sprayHitBand)) continue;
+        if (!pierce && e !== blocker) continue;
+        const fwd = (e.x - ox) * this.facing;
+        if (pierce && blocker && fwd > blockerFwd) continue;
         // Dome shelter: an enemy inside an active dome is immune while you're
         // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
         if (game.shields) {
@@ -771,15 +817,26 @@
           }
           if (sheltered) continue;
         }
+        targets.push({ e, fwd });
+      }
+      if (pierce) targets.sort((p, q) => p.fwd - q.fwd);
+      const LF = JH.RELIC_TUNE.lanceFalloff;
+      targets.forEach(({ e }, idx) => {
+        // Hydro Lance: pierce damage fades down the hit line (ladder repeats
+        // its last entry past its length); non-pierce hits take falloff 1.
+        const falloff = pierce ? LF[Math.min(idx, LF.length - 1)] : 1;
         const mult = e.def ? (e.def.waterMult || 1) : 1;
-        const pressureMult = this.pressureBuffT > 0 ? JH.CONSUMABLES.pressure.mult : 1;
+        const pressureMult = this.pressureBuffT > 0 ? JH.RELIC_TUNE.prayerBeadMult : 1;
         const beneMult = anyBene ? JH.Balance.beneDmgMult(beneRanks, {
           waterFrac, wet: e.wetness || 0,
           burning: (e.scaldT || 0) > 0 || (beneRanks.trial > 0 && enemyInFire(game, e)),
         }) : 1;
         const ssMult = standingStone ? 1.25 : 1;   // Standing Stone: braced spray hits harder
-        const spigotMult = this.spigotT > 0 ? 1.1 : 1;   // Spigot Key: post-hydrant dmg window
-        const dmg = S.sprayDamage * dmgScale * mult * pressureMult * beneMult * ssMult * spigotMult * dt;
+        const leashAdd = (game.relics && game.relics.dog_leash && (e.state === "charge" || e.state === "lunge"))
+          ? JH.RELIC_TUNE.leashLungeBonus : 0;
+        const rosaryAdd = (game.relics && game.relics.rosary_chain && game.rosaryBonus) ? game.rosaryBonus : 0;
+        const flatDmg = S.sprayDamage + (e === nozzleTarget ? nozzleAdd : 0) + leashAdd + rosaryAdd;
+        const dmg = flatDmg * falloff * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
         e.takeDamage(dmg, game, this.facing, 0);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
         // fire pillar's baseline capstone are independent sources — both can land.
@@ -814,6 +871,35 @@
         // huge HP pools gave full-rate sustain near-permanent uptime.
         if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
         if (ssRank) hitEnemies.push(e);
+      });
+      const primary = targets.length ? targets[0].e : null;  // nearest hit enemy (Boiler Coil hooks this)
+      // Boiler Coil: heat builds while the stream stays on one target.
+      if (!dry && game.relics && game.relics.boiler_coil) {
+        const T = JH.RELIC_TUNE;
+        if (primary === this.boilerTarget && primary) this.boilerHeat += dt;
+        else { this.boilerTarget = primary; this.boilerHeat = 0; }
+        this.boilerGapT = 0;
+        if (primary && this.boilerHeat >= T.boilerHeatTime) {
+          primary.takeDamage(T.boilerBonus * dmgScale * dt, game, this.facing, 0);
+          for (const e of game.enemies) {                    // splash: same radius the FX shows
+            if (e.dead || e === primary) continue;
+            if (!Geo.inGroundEllipse(e.x, e.y, primary.x, primary.y, T.boilerSplashR, T.boilerSplashR * 0.34)) continue;
+            // Dome shelter: an enemy inside an active dome is immune while you're
+            // outside it (Bulwark + any Pyros it protects). Step inside to hit them.
+            if (game.shields) {
+              let sheltered = false;
+              for (const s of game.shields) {
+                if (s.dead || !s.radius || !s.active) continue;
+                if (!insideDome(s, e.x, e.y)) continue;                          // enemy not in this dome
+                if (!insideDome(s, this.x, this.y)) { sheltered = true; break; } // ...and you're outside it
+              }
+              if (sheltered) continue;
+            }
+            e.takeDamage(T.boilerSplash * dmgScale * dt, game, this.facing, 0);
+          }
+          if (Math.random() < 12 * dt)                       // steam/ember flecks mark the superheat
+            burst(game, primary.x, primary.y, primary.z + 14, JH.PAL.flame, 2, { speed: 40, life: 0.3, up: 30 });
+        }
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
@@ -872,7 +958,7 @@
           if (fp.dead) continue;
           const fwd = (fp.x - ox) * this.facing;
           if (fwd > 0 && fwd - this.bodyW * 0.5 - fp.radius <= reach
-              && Math.abs(fp.y - oy) < S.sprayHitBand) {
+              && Math.abs(fp.y - oy) < JH.FIRE.douseBand) {
             // Douse speed scales with spray damage (built-up hoses put fires
             // out faster); clamped so a weak/low-pressure stream never douses
             // slower than the old flat rate.
@@ -960,26 +1046,6 @@
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
       const spriteSy = Geo.feetScreenY(this.y, this.z);
-      // Upgrade sequence: the current stat gain rises off Jon's head — icon
-      // + green delta, fading in fast and out at the end of its beat.
-      if (this.upgradeQ.length && this.upgradeT > 0) {
-        const e = this.upgradeQ[0];
-        const k = 1 - this.upgradeT / 1.4;                        // 0 → 1
-        // Quick fade-in, long readable hold, fade-out only in the last ~15%
-        // of the beat so the text finishes before it starts to go.
-        const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
-        // Sits in the gap between Jon's head and the overhead HP/H2O bars
-        // (bar bottom at bodyH+22); a short rise kept clear of the bar (12px
-        // icon centered here) so the gain text is never clipped behind it.
-        const iy = spriteSy - this.stats.bodyH - 8 - 4 * k;
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, a);
-        Assets.icon(ctx, e.icon, sx - 16, iy, 1);
-        ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
-        ctx.fillStyle = "#80ff80";
-        ctx.fillText(e.text, sx - 8, iy + 3);
-        ctx.restore();
-      }
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
       // that — active buffs stack visually instead of overwriting. Burn's
@@ -1021,6 +1087,18 @@
         ctx.restore();
       }
       if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
+
+      // Pressure Sermon pip: pulsing water diamond at the nozzle side while
+      // the hold is armed — "release now" reads at a glance.
+      if (this.sermonReady) {
+        const px2 = sx + this.facing * 15, py2 = spriteSy - 30;
+        const p = 2.5 + Math.sin(this.t * 10) * 0.8;
+        ctx.save();
+        ctx.translate(px2, py2); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = JH.PAL.waterHi; ctx.fillRect(-p, -p, p * 2, p * 2);
+        ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 1; ctx.strokeRect(-p, -p, p * 2, p * 2);
+        ctx.restore();
+      }
 
       // DEBUG: collision box
       if (JH.DEBUG_HITBOX) {
@@ -1070,6 +1148,21 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // XP: sits ABOVE the HP bar (grows away from Jon's head) only while
+      // xpFlashT runs (set on gain), fading over its last 0.5s.
+      const xpShown = this.xpFlashT > 0 && JH.Game && JH.Game.playerLevel != null;
+      if (xpShown) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.xpFlashT / 0.5);
+        const xf = Math.min(1, JH.Game.playerXp / JH.Balance.xpForLevel(JH.Game.playerLevel + 1));
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.fillRect(bx - 1, barTop - 5, barW + 2, 4);
+        ctx.fillStyle = "#443300";
+        ctx.fillRect(bx, barTop - 4, barW, 2);
+        ctx.fillStyle = "#ffd23f";
+        ctx.fillRect(bx, barTop - 4, Math.round(barW * xf), 2);
+        ctx.restore();
+      }
       // GUSH regen: a brightness wave travels left → right through the
       // FILLED portion only — a brighter shade of the bar's own blue, kept
       // strictly inside the fill (no halo).
@@ -1085,8 +1178,33 @@
         }
         ctx.restore();
       }
-      // Status indicators above bars — stacked if both active
+      // Status indicators above bars — indY is a running baseline cursor:
+      // it starts above whatever the XP bar occupies (sliding down in sync
+      // with its fade) and every row claims 7px, so rows never overlap the
+      // XP bar or each other.
       let indY = barTop - 2;
+      if (xpShown) indY -= Math.round(6 * Math.min(1, this.xpFlashT / 0.5));
+      // Upgrade sequence: the current stat gain claims the first status row —
+      // icon + green delta ABOVE the bars, in front of everything, kept clear
+      // of the XP bar and other rows by the same indY cursor that stacks
+      // KIBBLE/FOCUSED/BURN (never mid-sprite, never behind the body).
+      if (this.upgradeQ.length && this.upgradeT > 0) {
+        const e = this.upgradeQ[0];
+        const k = 1 - this.upgradeT / JH.JUICE.upgradeBeat;       // 0 → 1
+        // Quick fade-in, long readable hold, fade-out only in the last ~15%
+        // of the beat so the text finishes before it starts to go.
+        const a = Math.min(1, k / 0.1) * Math.min(1, (1 - k) / 0.15);
+        const gy = indY - 7;                  // 12px icon row centered here
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, a);
+        Assets.icon(ctx, e.icon, sx - 14, gy, 1);
+        ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+        ctx.fillStyle = "#80ff80";
+        ctx.fillText(e.text, sx - 6, gy + 3);
+        ctx.restore();
+        ctx.textAlign = "left";
+        indY -= 15;                           // icon row claims two slots
+      }
       if (this.kibbleTimer > 0) {
         ctx.fillStyle = "#44ff77";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
@@ -1103,11 +1221,13 @@
         ctx.fillStyle = "#ff6610";
         ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
         ctx.fillText("BURN x" + this.burnStacks, sx, indY);
+        indY -= 7;
       }
 
-      // Floating coin count above bars when standing near the vendor
+      // Floating coin count above bars when standing near the vendor;
+      // takes the next free slot on the indY cursor (9px-tall bg box).
       if (this.nearShop) {
-        const coinY = barTop - 12;
+        const coinY = indY - 8;
         ctx.fillStyle = "rgba(0,0,0,0.65)";
         ctx.fillRect(bx - 1, coinY - 1, barW + 2, 9);
         ctx.fillStyle = "#ffd23f";
@@ -2288,7 +2408,8 @@
         return true;
       }
       const pl = game.player;
-      if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r))
+      if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r) &&
+          !(game.relics && game.relics.rubber_boots))
         pl.zoneSlow = this.slowMult;
       return true;
     }
@@ -2460,14 +2581,18 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       const spd = enraged ? d.speed * 1.6 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
 
-      // Summon reinforcements occasionally.
+      // Summon reinforcements occasionally — but only while the encounter's
+      // drop budget has anything left: once adds stop paying, more of them
+      // is mop-up noise, so the boss stops calling them.
       this.summonTimer -= dt;
-      if (this.summonTimer <= 0 && game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
+      const budgetLeft = !game.dropBudget || game.dropBudget.suds > 0 || game.dropBudget.items > 0;
+      if (this.summonTimer <= 0 && budgetLeft &&
+          game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
         this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
         game.spawnEnemy(this.summonType, this.x - this.facing * 40, this.y + 10, { infinite: true });
       }
@@ -2612,9 +2737,9 @@
       if (this.kind === "suds") { pl.suds += this.value; pl.sudsEarned += this.value; game.audio.play("coin"); }
       else if (this.kind === "health") {
         // Stacking kibble EXTENDS the regen window (never resets it — two
-        // kibbles heal for twice as long).
-        pl.kibbleTimer += 6.0;
-        pl.kibbleRegen = this.value / 6.0;
+        // kibbles heal for twice as long). Routed through Balance.kibbleGrant
+        // so the shop's Kibble Pack buy shares the same semantics.
+        JH.Balance.kibbleGrant(pl, { dur: 6.0, heal: this.value });
         game.audio.play("buy");
         burst(game, pl.x, pl.y, pl.z + 10, JH.PAL.hpPk, 10, { speed: 70, life: 0.45, up: 50 });
       }
@@ -2651,7 +2776,7 @@
   JH.Pickup = Pickup;
 
   // ================================================== BENEDICTION SIGILS
-  // Post-boss/set-piece walk-up offer: a floating element glyph, picked with
+  // Post-boss/set-piece walk-up offer: a floating unique benediction glyph, picked with
   // E in range. Proximity + input are ticked game-side (game.tickSigils,
   // mirrors tickRangeStations); the sigil only exposes near (label range)
   // and pick(). Picking one offer clears all sigils on the field.
@@ -2689,8 +2814,8 @@
       const col = SIGIL_COLORS[this.element] || "#ffffff";
       const dk = SIGIL_COLORS_DK[this.element] || "#333333";
       Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), 6);
-      // Baked element icon; the rotated diamond stays as the streaming fallback.
-      const hasIcon = Assets.icon(ctx, "el_" + this.element, sx, sy, 1);
+      // Baked unique benediction glyph; the rotated diamond stays as the streaming fallback.
+      const hasIcon = Assets.icon(ctx, "bene_" + this.offer.id, sx, sy, 1);
       if (!hasIcon) {
         ctx.save();
         ctx.translate(sx, sy);
@@ -2710,31 +2835,11 @@
         ctx.strokeRect(-half, -half, half * 2, half * 2);
         ctx.restore();
       }
-      // Kind frames ring the icon at 1.5x so they read around the glyph.
-      if (this.kind === "duo" && hasIcon && !Assets.icon(ctx, "frame_duo", sx, sy, 1.5)) {
-        // Two-tone diamond ring fallback while frame_duo streams in.
-        ctx.save();
-        ctx.translate(sx, sy);
-        ctx.rotate(Math.PI / 4);
-        const h = 7;
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = SIGIL_COLORS[d.needs[0]] || col;
-        ctx.strokeRect(-h, -h, h, h * 2);
-        ctx.strokeStyle = SIGIL_COLORS[d.needs[1]] || col;
-        ctx.strokeRect(0, -h, h, h * 2);
-        ctx.restore();
-      }
+      // Rarity frame + glow rings the icon (boon/duo/legendary per tier).
+      Assets.tierFrame(ctx, sx, sy, d, this.offer.deepen ? 2 : 1, 1.1, this.t);
       // Verb corner mark tells same-element boons apart (boons only — the
       // duo/legendary frames are their distinguisher).
       if (this.kind === "boon" && d.verb) Assets.verbMark(ctx, d.verb, sx + 6, sy - 6);
-      if (this.kind === "legendary" && !Assets.icon(ctx, "frame_legendary", sx, sy, 1.5)) {
-        // Gold double-ring around legendary sigils (fallback).
-        ctx.save();
-        ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
-        ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-      }
       if (this.offer.deepen) {
         ctx.fillStyle = "#fff"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         ctx.fillText("II", sx, sy - 15);
@@ -2796,7 +2901,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       if (this.fireFx > 0) this.fireFx -= dt;
 
@@ -3401,7 +3506,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       const spd = enraged ? d.speed * 1.4 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -3947,7 +4052,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       if (this.fireFx > 0) this.fireFx -= dt;
 
@@ -4151,7 +4256,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       // Pin to the right edge of the arena; never moves.
       this.x = game.bounds.maxX - 6;
@@ -4593,7 +4698,7 @@
       // Prayer Bead: a boss's FIRST enrage flip grants a brief pressure buff (once per boss).
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
-        if (game.relics && game.relics.prayer_bead) game.player.pressureBuffT = Math.max(game.player.pressureBuffT, 4);
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
       if (this.strikeFx > 0) this.strikeFx -= dt;
       if (this.shootPoseT > 0) this.shootPoseT -= dt;

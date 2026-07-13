@@ -29,7 +29,7 @@
     enemies: [], embers: [], pickups: [], particles: [], floaters: [], sigils: [],
     beneUsedOnce: {},
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
-    hydrants: [], shopNpc: null, nearShop: false,
+    hydrants: [], shopNpc: null, nearShop: false, nearVendor: false, shopOpen: false,
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
@@ -43,6 +43,11 @@
     essenceDim: 0,              // 0..1 world-darken while a Holy Essence cross is uncollected
     bannerTimer: 0,
     shopCursor: 0,
+    shopWheelSlot: 0,   // 0-3 cursor within the relic wheel row (3 = kibble)
+    wheelStock: [],     // spawn-time snapshot of relicStock — wheel slots render from this and never shift
+    wheelSpinT: 0,      // seconds since the spin started; drives the reel spin-in
+    _wheelSpun: false,  // latches on the first nearShop approach — one spin per vendor
+    _wheelSettled: [false, false, false],   // one-shot "coin" SFX per reel as it settles
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
     dyingBoss: null, deathSeqT: 0,
@@ -155,12 +160,16 @@
       sync();
 
       // Tab toggles the stat panel anywhere in play (UI chrome, not a
-      // combat verb — preventDefault stops browser focus-cycling).
-      window.addEventListener("keydown", (e) => {
-        if (e.code === "Tab" && this.state === "play") {
-          e.preventDefault();
-          this.showStats = !this.showStats;
-        }
+      // combat verb). Tab / gamepad Back route through JH.Input as the
+      // "toggleStats" action, handled in update().
+
+      // Tab-away auto-pause: hidden tabs throttle rAF, and the return burst
+      // (dt clamp + accumulator drain) reads as rubberbanding — pausing on
+      // visibility loss sidesteps the whole class. Resume stays manual.
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden &&
+            (this.state === "play" || this.state === "church" || this.state === "truck"))
+          this.togglePause();
       });
 
       // ---- dev menu: localhost-only, backtick toggles wave-select overlay ----
@@ -175,6 +184,14 @@
             this.startGame();
           this.devMenu = !this.devMenu;
           if (this.devMenu) this.devCursor = 0;
+          return;
+        }
+        // H — toggle the hitbox overlay (street + truck run): the REAL hit
+        // variables drawn live, for auditing bands that feel off.
+        if (e.code === "KeyH") {
+          e.preventDefault();
+          JH.DEBUG_HITBOX = !JH.DEBUG_HITBOX;
+          this.banner("HITBOXES " + (JH.DEBUG_HITBOX ? "ON" : "OFF"), 1.0);
           return;
         }
         // K — instantly kill the active boss to test the death sequence
@@ -248,6 +265,10 @@
       ];
       // Isolated dummy for basic pierce / splash testing
       this.spawnEnemy("dummy", 320, py);
+      // Charge-cycling dummy: state flips to "charge" 1.2s of every 4s so the
+      // Dog Leash bonus window is visible on demand (no real charger AI).
+      const cd = this.spawnEnemy("dummy", 390, py);
+      cd.rangeChargeCycle = true;
       // Group of three: two in-line (pierce) + one off-depth (split stream)
       const gx = 460, gy = py;
       this.spawnEnemy("dummy", gx,      gy);       // front  — primary target
@@ -287,9 +308,53 @@
         beneMaxX = Math.max(beneMaxX, bxp);
       });
       this.bounds.maxX = Math.max(this.bounds.maxX, beneMaxX + 50);
+      // Relic rack: one toggle station per relic, roster order (common → rare →
+      // relic-grade reads left to right), two rows right of the sigil rows.
+      const rackX0 = 700, rackDX = 36, rackRowY = [58, 80];
+      let rackMaxX = 0;
+      JH.RELICS.forEach((r, i) => {
+        const rx = rackX0 + (i % 11) * rackDX;
+        this.rangeStations.push({ kind: "relic", relic: r.id, x: rx, y: rackRowY[i < 11 ? 0 : 1], near: false });
+        rackMaxX = Math.max(rackMaxX, rx);
+      });
+      this.bounds.maxX = Math.max(this.bounds.maxX, rackMaxX + 80);
+      // Scenario props (relic testing) --------------------------------------
+      // Slow puddle: permanent player-slow zone (rubber_boots immunity test).
+      this.slowZones.push(new JH.SlowZone(380, 70, 26, 1e9));
+      // Dome pair: permanent dome, one dummy sheltered + one outside
+      // (deputy_sprinkler shelter check, lance blocker feel).
+      const dome = new JH.DeployedShield(1220, py, null);
+      dome.domeDur = dome.domeT = 1e9;
+      this.shields.push(dome);
+      this.spawnEnemy("dummy", 1220, py);                       // sheltered
+      this.spawnEnemy("dummy", 1220 + dome.radius + 26, py);    // outside
+      this.bounds.maxX = Math.max(this.bounds.maxX, 1220 + dome.radius + 110);
+      // Generous drop budget so spawner-mook kills pay out (dowsing_rod / plate).
+      this.dropBudget = { suds: 999, items: 99 };
+      // Stations: super-elite proc button, mook spawner, fire patch spawner.
+      this.rangeStations.push(
+        { kind: "superelite", x: 140, y: py, near: false },
+        { kind: "mook",       x: 520, y: py, near: false },
+        { kind: "firepatch",  x: 600, y: py, near: false },
+      );
       this.rangeMode = true;
       this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
       this.devMenu = false;
+    },
+
+    // Dev range: toggle a relic on/off and re-fold stats (apply() relics need
+    // computeStats to run both ways). Revoking also clears the relic's live
+    // state so an A/B toggle can't leave stale bonuses behind.
+    toggleRelic(id) {
+      const owned = !!this.relics[id];
+      if (owned) delete this.relics[id];
+      else this.relics[id] = true;
+      const p = this.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      if (p.hp > p.stats.maxHp) p.hp = p.stats.maxHp;
+      if (!this.relics.rosary_chain) this.rosaryBonus = 0;
+      if (!this.relics.boiler_coil) { p.boilerTarget = null; p.boilerHeat = 0; p.boilerGapT = 0; }
+      return !owned;
     },
 
     // Standalone test arena for the wall boss (not in the wave list yet).
@@ -409,14 +474,18 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
+      this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
       this.voucher50 = false;
       this.relics = {}; this.relicStock = [];
+      this.shopWheelSlot = 0; this.wheelStock = []; this.wheelSpinT = 0;
+      this._wheelSpun = false; this._wheelSettled = [false, false, false];
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
-      this.shopNpc = null; this.nearShop = false; this.shopCursor = 0;
+      this.shopNpc = null; this.nearShop = false; this.nearVendor = false;
+      this.shopOpen = false; this.shopCursor = 0;
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
@@ -424,7 +493,9 @@
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
-      this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
+      this.clearsSinceVendor = 0;   // 0 seed: the wave-3 cadence hit lands on a pre-boss
+                                    // corridor and is suppressed, so the FIRST vendor spawns
+                                    // just before the wave-4 boss (~140 suds earned by then)
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.waveTriggerX = null;                     // wave 0 uses the base arena anchor
       this.rangeMode = false;                       // set true only by devGotoRange
@@ -434,7 +505,7 @@
       this.playerXp = 0; this.playerLevel = 0;
       this.elapsed = 0; this.kills = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
-      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
+      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0; this.rosaryBonus = 0;
       this.bounds = { minX: 8, maxX: WAVE_TRIGGERS[0] + 30 };
       this.state = "play";
       // Flush a restarted-but-unfinished run as "abandoned" before starting the
@@ -479,7 +550,7 @@
       this.waveCleared = false;
       this.wavePool = [];   // reinforcement queue — only regular waves fill it
       this.shopNpc = null;          // vendor gets left behind once the fight starts
-      this.nearShop = false;
+      this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       if (this.player.beneRank("eye_of_storm"))
         this.player.stormT = this.player.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
       const wave = JH.LEVEL1.waves[i];
@@ -496,7 +567,8 @@
       // batch/trickle + wall/holdout reinforcement).
       const actLevel = JH.Balance.actLevelForWave(i, JH.ACT_STARTS);
       const ownedCount = JH.Balance.powerCount(
-        JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
+        JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount,
+        this.statRelicCount());
       this.waveEliteScale = wave.tough ? JH.Balance.eliteScale(actLevel, ownedCount) : null;
       this.waveEliteFrac = wave.tough ? (JH.ELITE_FRAC[actLevel + 1] || 0) : 0;
       this._eliteAcc = 0;
@@ -588,6 +660,7 @@
             superHpScale: JH.SUPER_TUNE.hpByAct[actLevel + 1],
           });
           se.spawnGrace = 0.6;
+          this.procSuperEliteArrival();
         }
       }
     },
@@ -675,7 +748,15 @@
         const nx = this.waveIndex + 1;
         const trig = nx < WAVE_TRIGGERS.length ? this.gatedTriggerX(nx, this.player.x) : Infinity;
         let sx0 = this.player.x + 50;
-        const maxRight = trig - JH.WAVE_GATE.sigilGap;
+        // Clamp the row inside the CURRENT walkable bounds too, not just
+        // clear of the next trigger: a boss killed at the arena's right edge
+        // (locked camera, bounds at the frame) otherwise spawns the lineup
+        // past the level end — invisible AND unreachable (softlocks the
+        // post-Slayer beat, which waits on the pick).
+        const maxRight = Math.min(
+          trig - JH.WAVE_GATE.sigilGap,
+          (this.bounds ? this.bounds.maxX : JH.LEVEL_LEN - 8) - 24
+        );
         if (sx0 + (offers.length - 1) * 46 > maxRight)
           sx0 = maxRight - (offers.length - 1) * 46;
         this.sigils = offers.map((o, i) => new JH.Sigil(sx0 + i * 46, 56, o));
@@ -976,7 +1057,8 @@
       // instead of deleting them.
       if (e.isBoss) {
         const pc = JH.Balance.powerCount(
-          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount);
+          JH.Upgrades.owned, JH.Upgrades.repCount, JH.Church && JH.Church.state, JH.Upgrades.levelCount,
+          this.statRelicCount());
         e.hp = e.maxHp = JH.Balance.bossHpScale(e.maxHp, pc);
       }
       this.enemies.push(e);
@@ -994,12 +1076,24 @@
       if (this.voucher50) p *= 0.5;
       return Math.round(p);
     },
-    // Places a walk-up vendor and rolls its relic stock (3 of the still-
-    // unowned pool). Single spot so every vendor spawn site rolls stock the
-    // same way.
+    // Places a walk-up vendor and rolls its tiered relic stock (slot 1
+    // common, slot 2 rare, slot 3 rare-or-relic per act-indexed odds),
+    // minus minAct-gated and already-owned relics. Single spot so every
+    // vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
-      this.relicStock = JH.Balance.pickRelics(JH.RELICS.map((r) => r.id), this.relics, 3, Math.random);
+      this.relicStock = JH.Balance.rollWheelStock(JH.RELICS, this.relics, JH.Upgrades.currentActLevel, Math.random);
+      // Wheel slots render from this fixed snapshot (bought cards go SOLD in
+      // place, never shift); the reel spin arms on the first walk-up instead
+      // of here so it plays in front of the open panel.
+      this.wheelStock = this.relicStock.slice(0, 3);
+      this.shopWheelSlot = 0; this._wheelSpun = false;
+    },
+    // Stat-bearing relics owned (defs with apply) — feeds Balance.powerCount.
+    statRelicCount() {
+      let n = 0;
+      (JH.RELICS || []).forEach((r) => { if (r.apply && this.relics && this.relics[r.id]) n++; });
+      return n;
     },
     // Attempt to buy a relic from the current vendor stock; returns true on success.
     buyRelic(id) {
@@ -1012,19 +1106,29 @@
       this.player.suds -= price;
       this.relics = this.relics || {};
       this.relics[id] = true;
+      const fresh = JH.Upgrades.computeStats(JH.Upgrades.owned);
+      const hpGain = fresh.maxHp - this.player.stats.maxHp;
+      const waterGain = fresh.maxWater - this.player.stats.maxWater;
+      this.player.applyStats(fresh);
+      if (hpGain > 0) this.player.hp = Math.min(fresh.maxHp, this.player.hp + hpGain);
+      if (waterGain > 0) this.player.water = Math.min(fresh.maxWater, this.player.water + waterGain);
       this.relicStock = this.relicStock.filter((rid) => rid !== id);
       return true;
     },
     // Pooled world-space floating text (essence gains, level-ups, shop buys).
-    // Rises ~22px over 0.9s while fading; oldest dropped past a 20-cap so a
-    // burst of simultaneous pickups can't grow the pool unbounded.
-    float(x, y, text, color) {
-      this.floaters.push({ x, y, t: 0, text, color });
+    // Default: rises ~22px over 0.9s while fading. opts (all optional):
+    // life (s), rise (px), h (starting px above the feet line), big (8px
+    // bold). Oldest dropped past a 20-cap so a burst of simultaneous pickups
+    // can't grow the pool unbounded.
+    float(x, y, text, color, opts) {
+      const o = opts || {};
+      this.floaters.push({ x, y, t: 0, text, color,
+        life: o.life || 0.9, rise: o.rise || 22, h: o.h || 0, big: !!o.big });
       if (this.floaters.length > 20) this.floaters.shift();
     },
     tickFloaters(dt) {
       for (const f of this.floaters) f.t += dt;
-      this.floaters = this.floaters.filter((f) => f.t < 0.9);
+      this.floaters = this.floaters.filter((f) => f.t < (f.life || 0.9));
     },
     // Auto-award any live essence crosses. Called wherever the pickup array is
     // about to go away (win, church respawn) so banked essence can't be lost.
@@ -1035,6 +1139,14 @@
           p.dead = true;
         }
     },
+
+    procSuperEliteArrival() {
+      if (this.relics && this.relics.prayer_bead && this.player && this.player.alive) {
+        JH.Balance.prayerBeadProc(this.player, JH.RELIC_TUNE);
+        this.float(this.player.x, this.player.y - 40, "PRESSURE", "#ffd23f");
+      }
+    },
+
     onEnemyKilled(e) {
       this.kills++;
       this.grantXp((e && e.def && e.def.suds) || 0);
@@ -1043,20 +1155,27 @@
       this.combo++;
       this.comboTimer = JH.COMBO_WINDOW;
       this.comboFlash = 0.18;
+      // Rosary Chain: each chained kill banks flat spray dmg, capped, until
+      // the chain breaks (see decayCombo).
+      if (this.relics && this.relics.rosary_chain)
+        this.rosaryBonus = Math.min(JH.RELIC_TUNE.rosaryCap, (this.rosaryBonus || 0) + JH.RELIC_TUNE.rosaryPerKill);
       // Tiers: x3 arms a minor water-regen window (blue glow on Jon while
       // live); every 5th kill bumps the regen + refunds a splash of water.
       const p = this.player;
       if (p && p.alive) {
         const J = JH.JUICE;
+        // Loaded Sponge: GUSH regen windows run longer (both the x3 and x5+ tiers).
+        const winBonus = (this.relics && this.relics.loaded_sponge) ? JH.RELIC_TUNE.spongeWindowBonus : 0;
         if (this.combo === 3) {
-          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenT = J.gushRegenDur + winBonus;
           p.gushRegenRate = J.gushRegen3;
           this.audio.play("upgrade");
+          this.spawnGushPulse();
         } else if (this.combo >= 5 && this.combo % 5 === 0) {
           // Regen scales with the milestone, uncapped — x5 pays 8/s, x10 16/s,
           // x20 32/s: absurd chains deserve absurd water.
           const tier = this.combo / 5;
-          p.gushRegenT = J.gushRegenDur;
+          p.gushRegenT = J.gushRegenDur + winBonus;
           p.gushRegenRate = J.gushRegen5 * tier;
           // Loaded Sponge: GUSH milestone water refund doubled.
           const refundMult = (this.relics && this.relics.loaded_sponge) ? 2 : 1;
@@ -1073,11 +1192,23 @@
               vz: 60 + Math.random() * 60,
               life: 0.5 + Math.random() * 0.3, color: JH.PAL.water, size: 2, grav: 220,
             }));
+          this.spawnGushPulse();
         }
       }
       // Collection Plate: flat suds bonus per kill.
       if (this.relics && this.relics.collection_plate && p && p.alive) {
         p.suds += 2; p.sudsEarned += 2;
+      }
+      // Squeegee: a kill standing in a fire patch snuffs that patch.
+      if (e && this.relics && this.relics.squeegee && this.firePatches) {
+        for (const fp of this.firePatches) {
+          if (fp.dead) continue;
+          const f = fp.footprint();
+          if (JH.Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, f.rx, f.ry)) {
+            fp.sprayProgress = fp.extinguishDur;
+            this.audio.play("sizzle");
+          }
+        }
       }
       if (e && e.isBoss && JH.Church) {
         JH.Church.markBossDefeated(e.type);
@@ -1090,11 +1221,85 @@
       }
     },
 
+    // GUSH milestone pulse (Backdraft Valve / Big Spigot). Rim is hitbox: the
+    // ring damages/knocks each target the frame its expanding rim reaches it.
+    spawnGushPulse() {
+      const valve = this.relics && this.relics.backdraft_valve;
+      const spigot = this.relics && this.relics.big_spigot;
+      if (!valve && !spigot) return;
+      const T = JH.RELIC_TUNE, p = this.player;
+      this.pulseRings.push({
+        x: p.x, y: p.y, r: 0, targetR: T.pulseRadius, dur: 0.25, t: 0,
+        dmg: spigot ? T.spigotDamage : 0, kb: valve ? T.valveKnockback : 0,
+        douse: true, hit: new Set(),
+      });
+      this.audio.play("gush");
+    },
+    updatePulseRings(dt) {
+      if (!this.pulseRings || !this.pulseRings.length) return;
+      for (const ring of this.pulseRings) {
+        ring.t += dt;
+        ring.r = Math.min(ring.targetR, ring.targetR * (ring.t / ring.dur));
+        const ry = ring.r * 0.34;                       // same ground flatten as shadows
+        for (const e of this.enemies) {
+          if (e.dead || ring.hit.has(e)) continue;
+          if (!JH.Geo.inGroundEllipse(e.x, e.y, ring.x, ring.y, ring.r, ry)) continue;
+          ring.hit.add(e);
+          const dir = Math.sign(e.x - ring.x) || 1;
+          if (ring.dmg) e.takeDamage(ring.dmg, this, dir, 0);
+          if (ring.kb) e.applyKnockback(dir, ring.kb, (e.y - ring.y) * 0.02);
+        }
+        if (ring.douse && this.firePatches)
+          for (const fp of this.firePatches) {
+            if (fp.dead || ring.hit.has(fp)) continue;
+            if (!JH.Geo.inGroundEllipse(fp.x, fp.y, ring.x, ring.y, ring.r, ry)) continue;
+            ring.hit.add(fp); fp.sprayProgress = fp.extinguishDur;
+          }
+      }
+      this.pulseRings = this.pulseRings.filter((r) => r.t < r.dur + 0.15);  // brief fade tail
+    },
+
+    // Pressure Sermon wave: the drawn wavefront IS the hitbox — each enemy
+    // is hit exactly once as the front passes its x inside the depth band.
+    // The pass window equals this step's travel, so a fast front can't skip
+    // an enemy between frames.
+    updateSermonWaves(dt) {
+      if (!this.sermonWaves || !this.sermonWaves.length) return;
+      const C = JH.SERMON;
+      for (const w of this.sermonWaves) {
+        const step = C.speed * dt;
+        w.x += w.dir * step; w.traveled += step;
+        for (const e of this.enemies) {
+          if (e.dead || e.dropping || w.hit.has(e)) continue;
+          if (Math.abs(e.y - w.y) > C.halfDepth) continue;
+          const passed = (w.dir > 0)
+            ? (e.x >= w.x - step && e.x <= w.x + 4)
+            : (e.x <= w.x + step && e.x >= w.x - 4);
+          if (!passed) continue;
+          w.hit.add(e);
+          e.takeDamage(C.dmg, this, w.dir, 0);
+          e.applyKnockback(w.dir, C.kb, (e.y - w.y) * 0.02);
+        }
+      }
+      this.sermonWaves = this.sermonWaves.filter((w) => w.traveled < C.range);
+    },
+
+    // GUSH combo decay: ticks the chain window down and the flash pop out;
+    // when the timer runs dry the chain (and Rosary Chain's banked dmg) resets.
+    decayCombo(dt) {
+      if (this.comboFlash > 0) this.comboFlash = Math.max(0, this.comboFlash - dt);
+      if (this.comboTimer > 0) {
+        this.comboTimer -= dt;
+        if (this.comboTimer <= 0) { this.combo = 0; this.comboTimer = 0; this.rosaryBonus = 0; }
+      }
+    },
+
     // XP: kills feed the bar; each threshold applies the next gain-cycle
     // step instantly — flash + sting + 10% water/hp top-up, no pause.
     grantXp(n) {
       if (!this.player || !this.player.alive) return;
       this.playerXp += n;
+      this.player.xpFlashT = 2.2;   // overhead XP bar fades in on gain, out after
       while (this.playerXp >= JH.Balance.xpForLevel(this.playerLevel + 1)) {
         this.playerXp -= JH.Balance.xpForLevel(this.playerLevel + 1);
         this.playerLevel++;
@@ -1106,7 +1311,10 @@
         this.audio.play("upgrade", { pitch: 1.3 });
         JH.burst(this, p.x, p.y, p.z + 16, "#ffd23f", 16, { speed: 90, life: 0.5, up: 70, size: 2 });
         this.shake(3);
-        this.float(p.x, p.y - 34, "LEVEL UP", "#ffd23f");
+        // Above the overhead bar stack (bodyH + bars + xp), bigger + slower
+        // than a loot blip so it reads through the combat noise.
+        this.float(p.x, p.y, "LEVEL UP", "#ffd23f",
+          { life: 2.2, rise: 30, h: p.stats.bodyH + 56, big: true });
         // The stat delta itself plays through the upgrade sequence (icon +
         // amount rising off Jon, queued by applyStats) — no text spam here.
       }
@@ -1168,22 +1376,50 @@
     // Only exist in devGotoRange (rangeStations stays null in real runs).
     tickRangeStations() {
       if (!this.rangeStations) return;
+      for (const e of this.enemies) {
+        if (!e.rangeChargeCycle || e.dead) continue;
+        e.state = (e.t % 4) < 1.2 ? "charge" : "idle";
+      }
       const pl = this.player;
+      // Near-boxes of the two rack rows overlap between rows; E acts on the
+      // Euclidean-nearest near station so the toggle always matches the card.
+      let act = null, actD = Infinity;
       for (const st of this.rangeStations) {
         st.near = Math.abs(pl.x - st.x) < 20 && Math.abs(pl.y - st.y) < 24;
-        if (st.near && this.input.buffered("confirm")) {
-          this.input.consume("confirm");
-          if (st.kind === "kibble") {
-            // Drop a real health pickup at Jon's feet — exercises the actual
-            // collect path (incl. kibble stacking).
-            this.spawnPickup("health", pl.x, pl.y, 25);
-            this.audio.play("buy");
-          } else if (st.kind === "gush") {
-            // Jump the combo to the next multiple of 5 and run the real
-            // milestone path — repeat presses climb x5 → x10 → x20…
-            this.combo = Math.floor(this.combo / 5) * 5 + 4;
-            this.onEnemyKilled(null);
-          }
+        if (!st.near) continue;
+        const d = Math.hypot(pl.x - st.x, pl.y - st.y);
+        if (d < actD) { actD = d; act = st; }
+      }
+      if (act && this.input.buffered("confirm")) {
+        this.input.consume("confirm");
+        if (act.kind === "kibble") {
+          // Drop a real health pickup at Jon's feet — exercises the actual
+          // collect path (incl. kibble stacking).
+          this.spawnPickup("health", pl.x, pl.y, 25);
+          this.audio.play("buy");
+        } else if (act.kind === "gush") {
+          // Jump the combo to the next multiple of 5 and run the real
+          // milestone path — repeat presses climb x5 → x10 → x20…
+          this.combo = Math.floor(this.combo / 5) * 5 + 4;
+          this.onEnemyKilled(null);
+        } else if (act.kind === "relic") {
+          const on = this.toggleRelic(act.relic);
+          this.audio.play(on ? "buy" : "hurt", { pitch: on ? 1 : 0.8 });
+          const rd = JH.RELICS.find((r) => r.id === act.relic);
+          if (this.float) this.float(act.x, act.y - 30, (on ? "+ " : "− ") + rd.name.toUpperCase(), on ? "#80ff80" : "#8fa8c8");
+        } else if (act.kind === "superelite") {
+          this.procSuperEliteArrival();
+          this.audio.play("buy");
+        } else if (act.kind === "mook") {
+          // Real killable enemy: on-kill relics (squeegee/rosary/plate/dowsing) need
+          // actual deaths — TargetDummy is unkillable by design.
+          const m = this.spawnEnemy("mook", 560, act.y);
+          m.spawnGrace = 0.5;
+          this.audio.play("buy");
+        } else if (act.kind === "firepatch") {
+          // Lands where spawner mooks stand, so a kill-on-patch is easy to stage.
+          JH.spawnFirePatch(this, 560, act.y, 16, 3);
+          this.audio.play("sizzle");
         }
       }
     },
@@ -1297,17 +1533,12 @@
       const conCol = document.createElement("div");
       conCol.className = "tree-col";
       conCol.innerHTML = '<div class="tree-head">SUPPLIES</div>';
-      // Pressure Charge is delisted from both shops until the buff works.
+      // Kibble Pack is the only purchasable heal (over-time, stacks).
       const cons = [
-        { key: "medkit", buy: () => {
-            const c = JH.CONSUMABLES.medkit;
-            if (this.player.suds < c.cost) return false;
-            this.player.suds -= c.cost;
-            this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
-            return true;
-          }, label: () => JH.CONSUMABLES.medkit.name,
-          desc: () => "Heal " + JH.CONSUMABLES.medkit.heal + " HP now.",
-          cost: () => JH.CONSUMABLES.medkit.cost },
+        { key: "kibble", buy: () => this.buyKibble(),
+          label: () => JH.KIBBLE_PACK.name,
+          desc: () => "Heal " + JH.KIBBLE_PACK.heal + " HP over " + JH.KIBBLE_PACK.dur + "s. Stacks.",
+          cost: () => this.priceOf(JH.KIBBLE_PACK.cost) },
       ];
       cons.forEach((item) => {
         const cost = item.cost();
@@ -1352,16 +1583,19 @@
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
+      this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = [];   // usedOnce survives death; active boons are whatever the Reliquary gave back
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.trauma = 0; this.shakeKickX = 0; this.lootVacuumT = 0; this.essenceDim = 0;
-      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0;
+      this.combo = 0; this.comboTimer = 0; this.comboFlash = 0; this.rosaryBonus = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
-      this.shopNpc = null; this.nearShop = false;
+      this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       this.dropBudget = { suds: 0, items: 0 };
+      this.rangeStations = null;   // a range death degrades to a normal respawn
+      this.rangeMode = false;
       this.waveIndex = next - 1;
       // Act gate keyed to the wave being re-fought, not the decremented index.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(next, JH.ACT_STARTS);
@@ -1525,11 +1759,18 @@
     update(dt) {
       this.input.poll();
 
-      // pause toggle works in play/pause, church/churchPause, and truck/truckPause
+      // pause toggle works in play/pause, church/churchPause, and truck/truckPause.
+      // While the shop is open, Escape/Start closes it instead of pausing.
       if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"
         || this.state === "church" || this.state === "churchPause"
-        || this.state === "truck" || this.state === "truckPause"))
-        this.togglePause();
+        || this.state === "truck" || this.state === "truckPause")) {
+        if (this.state === "play" && this.shopOpen) this.shopOpen = false;
+        else this.togglePause();
+      }
+
+      // Stat + benediction panel toggle (Tab / gamepad Back).
+      if (this.input.pressed("toggleStats") && this.state === "play")
+        this.showStats = !this.showStats;
 
       if (this.bannerTimer > 0) {
         this.bannerTimer -= dt;
@@ -1604,11 +1845,9 @@
       this.elapsed += dt;
 
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
-      if (this.comboFlash > 0) this.comboFlash = Math.max(0, this.comboFlash - dt);
-      if (this.comboTimer > 0) {
-        this.comboTimer -= dt;
-        if (this.comboTimer <= 0) { this.combo = 0; this.comboTimer = 0; }
-      }
+      this.decayCombo(dt);
+      this.updatePulseRings(dt);
+      this.updateSermonWaves(dt);
 
       // --- entities
       this.player.update(dt, this);
@@ -1698,35 +1937,87 @@
       }
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
-        this.nearShop = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
+        this.nearVendor = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
           Math.abs(this.player.y - this.shopNpc.y) < 30;
+        // The shop is a walk-up interaction: E at the vendor opens it; it
+        // closes on Escape/Start or by leaving vendor range.
+        if (!this.shopOpen && this.nearVendor && this.input.buffered("confirm")) {
+          this.input.consume("confirm");
+          this.shopOpen = true;
+          this.shopCursor = 0;
+          this.audio.play("coin");
+        }
+        if (this.shopOpen && !this.nearVendor) this.shopOpen = false;
+        // Downstream consumers (panel mode, HUD hide, nav gating, wave hold)
+        // key off nearShop = "shop UI open".
+        this.nearShop = this.shopOpen;
         this.player.nearShop = this.nearShop;
+        // Wheel reel-spin: arms once per vendor on the first OPEN, so the
+        // reels + coin blips play in front of the open panel. Each reel (0-2)
+        // settles at 0.6 + i*0.3s with one pitch-stepped "coin" blip.
+        if (this.shopOpen && !this._wheelSpun) {
+          this._wheelSpun = true;
+          this.wheelSpinT = 0;
+          this._wheelSettled = [false, false, false];
+        }
+        if (this._wheelSpun) {
+          this.wheelSpinT += dt;
+          for (let i = 0; i < 3; i++) {
+            const settle = 0.6 + i * 0.3;
+            if (!this._wheelSettled[i] && this.wheelSpinT >= settle) {
+              this._wheelSettled[i] = true;
+              this.audio.play("coin", { pitch: 1 + i * 0.2 });
+            }
+          }
+        }
+        this.player.shopWheelFocus = false;
         if (this.nearShop) {
           const U = JH.Upgrades;
           const sel = this.shopSelectables();
           if (sel.length > 0) {
             if (this.input.pressed("up"))   this.shopCursor = (this.shopCursor - 1 + sel.length) % sel.length;
             if (this.input.pressed("down")) this.shopCursor = (this.shopCursor + 1) % sel.length;
+            const onWheel = sel[this.shopCursor] && sel[this.shopCursor].kind === "wheelRow";
+            // Entity movement reads this: while the cursor sits on the wheel
+            // row, left/right belong to card navigation, not walking (same
+            // pattern as the nearShop up/down suppression in Player.update).
+            this.player.shopWheelFocus = onWheel;
+            if (onWheel) {
+              if (this.input.pressed("left"))  this.shopWheelSlot = Math.max(0, this.shopWheelSlot - 1);
+              if (this.input.pressed("right")) this.shopWheelSlot = Math.min(3, this.shopWheelSlot + 1);
+            }
             if (this.input.buffered("confirm")) {
               this.input.consume("confirm");
               const e = sel[this.shopCursor];
-              let ok = false;
+              let ok = false, telemKind = e.kind, telemId = e.id;
               if (e.kind === "node") {
                 ok = U.buy(e.id, this.player, this.priceOf(U.cost(e.id)));
                 if (ok) { this.upgradeFx(U.byId(e.id)); this.float(this.player.x, this.player.y - 30, U.byId(e.id).name, "#80ff80"); }
               } else if (e.kind === "rep") {
                 ok = U.buyRep(e.id, this.player, this.priceOf(U.repCost(e.id)));
                 if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, U.repById(e.id).name, "#80ff80"); }
-              } else if (e.kind === "consumable") { ok = this.buyConsumable(e.id); if (ok) this.audio.play("buy"); }
-              else if (e.kind === "relic") {
-                ok = this.buyRelic(e.id);
-                if (ok) {
-                  const r = JH.RELICS.find((x) => x.id === e.id);
-                  this.audio.play("upgrade");
-                  this.float(this.player.x, this.player.y - 30, r.name, "#80ff80");
+              }
+              else if (e.kind === "wheelRow") {
+                if (this.shopWheelSlot === 3) {
+                  telemKind = "consumable"; telemId = "kibble";
+                  ok = this.buyKibble();
+                  if (ok) { this.audio.play("upgrade"); this.float(this.player.x, this.player.y - 30, "Kibble Pack", "#80ff80"); }
+                } else {
+                  // Snapshot slot: sold/empty cards leave ok false → deny
+                  // "hurt" (buyRelic itself also refuses owned/out-of-stock).
+                  const wid = (this.wheelStock || [])[this.shopWheelSlot];
+                  telemKind = "relic"; telemId = wid;
+                  if (wid && !(this.relics && this.relics[wid])) {
+                    ok = this.buyRelic(wid);
+                    if (ok) {
+                      const r = JH.RELICS.find((x) => x.id === wid);
+                      this.audio.play("upgrade");
+                      this.float(this.player.x, this.player.y - 30, r.name, "#80ff80");
+                    }
+                  }
                 }
               }
-              if (ok && JH.Telemetry) JH.Telemetry.item(e.kind + ":" + e.id);
+              if (ok && JH.Telemetry) JH.Telemetry.item(telemKind + ":" + telemId);
               if (!ok) this.audio.play("hurt");
               else {
                 if (this.voucher50) {
@@ -1738,7 +2029,10 @@
             }
           }
         }
-      } else { this.nearShop = false; this.player.nearShop = false; }
+      } else {
+        this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
+        this.player.nearShop = false; this.player.shopWheelFocus = false;
+      }
 
       // --- separation so enemies don't fully stack
       this.separate();
@@ -1770,7 +2064,13 @@
               e.spawnGrace = 0.2;
             }
           }
-          if (!this.wall || this.wall.dead) this.waveCleared_();
+          if (!this.wall || this.wall.dead) {
+            // Wall down = encounter beaten: remaining reinforcements leave
+            // without reward (same idiom as the garden harassers) instead of
+            // demanding a mop-up.
+            for (const e of this.enemies) if (!e.dead && !e.isBoss) e.dead = true;
+            this.waveCleared_();
+          }
         } else if (wave && wave.holdout) {
           this.holdoutTimer -= dt;
           this.wallSpawnTimer -= dt;
@@ -1786,8 +2086,9 @@
             e.spawnGrace = 0.2;
           }
           if (this.holdoutTimer <= 0) {
-            // Survived: the wave clears but any enemies still standing are left
-            // alive to keep harassing as the player moves on.
+            // Survived = encounter beaten: the field clears with the wave
+            // (rewardless, garden idiom) — no post-timer mop-up.
+            for (const e of this.enemies) if (!e.dead && !e.isBoss) e.dead = true;
             this.waveCleared_();
           }
         } else if (wave && (wave.garden || wave.douse)) {
@@ -1876,25 +2177,91 @@
       // sole job of this method's player-independent half.
     },
 
+    // KeyH dev overlay — draws the REAL hit variables, never approximations:
+    // magenta = enemy bodies (bodyW x bodyH at the feet; inHitArc measures
+    // edge-to-edge, so effective reach extends half a body past each rect),
+    // cyan = Jon's spray band while spraying (nozzle -> live reach, ±sprayHitBand
+    // depth), gold = prop feet ellipses (dy counts 2.4x, same as propPushout).
+    drawDebugHitboxes(ctx, cam) {
+      const pl = this.player; if (!pl) return;
+      ctx.save();
+      ctx.lineWidth = 1; ctx.font = "5px monospace";
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const sx = e.x - cam, sy = JH.Geo.feetScreenY(e.y, 0);
+        const bw = e.bodyW || 14, bh = e.bodyH || 20;
+        ctx.strokeStyle = e.isBoss ? "#ff5aff" : "#ff00ff";
+        ctx.strokeRect(Math.round(sx - bw / 2), Math.round(sy - bh - 3), bw, bh);
+        ctx.fillStyle = "#ff00ff";
+        ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2);   // feet anchor
+      }
+      if (pl.spraying && pl._dbgReach != null) {
+        const S = pl.stats, dir = pl.facing;
+        const ox = pl.x + dir * 12 - cam;
+        // Stream rect exactly as inSprayPath tests it: jet centerline at
+        // nozzle height, ± band screen px. A magenta body crossing this
+        // rect (within the x range) IS a hit.
+        const jetY = JH.Geo.feetScreenY(pl.y, (pl.z || 0) + JH.PLAYER.nozzleZ);
+        ctx.strokeStyle = "#00e5ff";
+        ctx.strokeRect(Math.round(Math.min(ox, ox + dir * pl._dbgReach)),
+          Math.round(jetY - S.sprayHitBand),
+          Math.round(pl._dbgReach), S.sprayHitBand * 2);
+        ctx.fillStyle = "#00e5ff";
+        ctx.fillText("SPRAY " + Math.round(pl._dbgReach) + "px  ±" + S.sprayHitBand,
+          Math.round(ox + dir * 8), Math.round(jetY - S.sprayHitBand) - 2);
+      }
+      const props = [
+        [this.shopNpc, JH.SHOP && JH.SHOP.vendorCollideR],
+        [this.deepdiveTV, JH.DEEPDIVE && JH.DEEPDIVE.tvCollideR],
+      ];
+      for (const [prop, r] of props) {
+        if (!prop || !r) continue;
+        const px = prop.x - cam, py = JH.Geo.feetScreenY(prop.y, 0);
+        ctx.strokeStyle = "#ffd23f";
+        ctx.beginPath(); ctx.ellipse(px, py, r, r / 2.4, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    },
+
     drawRangeStations(ctx, cam) {
+      const RANGE_LABELS = { kibble: "KIBBLE", gush: "GUSH", superelite: "SUPER-ELITE", mook: "SPAWN MOOK", firepatch: "FIRE PATCH" };
       for (const st of this.rangeStations) {
         const sx = Math.round(st.x - cam), sy = Math.round(JH.Geo.feetScreenY(st.y, 0));
         ctx.save();
-        // pedestal + ground pad
-        ctx.fillStyle = "#0d1420";
-        ctx.beginPath(); ctx.ellipse(sx, sy, 9, 9 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#2a3548";
-        ctx.fillRect(sx - 7, sy - 10, 14, 10);
-        if (st.kind === "kibble") {
-          ctx.fillStyle = "#44ee66";
-          ctx.fillRect(sx - 4, sy - 15, 8, 6);
+        if (st.kind === "relic") {
+          const rd = JH.RELICS.find((r) => r.id === st.relic);
+          const owned = !!this.relics[st.relic];
+          ctx.globalAlpha = owned ? 1 : 0.5;
+          JH.Assets.gearFrame(ctx, sx, sy - 12, 1, rd && rd.tier, this.player ? this.player.t : 0);
+          JH.Assets.icon(ctx, st.relic, sx, sy - 12, 1);
+          ctx.globalAlpha = 1;
+          if (owned) { ctx.fillStyle = "#80ff80"; ctx.fillRect(sx + 7, sy - 20, 2, 2); }
         } else {
-          ctx.fillStyle = "#55c8ff";
-          ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
+          // pedestal + ground pad
+          ctx.fillStyle = "#0d1420";
+          ctx.beginPath(); ctx.ellipse(sx, sy, 9, 9 * JH.GROUND_RY, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#2a3548";
+          ctx.fillRect(sx - 7, sy - 10, 14, 10);
+          if (st.kind === "kibble") {
+            ctx.fillStyle = "#44ee66";
+          } else if (st.kind === "gush") {
+            ctx.fillStyle = "#55c8ff";
+          } else if (st.kind === "superelite") {
+            ctx.fillStyle = "#ff5a5a";
+          } else if (st.kind === "mook") {
+            ctx.fillStyle = "#cc5c18";
+          } else if (st.kind === "firepatch") {
+            ctx.fillStyle = "#ff9040";
+          }
+          if (st.kind === "kibble") {
+            ctx.fillRect(sx - 4, sy - 15, 8, 6);
+          } else {
+            ctx.beginPath(); ctx.arc(sx, sy - 13, 4, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+          ctx.fillStyle = "#9be8ff";
+          ctx.fillText(RANGE_LABELS[st.kind] || st.kind.toUpperCase(), sx, sy - 20);
         }
-        ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
-        ctx.fillStyle = "#9be8ff";
-        ctx.fillText(st.kind === "kibble" ? "KIBBLE" : "GUSH", sx, sy - 20);
         if (st.near) {
           ctx.fillStyle = "#ffd23f"; ctx.font = "bold 7px monospace";
           ctx.fillText("E", sx, sy - 27 + Math.sin((this.player ? this.player.t : 0) * 6) * 1.5);
@@ -1906,11 +2273,15 @@
       ctx.save();
       ctx.font = "bold 5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#7fa0c0";
       for (const e of this.enemies) {
-        if (!e.isGallery) continue;
+        if (!e.isGallery && !e.rangeChargeCycle) continue;
         const sx = Math.round(e.x - cam);
         if (sx < -30 || sx > JH.VIEW_W + 30) continue;
-        ctx.fillText(e.type.toUpperCase(), sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
+        const label = e.rangeChargeCycle ? (e.state === "charge" ? "CHARGING!" : "CHARGE DUMMY") : e.type.toUpperCase();
+        const color = (e.rangeChargeCycle && e.state === "charge") ? "#ff5a5a" : "#7fa0c0";
+        ctx.fillStyle = color;
+        ctx.fillText(label, sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
       }
+      ctx.fillStyle = "#7fa0c0";
       ctx.textAlign = "left";
       ctx.restore();
     },
@@ -1920,9 +2291,6 @@
       const hud = document.getElementById("hud");
       if (hud) hud.style.visibility = (this.state === "play" && this.nearShop) ? "hidden" : "";
       document.getElementById("hud-suds").textContent = Math.floor(this.player.suds);
-      document.getElementById("hud-xp-fill").style.width =
-        Math.min(100, 100 * this.playerXp / JH.Balance.xpForLevel(this.playerLevel + 1)) + "%";
-      document.getElementById("hud-lv").textContent = "LV " + this.playerLevel;
     },
 
     // ============================================================ RENDER
@@ -1960,6 +2328,7 @@
         // hydrants (static world props, behind actors)
         this.drawHydrants(ctx, cam);
         if (this.rangeStations) this.drawRangeStations(ctx, cam);
+        if (JH.DEBUG_HITBOX) this.drawDebugHitboxes(ctx, cam);
         if (this.victoryPortal) this.drawVictoryPortal(ctx, cam);
         if (this.truckBoard) this.drawTruckBoard(ctx, cam);
         if (this.worldCrumble) this.drawCrumble(ctx);
@@ -1978,6 +2347,43 @@
 
         // slow zones (super-Bulwark's landed shield)
         for (const z of this.slowZones) z.draw(ctx, cam);
+
+        // Pressure Sermon waves — the drawn crescent front IS the hit front
+        // (leading edge ≈ +4px of the wave x, matching updateSermonWaves).
+        if (this.sermonWaves) for (const w of this.sermonWaves) {
+          const C = JH.SERMON;
+          const wx = w.x - cam;
+          const topY = JH.Geo.feetScreenY(w.y - C.halfDepth, 0);
+          const botY = JH.Geo.feetScreenY(w.y + C.halfDepth, 0);
+          const k = Math.max(0, 1 - w.traveled / C.range);
+          ctx.save();
+          ctx.globalAlpha = 0.35 + 0.45 * k;
+          ctx.strokeStyle = JH.PAL.waterHi; ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(wx - w.dir * 6, topY);
+          ctx.quadraticCurveTo(wx + w.dir * 8, (topY + botY) / 2, wx - w.dir * 6, botY);
+          ctx.stroke();
+          ctx.globalAlpha *= 0.6;
+          ctx.strokeStyle = JH.PAL.water; ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(wx - w.dir * 11, topY + 2);
+          ctx.quadraticCurveTo(wx + w.dir * 2, (topY + botY) / 2, wx - w.dir * 11, botY - 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // GUSH pulse rings (Backdraft Valve / Big Spigot) — drawn rim IS the hit rim.
+        if (this.pulseRings) for (const ring of this.pulseRings) {
+          const sx = ring.x - cam, sy = JH.Geo.feetScreenY(ring.y, 0);
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, 1 - ring.t / (ring.dur + 0.15));
+          ctx.strokeStyle = JH.PAL.waterHi;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
 
         // ground pickups first
         for (const p of this.pickups) p.draw(ctx, cam);
@@ -2052,7 +2458,9 @@
         const boss = this.enemies.find((e) => e.isBoss && !e.dying && !e.isGallery);
         if (boss) this.drawBossBar(ctx, boss);
 
-        if (this.state === "play") this.drawSigilStrip(ctx);
+        // HUD benediction rail: the canonical at-a-glance icon row. The stat
+        // box anchors below it (game panel Y=40) so the two never overlap.
+        if (this.state === "play") this.drawSigilStrip(ctx, 10, 16, 99);
         if (this.state === "play" && this.combo >= 2) this.drawCombo(ctx);
       }
       ctx.restore();
@@ -2163,25 +2571,46 @@
         ctx.translate(so.x, so.y);
         ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         for (const f of this.floaters) {
-          const k = f.t / 0.9;
+          const k = f.t / (f.life || 0.9);
           ctx.globalAlpha = Math.max(0, 1 - k);
+          if (f.big) ctx.font = "bold 8px monospace";
+          const fx = f.x - cam;
+          const fy = JH.Geo.feetScreenY(f.y, 0) - (f.h || 0) - (f.rise || 22) * k;
+          // Big floaters get a dark outline so they read over any backdrop.
+          if (f.big) {
+            ctx.fillStyle = "#0a0e18";
+            ctx.fillText(f.text, fx + 1, fy + 1); ctx.fillText(f.text, fx - 1, fy + 1);
+            ctx.fillText(f.text, fx + 1, fy - 1); ctx.fillText(f.text, fx - 1, fy - 1);
+          }
           ctx.fillStyle = f.color;
-          ctx.fillText(f.text, f.x - cam, JH.Geo.feetScreenY(f.y, 0) - 22 * k);
+          ctx.fillText(f.text, fx, fy);
+          if (f.big) ctx.font = "bold 6px monospace";
         }
         ctx.globalAlpha = 1;
         ctx.textAlign = "left";
         ctx.restore();
       }
-      // Stat panel: at the vendor, or toggled anywhere with Tab.
-      if (this.state === "play" && (this.nearShop || this.showStats))
+      // Stat panel: always on in play (collapsed), named near the vendor,
+      // full character sheet when Tab-toggled.
+      if (this.state === "play")
         this.drawStatPanel(this.ctx);
       // Hover shop panel — drawn outside shake transform so it stays stable.
+      // Walk-up prompt over the vendor while the shop is closed.
+      if (this.state === "play" && this.shopNpc && this.nearVendor && !this.shopOpen) {
+        const psx = Math.round(this.shopNpc.x - JH.Camera.x);
+        const psy = Math.round(JH.Geo.feetScreenY(this.shopNpc.y, 0)) - 42;
+        this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E  SHOP", psx + 1, psy + 1);
+        this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E  SHOP", psx, psy);
+        this.ctx.textAlign = "left";
+      }
       if (this.nearShop && this.state === "play") {
         this.drawHoverShop(this.ctx);
         // Sigils must never hide behind the shop panel — redraw them above it.
         for (const s of this.sigils) if (!s.dead) s.draw(this.ctx, JH.Camera.x);
       }
       if (this.state === "play") this.drawSigilCard(this.ctx);
+      if (this.rangeMode) this.drawRelicRackCard(this.ctx);
       // Cutscene overlay (drawn after everything else).
       if (this.state === "cutscene" && this.cutscene) this.drawCutscene(this.ctx);
       // Dev menu drawn last so it's always on top.
@@ -2427,35 +2856,61 @@
       const U = JH.Upgrades;
       const out = [];
       U.nodes.forEach((n) => { if (U.isAvailable(n.id)) out.push({ kind: "node", id: n.id }); });
-      // OVERCHARGE only unlocks once the whole skill tree is bought.
-      if (U.allNodesOwned()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
-      // "pressure" is delisted until the buff works.
-      Object.keys(JH.CONSUMABLES).forEach((k) => {
-        if (k !== "pressure") out.push({ kind: "consumable", id: k });
-      });
-      (this.relicStock || []).forEach((id) => out.push({ kind: "relic", id }));
+      // OVERCHARGE only unlocks from Act 2 on (after the first boss).
+      if (U.overchargeUnlocked()) U.repeatables.forEach((n) => out.push({ kind: "rep", id: n.id }));
+      out.push({ kind: "wheelRow" });
       return out;
     },
-    // Buy a between-wave consumable; returns true on success.
-    buyConsumable(key) {
-      const c = JH.CONSUMABLES[key];
-      if (!c) return false;
-      const price = this.priceOf(c.cost);
+    // Buy a Kibble Pack (fixed slot-wheel card, repeatable); returns true on success.
+    buyKibble() {
+      const K = JH.KIBBLE_PACK, price = this.priceOf(K.cost);
       if (this.player.suds < price) return false;
       this.player.suds -= price;
-      if (key === "medkit") this.player.hp = Math.min(this.player.stats.maxHp, this.player.hp + c.heal);
+      JH.Balance.kibbleGrant(this.player, K);
       return true;
+    },
+
+    // Greedy word-wrap into up to `maxLines` lines of ~maxChars each. Breaks
+    // only on spaces; if words remain past the line cap the last kept line
+    // gets an ellipsis. Shared by the shop + stat-panel benediction tips.
+    wrapText(str, maxChars, maxLines) {
+      const words = String(str || "").split(" ");
+      const lines = [];
+      let line = "";
+      for (const w of words) {
+        const trial = line ? line + " " + w : w;
+        if (trial.length > maxChars && line) {
+          lines.push(line); line = w;
+          if (lines.length >= maxLines) {
+            // Out of lines with words left: mark the cut.
+            let last = lines[maxLines - 1];
+            while (last.length + 1 > maxChars && last.includes(" "))
+              last = last.slice(0, last.lastIndexOf(" "));
+            lines[maxLines - 1] = last + "…";
+            return lines;
+          }
+        } else line = trial;
+      }
+      if (line && lines.length < maxLines) lines.push(line);
+      return lines;
     },
 
     // Slim stat readout beside the hover shop: the numbers the scaling pass
     // moves, flashing green for 2s after any purchase changes them. Sits at
     // the top-left — the shop panel occupies PX=280..474, and no other HUD
     // element claims this corner while the shop is open.
+    // Three-mode character block: COLLAPSED (always on in play — icons +
+    // numbers, no labels), NAMED (near the vendor — adds stat labels),
+    // EXPANDED (Tab — adds benediction rows + owned-relic grid). Every
+    // section drawn below must be counted into H before the backdrop
+    // fillRect, or it clips at the panel edge.
     drawStatPanel(ctx) {
       const S = this.player.stats, F = this.player.statFlash || {};
-      // 4th column = baked icon key (drawn at half size before the label).
+      const expanded = this.showStats;                // Tab / gamepad Back
+      const inlineDesc = expanded && !this.nearShop;   // descriptions unless the shop needs the space
+      const named = expanded || this.nearShop;         // stat labels
+      // 4th column = baked icon key (drawn at half size before/instead of the label).
       const rows = [
-        ["LV",     this.playerLevel, null, null],
         ["DMG",    Math.round(S.sprayDamage), "sprayDamage", "dmg"],
         ["RANGE",  Math.round(S.sprayRange),  "sprayRange",  "range"],
         ["WATER",  Math.round(S.maxWater),    "maxWater",    "water"],
@@ -2471,9 +2926,94 @@
         rows.push(["DODGE", Math.round(S.dodgeChance * 100) + "%", "dodgeChance", "dodge"]);
       if (S.vampiricRate > 0 || F.vampiricRate > 0)
         rows.push(["VAMP", Math.round(S.vampiricRate * 100) + "%", "vampiricRate", "vamp"]);
-      const beneIds = JH.Benedictions ? Object.keys(JH.Benedictions.active) : [];
-      const X = 10, Y = 30, ROW = 9, W = 74;
-      const H = rows.length * ROW + 16 + (beneIds.length ? beneIds.length * ROW + 6 : 0);
+      // Level + XP live in the expanded sheet only — the top-left HUD bar is
+      // gone (the overhead XP bar over Jon fades in on gain instead).
+      if (expanded) {
+        rows.unshift(["XP", Math.floor(this.playerXp) + "/" + JH.Balance.xpForLevel(this.playerLevel + 1), null, null]);
+        rows.unshift(["LV", this.playerLevel, null, null]);
+      }
+
+      // Active benedictions (expanded only): baked 12px icon + tier frame,
+      // name in element color, rank-appropriate effect text wrapped below
+      // when Tab-toggled away from the shop (the shop needs the width for
+      // its own cursor inspection instead).
+      const beneRows = [];
+      if (expanded && JH.Benedictions) {
+        for (const id of Object.keys(JH.Benedictions.active)) {
+          const d = JH.Benedictions.byId(id);
+          if (!d) continue;
+          const rank = JH.Benedictions.active[id] | 0;
+          const el = d.element || (d.needs && d.needs[0]) || "water";
+          const tag = d.kind === "boon" ? (rank >= 2 ? " II" : "")
+            : d.kind === "legendary" ? " ·LEG" : " ·DUO";
+          beneRows.push({
+            id, d, rank,
+            name: d.name + tag,
+            color: JH.SIGIL_COLORS[el] || "#ffd23f",
+            text: JH.Benedictions.effectText(id, rank),
+            lines: [],
+          });
+        }
+      }
+      // Relic grid (expanded only): owned relic icons, RELIC_COLS per row.
+      const RELIC_COLS = 9;
+      const relicIds = expanded ? Object.keys(this.relics || {}) : [];
+      const relicRows = relicIds.length ? Math.ceil(relicIds.length / RELIC_COLS) : 0;
+
+      // Y anchors the box top (Y-10) below the HUD benediction rail: rail
+      // pips sit at y 13.5..26.5 (drawSigilStrip at Y=16, rank ring ±2.5),
+      // so the box top at 30 clears them — the two must never overlap.
+      const X = 10, Y = 40, ROW = 9;
+      // Width follows expansion: benediction names + the relic grid need the
+      // full 152 even when the shop suppresses desc text. The shop overlay
+      // starts at PX=280, so the wide panel (x 6..158) never reaches it.
+      const W = expanded ? 152 : named ? 74 : 46;
+      // Relic block: RELICS label (12) + icon rows at 16 pitch + 4 so the
+      // last row's gear frame (icon center ±9) clears the panel border.
+      const relicH = relicRows ? 12 + relicRows * 16 + 4 : 0;
+      const statH = rows.length * ROW + 16;
+      const maxBottom = JH.VIEW_H - 4;
+      const budget = maxBottom - (Y - 10);      // total box height allowed
+
+      // Collapsed/named summary: ONE compact line — an element-colored pip
+      // per owned benediction plus the total count. Details live in the
+      // expanded sheet; the HUD rail above the box carries the icons.
+      const sumIds = (!expanded && JH.Benedictions) ? Object.keys(JH.Benedictions.active) : [];
+      const summaryH = sumIds.length ? 11 : 0;
+
+      // Rewraps every benediction desc at maxLines and returns the bene
+      // block height. A name-only row (0 lines) still costs the 24px icon
+      // floor, same as a 1-line row — so degrading below 1 line saves no
+      // space while silently dropping every desc. Never called with 0.
+      const measureBeneH = (maxLines) => {
+        if (!beneRows.length) return 18;   // "no benedictions yet" hint + slack
+        let h = 0;
+        for (const b of beneRows) {
+          b.lines = (inlineDesc && maxLines) ? this.wrapText(b.text, 34, maxLines) : [];
+          // Row height clears the framed icon (±9 with seat rim) or the
+          // text column, whichever is taller.
+          h += Math.max(24, 16 + b.lines.length * 6);
+        }
+        return h;
+      };
+
+      // Expanded content starts 6px below the stat block (`by` below), so H
+      // must carry statH + 6 + content — dropping the 6 was the clipped-grid
+      // bug. Ladder: 3 desc lines -> 2 -> 1 (never fewer). If 1-line descs +
+      // the full relic grid still overflow, the content block scrolls
+      // instead of dropping info.
+      const contentBudget = budget - statH - 6;
+      let contentH = 0, scroll = false;
+      if (expanded) {
+        contentH = measureBeneH(3) + relicH;
+        if (contentH > contentBudget) contentH = measureBeneH(2) + relicH;
+        if (contentH > contentBudget) contentH = measureBeneH(1) + relicH;
+        if (contentH > contentBudget) scroll = true;
+      }
+      const H = expanded ? (scroll ? budget : statH + 6 + contentH)
+                         : statH + summaryH;
+      this.statPanelBottom = Y - 10 + H;   // screen-fit probe for tests
+
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.85)";
       ctx.fillRect(X - 4, Y - 10, W, H);
@@ -2487,25 +3027,141 @@
         // A row may aggregate several stat keys — flash if any of them changed.
         const live = [].concat(key).some((k) => F[k] > 0);
         const hot = live && (Math.floor(this.elapsed * 6) & 1) === 0;
-        // Stat icon at half size (6px) before the label; label alone until loaded.
-        const hasIcon = ik && JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
-        ctx.fillStyle = "#667788";
-        ctx.fillText(label, hasIcon ? X + 8 : X, y);
-        ctx.textAlign = "right";
-        ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
-        ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
+        if (named) {
+          // Named row: icon at half size (6px) before the label; label alone until loaded.
+          const hasIcon = ik && JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
+          ctx.fillStyle = "#667788";
+          ctx.fillText(label, hasIcon ? X + 8 : X, y);
+          ctx.textAlign = "right";
+          ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
+          ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 10, y);
+          ctx.textAlign = "left";
+        } else {
+          // Collapsed row: icon + value only, no label.
+          if (ik) JH.Assets.icon(ctx, ik, X + 3, y - 2, 0.5);
+          ctx.textAlign = "right";
+          ctx.fillStyle = hot ? "#80ff80" : "#dfe8f5";
+          ctx.fillText(String(val) + (live ? " ▲" : ""), X + W - 6, y);
+          ctx.textAlign = "left";
+        }
+      });
+
+      // Collapsed/named benediction summary line: 4px pips grouped by
+      // element (SIGIL_COLORS) + total count, right-aligned. Overflow past
+      // the pip budget is carried by the count alone.
+      if (!expanded && sumIds.length) {
+        const order = { water: 0, fire: 1, earth: 2, air: 3 };
+        const els = sumIds.map((id) => {
+          const d = JH.Benedictions.byId(id);
+          return (d && (d.element || (d.needs && d.needs[0]))) || "water";
+        }).sort((a, b) => (order[a] | 0) - (order[b] | 0));
+        const py = Y - 10 + statH + 2;
+        const maxPips = Math.max(1, Math.floor((W - 26) / 5));
+        els.slice(0, maxPips).forEach((el, i) => {
+          ctx.fillStyle = JH.SIGIL_COLORS[el] || "#ffd23f";
+          ctx.fillRect(X + i * 5, py, 4, 4);
+        });
+        ctx.font = "5px monospace"; ctx.textAlign = "right";
+        ctx.fillStyle = "#8fa8c8";
+        ctx.fillText("×" + sumIds.length, X + W - (named ? 10 : 6), py + 4);
         ctx.textAlign = "left";
-      });
-      // Active benedictions, listed under the stat rows in their element color.
-      beneIds.forEach((id, i) => {
-        const d = JH.Benedictions.byId(id);
-        if (!d) return;
-        const rank = JH.Benedictions.active[id] | 0;
-        const el = d.element || (d.needs && d.needs[0]) || "water";
-        const y = Y + 6 + rows.length * ROW + 6 + i * ROW;
-        ctx.fillStyle = JH.SIGIL_COLORS[el] || "#ffd23f";
-        ctx.fillText(d.name + (rank >= 2 ? " II" : ""), X, y);
-      });
+      }
+
+      let by = Y + 6 + rows.length * ROW + 6;
+      if (expanded) {
+        const contentTop = by, contentBottom = Y - 10 + H;
+        // Ping-pong auto-scroll the bene+relic block when it's taller than
+        // the box (clip is the hard screen-fit guarantee; the scroll just
+        // brings the rest into view over time instead of cutting it off).
+        const overflow = Math.max(0, contentH - (contentBottom - contentTop));
+        let scrollY = 0;
+        if (scroll && overflow > 0) {
+          const period = 3.5;   // seconds one-way, ~7s full up-down cycle
+          const t = (this.elapsed % (period * 2)) / period;
+          scrollY = -overflow * (t < 1 ? t : 2 - t);
+        }
+        ctx.save();
+        ctx.beginPath();
+        // Clip top sits 6 above the first row: tier frames extend 5 above
+        // rowStart (icon center rowStart+4, frame ±9). Bottom stays inside
+        // the border.
+        ctx.rect(X - 4, contentTop - 6, W, Math.max(0, (contentBottom - 1) - (contentTop - 6)));
+        ctx.clip();
+        ctx.translate(0, scrollY);
+
+        for (const b of beneRows) {
+          const rowStart = by;
+          // Icon rail on the left; name + desc share the right column so the
+          // frame never strikes through text.
+          JH.Assets.icon(ctx, "bene_" + b.id, X + 10, rowStart + 4, 1);
+          JH.Assets.tierFrame(ctx, X + 10, rowStart + 4, b.d, b.rank, 1, this.elapsed);
+          ctx.font = "6px monospace"; ctx.textAlign = "left";
+          ctx.fillStyle = b.color;
+          ctx.fillText(b.name, X + 24, rowStart + 4);
+          if (b.lines.length) {
+            ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
+            let ly = rowStart + 12;
+            for (const ln of b.lines) { ctx.fillText(ln, X + 24, ly); ly += 6; }
+          }
+          by = rowStart + Math.max(24, 16 + b.lines.length * 6);
+        }
+        if (beneRows.length === 0) {
+          ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
+          ctx.fillText("no benedictions yet", X, by + 6);
+          by += 12;
+        }
+        // Mouse hover-tests the relic grid while the panel is open (read-only:
+        // gates a tooltip, never a click). Position compared post-scroll so
+        // the hit box tracks the icon actually on screen.
+        const mouse = JH.Input && JH.Input.mouse && JH.Input.mouse.inside ? JH.Input.mouse : null;
+        let hoverRelic = null, hoverX = 0, hoverY = 0;
+        if (relicIds.length) {
+          ctx.font = "5px monospace"; ctx.fillStyle = "#667788"; ctx.textAlign = "left";
+          ctx.fillText("RELICS", X, by + 6);
+          const gridTop = by + 12;
+          relicIds.forEach((id, i) => {
+            const gx = X + 10 + (i % RELIC_COLS) * 16, gy = gridTop + 8 + Math.floor(i / RELIC_COLS) * 16;
+            const rd = JH.RELICS.find((x) => x.id === id);
+            JH.Assets.icon(ctx, id, gx, gy, 1);
+            JH.Assets.gearFrame(ctx, gx, gy, 1, rd && rd.tier, this.elapsed);
+            if (mouse && rd) {
+              const visY = gy + scrollY;
+              if (Math.abs(mouse.x - gx) <= 8 && Math.abs(mouse.y - visY) <= 8) {
+                hoverRelic = rd; hoverX = gx; hoverY = visY;
+              }
+            }
+          });
+          by += relicH;
+        }
+        ctx.restore();   // drop the clip before the tooltip so it can spill past the panel box
+
+        if (hoverRelic) this.drawRelicTooltip(ctx, hoverRelic, hoverX, hoverY);
+      }
+      ctx.restore();
+    },
+
+    // Relic-grid mouseover: name + desc, clamped fully on-screen near the
+    // hovered cell. Tier-colored border matches drawRelicRackCard's style.
+    drawRelicTooltip(ctx, rd, x, y) {
+      const lines = this.wrapText(rd.desc || "", 40, 3);
+      const W = 130, lineH = 7, H = 13 + lines.length * lineH + 3;
+      let tx = x + 10, ty = y - H - 4;
+      if (tx + W > JH.VIEW_W - 2) tx = JH.VIEW_W - 2 - W;
+      if (tx < 2) tx = 2;
+      if (ty < 2) ty = y + 12;
+      if (ty + H > JH.VIEW_H - 2) ty = JH.VIEW_H - 2 - H;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.95)";
+      ctx.fillRect(tx, ty, W, H);
+      const tierColors = { common: "#8fa8c8", rare: "#c9924a", relic: "#ffd23f" };
+      ctx.strokeStyle = tierColors[rd.tier] || "#8fa8c8";
+      ctx.strokeRect(tx, ty, W, H);
+      ctx.font = "bold 6px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#dfe8f5";
+      ctx.fillText(rd.name, tx + 5, ty + 9);
+      ctx.font = "5px monospace"; ctx.fillStyle = "#aebdd4";
+      let ly = ty + 17;
+      for (const ln of lines) { ctx.fillText(ln, tx + 5, ly); ly += lineH; }
       ctx.restore();
     },
 
@@ -2556,6 +3212,61 @@
       ctx.restore();
     },
 
+    drawRelicRackCard(ctx) {
+      const RANGE_GAP = { alarm_bell: 1, sunday_suit: 1, censer: 1 };
+      const pl = this.player;
+      let near = null, best = 30;
+      for (const st of this.rangeStations) {
+        if (st.kind !== "relic") continue;
+        const d = Math.hypot(pl.x - st.x, pl.y - st.y);
+        if (d < best) { best = d; near = st; }
+      }
+      if (!near) return;
+      // Sigil wins ties (compare sigil to rack station distance)
+      if (this.sigils && this.sigils.length > 0) {
+        let sigilBest = 30;
+        for (const s of this.sigils) {
+          if (s.dead) continue;
+          const d = Math.hypot(pl.x - s.x, pl.y - s.y);
+          if (d < sigilBest) sigilBest = d;
+        }
+        if (sigilBest <= best) return;
+      }
+      const rd = JH.RELICS.find((r) => r.id === near.relic);
+      if (!rd) return;
+      const owned = !!this.relics[near.relic];
+      const tierColors = { common: "#8fa8c8", rare: "#c9924a", relic: "#ffd23f" };
+      const tierColor = tierColors[rd.tier] || "#8fa8c8";
+      const desc = rd.desc + (RANGE_GAP[rd.id] ? "  (needs real run)" : "");
+      const W = 300, H = 34, X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
+      ctx.save();
+      ctx.fillStyle = "rgba(10,14,24,0.92)";
+      ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = tierColor;
+      ctx.strokeRect(X, Y, W, H);
+      ctx.font = "bold 7px monospace"; ctx.textAlign = "left";
+      ctx.fillStyle = "#dfe8f5";
+      ctx.fillText(rd.name + (owned ? "  [ON]" : ""), X + 6, Y + 10);
+      ctx.textAlign = "right";
+      ctx.fillStyle = tierColor;
+      ctx.fillText(rd.tier.toUpperCase(), X + W - 6, Y + 10);
+      ctx.textAlign = "left";
+      ctx.font = "6px monospace";
+      ctx.fillStyle = "#aebdd4";
+      // Two-line wrap: split near the middle on a space.
+      if (desc.length > 52) {
+        let cut = desc.lastIndexOf(" ", 52);
+        if (cut < 20) cut = 52;
+        ctx.fillText(desc.slice(0, cut), X + 6, Y + 20);
+        ctx.fillText(desc.slice(cut + 1), X + 6, Y + 28);
+      } else {
+        ctx.fillText(desc, X + 6, Y + 22);
+      }
+      ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
+      ctx.fillText("E: TOGGLE RELIC", X + W - 6, Y + H - 6);
+      ctx.restore();
+    },
+
     drawHoverShop(ctx) {
       const U = JH.Upgrades, pl = this.player;
       const selectable = this.shopSelectables();
@@ -2600,28 +3311,25 @@
 
       // ---- Build the flat row list (headers + buyable items), then scroll it
       // so the cursor row stays visible (the list now overflows the panel). ----
-      const HROW = 7, IROW = 11;
+      const HROW = 7, IROW = 14;
       const rows = [];
       U.branches.forEach((branch) => {
         rows.push({ t: "head", label: "── " + branch + " ──" });
         U.nodesByBranch(branch).forEach((n) => rows.push({ t: "node", n }));
       });
       rows.push({ t: "head", label: "── OVERCHARGE ──" });
-      if (U.allNodesOwned()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
-      else rows.push({ t: "lock", label: "Max the skill tree to unlock" });
-      rows.push({ t: "head", label: "── SUPPLIES ──" });
-      Object.keys(JH.CONSUMABLES).forEach((k) => rows.push({ t: "con", k }));
+      if (U.overchargeUnlocked()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
+      else rows.push({ t: "lock", label: "Unlocks after the first boss" });
       rows.push({ t: "head", label: "── RELICS ──" });
-      (this.relicStock || []).forEach((id) => rows.push({ t: "relic", id }));
+      rows.push({ t: "wheel" });
 
       const isCurRow = (r) => cur && (
         (r.t === "node" && cur.kind === "node" && cur.id === r.n.id) ||
         (r.t === "rep" && cur.kind === "rep" && cur.id === r.n.id) ||
-        (r.t === "con" && cur.kind === "consumable" && cur.id === r.k) ||
-        (r.t === "relic" && cur.kind === "relic" && cur.id === r.id));
+        (r.t === "wheel" && cur.kind === "wheelRow"));
 
       let cy = 0, cursorCY = 0;
-      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
+      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : r.t === "wheel" ? 34 : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
       const contentH = cy;
 
       const viewTop = PY + 26, viewBot = PY + PH - 34, viewH = viewBot - viewTop;
@@ -2645,6 +3353,51 @@
           ctx.fillText("🔒 " + r.label, MID, ry + 7); ctx.textAlign = "left";
           return;
         }
+        if (r.t === "wheel") {
+          // Cards render from the spawn-time snapshot: a bought card shows
+          // SOLD in its own slot, id null (thin pool at spawn) shows "—".
+          const entries = JH.Balance.shopWheelEntries(this.wheelStock, this.relics);
+          entries.forEach((en, i) => {
+            const cx = PX + 6 + i * 47, cy2 = ry + 2, focused = isCurRow(r) && this.shopWheelSlot === i;
+            ctx.fillStyle = focused ? "rgba(255,210,63,0.14)" : "rgba(20,28,44,0.9)";
+            ctx.fillRect(cx, cy2, 44, 30);
+            ctx.strokeStyle = focused ? "#ffd23f" : "#2a3550"; ctx.strokeRect(cx, cy2, 44, 30);
+            // Reel spin: for slots 0-2, before this reel's settle time show a
+            // cycling icon instead of the real one (staggered left->right).
+            const settle = 0.6 + i * 0.3;
+            let iconKey = en.id === "kibble" ? "kibble" : en.id;
+            let label, price, rd = null;
+            if (en.id === "kibble") { label = "KIBBLE PACK"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
+            else if (en.sold) { label = "SOLD"; price = null; }
+            else if (en.id) { rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
+            else { label = "SOLD OUT"; price = null; iconKey = "sold_out"; }
+            if (i < 3 && this.wheelSpinT < settle && en.id && !en.sold) {
+              const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
+              label = "· · ·"; price = null; rd = null;   // mask tier too: steel frame until the reel settles
+            }
+            if (iconKey) {
+              ctx.globalAlpha = en.sold ? 0.35 : iconKey === "sold_out" ? 0.6 : 1;
+              JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1);
+              JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1, rd && rd.tier, this.elapsed);
+              ctx.globalAlpha = 1;
+            }
+            ctx.font = "5px monospace"; ctx.textAlign = "center";
+            ctx.fillStyle = en.id && !en.sold ? "#dfe8f5" : "#556070";
+            ctx.fillText(label.slice(0, 12), cx + 22, cy2 + 23);
+            if (price != null) {
+              // Tier hues (relic gold / rare bronze) stay hued even when unaffordable —
+              // dim via alpha instead of swapping to the common path's grey-brown.
+              const tierColor = rd && rd.tier === "relic" ? "#ffd23f" : rd && rd.tier === "rare" ? "#c9924a" : null;
+              const afford = pl.suds >= price;
+              ctx.fillStyle = tierColor || (afford ? "#ffd23f" : "#775533");
+              ctx.globalAlpha = tierColor && !afford ? 0.45 : 1;
+              ctx.fillText(price + "", cx + 22, cy2 + 29);
+              ctx.globalAlpha = 1;
+            }
+          });
+          ctx.textAlign = "left";
+          return;
+        }
         let name, cost, owned = false, locked = false, afford = false, suffix = "";
         if (r.t === "node") {
           const n = r.n;
@@ -2655,29 +3408,21 @@
         } else if (r.t === "rep") {
           cost = this.priceOf(U.repCost(r.n.id)); afford = pl.suds >= cost; name = r.n.name;
           if (U.repCount[r.n.id]) suffix = " x" + U.repCount[r.n.id];
-        } else if (r.t === "relic") {
-          const rd = JH.RELICS.find((x) => x.id === r.id);
-          owned = !!(this.relics && this.relics[r.id]);
-          cost = this.priceOf(rd.cost); afford = pl.suds >= cost; name = rd.name;
-        } else {
-          const c = JH.CONSUMABLES[r.k]; cost = this.priceOf(c.cost); afford = pl.suds >= cost; name = c.name;
         }
         if (isCurRow(r)) {
           ctx.fillStyle = afford ? "rgba(255,210,63,0.18)" : "rgba(220,80,60,0.14)";
-          ctx.fillRect(PX + 2, ry, PW - 4, 11);
+          ctx.fillRect(PX + 2, ry, PW - 4, IROW);
         }
         ctx.font = "bold 6px monospace";
         ctx.fillStyle = owned ? "#55bb55" : locked ? "#3a4a5a" : afford ? "#ffffff" : "#aa6655";
-        // Baked icon replaces the •/▸/✓ mark: relics by id, signatures and
-        // Overcharge by the stat they push. Text mark remains the fallback.
-        const ik = r.t === "relic" ? r.id
-          : r.t === "node" ? ({ sig_dash: "dash", sig_marshal: "range", sig_lance: "dmg" })[r.n.id]
-          : r.t === "rep" ? "dmg" : null;
+        // Baked icon replaces the •/▸/✓ mark: Overcharge by the stat it
+        // pushes. Text mark remains the fallback.
+        const ik = r.t === "rep" ? "dmg" : null;
         ctx.globalAlpha = locked ? 0.45 : 1;
-        const hasIcon = ik && JH.Assets.icon(ctx, ik, PX + 8, ry + 5, 0.5);
+        const hasIcon = ik && JH.Assets.icon(ctx, ik, PX + 10, ry + 5, 1);
         ctx.globalAlpha = 1;
         const mark = owned ? "✓" : locked ? "▸" : "•";
-        ctx.fillText(hasIcon ? name + suffix : mark + " " + name + suffix, hasIcon ? PX + 13 : PX + 5, ry + 8);
+        ctx.fillText(hasIcon ? name + suffix : mark + " " + name + suffix, hasIcon ? PX + 19 : PX + 5, ry + 8);
         if (!owned) {
           ctx.textAlign = "right";
           ctx.fillStyle = locked ? "#3a4a5a" : afford ? "#ffd23f" : "#cc4444";
@@ -2701,31 +3446,27 @@
       if (cur) {
         if (cur.kind === "node") { const n = U.byId(cur.id); desc = n ? n.desc : ""; }
         else if (cur.kind === "rep") { const n = U.repById(cur.id); desc = n ? n.desc : ""; }
-        else if (cur.kind === "consumable") {
-          const c = JH.CONSUMABLES[cur.id];
-          desc = cur.id === "medkit" ? "Heal " + c.heal + " HP now." : "";
-        } else if (cur.kind === "relic") {
-          const rd = JH.RELICS.find((x) => x.id === cur.id);
-          desc = rd ? rd.desc : "";
+        else if (cur.kind === "wheelRow") {
+          const en = JH.Balance.shopWheelEntries(this.wheelStock, this.relics)[this.shopWheelSlot];
+          if (en.id === "kibble") desc = "Heal " + JH.KIBBLE_PACK.heal + " HP over " + JH.KIBBLE_PACK.dur + "s. Stacks.";
+          else if (en.id && !en.sold) { const rd = JH.RELICS.find((x) => x.id === en.id); desc = rd ? rd.desc : ""; }
+          else if (!en.id) desc = "No more relics in the vendor's stock.";
+          else desc = "";
         }
       }
       if (desc) {
         ctx.fillStyle = "#778899";
         ctx.font = "5px monospace";
-        const wrap = desc.length > 34 ? desc.lastIndexOf(" ", 34) : -1;
-        if (wrap > 0) {
-          ctx.fillText(desc.slice(0, wrap), PX + 5, dy + 6);
-          ctx.fillText(desc.slice(wrap + 1), PX + 5, dy + 12);
-        } else {
-          ctx.fillText(desc, PX + 5, dy + 6);
-        }
+        // 3 lines is the vertical budget between separator and footer; 48
+        // chars/line greedy-wraps every rank-II benediction text untruncated.
+        this.wrapText(desc, 48, 3).forEach((ln, i) => ctx.fillText(ln, PX + 5, dy + 6 + i * 6));
       }
 
       // Footer hint
       ctx.fillStyle = "#445566";
       ctx.font = "5px monospace";
       ctx.textAlign = "center";
-      ctx.fillText("▲▼ SELECT   [E] BUY", MID, PY + PH - 5);
+      ctx.fillText("▲▼ SELECT   [E] BUY   [ESC] CLOSE", MID, PY + PH - 5);
       ctx.textAlign = "left";
     },
 
@@ -2781,16 +3522,29 @@
       ctx.fillRect(JH.VIEW_W - 8 - 46 * frac, 44, 46 * frac, 2);
       ctx.restore();
       ctx.textAlign = "left";
+
+      // Rosary Chain: banked flat-dmg readout, one row under the GUSH label.
+      if (this.rosaryBonus > 0) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#ffd23f";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("+" + this.rosaryBonus + " DMG", JH.VIEW_W - 8, 66);
+        ctx.restore();
+        ctx.textAlign = "left";
+      }
     },
 
-    // Active-benediction readout: one 8px pip per owned boon, under the
-    // top-left LV/XP HUD. Dim at rank 1, bright (full alpha) at rank 2.
-    drawSigilStrip(ctx) {
+    // HUD benediction rail: one icon pip per owned boon at the top-left —
+    // the canonical at-a-glance display (the stat box sits below it; the
+    // expanded sheet carries the details). Dim at rank 1, bright (full
+    // alpha) at rank 2. Wraps every `perRow` pips; pitch 13 x 16.
+    drawSigilStrip(ctx, x0, y0, perRow) {
       if (!JH.Benedictions) return;
       const active = JH.Benedictions.active;
       const ids = Object.keys(active);
       if (ids.length === 0) return;
-      const X = 10, Y = 16, GAP = 13;
       ctx.save();
       ids.forEach((id, i) => {
         const d = JH.Benedictions.byId(id);
@@ -2798,21 +3552,22 @@
         const rank = active[id] | 0;
         const el = d.element || (d.needs && d.needs[0]) || "water";
         const col = JH.SIGIL_COLORS[el] || "#ffd23f";
-        const x = X + i * GAP;
+        const x = x0 + (i % perRow) * 13;
+        const y = y0 + Math.floor(i / perRow) * 16;
         ctx.globalAlpha = rank >= 2 ? 1 : 0.55;
         // Baked element icon (procedural pip while it streams in).
-        if (!JH.Assets.icon(ctx, "el_" + el, x + 4, Y + 4, 1)) {
+        if (!JH.Assets.icon(ctx, "el_" + el, x + 4, y + 4, 1)) {
           ctx.fillStyle = col;
-          ctx.fillRect(x, Y, 8, 8);
+          ctx.fillRect(x, y, 8, 8);
           ctx.strokeStyle = "#0a0e18";
-          ctx.strokeRect(x, Y, 8, 8);
+          ctx.strokeRect(x, y, 8, 8);
         }
         // Verb corner mark tells same-element boons apart (boons only).
-        if (d.kind === "boon" && d.verb) JH.Assets.verbMark(ctx, d.verb, x + 10, Y - 2);
+        if (d.kind === "boon" && d.verb) JH.Assets.verbMark(ctx, d.verb, x + 10, y - 2);
         // Rank-2 boons keep the bright ring.
         if (rank >= 2) {
           ctx.strokeStyle = col;
-          ctx.strokeRect(x - 2.5, Y - 2.5, 13, 13);
+          ctx.strokeRect(x - 2.5, y - 2.5, 13, 13);
         }
       });
       ctx.globalAlpha = 1;

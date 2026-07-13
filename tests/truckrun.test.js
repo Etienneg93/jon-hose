@@ -53,13 +53,67 @@ test("cleanBonus: flawless > decent > none, wall touch caps the top tier", () =>
   assert.strictEqual(TB.cleanBonus(CFG, 0.3, false), 0, "low HP → none");
 });
 
-test("beamCovers: forward, in-range, within the depth swath", () => {
-  const { hoseBand, hoseRange } = CFG;
-  assert.ok(TB.beamCovers(43, hoseBand, 43, 50, hoseRange), "same lane, ahead");
-  assert.ok(TB.beamCovers(43, hoseBand, 43 + hoseBand, 50, hoseRange), "swath edge in");
-  assert.ok(!TB.beamCovers(43, hoseBand, 43 + hoseBand + 1, 50, hoseRange), "past swath out");
-  assert.ok(!TB.beamCovers(43, hoseBand, 43, -5, hoseRange), "behind the nozzle out");
-  assert.ok(!TB.beamCovers(43, hoseBand, 43, hoseRange + 1, hoseRange), "beyond range out");
+test("beamHitsCore: the spray band at the wall decides, ballistic drop included", () => {
+  const range = CFG.hoseRange, bandH = CFG.hoseBandH;
+  const dxWall = 200;                                   // wall distance from the nozzle
+  const truckRoadY = 230;                               // this lane's ground line (screen)
+  const streamY = truckRoadY - TB.hoseStreamY(dxWall, range, CFG);  // band center at the wall
+  const halfH = 12;
+  // Eye centered exactly on the band: hit.
+  assert.ok(TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, streamY, halfH), "band on the eye");
+  // Eye just past band+eye reach: miss (and just inside: hit).
+  assert.ok(!TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, streamY + bandH + halfH + 1, halfH), "past the band: miss");
+  assert.ok(TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, streamY + bandH + halfH - 1, halfH), "edge overlap: hit");
+  // The ballistic drop matters: an eye at the MUZZLE's height hits at this
+  // wall distance only if the curve's sag is still within band+eye reach.
+  const drop = CFG.cannonH - TB.hoseStreamY(dxWall, range, CFG);
+  const muzzleY = truckRoadY - CFG.cannonH;
+  assert.strictEqual(TB.beamHitsCore(dxWall, range, CFG, bandH, truckRoadY, muzzleY, halfH),
+    drop <= bandH + halfH, "drop vs reach agree with the closed form");
+  // Range gates unchanged.
+  assert.ok(!TB.beamHitsCore(-5, range, CFG, bandH, truckRoadY, streamY, halfH), "behind the nozzle out");
+  assert.ok(!TB.beamHitsCore(range + 1, range, CFG, bandH, truckRoadY, streamY, halfH), "beyond range out");
+});
+
+test("hoseStreamY: one ballistic parabola — near-flat early, road at exactly range, no knee", () => {
+  const range = CFG.hoseRange;
+  assert.strictEqual(TB.hoseStreamY(0, range, CFG), CFG.cannonH, "leaves at cannon height");
+  assert.strictEqual(TB.hoseStreamY(range, range, CFG), 0, "on the road at exactly range");
+  // Quadratic gravity signature: quarter range has shed only 1/16 of the
+  // height, half range exactly a quarter.
+  assert.ok(Math.abs(TB.hoseStreamY(range * 0.25, range, CFG) - CFG.cannonH * (1 - 0.0625)) < 1e-9);
+  assert.ok(Math.abs(TB.hoseStreamY(range * 0.5, range, CFG) - CFG.cannonH * 0.75) < 1e-9);
+  // Smooth + monotonic: never rises, and adjacent-step drops grow gradually
+  // (no piecewise knee — second differences stay tiny and constant-signed).
+  let prev = TB.hoseStreamY(0, range, CFG), prevDrop = 0;
+  for (let dx = 4; dx <= range; dx += 4) {
+    const y = TB.hoseStreamY(dx, range, CFG);
+    const drop = prev - y;
+    assert.ok(drop >= 0, "non-increasing at dx=" + dx);
+    assert.ok(drop >= prevDrop - 1e-9, "bend only steepens (no knee) at dx=" + dx);
+    prev = y; prevDrop = drop;
+  }
+});
+
+test("hoseDpsMult: full before the taper, floors at range, 0 past range, linear midpoint", () => {
+  const range = CFG.hoseRange;
+  const taperStart = range * (1 - CFG.endFalloff);
+  assert.strictEqual(TB.hoseDpsMult(taperStart - 1, range, CFG), 1);
+  assert.strictEqual(TB.hoseDpsMult(range, range, CFG), CFG.endFalloffFloor);
+  assert.strictEqual(TB.hoseDpsMult(range + 1, range, CFG), 0);
+  const mid = TB.hoseDpsMult(taperStart + (range - taperStart) / 2, range, CFG);
+  const expectedMid = 1 - 0.5 * (1 - CFG.endFalloffFloor);
+  assert.ok(Math.abs(mid - expectedMid) < 1e-9, "midpoint of the taper is halfway to the floor");
+});
+
+test("hose hit window: first-hit dx solves the ballistic closed form", () => {
+  const range = CFG.hoseRange;
+  const bodyH = 28;
+  // Hit when cannonH*(1-(dx/range)^2) - hoseBandH <= bodyH:
+  const firstHit = range * Math.sqrt(1 - (bodyH + CFG.hoseBandH) / CFG.cannonH);
+  assert.ok(TB.hoseStreamY(firstHit - 1, range, CFG) - CFG.hoseBandH > bodyH, "misses just before first-hit dx");
+  assert.ok(TB.hoseStreamY(firstHit + 1, range, CFG) - CFG.hoseBandH <= bodyH, "hits just after first-hit dx");
+  assert.ok(firstHit > 0 && firstHit < range, "a landing window exists before max range");
 });
 
 test("buildTimeline: deterministic for a fixed seed", () => {
@@ -70,18 +124,37 @@ test("buildTimeline: deterministic for a fixed seed", () => {
 
 test("buildTimeline: sorted, within run, only known kinds/lanes", () => {
   const ev = TB.buildTimeline(CFG, seeded(7));
-  const kinds = new Set(["wreck", "fuse", "smelt", "pyro", "hydrant", "cross"]);
+  const kinds = new Set(["wreck", "fuse", "smelt", "pyro", "hydrant", "cross", "rockrain", "fusevolley"]);
+  // rockrain/fusevolley are container events — the runtime scene picks a
+  // lane per unrolled drop, so the container itself carries no single lane.
+  const laneless = new Set(["rockrain", "fusevolley"]);
   for (let i = 0; i < ev.length; i++) {
     assert.ok(ev[i].at >= 0 && ev[i].at <= CFG.runDuration, "within run");
     assert.ok(kinds.has(ev[i].kind), "known kind: " + ev[i].kind);
-    assert.ok(CFG.lanes.includes(ev[i].depth), "on a lane");
+    if (!laneless.has(ev[i].kind)) assert.ok(CFG.lanes.includes(ev[i].depth), "on a lane");
     if (i) assert.ok(ev[i].at >= ev[i - 1].at, "sorted by at");
   }
 });
 
+test("buildTimeline: rockrain + fusevolley windows present, in-run, deterministic", () => {
+  const ev = TB.buildTimeline(CFG, seeded(21));
+  const rr = ev.filter((e) => e.kind === "rockrain");
+  const fv = ev.filter((e) => e.kind === "fusevolley");
+  assert.strictEqual(rr.length, CFG.rockrain.at.length);
+  assert.strictEqual(fv.length, CFG.fusevolley.at.length);
+  for (const e of rr.concat(fv)) assert.ok(e.at >= 0 && e.at <= CFG.runDuration, "window within run");
+  for (const e of fv) assert.ok(e.flavor === "drop" || e.flavor === "fling", "flavor is one of the two arrivals");
+  const ev2 = TB.buildTimeline(CFG, seeded(21));
+  assert.deepStrictEqual(ev.filter((e) => e.kind === "fusevolley"), ev2.filter((e) => e.kind === "fusevolley"),
+    "flavor pick is reproducible from the seed");
+});
+
 test("buildTimeline: density builds then goes quiet at the arrival tail", () => {
   const ev = TB.buildTimeline(CFG, seeded(99));
-  const inWin = (s, e) => ev.filter((x) => x.kind !== "hydrant" && x.kind !== "cross" && x.at >= s && x.at < e).length;
+  // rockrain/fusevolley are scripted chase beats layered on top of the
+  // organic ramp, not part of it — exclude them like hydrant/cross.
+  const scripted = new Set(["hydrant", "cross", "rockrain", "fusevolley"]);
+  const inWin = (s, e) => ev.filter((x) => !scripted.has(x.kind) && x.at >= s && x.at < e).length;
   const intro = inWin(0, 12), build = inWin(12, 35), dense = inWin(35, 52), tail = inWin(52, 60);
   assert.ok(build > intro, "build denser than intro");
   assert.ok(dense > build, "climax denser than build");

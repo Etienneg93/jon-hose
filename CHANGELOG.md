@@ -7,6 +7,71 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.30.0 — Rummage Sale (2026-07-13)
+
+The shop grows up: relics come in three rarities, the wheel rolls by tier,
+and everything you buy — or get hit by — tells the truth about its shape.
+(Specs: `2026-07-09-shop-relics-pass-design.md`,
+`2026-07-11-relic-rarity-tiers-design.md`.)
+
+### Shop & relics
+- **Relic rarity tiers:** 22-item roster — 8 commons (steel, 60-100), 10
+  rares (brass, 250-350), 4 relic-grade build-arounds (gold, 500-560,
+  unlocked from Act 2; Boiler Coil one act later).
+- **Tiered wheel:** slot 1 common, slot 2 rare, slot 3 upgrades to
+  relic-grade with act-scaling odds (0/25/50/75%). Rarity reveals only when
+  the reel settles; exhausted tiers fall back down the chain; SOLD OUT cards.
+- **9 new relics:** Rubber Boots, Asbestos Socks, Squeegee, Dog Leash,
+  Rosary Chain, Backdraft Valve, Deputy Sprinkler, The Big Spigot, Boiler
+  Coil — all flat-gear, all with baked icons and steel/brass/gold frames.
+- **Hydro Lance falloff:** pierce fades down the line (100/70/50/35/25%) —
+  packed lines ~3x, not 10x. Prayer Bead also procs on super-elite arrivals.
+- **First-shop pacing:** the first vendor now waits for the Big Drip
+  corridor (~127 suds in pocket) and the Act 1 wheel rolls commons only.
+- Kibble pack is the only heal; shop opens on E, closes on Escape/walk-away.
+
+### Combat honesty (the WYSIWYG round)
+- **Jon's spray:** the hit path anchors at the NOZZLE at its real height and
+  tests the stream rect against enemy bodies — if the drawn water crosses
+  you, you're hit; nothing behind the nozzle, no more feet-line hits.
+- **Pressure Sermon reworked:** 0.8s of spraying arms a visible pip at the
+  nozzle; releasing the hose looses a traveling water wave (the drawn front
+  IS the hitbox). The old full-pressure gate that made it near-unfireable is
+  gone.
+- **Level-ups read:** stat-gain rows live in the overhead status stack above
+  Jon (2.2s each), never behind the sprite.
+- **Benediction row clamps in-arena** — killing a boss at the screen edge
+  can no longer strand the offer off-level (post-Slayer softlock fixed).
+
+### Fire-truck escape (chase pass)
+- **The cannon is ballistic:** one smooth gravity parabola from the roof
+  cannon to the road at max reach, generous band, dps taper at the tail;
+  droplets trace the same curve and splash back on whatever they hit —
+  nothing passes through a body or the Firewall's face.
+- **The spray decides the Firewall:** the band where it crosses the wall
+  must overlap the eye's box — lane choice is vertical aim with the drop
+  included. The SURGE bolt likewise hits box-vs-body (no more bumper
+  pass-throughs).
+- **New chase sequences:** Rock Rain (rapid debris windows) and Fuse Volley
+  (drop-ins or flung arcs landing on your lane, well downfield) — mutually
+  exclusive with ordinary traffic so pressure never doubles up.
+- Fuses wander the lanes instead of homing, explode on contact, and carry
+  half HP on the road; wrecks persist after collision; hydrants pop with a
+  splash; cross pickups grab from ~30% farther; the truck hitbox is
+  sprite-true.
+
+### Quality of life
+- **Stat panel redesign:** collapsed shows element pips + a count under the
+  benediction rail; Tab opens the full study view — names, complete
+  descriptions, relic grid with mouse hover tooltips; nothing clips at any
+  loadout (scrolls when huge).
+- **Tab-away auto-pauses** (play, church, truck) — no more catch-up
+  rubberband when you come back.
+- **Dev:** KeyH hitbox overlay (localhost) draws every hit shape in the
+  game, street and truck, from the live variables; the target range gains a
+  22-relic toggle rack + staged props for every relic effect; range deaths
+  respawn clean.
+
 ## v0.29.1 — Do-Over (2026-07-09)
 
 - **Telemetry:** hitting TRY AGAIN / PLAY AGAIN now flushes the restarted run

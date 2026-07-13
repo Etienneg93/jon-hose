@@ -30,16 +30,58 @@
     },
 
     // Total player-power count fed to eliteScale/bossHpScale: one-time nodes
-    // + repeatable Overcharge buys + total pillar ranks + XP levels. All sources of
-    // permanent stat growth count, so the enemy ramp can see them.
-    powerCount(owned, repCount, churchState, levelCount) {
+    // + repeatable Overcharge buys + total pillar ranks + XP levels + owned
+    // stat-bearing relics (5th arg, default 0). All sources of permanent
+    // stat growth count, so the enemy ramp can see them.
+    powerCount(owned, repCount, churchState, levelCount, statRelicCount) {
       let n = Object.keys(owned || {}).length;
       const rc = repCount || {};
       for (const k in rc) n += rc[k] || 0;
       const p = (churchState && churchState.pillars) || {};
       for (const k in p) n += p[k] | 0;
       n += levelCount | 0;
+      n += statRelicCount | 0;
       return n;
+    },
+
+    // Vendor relic pool: minAct-gated by actLevel; optional tier filter.
+    // Pure — takes the relic defs array, doesn't read JH.RELICS itself.
+    relicPoolIds(relicDefs, actLevel, tier) {
+      return (relicDefs || [])
+        .filter((r) => (r.minAct == null || actLevel >= r.minAct) && (!tier || r.tier === tier))
+        .map((r) => r.id);
+    },
+
+    // Tiered 3-slot wheel roll: slot 1 common, slot 2 rare, slot 3 rare that
+    // upgrades to relic-grade with act-indexed odds (JH.SHOP.relicGradeOdds).
+    // Exhausted tiers fall back down the chain; fully-exhausted slots are null.
+    // Never rolls duplicates. Pure aside from the injected rng.
+    rollWheelStock(relicDefs, ownedMap, actLevel, rng) {
+      const owned = ownedMap || {}, r = rng || Math.random;
+      const pools = {};
+      for (const t of ["common", "rare", "relic"])
+        pools[t] = this.relicPoolIds(relicDefs, actLevel, t).filter((id) => !owned[id]);
+      const draw = (chain) => {
+        for (const t of chain) {
+          const p = pools[t];
+          if (p.length) return p.splice(Math.floor(r() * p.length), 1)[0];
+        }
+        return null;
+      };
+      const shop = (root.JH && root.JH.SHOP) || {};
+      // Act 1 wheel: commons only — the first wallet can't touch rares, so
+      // nothing unbuyable sits on the shelf. No fallback past common: the
+      // 8-common pool can't exhaust across 3 slots.
+      if (shop.wheelAllCommonsBelowAct != null && actLevel < shop.wheelAllCommonsBelowAct)
+        return [draw(["common"]), draw(["common"]), draw(["common"])];
+      const oddsArr = shop.relicGradeOdds || [0, 0, 0, 0];
+      const odds = oddsArr[Math.max(0, Math.min(oddsArr.length - 1, actLevel + 1))] || 0;
+      const slot3Chain = (pools.relic.length && r() < odds)
+        ? ["relic", "rare", "common"] : ["rare", "common", "relic"];
+      const s1 = draw(["common", "rare", "relic"]);
+      const s2 = draw(["rare", "common", "relic"]);
+      const s3 = draw(slot3Chain);
+      return [s1, s2, s3];
     },
 
     // Boss HP at spawn scales with player power (same count as eliteScale).
@@ -132,6 +174,22 @@
         const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
       }
       return pool.slice(0, n);
+    },
+
+    // Slot-wheel entries for the shop's relic row: 3 stock cards + a 4th
+    // fixed Kibble Pack card. `stock` is the vendor's spawn-time snapshot,
+    // so slots never shift: a bought relic keeps its slot with sold=true.
+    // id is null only when the pool was thin at spawn (renders empty).
+    // Pure — never mutates stock.
+    shopWheelEntries(stock, relicsOwned) {
+      const owned = relicsOwned || {};
+      const out = [];
+      for (let i = 0; i < 3; i++) {
+        const id = (stock && stock[i]) || null;
+        out.push({ kind: "wheel", slot: i, id, sold: !!(id && owned[id]) });
+      }
+      out.push({ kind: "wheel", slot: 3, id: "kibble", sold: false });
+      return out;
     },
 
     // Cumulative loot-roll thresholds vs Math.random(), scaled by an enemy's
@@ -259,6 +317,26 @@
       if (ranks.baptize && t.wet > 0.3) m *= ranks.baptize >= 2 ? 1.25 : 1.15;
       if (ranks.trial && t.burning) m *= ranks.trial >= 2 ? 1.3 : 1.2;
       return m;
+    },
+
+    // Kibble grant: extend the regen window, reset the rate (same semantics
+    // as the health-pickup collect path and the shop's Kibble Pack buy).
+    kibbleGrant(pl, pack) {
+      pl.kibbleTimer += pack.dur;
+      pl.kibbleRegen = pack.heal / pack.dur;
+    },
+
+    // Prayer Bead grant: extend-only pressure buff (boss enrage + super-elite arrival).
+    prayerBeadProc(pl, tune) {
+      pl.pressureBuffT = Math.max(pl.pressureBuffT || 0, (tune || root.JH.RELIC_TUNE).prayerBeadDur);
+    },
+
+    // Burn dps on the player: per-stack rate, Asbestos Socks flat cut (floored).
+    burnTickDps(stacks, socksOwned) {
+      const per = socksOwned
+        ? Math.max(root.JH.RELIC_TUNE.socksBurnDpsFloor, root.JH.FIRE.burnDpsPerStack - root.JH.RELIC_TUNE.socksBurnDpsCut)
+        : root.JH.FIRE.burnDpsPerStack;
+      return stacks * per;
     },
   };
   root.JH = root.JH || {};

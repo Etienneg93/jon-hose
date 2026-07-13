@@ -11,6 +11,7 @@ global.window.JH.Loader = { img: () => ({}) };
 require("../js/world.js");
 require("../js/upgrades.js");
 require("../js/entities.js");
+require("../js/game.js");
 const JH = global.window.JH;
 
 test("applyKnockback still knocks back regular enemies", () => {
@@ -68,6 +69,21 @@ test("Player.applyBurn: burn stacks have i-frames like hits", () => {
   p.burnGraceT = 0;
   p.applyBurn(1);
   assert.strictEqual(p.burnStacks, 2);
+});
+
+test("Player.applyBurn: burnGraceT is exactly stats.invuln, +socksGraceBonus with Asbestos Socks", () => {
+  const p = makePlayer();
+  p.applyBurn(1);
+  assert.strictEqual(p.burnGraceT, p.stats.invuln, "no socks: grace window is exactly stats.invuln");
+
+  const p2 = makePlayer();
+  const realGame = JH.Game;
+  JH.Game = { relics: { asbestos_socks: true } };   // applyBurn reads JH.Game.relics (known idiom)
+  try {
+    p2.applyBurn(1);
+    assert.strictEqual(p2.burnGraceT, p2.stats.invuln + JH.RELIC_TUNE.socksGraceBonus,
+      "socks owned: grace window is exactly stats.invuln + socksGraceBonus");
+  } finally { JH.Game = realGame; }
 });
 
 test("Player.clearBurn: wipes all burn state (church respawn must not keep DoT)", () => {
@@ -583,25 +599,18 @@ test("mook holds its windup when no attack ticket is free", () => {
   assert.strictEqual(m.usingTicket, true);
 });
 
-test("tier-3 nodes are act-gated: locked before Act 2, available from Act 2", () => {
-  JH.Upgrades.reset();
-  JH.Upgrades.currentActLevel = -1;                     // Act 1
-  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), false);
-  JH.Upgrades.currentActLevel = 0;                      // Act 2 — gate opens here
-  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
-  JH.Upgrades.currentActLevel = 1;                      // Act 3 — still available
-  assert.strictEqual(JH.Upgrades.isAvailable("sig_lance"), true);
-  JH.Upgrades.reset(); JH.Upgrades.currentActLevel = -1;
-});
+// Act-gating for the ex-signature Hydro Lance moved with it into JH.RELICS
+// (relic.minAct) — see tests/relics.test.js; the NODES-tier gate this used
+// to test no longer exists (NODES is empty, below).
 
-test("Upgrades NODES: exactly three signatures, retired ids gone", () => {
-  const ids = JH.Upgrades.nodes.map((n) => n.id).sort();
-  assert.deepStrictEqual(ids, ["sig_dash", "sig_lance", "sig_marshal"]);
-  assert.deepStrictEqual(JH.Upgrades.branches, ["SIGNATURE"]);
+test("Upgrades NODES: empty, signatures retired to JH.RELICS", () => {
+  assert.strictEqual(JH.Upgrades.nodes.length, 0);
+  assert.deepStrictEqual(JH.Upgrades.branches, []);
   assert.strictEqual(JH.Upgrades.repeatables.length, 1);
   assert.strictEqual(JH.Upgrades.repeatables[0].id, "ov_dmg");
   ["pw1", "pw2", "pw3", "rc1", "rc2", "rc3", "tk1", "tk2", "tk3",
-   "mb1", "mb2", "mb3", "vt1", "vt2", "vt3", "ov_water", "ov_hp"].forEach((id) => {
+   "mb1", "mb2", "mb3", "vt1", "vt2", "vt3", "ov_water", "ov_hp",
+   "sig_dash", "sig_marshal", "sig_lance"].forEach((id) => {
     assert.strictEqual(JH.Upgrades.byId(id), undefined, id + " should be retired");
   });
 });
@@ -638,6 +647,115 @@ test("sweepCrosses banks live crosses so win/respawn can't lose essence", () => 
   if (prevChurch === undefined) delete JH.Church; else JH.Church = prevChurch;
 });
 
+test("Squeegee: a kill standing in a fire patch douses it; owned only", () => {
+  const g = makeKillGame();
+  g.relics.squeegee = true;
+  const onPatch = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g.firePatches = [onPatch];
+  JH.Game.onEnemyKilled.call(g, { x: 0, y: 0 });
+  assert.strictEqual(onPatch.sprayProgress, onPatch.extinguishDur, "kill on the patch snuffs it");
+
+  const farPatch = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g.firePatches = [farPatch];
+  JH.Game.onEnemyKilled.call(g, { x: 200, y: 0 });
+  assert.strictEqual(farPatch.sprayProgress, 0, "kill far from the patch leaves it lit");
+
+  const g2 = makeKillGame();   // no relic: never touches the patch
+  const noRelicPatch = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g2.firePatches = [noRelicPatch];
+  JH.Game.onEnemyKilled.call(g2, { x: 0, y: 0 });
+  assert.strictEqual(noRelicPatch.sprayProgress, 0, "no Squeegee: patch untouched");
+});
+
+test("Squeegee: a dead patch on the kill's footprint is skipped; two overlapping live patches both snuff", () => {
+  const g = makeKillGame();
+  g.relics.squeegee = true;
+  const deadPatch = { x: 0, y: 0, dead: true, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  const liveElsewhere = { x: 200, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  g.firePatches = [deadPatch, liveElsewhere];
+  JH.Game.onEnemyKilled.call(g, { x: 0, y: 0 });
+  assert.strictEqual(deadPatch.sprayProgress, 0, "dead patch untouched even though the kill sits on its footprint");
+  assert.strictEqual(liveElsewhere.sprayProgress, 0, "live patch out of range is untouched");
+
+  const g2 = makeKillGame();
+  g2.relics.squeegee = true;
+  const patchA = { x: 0, y: 0, dead: false, sprayProgress: 0, extinguishDur: 5,
+    footprint: () => ({ rx: 20, ry: 8 }) };
+  const patchB = { x: 5, y: 0, dead: false, sprayProgress: 0, extinguishDur: 4,
+    footprint: () => ({ rx: 20, ry: 8 }) };   // overlaps the same kill spot
+  g2.firePatches = [patchA, patchB];
+  JH.Game.onEnemyKilled.call(g2, { x: 0, y: 0 });
+  assert.strictEqual(patchA.sprayProgress, patchA.extinguishDur, "first overlapping patch is snuffed");
+  assert.strictEqual(patchB.sprayProgress, patchB.extinguishDur, "second overlapping patch is also snuffed, not just the first");
+});
+
+test("Rosary Chain: banks +1 dmg per combo kill up to cap; chain break zeroes it; absent relic stays 0", () => {
+  const g = makeKillGame();
+  g.relics.rosary_chain = true;
+  for (let i = 0; i < 12; i++) JH.Game.onEnemyKilled.call(g, null);
+  assert.strictEqual(g.rosaryBonus, JH.RELIC_TUNE.rosaryCap, "banked bonus caps at rosaryCap");
+
+  JH.Game.decayCombo.call(g, JH.COMBO_WINDOW + 1);   // force the chain to expire
+  assert.strictEqual(g.combo, 0, "combo resets on expiry");
+  assert.strictEqual(g.rosaryBonus, 0, "banked bonus clears when the chain breaks");
+
+  const g2 = makeKillGame();
+  for (let i = 0; i < 12; i++) JH.Game.onEnemyKilled.call(g2, null);
+  assert.strictEqual(g2.rosaryBonus || 0, 0, "no relic, no bonus");
+});
+
+test("spawnGushPulse: ring dmg/kb reflect owned relics; neither relic spawns no ring", () => {
+  const g = { pulseRings: [], relics: { backdraft_valve: true, big_spigot: true },
+    player: { x: 50, y: 60 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(g);
+  assert.strictEqual(g.pulseRings.length, 1);
+  assert.strictEqual(g.pulseRings[0].dmg, JH.RELIC_TUNE.spigotDamage);
+  assert.strictEqual(g.pulseRings[0].kb, JH.RELIC_TUNE.valveKnockback);
+
+  const g2 = { pulseRings: [], relics: {}, player: { x: 0, y: 0 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(g2);
+  assert.strictEqual(g2.pulseRings.length, 0, "no relic, no ring");
+});
+
+test("spawnGushPulse: valve alone gives knockback with no damage; spigot alone gives damage with no knockback", () => {
+  const T = JH.RELIC_TUNE;
+  const gValve = { pulseRings: [], relics: { backdraft_valve: true }, player: { x: 10, y: 20 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(gValve);
+  assert.strictEqual(gValve.pulseRings.length, 1);
+  assert.strictEqual(gValve.pulseRings[0].dmg, 0, "valve-only: no damage");
+  assert.strictEqual(gValve.pulseRings[0].kb, T.valveKnockback, "valve-only: full knockback");
+
+  const gSpigot = { pulseRings: [], relics: { big_spigot: true }, player: { x: 10, y: 20 }, audio: { play() {} } };
+  JH.Game.spawnGushPulse.call(gSpigot);
+  assert.strictEqual(gSpigot.pulseRings.length, 1);
+  assert.strictEqual(gSpigot.pulseRings[0].dmg, T.spigotDamage, "spigot-only: full damage");
+  assert.strictEqual(gSpigot.pulseRings[0].kb, 0, "spigot-only: no knockback");
+});
+
+test("updatePulseRings: rim-is-hitbox — near enemy hit exactly once, far enemy untouched, patch doused", () => {
+  const T = JH.RELIC_TUNE;
+  const near = new JH.Enemy("mook", 50 + (T.pulseRadius - 30), 60);   // inside pulseRadius
+  const far = new JH.Enemy("mook", 50 + T.pulseRadius + 40, 60);      // beyond pulseRadius
+  const nearStartHp = near.hp, farStartHp = far.hp;
+  const patch = { x: 55, y: 60, dead: false, sprayProgress: 0, extinguishDur: 5 };
+  const g = {
+    pulseRings: [{ x: 50, y: 60, r: 0, targetR: T.pulseRadius, dur: 0.25, t: 0,
+      dmg: T.spigotDamage, kb: T.valveKnockback, douse: true, hit: new Set() }],
+    enemies: [near, far], firePatches: [patch],
+  };
+  for (let i = 0; i < 30; i++) JH.Game.updatePulseRings.call(g, 0.02);   // past full expansion + fade tail
+  assert.strictEqual(nearStartHp - near.hp, T.spigotDamage, "near enemy takes exactly one pulse hit");
+  assert.notStrictEqual(near.knockVX, 0, "near enemy knocked back");
+  assert.strictEqual(far.hp, farStartHp, "far enemy beyond pulseRadius untouched");
+  assert.strictEqual(patch.sprayProgress, patch.extinguishDur, "patch inside the ring is doused");
+  assert.strictEqual(g.pulseRings.length, 0, "ring is culled after its fade tail");
+});
+
 test("priceOf: Punch Card discounts 20%, rounded; absent relic charges full price", () => {
   assert.strictEqual(JH.Game.priceOf.call({ relics: {} }, 150), 150);
   assert.strictEqual(JH.Game.priceOf.call({ relics: { punch_card: true } }, 150), 120);
@@ -651,8 +769,9 @@ function makeKillGame() {
   return {
     kills: 0, combo: 0, comboTimer: 0, comboFlash: 0,
     grantXp() {}, audio: { play() {} }, shake() {}, particles: [],
-    pickups: [],
+    pickups: [], pulseRings: [], firePatches: [],
     spawnPickup(kind, x, y, value) { this.pickups.push({ kind, x, y, value }); },
+    spawnGushPulse() { JH.Game.spawnGushPulse.call(this); },
     player: makePlayer(),
     relics: {},
   };
@@ -1008,20 +1127,33 @@ test("Scalding Faith: full-pressure spray applies scald", () => {
   B.reset();
 });
 
-test("Pressure Sermon: arms across a full-pressure hold even after the tank drains below 80%", () => {
+test("Pressure Sermon: SERMON.charge seconds of spray arms the pip regardless of pressure tier", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("pressure_sermon");
   const g = makeThinkGame(60, 40);
   const p = g.player;
-  p.water = p.stats.maxWater;   // start full → top pressure tier this hold
+  p.water = p.stats.maxWater * 0.5;   // MID tier the whole hold — no tier gate
   p.facing = 1;
-  for (let i = 0; i < 17; i++) p.doSpray(0.05, g);   // ~0.85s continuous
-  assert.ok(p.sprayHeldT >= 0.8, "held long enough to qualify");
-  assert.ok(p.sermonFullPressure, "armed by hitting full pressure during the hold");
-  // The tank has drained under the 80% full-pressure tier by now — the old
-  // release-frame check (dmgScale >= 1.2 on the last frame) was unreachable.
-  assert.ok(p.water < p.stats.maxWater * 0.8, "tank below 80% (old check would fail here)");
+  const steps = Math.ceil(JH.SERMON.charge / 0.05) + 1;
+  for (let i = 0; i < steps; i++) p.doSpray(0.05, g);
+  assert.ok(p.sprayHeldT >= JH.SERMON.charge, "held long enough to qualify");
+  assert.ok(p.sermonReady, "armed at the charge threshold without full pressure");
   B.reset();
+});
+
+test("Pressure Sermon wave: front hits each enemy once with SERMON.dmg, band-gated", () => {
+  const C = JH.SERMON;
+  const mk = (x, y) => ({ x, y, dead: false, dropping: false, hp: 100,
+    takeDamage(d) { this.hp -= d; }, applyKnockback() {} });
+  const near = mk(60, 40), deep = mk(60, 40 + C.halfDepth + 5), far = mk(60 + C.range + 50, 40);
+  const g = { sermonWaves: [{ x: 20, y: 40, dir: 1, traveled: 0, hit: new Set() }],
+              enemies: [near, deep, far] };
+  for (let i = 0; i < 120 && g.sermonWaves.length; i++)
+    JH.Game.updateSermonWaves.call(g, 1 / 60);
+  assert.strictEqual(near.hp, 100 - C.dmg, "in-band enemy hit exactly once");
+  assert.strictEqual(deep.hp, 100, "outside the depth band: untouched");
+  assert.strictEqual(far.hp, 100, "beyond range: wave dissipated first");
+  assert.strictEqual(g.sermonWaves.length, 0, "wave culled at range");
 });
 
 // ---- Benedictions: Backdraft + Ash Walk ----
@@ -1278,10 +1410,10 @@ test("super bulwark recovers its shield when the lob dies mid-flight", () => {
 
 // ---- Relics: runtime effect hooks ----
 
-test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", () => {
+test("Brass Nozzle: +10 flat dmg to the primary (blocker) target only; never a second target", () => {
   const g = makeThinkGame(60, 40);
   const p = g.player;
-  p.water = p.stats.maxWater; p.facing = 1;
+  p.water = p.stats.maxWater; p.facing = 1;   // full pressure tier (dmgScale 1.2)
   const near = new JH.Enemy("mook", p.x + 20, p.y);
   const far  = new JH.Enemy("mook", p.x + 40, p.y);
   g.enemies = [far, near];   // order shouldn't matter — nearest is still the primary blocker
@@ -1289,45 +1421,373 @@ test("Brass Nozzle: non-pierce stream also hits the next-closest enemy in arc", 
   // Without the relic: only the closest (blocker) takes damage.
   const hpNear0 = near.hp, hpFar0 = far.hp;
   p.doSpray(0.05, g);
-  assert.ok(near.hp < hpNear0, "closest enemy always hit");
-  assert.strictEqual(far.hp, hpFar0, "no relic: second enemy in line is untouched");
+  const baseDmg = hpNear0 - near.hp;
+  assert.ok(baseDmg > 0, "closest enemy always hit");
+  assert.strictEqual(far.hp, hpFar0, "second enemy in line is untouched");
 
-  // With the relic: the next-closest also takes damage.
+  // With the relic: the primary target takes +10 flat dmg (scaled by dmgScale/dt
+  // like the base hit); the second-closest is still never touched — no chain promotion.
   g.relics = { brass_nozzle: true };
-  const hpFar1 = far.hp;
+  const near2 = new JH.Enemy("mook", p.x + 20, p.y);
+  const far2  = new JH.Enemy("mook", p.x + 40, p.y);
+  g.enemies = [far2, near2];
+  const hpNear2 = near2.hp, hpFar2 = far2.hp;
   p.doSpray(0.05, g);
-  assert.ok(far.hp < hpFar1, "Brass Nozzle: second-closest enemy also hit");
+  const nozzleDmg = hpNear2 - near2.hp;
+  const expectedAdd = JH.RELIC_TUNE.brassNozzleAdd * 1.2 * 0.05;
+  assert.ok(Math.abs((nozzleDmg - baseDmg) - expectedAdd) < 1e-6,
+    "Brass Nozzle: primary target takes exactly the flat dmg add, scaled like the base hit");
+  assert.strictEqual(far2.hp, hpFar2, "Brass Nozzle: second-closest enemy is never hit");
 });
 
-test("Brass Nozzle: never promotes a target past an active dome blocker (regression)", () => {
-  const g = makeThinkGame(60, 40);
-  g.relics = { brass_nozzle: true };
-  const p = g.player;
-  p.water = p.stats.maxWater; p.facing = 1;
-  p.stats.sprayRange = 300;   // long reach — the arc spans well past the dome
-  // Dome (r 58) between Jon and the mook; Jon outside it, mook beyond its far edge.
-  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];
-  const beyond = new JH.Enemy("mook", p.x + 250, p.y);
-  g.enemies = [beyond];
-  const hp0 = beyond.hp;
-  p.doSpray(0.05, g);
-  assert.strictEqual(beyond.hp, hp0, "dome stops the stream — no second target promoted past it");
+// ---- Hydro Lance: pierce damage fades down the line ----
+
+test("inSprayPath: WYSIWYG — stream rect at nozzle height vs body rect, from config", () => {
+  const G = global.window.JH.Geo;
+  const band = JH.PLAYER.sprayHitBand, nz = JH.PLAYER.nozzleZ;
+  const mk = (x, y, z, bodyH) => ({ x, y, z: z || 0, bodyW: 14, bodyH: bodyH || 28 });
+  const hit = (t) => G.inSprayPath(100, 50, nz, t, 1, 78, band);
+  assert.ok(hit(mk(140, 50)), "same-depth mook-height body crosses the jet");
+  assert.ok(!hit(mk(80, 50)), "behind the nozzle: never hit");
+  // deeper than bodyH - (nozzleZ - band): head no longer reaches the jet
+  assert.ok(hit(mk(140, 50 + (28 - (nz - band)) - 1)), "slightly deeper: head still in the jet");
+  assert.ok(!hit(mk(140, 50 + (28 - (nz - band)) + 2)), "too deep: water flies over the head");
+  // airborne: body lifts out of the band
+  assert.ok(!hit(mk(140, 50, nz + band + 30, 28)), "high airborne target: jet passes under");
 });
 
-test("Brass Nozzle: enemy blocker with a dome behind it — second target can't sit past the dome", () => {
+test("lance falloff: pierce damage fades down the line per RELIC_TUNE.lanceFalloff", () => {
   const g = makeThinkGame(60, 40);
-  g.relics = { brass_nozzle: true };
   const p = g.player;
   p.water = p.stats.maxWater; p.facing = 1;
   p.stats.sprayRange = 300;
-  g.shields = [new JH.DeployedShield(p.x + 100, p.y, null)];   // dome near edge ~30px out
-  const near   = new JH.Enemy("mook", p.x + 20, p.y);    // in front of the dome — the blocker
-  const beyond = new JH.Enemy("mook", p.x + 250, p.y);   // past the dome's far edge
-  g.enemies = [near, beyond];
-  const hpNear0 = near.hp, hpBeyond0 = beyond.hp;
+  p.stats.beam = 3;   // Hydro Lance tier: pierce
+  const a = new JH.Enemy("mook", p.x + 30, p.y);
+  const b = new JH.Enemy("mook", p.x + 60, p.y);
+  const c = new JH.Enemy("mook", p.x + 90, p.y);
+  g.enemies = [c, a, b];   // scrambled order — sort must go by depth, not array order
+
+  const a0 = a.hp, b0 = b.hp, c0 = c.hp;
+  p.doSpray(0.1, g);
+  const L = JH.RELIC_TUNE.lanceFalloff;
+  const lossA = a0 - a.hp, lossB = b0 - b.hp, lossC = c0 - c.hp;
+  assert.ok(lossA > 0, "nearest enemy is hit");
+  assert.ok(Math.abs(lossB / lossA - L[1]) < 0.01, "2nd hit scales by lanceFalloff[1]");
+  assert.ok(Math.abs(lossC / lossA - L[2]) < 0.01, "3rd hit scales by lanceFalloff[2]");
+});
+
+test("lance falloff: hit indices past the ladder's length repeat the LAST entry", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;   // Hydro Lance tier: pierce
+  const L = JH.RELIC_TUNE.lanceFalloff;
+  const n = L.length + 1;   // one more enemy than the ladder has entries
+  const enemies = [];
+  for (let i = 0; i < n; i++) enemies.push(new JH.Enemy("mook", p.x + 30 * (i + 1), p.y));
+  g.enemies = enemies.slice().reverse();   // scrambled order — sort must go by depth
+  const hp0 = enemies.map((e) => e.hp);
+  p.doSpray(0.1, g);
+  const loss = enemies.map((e, i) => hp0[i] - e.hp);
+  const lossA = loss[0];
+  for (let i = 0; i < n; i++) {
+    const expected = L[Math.min(i, L.length - 1)];
+    assert.ok(Math.abs(loss[i] / lossA - expected) < 0.01,
+      "hit index " + i + " scales by lanceFalloff[" + Math.min(i, L.length - 1) + "]");
+  }
+  // The untested branch this pins: idx >= L.length must repeat L's last
+  // entry (Math.min(idx, L.length-1)), not fall off to undefined/NaN.
+  assert.ok(Math.abs(loss[n - 1] / lossA - L[L.length - 1]) < 0.01,
+    "the extra hit past the ladder's length repeats the last falloff entry");
+});
+
+// ---- Dome shelter contract (Bulwark's planted dome blocks/shelters the stream) ----
+
+test("dome shelter: enemy inside an active dome is immune while Jon is outside; hittable once the dome fades", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;   // long reach — the arc spans well past the dome
+  const dome = new JH.DeployedShield(p.x + 100, p.y, null);
+  g.shields = [dome];
+  const e = new JH.Enemy("mook", dome.x, dome.y);   // at the dome's center
+  g.enemies = [e];
+
+  const hp0 = e.hp;
   p.doSpray(0.05, g);
-  assert.ok(near.hp < hpNear0, "enemy in front of the dome still takes the stream");
-  assert.strictEqual(beyond.hp, hpBeyond0, "second target is never promoted past the dome");
+  assert.strictEqual(e.hp, hp0, "active dome: stream blocked, enemy inside takes nothing");
+
+  dome.active = false;   // dome faded — no blocking, no shelter
+  p.doSpray(0.05, g);
+  assert.ok(e.hp < hp0, "inactive dome: the same enemy takes spray damage");
+});
+
+test("dome shelter: stepping inside the dome lets the stream through (the counter)", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const dome = new JH.DeployedShield(p.x + 30, p.y, null);   // Jon inside (30 < domeRadius)
+  g.shields = [dome];
+  assert.ok(JH.insideDome(dome, p.x, p.y), "setup: Jon is inside the dome");
+  const e = new JH.Enemy("mook", dome.x + 20, dome.y);       // also inside, in front of Jon
+  g.enemies = [e];
+
+  const hp0 = e.hp;
+  p.doSpray(0.05, g);
+  assert.ok(e.hp < hp0, "Jon inside the dome: sheltered enemy is hittable");
+});
+
+test("dome shelter: pierce beam — enemy in front is hit, enemy inside the dome is sheltered, enemy beyond is blocked", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;   // Hydro Lance tier: pierce (planted shields still hard-block)
+  const dome = new JH.DeployedShield(p.x + 100, p.y, null);
+  g.shields = [dome];
+  const front  = new JH.Enemy("mook", p.x + 30, p.y);        // before the dome, in the open
+  const inside = new JH.Enemy("mook", dome.x - 20, dome.y);  // inside the dome, ahead of its center
+  const beyond = new JH.Enemy("mook", dome.x + 100, dome.y); // past the dome
+  g.enemies = [front, inside, beyond];
+  assert.ok(JH.insideDome(dome, inside.x, inside.y) && !JH.insideDome(dome, p.x, p.y),
+    "setup: middle enemy sheltered, Jon outside");
+
+  const hpFront0 = front.hp, hpInside0 = inside.hp, hpBeyond0 = beyond.hp;
+  p.doSpray(0.05, g);
+  assert.ok(front.hp < hpFront0, "pierce: enemy in the open before the dome is hit");
+  assert.strictEqual(inside.hp, hpInside0, "pierce: enemy inside the active dome is sheltered");
+  assert.strictEqual(beyond.hp, hpBeyond0, "pierce: dome hard-blocks the beam — nothing past it is hit");
+});
+
+// ---- Brass Nozzle: bonus targets the first (nearest) enemy the stream hits ----
+
+test("Brass Nozzle: pierce beam (Hydro Lance) — bonus lands on the nearest enemy only", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  p.stats.beam = 3;                        // Hydro Lance tier: pierce, blocker can only be a planted shield
+  g.relics = { brass_nozzle: true };
+  const near = new JH.Enemy("mook", p.x + 40, p.y);
+  const far  = new JH.Enemy("mook", p.x + 120, p.y);
+  g.enemies = [near, far];
+
+  const n0 = near.hp, f0 = far.hp;
+  p.doSpray(0.05, g);
+  const nearLoss = n0 - near.hp, farLoss = f0 - far.hp;
+  assert.ok(farLoss > 0, "pierce: far enemy is hit too");
+  // Ratio folds in the lance falloff ladder (near = hit index 0 → LF[0]=1,
+  // far = hit index 1 → LF[1]) on top of the nozzle's flat add on near only.
+  const LF = JH.RELIC_TUNE.lanceFalloff;
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / (p.stats.sprayDamage * LF[1]);
+  assert.ok(Math.abs(nearLoss / farLoss - expected) < 1e-9,
+    "near enemy takes the nozzle bonus, both scaled by lanceFalloff: loss ratio near/far == "
+    + "(sprayDamage+add)/(sprayDamage*LF[1]), got " + (nearLoss / farLoss));
+});
+
+test("Brass Nozzle: beam 0 — bonus still lands on the blocker (regression)", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const near = new JH.Enemy("mook", p.x + 40, p.y);
+  const far  = new JH.Enemy("mook", p.x + 60, p.y);
+  g.enemies = [near, far];
+
+  g.relics = {};                           // control: no nozzle
+  const n0 = near.hp;
+  p.doSpray(0.05, g);
+  const plainLoss = n0 - near.hp;
+  assert.ok(plainLoss > 0, "non-pierce: blocker is hit");
+
+  near.hp = n0; p.water = p.stats.maxWater;
+  g.relics = { brass_nozzle: true };
+  const f0 = far.hp;
+  p.doSpray(0.05, g);
+  const nozzleLoss = n0 - near.hp;
+  assert.strictEqual(far.hp, f0, "non-pierce: enemy behind the blocker is untouched");
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.brassNozzleAdd) / p.stats.sprayDamage;
+  assert.ok(Math.abs(nozzleLoss / plainLoss - expected) < 1e-9,
+    "blocker takes the nozzle bonus: loss ratio == (sprayDamage+add)/sprayDamage, got " + (nozzleLoss / plainLoss));
+});
+
+test("Dog Leash: flat dmg bonus vs a charging or lunging enemy, not a walking one", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  g.relics = { dog_leash: true };
+
+  const charging = new JH.Enemy("mook", p.x + 20, p.y);
+  charging.state = "charge";
+  g.enemies = [charging];
+  const c0 = charging.hp;
+  p.doSpray(0.05, g);
+  const chargeLoss = c0 - charging.hp;
+
+  p.water = p.stats.maxWater;
+  const lunging = new JH.Enemy("mook", p.x + 20, p.y);
+  lunging.state = "lunge";
+  g.enemies = [lunging];
+  const l0 = lunging.hp;
+  p.doSpray(0.05, g);
+  const lungeLoss = l0 - lunging.hp;
+
+  p.water = p.stats.maxWater;
+  const walking = new JH.Enemy("mook", p.x + 20, p.y);
+  walking.state = "walk";
+  g.enemies = [walking];
+  const w0 = walking.hp;
+  p.doSpray(0.05, g);
+  const walkLoss = w0 - walking.hp;
+
+  const expected = (p.stats.sprayDamage + JH.RELIC_TUNE.leashLungeBonus) / p.stats.sprayDamage;
+  assert.ok(Math.abs(chargeLoss / walkLoss - expected) < 1e-9,
+    "charging enemy takes the flat bonus: loss ratio charge/walk == (sprayDamage+bonus)/sprayDamage, got " + (chargeLoss / walkLoss));
+  assert.ok(Math.abs(lungeLoss / walkLoss - expected) < 1e-9,
+    "lunging enemy takes the same flat bonus, got " + (lungeLoss / walkLoss));
+});
+
+test("Rosary Chain: banked bonus adds flat dmg while the relic is owned", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  g.relics = { rosary_chain: true };
+  g.rosaryBonus = 5;
+
+  const target = new JH.Enemy("mook", p.x + 20, p.y);
+  g.enemies = [target];
+  const t0 = target.hp;
+  p.doSpray(0.05, g);
+  const bonusLoss = t0 - target.hp;
+
+  p.water = p.stats.maxWater;
+  g.rosaryBonus = 0;
+  const plain = new JH.Enemy("mook", p.x + 20, p.y);
+  g.enemies = [plain];
+  const p0 = plain.hp;
+  p.doSpray(0.05, g);
+  const plainLoss = p0 - plain.hp;
+
+  const expected = (p.stats.sprayDamage + 5) / p.stats.sprayDamage;
+  assert.ok(Math.abs(bonusLoss / plainLoss - expected) < 1e-9,
+    "rosary bonus adds flat dmg: loss ratio == (sprayDamage+bonus)/sprayDamage, got " + (bonusLoss / plainLoss));
+});
+
+test("Boiler Coil: sustained spray on one target superheats — flat bonus dps + splash on a neighbor", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.facing = 1;
+  g.relics = { boiler_coil: true };
+  const T = JH.RELIC_TUNE;
+  const dt = 0.05;
+
+  const primary = new JH.Enemy("mook", p.x + 20, p.y);
+  primary.hp = 1e6;
+  const neighbor = new JH.Enemy("mook", primary.x + 10, primary.y);   // within boilerSplashR (24)
+  neighbor.hp = 1e6;
+  g.enemies = [primary, neighbor];
+
+  p.water = p.stats.maxWater;
+  p.doSpray(dt, g);   // frame 1: locks onto primary, heat starts at 0
+  assert.strictEqual(p.boilerTarget, primary, "nearest hit enemy is tracked");
+
+  // Just under threshold: normal spray damage only, no splash yet.
+  p.boilerHeat = T.boilerHeatTime - 0.1;
+  p.water = p.stats.maxWater;
+  let p0 = primary.hp, n0 = neighbor.hp;
+  p.doSpray(dt, g);
+  const baseLoss = p0 - primary.hp;
+  assert.strictEqual(neighbor.hp, n0, "no splash before the superheat threshold");
+
+  // This frame's dt crosses the threshold — bonus + splash both land.
+  p.boilerHeat = T.boilerHeatTime - dt + 0.001;
+  p.water = p.stats.maxWater;
+  p0 = primary.hp; n0 = neighbor.hp;
+  p.doSpray(dt, g);
+  const heatedLoss = p0 - primary.hp;
+  const neighborLoss = n0 - neighbor.hp;
+  const dmgScale = 1.2;   // full-pressure tier both frames (water topped off each call)
+  assert.ok(Math.abs((heatedLoss - baseLoss) - T.boilerBonus * dmgScale * dt) < 1e-6,
+    "heated frame adds flat boilerBonus dps on top of the base hit, got delta " + (heatedLoss - baseLoss));
+  assert.ok(Math.abs(neighborLoss - T.boilerSplash * dmgScale * dt) < 1e-6,
+    "neighbor within boilerSplashR takes boilerSplash dps once superheated, got " + neighborLoss);
+});
+
+test("Boiler Coil: switching the hit target resets the heat build-up", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.facing = 1;
+  g.relics = { boiler_coil: true };
+  const T = JH.RELIC_TUNE;
+  const dt = 0.05;
+
+  const a = new JH.Enemy("mook", p.x + 20, p.y);
+  a.hp = 1e6;
+  g.enemies = [a];
+  for (let t = 0; t < 1.0; t += dt) { p.water = p.stats.maxWater; p.doSpray(dt, g); }
+  assert.strictEqual(p.boilerTarget, a);
+  assert.ok(p.boilerHeat > 0 && p.boilerHeat < T.boilerHeatTime, "accumulated heat, still under threshold");
+
+  const b = new JH.Enemy("mook", p.x + 20, p.y);
+  b.hp = 1e6;
+  g.enemies = [b];
+  p.water = p.stats.maxWater;
+  p.doSpray(dt, g);
+  assert.strictEqual(p.boilerTarget, b, "new nearest hit becomes the tracked target");
+  assert.strictEqual(p.boilerHeat, 0, "heat resets on target switch");
+});
+
+test("Boiler Coil: a boilerGap pause with no spray resets the heat", () => {
+  const p = makePlayer();
+  p.boilerTarget = {};   // stand-in for a previously tracked enemy
+  p.boilerHeat = 1.5;
+  p.boilerGapT = 0;
+  const g = {
+    relics: {}, enemies: [], particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  };
+  const dt = 1 / 60;
+  const total = JH.RELIC_TUNE.boilerGap + 0.1;
+  for (let t = 0; t < total; t += dt) p.update(dt, g);
+  assert.strictEqual(p.boilerTarget, null, "gap pause clears the tracked target");
+  assert.strictEqual(p.boilerHeat, 0, "gap pause clears the heat");
+});
+
+test("Boiler Coil: real per-frame order — heat survives while spraying via update(), gap only fires after real dry frames", () => {
+  const dt = 1 / 60;
+  const spraying = { v: true };
+  const g = Object.assign(makeThinkGame(60, 40), {
+    input: { held: (k) => k === "spray" && spraying.v, pressed: () => false, buffered: () => false, consume() {} },
+  });
+  const p = g.player;
+  p.facing = 1;
+  g.relics = { boiler_coil: true };
+  const T = JH.RELIC_TUNE;
+  const target = new JH.Enemy("mook", p.x + 20, p.y);
+  target.hp = 1e6;
+  g.enemies = [target];
+
+  // Drive the real per-step order: player.update() ticks boilerGapT up FIRST,
+  // then (still inside the same update) doSpray fires and zeroes it back to 0.
+  // The regression this pins: that same-frame incr-then-reset order must
+  // never let the gap threshold trip mid-stream, and heat must climb, not reset.
+  let lastHeat = -1;
+  for (let i = 0; i < 10; i++) {
+    p.water = p.stats.maxWater;   // keep the tank topped so pressure tier stays constant
+    p.update(dt, g);
+    assert.strictEqual(p.boilerGapT, 0, "gap timer stays zeroed while actively spraying, frame " + i);
+    assert.ok(p.boilerHeat >= lastHeat, "heat never resets mid-stream, frame " + i);
+    lastHeat = p.boilerHeat;
+  }
+  assert.strictEqual(p.boilerTarget, target, "boiler target tracked through the real update() path");
+  assert.ok(lastHeat > 0, "heat actually accumulated while spraying");
+
+  // Stop spraying and let real (non-spray) update() frames pass beyond boilerGap.
+  spraying.v = false;
+  const total = T.boilerGap + 0.1;
+  for (let t = 0; t < total; t += dt) p.update(dt, g);
+  assert.strictEqual(p.boilerTarget, null, "gap after real dry frames clears the target");
+  assert.strictEqual(p.boilerHeat, 0, "gap after real dry frames clears the heat");
 });
 
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
@@ -1348,43 +1808,160 @@ test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", 
   assert.strictEqual(p.water, 15, "Dowsing Rod: water_can value x1.5 (10 -> 15)");
 });
 
-test("Spigot Key: hydrant contact arms a 15s window; doSpray deals +10% while it's live", () => {
+test("Spigot Key: standing at a hydrant heals HP at the configured rate while it refills you", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, p) => ({
+    hydrants: [{ x: p.x, y: p.y }], relics,
+    particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
   const p = makePlayer();
-  p.facing = 1;
-  const g = { hydrants: [{ x: p.x, y: p.y, t: 0 }], relics: { spigot_key: true },
-    particles: [], bounds: { minX: 0, maxX: 480 }, input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} } };
-  // Drive just the hydrant-proximity slice of Player.update via a direct call
-  // to the same logic: assert the flag through a real update() tick.
-  p.update(1 / 60, g);
-  assert.strictEqual(p.spigotT, 15, "standing at a hydrant arms Spigot Key's window");
+  p.facing = 1; p.hp = p.stats.maxHp - 50;   // leave room to heal
+  p.water = p.stats.maxWater * 0.5;          // tank must be FILLING for the heal
+  const hpBefore = p.hp;
+  p.update(dt, mkGame({ spigot_key: true }, p));
+  assert.ok((p.hp - hpBefore) >= JH.RELIC_TUNE.spigotHealRate * dt - 1e-6,
+    "Spigot Key: heals at spigotHealRate HP/s while the hydrant refills you");
 
-  const g2 = makeThinkGame(60, 40);
-  const e = new JH.Enemy("mook", p.x + 20, p.y);
-  g2.player = p; g2.enemies = [e]; g2.relics = { spigot_key: true };
-  p.water = p.stats.maxWater;
-  const hpBefore = e.hp;
-  p.doSpray(0.05, g2);
-  const dmgWithBuff = hpBefore - e.hp;
+  // Full tank: no refill happening -> no heal (hydrants can't be camped for HP).
+  const pFull = makePlayer();
+  pFull.facing = 1; pFull.hp = pFull.stats.maxHp - 50;
+  pFull.water = pFull.stats.maxWater;
+  const hpBeforeFull = pFull.hp;
+  pFull.update(dt, mkGame({ spigot_key: true }, pFull));
+  assert.ok(pFull.hp <= hpBeforeFull + 1e-9, "Spigot Key: full tank grants no heal");
 
-  p.spigotT = 0;
-  const e2 = new JH.Enemy("mook", p.x + 20, p.y);
-  g2.enemies = [e2];
-  p.water = p.stats.maxWater;
-  const hpBefore2 = e2.hp;
-  p.doSpray(0.05, g2);
-  const dmgWithoutBuff = hpBefore2 - e2.hp;
-  assert.ok(Math.abs(dmgWithBuff - dmgWithoutBuff * 1.1) < 1e-6, "spigotT active: +10% spray dmg");
+  const p2 = makePlayer();
+  p2.facing = 1; p2.hp = p2.stats.maxHp - 50;
+  const hpBefore2 = p2.hp;
+  p2.update(dt, mkGame({}, p2));
+  assert.strictEqual(p2.hp, hpBefore2, "no relic: hydrant proximity alone doesn't heal");
+
+  const p3 = makePlayer();
+  p3.facing = 1; p3.hp = p3.stats.maxHp;   // already full
+  p3.update(dt, mkGame({ spigot_key: true }, p3));
+  assert.strictEqual(p3.hp, p3.stats.maxHp, "heal clamps at maxHp");
 });
 
-test("shopSelectables lists the current relic stock; buyRelic spends suds, flags ownership, and clears stock", () => {
+test("Deputy Sprinkler: auto-jets flat dps on the nearest enemy in range, gated on the relic", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, enemies) => ({
+    relics, enemies, particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
+  // In range, relic owned: pyro (waterMult 1.5) drains sprinklerDps*dt*waterMult.
+  const p = makePlayer();
+  p.facing = 1;
+  const near = new JH.Enemy("pyro", p.x + 20, p.y);
+  const hpBefore = near.hp;
+  p.update(dt, mkGame({ deputy_sprinkler: true }, [near]));
+  const loss = hpBefore - near.hp;
+  const expected = JH.RELIC_TUNE.sprinklerDps * dt * 1.5;
+  assert.ok(Math.abs(loss - expected) < 1e-9,
+    "in-range pyro takes sprinklerDps*dt*waterMult, got " + loss);
+
+  // Beyond sprinklerRange: untouched (no spraying involved either way).
+  const p2 = makePlayer();
+  p2.facing = 1;
+  const far = new JH.Enemy("mook", p2.x + JH.RELIC_TUNE.sprinklerRange + 10, p2.y);
+  const farHp = far.hp;
+  p2.update(dt, mkGame({ deputy_sprinkler: true }, [far]));
+  assert.strictEqual(far.hp, farHp, "enemy beyond sprinklerRange is untouched");
+
+  // No relic: nothing happens even at close range.
+  const p3b = makePlayer();
+  p3b.facing = 1;
+  const close = new JH.Enemy("mook", p3b.x + 20, p3b.y);
+  const closeHp = close.hp;
+  p3b.update(dt, mkGame({}, [close]));
+  assert.strictEqual(close.hp, closeHp, "no relic: no auto-jet damage");
+});
+
+test("Deputy Sprinkler: enemy sheltered inside an active dome takes no auto-jet damage; unsheltered twin does", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, enemies, shields) => ({
+    relics, enemies, shields: shields || [], particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
+  // Dome center 70 units out (inside sprinklerRange 80, outside domeRadius 58) —
+  // Jon is outside the dome, the enemy sitting at its center is sheltered.
+  const p = makePlayer();
+  p.facing = 1;
+  const dome = new JH.DeployedShield(p.x + 70, p.y, null);
+  const sheltered = new JH.Enemy("mook", dome.x, dome.y);
+  const hpBefore = sheltered.hp;
+  p.update(dt, mkGame({ deputy_sprinkler: true }, [sheltered], [dome]));
+  assert.strictEqual(sheltered.hp, hpBefore,
+    "enemy sheltered inside an active dome takes no auto-jet damage");
+
+  // Same relic, no dome: an unsheltered twin at close range takes the damage.
+  const p2 = makePlayer();
+  p2.facing = 1;
+  const unsheltered = new JH.Enemy("mook", p2.x + 20, p2.y);
+  const hpBefore2 = unsheltered.hp;
+  p2.update(dt, mkGame({ deputy_sprinkler: true }, [unsheltered], []));
+  assert.ok(unsheltered.hp < hpBefore2, "unsheltered twin at close range takes sprinkler damage");
+});
+
+test("Deputy Sprinkler: nearest of two in-range enemies drains; dead/dropping skipped; dead player never drains", () => {
+  const dt = 1 / 60;
+  const mkGame = (relics, enemies) => ({
+    relics, enemies, particles: [], bounds: { minX: 0, maxX: 480 },
+    input: { held: () => false, pressed: () => false, buffered: () => false, consume() {} },
+  });
+
+  // Two live enemies in range — only the nearer one drains this frame.
+  const p = makePlayer();
+  p.facing = 1;
+  const near = new JH.Enemy("mook", p.x + 20, p.y);
+  const far = new JH.Enemy("mook", p.x + 50, p.y);
+  const nearHp0 = near.hp, farHp0 = far.hp;
+  p.update(dt, mkGame({ deputy_sprinkler: true }, [near, far]));
+  assert.ok(near.hp < nearHp0, "nearest enemy drains");
+  assert.strictEqual(far.hp, farHp0, "farther enemy is untouched while a nearer one is in range");
+
+  // Dead/dropping enemies are skipped even when nearer than the only live target.
+  const p2 = makePlayer();
+  p2.facing = 1;
+  const deadNear = new JH.Enemy("mook", p2.x + 10, p2.y);
+  deadNear.dead = true;
+  const deadHp0 = deadNear.hp;
+  const droppingNear = new JH.Enemy("mook", p2.x + 15, p2.y);
+  droppingNear.dropping = true;
+  const droppingHp0 = droppingNear.hp;
+  const liveFar = new JH.Enemy("mook", p2.x + 40, p2.y);
+  const liveFarHp0 = liveFar.hp;
+  p2.update(dt, mkGame({ deputy_sprinkler: true }, [deadNear, droppingNear, liveFar]));
+  assert.strictEqual(deadNear.hp, deadHp0, "dead enemy never takes auto-jet damage");
+  assert.strictEqual(droppingNear.hp, droppingHp0, "dropping (airborne) enemy never takes auto-jet damage");
+  assert.ok(liveFar.hp < liveFarHp0, "the only live enemy drains despite being farthest");
+
+  // alive=false player: no drain at all.
+  const p3 = makePlayer();
+  p3.facing = 1;
+  p3.alive = false;
+  const target = new JH.Enemy("mook", p3.x + 10, p3.y);
+  const targetHp0 = target.hp;
+  p3.update(dt, mkGame({ deputy_sprinkler: true }, [target]));
+  assert.strictEqual(target.hp, targetHp0, "dead player: no auto-jet drain");
+});
+
+test("shopSelectables carries the relic wheel as one row; buyRelic spends suds, flags ownership, and clears stock", () => {
   const g = Object.create(JH.Game);
   g.player = makePlayer();
   g.player.suds = 300;
   g.relics = {};
   g.relicStock = ["brass_nozzle", "spigot_key"];
+  g.wheelStock = g.relicStock.slice(0, 3);   // spawnVendor's snapshot — production always reads THIS, not relicStock
   const sel = g.shopSelectables();
-  const relicRows = sel.filter((s) => s.kind === "relic");
-  assert.deepStrictEqual(relicRows.map((r) => r.id), ["brass_nozzle", "spigot_key"]);
+  const wheelRows = sel.filter((s) => s.kind === "wheelRow");
+  assert.strictEqual(wheelRows.length, 1, "the whole relic stock collapses to a single wheel row");
+  // Production always calls this with the (wheelStock, relics) two-arg form (game.js drawHoverShop) — match it here.
+  const entries = JH.Balance.shopWheelEntries(g.wheelStock, g.relics);
+  assert.deepStrictEqual(entries.map((e) => e.id), ["brass_nozzle", "spigot_key", null, "kibble"]);
 
   assert.strictEqual(g.buyRelic("dowsing_rod"), false, "not in stock: rejected");
   const cost = JH.RELICS.find((r) => r.id === "brass_nozzle").cost;
@@ -1414,7 +1991,7 @@ test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly onc
   boss.hp = boss.maxHp * 0.5;         // already below the (high) enrageAt threshold
   g.player.pressureBuffT = 0;
   boss.think(1 / 60, g);
-  assert.strictEqual(g.player.pressureBuffT, 4, "first enrage tick grants the buff");
+  assert.strictEqual(g.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur, "first enrage tick grants the buff");
   g.player.pressureBuffT = 0;         // simulate the buff wearing off
   boss.think(1 / 60, g);
   assert.strictEqual(g.player.pressureBuffT, 0, "latch prevents re-granting on subsequent enraged frames");
@@ -1443,17 +2020,53 @@ test("dropLoot: dryStreak increments on a null roll and resets once an item drop
   }
 });
 
-test("death wash: benedictions clear, levels/signatures survive respawn refresh", () => {
+test("death wash: benedictions clear, levels/relics survive respawn refresh", () => {
   JH.Upgrades.reset(); JH.Benedictions.reset();
-  JH.Upgrades.owned = { sig_marshal: true };
+  const prevGame = JH.Game;
+  JH.Game = { relics: { fire_marshal: true } };
   JH.Upgrades.levelCount = 4;
   JH.Benedictions.take("bedrock");
   const before = JH.Upgrades.computeStats(JH.Upgrades.owned);
   JH.Benedictions.reset();                             // what respawnFromChurch does
   const after = JH.Upgrades.computeStats(JH.Upgrades.owned);
   assert.strictEqual(before.maxHp - after.maxHp, 40);  // bedrock gone
-  assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // signature survived
+  assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // relic survived
   JH.Upgrades.reset(); JH.Benedictions.reset();
+  JH.Game = prevGame;
+});
+
+test("toggleRelic: grant folds apply() stats in, revoke folds out + clamps hp + clears relic state", () => {
+  const stats = [];
+  const g = {
+    relics: {}, rosaryBonus: 7,
+    player: {
+      hp: 120, stats: { maxHp: 100 },
+      boilerTarget: {}, boilerHeat: 1.5, boilerGapT: 0.1,
+      applyStats(s) { this.stats = s; stats.push(s); },
+    },
+  };
+  const toggleMethod = JH.Game.toggleRelic;
+  const toggle = (id) => toggleMethod.call(g, id);
+  const realGame = JH.Game;
+  JH.Game = g;                                  // computeStats reads JH.Game.relics (known idiom)
+  try {
+    assert.strictEqual(toggle("rubber_boots"), true);
+    assert.strictEqual(g.relics.rubber_boots, true);
+    assert.strictEqual(g.player.stats.maxHp, JH.PLAYER.maxHp + JH.RELIC_TUNE.bootsHp);
+    g.player.hp = g.player.stats.maxHp;         // full hp with boots on
+    assert.strictEqual(toggle("rubber_boots"), false);
+    assert.ok(!g.relics.rubber_boots);
+    assert.strictEqual(g.player.stats.maxHp, JH.PLAYER.maxHp);
+    assert.ok(g.player.hp <= g.player.stats.maxHp, "hp clamped after boots revoke");
+    // relic-state cleanup on revoke
+    g.relics.rosary_chain = true; g.rosaryBonus = 7;
+    toggle("rosary_chain");                     // revoke
+    assert.strictEqual(g.rosaryBonus, 0);
+    g.relics.boiler_coil = true; g.player.boilerHeat = 2;
+    toggle("boiler_coil");                      // revoke
+    assert.strictEqual(g.player.boilerTarget, null);
+    assert.strictEqual(g.player.boilerHeat, 0);
+  } finally { JH.Game = realGame; }
 });
 
 test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {
@@ -1503,4 +2116,18 @@ test("spray-douse speed scales with spray damage, never below the flat rate", ()
   assert.ok(twice > base * 1.5, "double damage douses much faster");
   assert.ok(base >= 0.1 - 1e-9, "base damage is at least the flat rate");
   assert.ok(Math.abs(weak - 0.1) < 1e-9, "well-below-base damage clamps to exactly the flat rate");
+});
+
+test("procSuperEliteArrival: grants pressure buff + floater only with prayer_bead and a live player", () => {
+  const floats = [];
+  const g = { relics: { prayer_bead: true },
+              player: { alive: true, x: 0, y: 0, pressureBuffT: 0 },
+              float(x, y, txt) { floats.push(txt); } };
+  JH.Game.procSuperEliteArrival.call(g);
+  assert.strictEqual(g.player.pressureBuffT, JH.RELIC_TUNE.prayerBeadDur);
+  assert.strictEqual(floats.length, 1);
+  const g2 = { relics: {}, player: { alive: true, pressureBuffT: 0 }, float() { floats.push("x"); } };
+  JH.Game.procSuperEliteArrival.call(g2);
+  assert.strictEqual(g2.player.pressureBuffT, 0);
+  assert.strictEqual(floats.length, 1);
 });

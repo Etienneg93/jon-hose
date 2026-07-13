@@ -2,6 +2,9 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const B = require("../js/benedictions.js");
+global.window = global.window || {};
+require("../js/config.js");
+const JH = global.window.JH;
 
 test("DEFS: 17 boons, 3 duos, 4 legendaries; ids unique", () => {
   const boons = B.DEFS.filter((d) => d.kind === "boon");
@@ -17,6 +20,21 @@ test("DEFS: every boon carries a verb from the allowed set; duos/legendaries non
     if (d.kind === "boon") assert.ok(VERBS.has(d.verb), d.id + " verb=" + d.verb);
     else assert.strictEqual(d.verb, undefined, d.id + " should carry no verb");
   }
+});
+
+test("effectText: rank 1 is base desc; rank 2 appends the II upgrade line", () => {
+  const d = B.byId("split_stream");
+  assert.strictEqual(B.effectText("split_stream", 1), d.desc);
+  assert.strictEqual(B.effectText("split_stream", 0), d.desc);
+  const two = B.effectText("split_stream", 2);
+  assert.ok(two.startsWith(d.desc), "rank-2 text keeps the base effect");
+  assert.ok(two.includes(d.descII), "rank-2 text includes the descII upgrade");
+});
+
+test("effectText: duos/legendaries (no descII) return their single desc at any rank", () => {
+  const duo = B.byId("steam_sermon");
+  assert.strictEqual(B.effectText("steam_sermon", 2), duo.desc);
+  assert.strictEqual(B.effectText("bogus_id", 2), "");
 });
 
 test("pickOffers: 3 offers, distinct elements when possible, no rank-2 repeats", () => {
@@ -91,19 +109,27 @@ test("wash moves active boons to the reliquary; second wash keeps the higher ran
   B.reset();
 });
 
-test("reclaimNext restores one washed boon at its rank, FIFO; empty returns null", () => {
+test("reliquary: redeemAll restores every washed boon at rank, cost escalates, reset clears", () => {
   B.reset();
-  B.take("bedrock"); B.take("bedrock");
-  B.take("gale_stride");
+  B.take("split_stream"); B.take("split_stream"); B.take("ash_walk");
   B.wash();
-  const first = B.reclaimNext();
-  assert.strictEqual(first.id, "bedrock");
-  assert.strictEqual(B.rank("bedrock"), 2, "reclaimed at washed rank");
-  assert.strictEqual(B.washedCount(), 1);
-  const second = B.reclaimNext();
-  assert.strictEqual(second.id, "gale_stride");
-  assert.strictEqual(B.reclaimNext(), null, "empty reliquary");
+  assert.strictEqual(B.redeemAllCost(), 1);
+  const n = B.redeemAll();
+  assert.strictEqual(n, 2);
+  assert.strictEqual(B.rank("split_stream"), 2);
+  assert.strictEqual(B.rank("ash_walk"), 1);
+  assert.strictEqual(B.washedCount(), 0);
+  assert.strictEqual(B.redeemAllCost(), 2, "second redemption costs 2");
+  B.wash();                      // death does NOT reset the counter
+  assert.strictEqual(B.redeemAllCost(), 2);
   B.reset();
+  assert.strictEqual(B.redeemAllCost(), 1, "new run resets the counter");
+  assert.strictEqual(typeof B.reclaimNext, "undefined", "per-boon reclaim retired");
+});
+
+test("every benediction has a baked icon key", () => {
+  for (const d of B.DEFS)
+    assert.ok(JH.ICONS.keys.includes("bene_" + d.id), "missing icon key bene_" + d.id);
 });
 
 test("reset clears both active and washed (new run wipes the reliquary)", () => {

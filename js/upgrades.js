@@ -1,28 +1,21 @@
 /* =====================================================================
-   upgrades.js — three signature purchases + a repeatable Overcharge sink
-   (replaces the old 15-node branching skill tree).
+   upgrades.js — the repeatable Overcharge sink + the player stat fold.
 
-   Each node is bought ONCE, costs Suds, and may require earlier nodes in
-   its branch. `owned` tracks purchased node ids; computeStats() folds the
-   apply() of every owned node onto the base JH.PLAYER block. Some nodes
-   set flags (beam / dashPuddle) that the player logic reads directly.
+   NODES is empty (the three signature purchases live in JH.RELICS now,
+   vendor-stock relics). REPEATABLES (Overcharge) unlocks by act via
+   overchargeUnlocked(), bought any number of times at rising cost.
+   computeStats() builds the player's effective stats fresh each time from
+   base JH.PLAYER + owned relics' apply() + repeatable buys + XP-level
+   gains + Church pillar ranks + active benedictions.
    ===================================================================== */
 (function () {
   "use strict";
   const JH = (window.JH = window.JH || {});
 
   // tier = vertical position in its branch column (1 = root).
-  const NODES = [
-    { id: "sig_dash", branch: "SIGNATURE", tier: 1, req: [], cost: 160,
-      name: "Hydro-Dash", desc: "-0.2s dash cd. Dash boosts speed +28 for 3s and leaves a slick.",
-      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashPuddle = true; s.dashBoost = 28; s.dashBoostDur = 3; } },
-    { id: "sig_marshal", branch: "SIGNATURE", tier: 1, req: [], cost: 200,
-      name: "Fire-Marshal Spec", desc: "+30 range, +30 knockback. Blow 'em back.",
-      apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
-    { id: "sig_lance", branch: "SIGNATURE", tier: 3, req: [], cost: 220,
-      name: "Hydro Lance", desc: "+18 dmg. A cutting beam that pierces the whole line.",
-      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
-  ];
+  // The three signature entries retired from here into JH.RELICS (ids
+  // hydro_dash/fire_marshal/hydro_lance) — they're now vendor-stock relics.
+  const NODES = [];
 
   // Repeatable "Overcharge" node: bought any number of times, cost rises each
   // buy (JH.Balance.repeatableCost, 1.8x factor). The late-game Suds sink
@@ -32,7 +25,7 @@
       apply: (s) => { s.sprayDamage += 4; } },
   ];
 
-  const BRANCHES = ["SIGNATURE"];
+  const BRANCHES = [];
 
   const Upgrades = {
     nodes: NODES,
@@ -68,8 +61,9 @@
     // the Punch Card relic discount before calling in.
     canBuy(id, suds, price) { return this.isAvailable(id) && suds >= (price != null ? price : this.cost(id)); },
 
-    // Every one-time skill node purchased — gates the repeatable OVERCHARGE nodes.
-    allNodesOwned() { return NODES.every((n) => this.owned[n.id]); },
+    // Gates the repeatable OVERCHARGE nodes: unlocked from Act 2 on
+    // (currentActLevel >= 0, set by Game after the first boss falls).
+    overchargeUnlocked() { return this.currentActLevel >= 0; },
 
     nodesByBranch(branch) {
       return NODES.filter((n) => n.branch === branch).sort((a, b) => a.tier - b.tier);
@@ -79,6 +73,10 @@
     computeStats(owned) {
       const s = JSON.parse(JSON.stringify(JH.PLAYER));
       NODES.forEach((n) => { if (owned && owned[n.id]) n.apply(s); });
+      // Owned relics with stat hooks (game.relics lives on the instance;
+      // JH.Game is published by main.js). Flag-relics have no apply.
+      const relicsOwned = (JH.Game && JH.Game.relics) || {};
+      (JH.RELICS || []).forEach((r) => { if (r.apply && relicsOwned[r.id]) r.apply(s); });
       const rc = this.repCount || {};
       REPEATABLES.forEach((n) => {
         const c = rc[n.id] || 0;

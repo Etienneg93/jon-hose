@@ -329,18 +329,19 @@
         sc.pityVoucher = null;
       }
 
-      // Reliquary: benedictions washed away by death wait here; E reclaims
-      // the next one for 1 Essence (rank preserved).
+      // Reliquary: benedictions washed away by death wait here; E redeems
+      // ALL of them at once for an escalating Essence cost (1, 2, 3… per run).
       const B = root.JH.Benedictions;
       sc.nearReliquary = !!(B && B.washedCount() > 0 &&
         Math.abs(sc.jonX - L.reliquaryX) <= L.stationRange);
       if (sc.nearReliquary && In.pressed("confirm")) {
-        if (this.state.essence >= 1) {
-          this.state.essence -= 1; this.save();
-          const def = B.reclaimNext();
+        const cost = B.redeemAllCost();
+        if (this.state.essence >= cost) {
+          this.state.essence -= cost; this.save();
+          const n = B.redeemAll();
           game.audio.play("bell");
           sc.ringFx = { x: L.reliquaryX, color: "#ffd23f", t: 0 };
-          sc.buyFloat = { text: "+" + def.name.toUpperCase(), x: L.reliquaryX, color: "#ffd23f", t: 0 };
+          sc.buyFloat = { text: "+" + n + " BENEDICTION" + (n === 1 ? "" : "S"), x: L.reliquaryX, color: "#ffd23f", t: 0 };
         } else {
           game.audio.play("hurt");   // can't afford
         }
@@ -678,17 +679,12 @@
       if (sc.nearReliquary) {
         const B = root.JH.Benedictions;
         const nWashed = B.washedCount();
-        const nextId = Object.keys(B.washed)[0];
-        const next = nextId && B.byId(nextId);
+        const cost = B.redeemAllCost();
         const rx = Math.round(L.reliquaryX - camX);
         ctx.fillStyle = "#ffe9a8";
         otext(ctx, "RELIQUARY — " + nWashed + " washed benediction" + (nWashed === 1 ? "" : "s"), rx, VH - 114);
-        if (next) {
-          ctx.fillStyle = "#c8d2e8";
-          otext(ctx, "Next: " + next.name + (B.washed[nextId] >= 2 ? " II" : ""), rx, VH - 104);
-        }
-        ctx.fillStyle = this.state.essence >= 1 ? "#9be8ff" : "#a66";
-        otext(ctx, "1 Essence · E: reclaim", rx, VH - 94);
+        ctx.fillStyle = this.state.essence >= cost ? "#9be8ff" : "#a66";
+        otext(ctx, cost + " Essence · E: redeem all", rx, VH - 94);
       }
 
       // Rising "+RANK" float after a buy (church draws its own overlays).

@@ -339,3 +339,10 @@ test("pickRelics: no owned map treats every id as available", () => {
   const picks = Balance.pickRelics(pool, null, 5, Math.random);
   assert.strictEqual(picks.length, 2);
 });
+
+test("relicPoolIds: excludes minAct-gated defs before their act, includes them from that act on", () => {
+  const defs = [{ id: "a" }, { id: "b", minAct: 0 }];
+  assert.deepStrictEqual(Balance.relicPoolIds(defs, -1), ["a"]);
+  assert.deepStrictEqual(Balance.relicPoolIds(defs, 0), ["a", "b"]);
+  assert.deepStrictEqual(Balance.relicPoolIds(defs, 2), ["a", "b"]);
+});

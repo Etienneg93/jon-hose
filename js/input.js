@@ -16,7 +16,7 @@
   };
 
   // Logical actions the game cares about.
-  const ACTIONS = ["up", "down", "left", "right", "spray", "whack", "dash", "jump", "confirm", "pause"];
+  const ACTIONS = ["up", "down", "left", "right", "spray", "whack", "dash", "jump", "confirm", "pause", "toggleStats"];
 
   // Keyboard map (multiple keys per action).
   const KEYMAP = {
@@ -28,6 +28,7 @@
     ShiftLeft: "dash", ShiftRight: "dash", KeyL: "dash",
     Enter: "confirm", KeyE: "confirm",   // confirm doubles as "interact" with the shop NPC
     Escape: "pause",
+    Tab: "toggleStats",                  // stat/benediction panel (UI chrome, not a verb)
   };
 
   // Edge-buffered actions: a press stays "pending" for BUFFER_MS and is
@@ -42,6 +43,11 @@
     _prev: {},   // action -> bool (held last frame)
     _keys: {},   // action -> bool (from keyboard)
     _bufAt: {},  // action -> _now() timestamp of the latest unconsumed edge
+    // Read-only pointer position in 480x270 logical space (mapped from the
+    // canvas's CSS bounding rect, not devicePixelRatio — the ctx transform
+    // already absorbs dpr, so client coords only need CSS-pixel scaling).
+    // Hover-only: no gameplay code should ever branch on a click here.
+    mouse: { x: -1, y: -1, inside: false },
     _now() { return performance.now(); },
 
     init() {
@@ -53,8 +59,8 @@
         const a = KEYMAP[e.code];
         if (a) {
           this._keys[a] = true;
-          // Prevent page scroll on arrows/space.
-          if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code))
+          // Prevent page scroll on arrows/space and focus-cycling on Tab.
+          if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(e.code))
             e.preventDefault();
         }
       });
@@ -67,6 +73,21 @@
       window.addEventListener("blur", () => {
         for (const k in this._keys) this._keys[k] = false;
       });
+
+      // Mouse tracking (no `document` in the node test harness — guarded).
+      if (typeof document !== "undefined") {
+        const canvas = document.getElementById("game");
+        if (canvas && canvas.addEventListener) {
+          canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            this.mouse.x = (e.clientX - rect.left) / rect.width * JH.VIEW_W;
+            this.mouse.y = (e.clientY - rect.top) / rect.height * JH.VIEW_H;
+            this.mouse.inside = true;
+          });
+          canvas.addEventListener("mouseleave", () => { this.mouse.inside = false; });
+        }
+      }
     },
 
     // Call once per frame BEFORE reading state, to fold in gamepad + edges.
@@ -92,10 +113,12 @@
         if (down(13)) s.down = true;
         if (down(14)) s.left = true;
         if (down(15)) s.right = true;
-        if (down(0)) s.spray = true;  // A
+        if (down(0)) { s.spray = true; s.confirm = true; } // A: spray in play, confirm/interact in menus
         if (down(7)) s.spray = true;  // RT
         if (down(1)) s.dash = true;   // B
-        if (down(9)) { s.confirm = true; s.pause = true; } // Start
+        if (down(2)) s.confirm = true; // X: confirm/interact
+        if (down(8)) s.toggleStats = true; // Back/Select: stat + benediction panel
+        if (down(9)) s.pause = true;  // Start
       }
 
       this.state = s;

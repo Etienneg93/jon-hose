@@ -132,8 +132,21 @@
 
     rank(id) { return this.active[id] | 0; },
 
-    // Full wipe (new run): clears both live boons and the reliquary.
-    reset() { this.active = {}; this.washed = {}; },
+    // Rank-aware effect text for an owned/inspected boon (the tooltip body).
+    // rank 0/1 -> base desc; rank 2 -> base desc + the descII upgrade line so
+    // a maxed boon reads what rank II actually grants, not just a "II" badge.
+    // Duos/legendaries have no descII, so they always return their single desc.
+    effectText(id, rank) {
+      const d = this.byId(id);
+      if (!d) return "";
+      let t = d.desc || "";
+      if ((rank | 0) >= 2 && d.descII) t += "  ▲ II: " + d.descII;
+      return t;
+    },
+
+    // Full wipe (new run): clears both live boons, the reliquary, and the
+    // redeem-all cost escalation.
+    reset() { this.active = {}; this.washed = {}; this.redeemCount = 0; },
 
     // Death: live boons move to the reliquary instead of vanishing. Dying
     // again with unreclaimed boons keeps the higher rank of each.
@@ -145,15 +158,20 @@
 
     washedCount() { return Object.keys(this.washed).length; },
 
-    // Reliquary reclaim: restore the next washed boon at its washed rank.
-    // Returns its def (for UI) or null when the reliquary is empty. usedOnce
-    // is untouched — reclaiming never re-opens duo/legendary offer slots.
-    reclaimNext() {
-      const id = Object.keys(this.washed)[0];
-      if (!id) return null;
-      this.active[id] = this.washed[id];
-      delete this.washed[id];
-      return this.byId(id);
+    // Reliquary redemptions this run; each redeem-all costs 1 + prior count.
+    redeemCount: 0,
+
+    redeemAllCost() { return 1 + this.redeemCount; },
+
+    // Restore EVERY washed boon at its washed rank. Charges nothing itself —
+    // the church station checks/charges essence first. Returns boons restored.
+    redeemAll() {
+      const ids = Object.keys(this.washed);
+      if (!ids.length) return 0;
+      for (const id of ids) this.active[id] = this.washed[id];
+      this.washed = {};
+      this.redeemCount++;
+      return ids.length;
     },
 
     // Rank 1 on first take, rank 2 (capped) on deepen. Returns the new rank.

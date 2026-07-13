@@ -58,14 +58,30 @@
     { x: 9000,  y: JH.DEPTH_MAX - 12 },   // after Gateway Krusher
     { x: 10140, y: JH.DEPTH_MAX - 26 },   // Fire midpoint (before FURNACE TRIAL)
   ];
-  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill only; no HP heal (buy Med Kit at shop)
+  JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill; HP only via Spigot Key relic
 
   // Floor collision for Act-3 rubble piles. Ellipse footprint scaled by pile's `s`.
   // rx/ry are a touch larger than the sprite so the visual edge always blocks.
   JH.DEBRIS = { collide: true, rx: 13, ry: 10 }; // rx/ry = half-extents in worldX / depth at s=1
 
   // Walk-up shop vendor between fights.
-  JH.SHOP = { range: 28 };
+  JH.SHOP = {
+    range: 28,
+    relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
+    wheelAllCommonsBelowAct: 0,   // actLevel < this: every wheel slot rolls common (Act 1 wallets can't touch rares)
+  };
+
+  // Pressure Sermon (water legendary): spraying `charge` seconds arms it
+  // (pip on Jon); releasing the hose looses a forward-traveling water wave.
+  // The wavefront is the hitbox: each enemy is hit once as the front passes.
+  JH.SERMON = {
+    charge: 0.8,     // s of continuous (non-dry) spray to arm
+    dmg: 15,         // flat damage as the front passes
+    kb: 220,         // knockback impulse
+    speed: 260,      // px/s wavefront travel
+    range: 190,      // px before the wave dissipates
+    halfDepth: 26,   // depth half-band the front covers
+  };
 
   // Colour palette (kept central so procedural art + UI stay in sync).
   JH.PAL = {
@@ -115,7 +131,15 @@
       "essence",
       "brass_nozzle", "spigot_key", "loaded_sponge", "prayer_bead", "collection_plate",
       "censer", "sunday_suit", "punch_card", "dowsing_rod", "alarm_bell",
-      "frame_duo", "frame_legendary",
+      "hydro_dash", "fire_marshal", "hydro_lance", "kibble", "sold_out",
+      "rubber_boots", "asbestos_socks", "squeegee", "rosary_chain", "backdraft_valve",
+      "dog_leash", "deputy_sprinkler", "big_spigot", "boiler_coil",
+      "bene_split_stream", "bene_baptismal_wake", "bene_overflow", "bene_baptize", "bene_absolution",
+      "bene_scalding_faith", "bene_backdraft", "bene_trial_by_fire", "bene_ash_walk",
+      "bene_aftershock", "bene_sure_grip", "bene_bedrock", "bene_landslide",
+      "bene_gale_stride", "bene_slipstream", "bene_tailwind", "bene_eye_of_storm",
+      "bene_steam_sermon", "bene_mudslide", "bene_firestorm",
+      "bene_pressure_sermon", "bene_bushfire", "bene_standing_stone", "bene_whirlwind_walk",
     ],
   };
 
@@ -139,11 +163,10 @@
     sprayDamage: 50,        // dmg/sec at FULL pressure (80-100% tank = bonus tier)
     sprayRange: 78,         // stream reach (px)
     sprayWidth: 12,         // VISUAL depth half-band of the droplet spray (tightens with Pressure)
-    sprayHitBand: 18,       // DAMAGE depth half-band — decoupled from visual so hits stay forgiving up/down
+    sprayHitBand: 9,        // jet half-thickness in SCREEN px around the nozzle-height stream line (Geo.inSprayPath: stream rect vs BODY rect)
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
-    dashPuddle: false,      // dash leaves a slick water puddle (Hydro-Dash)
 
     // Melee fallback (no water cost) — deliberately weak so the hose wins at
     // any decent pressure; melee is just for when you're dry.
@@ -160,6 +183,7 @@
     dashBoostDur: 0,        // seconds the post-dash speed boost lasts
 
     bodyW: 20, bodyH: 34,   // collision box (px), feet-anchored
+    nozzleZ: 30,            // stream height off the feet — the spray hit band centers here
   };
 
   // ---- Enemy archetypes ----------------------------------------------
@@ -277,7 +301,7 @@
     touchDmg: 14, contactCd: 0.9, suds: 120, color: "boss",
     slamDmg: 20, slamRange: 40, slamWind: 0.85,
     sweepDmg: 16, sweepRange: 56, sweepWind: 1.0,
-    summonCd: 6.5, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks
+    summonCd: 9, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks; summons also stop once dropBudget is dry
   };
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable
@@ -366,30 +390,82 @@
   // Concerta pill: unlimited water spray for a few seconds.
   JH.CONCERTA = { dur: 4.5 };
 
-  // Between-wave consumables (Suds sink). Med Kit heals instantly on purchase;
-  // Pressure Charge is "armed" in the shop and ticks down only during play.
-  JH.CONSUMABLES = {
-    medkit:   { name: "Med Kit",        cost: 45, heal: 60 },
-    pressure: { name: "Pressure Charge", cost: 70, mult: 1.5, dur: 8 },
-  };
+  // Kibble Pack: the only purchasable heal (slot-wheel fixed card, repeatable).
+  // Same grant semantics as the health-pickup collect — JH.Balance.kibbleGrant.
+  JH.KIBBLE_PACK = { name: "Kibble Pack", cost: 30, heal: 25, dur: 6 };
 
-  // Relics: one-time flag purchases (game.relics[id] = true), never a
-  // repeatable. Effects are hook-checks scattered across game.js/entities.js
-  // (grep the id) rather than an apply fn — see each id's comment there.
-  // A rotating stock of 3 is rolled per vendor visit from the still-unowned
-  // pool (Balance.pickRelics).
+  // Relics: one-time purchases (game.relics[id] = true), never a repeatable.
+  // Effects are either hook-checks scattered across game.js/entities.js (grep
+  // the id) or an apply(s) stat fold run by Upgrades.computeStats; apply-
+  // bearing relics also count toward Balance.powerCount. A rotating stock of
+  // 3 is rolled per vendor visit from the still-unowned pool via
+  // Balance.rollWheelStock (tiered odds, gated by minAct).
+  // Three tiers: common (steel, 60-100, one honest felt effect), rare
+  // (brass, 250-350, a combat-moment mechanic), relic (gold, 500+, a
+  // minAct-gated build-around). minAct (replaces the old boolean actGate):
+  // null/absent = available from Act 1; a number = actLevel must be >= it
+  // (actLevelForWave returns -1..3, so minAct: 0 means "Act 2 on").
   JH.RELICS = [
-    { id: "brass_nozzle",    name: "Brass Nozzle",     cost: 180, desc: "Non-pierce stream also catches the next-closest enemy" },
-    { id: "spigot_key",      name: "Spigot Key",       cost: 150, desc: "Hydrant refill grants +10% spray dmg for 15s" },
-    { id: "loaded_sponge",   name: "Loaded Sponge",    cost: 160, desc: "GUSH milestone water refund doubled" },
-    { id: "prayer_bead",     name: "Prayer Bead",      cost: 220, desc: "A boss's first enrage grants a brief pressure buff" },
-    { id: "collection_plate",name: "Collection Plate", cost: 300, desc: "+2 bonus suds per kill" },
-    { id: "censer",          name: "Censer",           cost: 250, desc: "Sigil offers include an extra choice" },
-    { id: "sunday_suit",     name: "Sunday Suit",      cost: 260, desc: "Bosses drop a second Holy Essence cross" },
-    { id: "punch_card",      name: "Punch Card",       cost: 200, desc: "All shop prices are 20% cheaper" },
-    { id: "dowsing_rod",     name: "Dowsing Rod",      cost: 150, desc: "Pickups magnet from farther away; water cans +50% value" },
-    { id: "alarm_bell",      name: "Alarm Bell",       cost: 180, desc: "Non-elite wave clears also roll the bonus item drop" },
+    // -- common (steel frame, 60-100): one honest felt effect --------------
+    { id: "dowsing_rod",   tier: "common", name: "Dowsing Rod",    cost: 80,  desc: "Pickups magnet from farther away; water cans +50% value" },
+    { id: "alarm_bell",    tier: "common", name: "Alarm Bell",     cost: 80,  desc: "Non-elite wave clears also roll the bonus item drop" },
+    { id: "spigot_key",    tier: "common", name: "Spigot Key",     cost: 90,  desc: "A hydrant refill also restores 15 HP/s while filling" },
+    { id: "brass_nozzle",  tier: "common", name: "Brass Nozzle",   cost: 90,  desc: "+10 spray dmg to the first enemy the stream hits" },
+    { id: "loaded_sponge", tier: "common", name: "Loaded Sponge",  cost: 100, desc: "GUSH refund doubled and regen windows +2s" },
+    { id: "rubber_boots",  tier: "common", name: "Rubber Boots",   cost: 90,
+      desc: "+20 max HP; slow zones and puddles don't slow you",
+      apply: (s) => { s.maxHp += JH.RELIC_TUNE.bootsHp; } },
+    { id: "asbestos_socks", tier: "common", name: "Asbestos Socks", cost: 80,  desc: "Burn ticks hurt less; burn i-frames last +1s" },
+    { id: "squeegee",      tier: "common", name: "Squeegee",       cost: 80,  desc: "An enemy killed on a fire patch douses the patch" },
+    // -- rare (brass frame, 250-350): a combat-moment mechanic -------------
+    { id: "punch_card",    tier: "rare", name: "Punch Card",       cost: 250, desc: "All shop prices are 20% cheaper" },
+    { id: "censer",        tier: "rare", name: "Censer",           cost: 270, desc: "Sigil offers include an extra choice" },
+    { id: "dog_leash",     tier: "rare", name: "Dog Leash",        cost: 270, desc: "+15 spray dmg to charging or lunging enemies" },
+    { id: "hydro_dash",    tier: "rare", name: "Hydro-Dash",       cost: 270,
+      desc: "-0.2s dash cooldown; dash boosts speed +28 for 3s",
+      apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashBoost = 28; s.dashBoostDur = 3; } },
+    { id: "sunday_suit",   tier: "rare", name: "Sunday Suit",      cost: 300, desc: "Bosses drop a second Holy Essence cross" },
+    { id: "fire_marshal",  tier: "rare", name: "Fire-Marshal Spec", cost: 300,
+      desc: "+30 range, +30 knockback",
+      apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
+    { id: "prayer_bead",   tier: "rare", name: "Prayer Bead",      cost: 300, desc: "Boss enrages AND super-elite arrivals grant an 8s pressure buff" },
+    { id: "collection_plate", tier: "rare", name: "Collection Plate", cost: 320, desc: "+2 bonus suds per kill" },
+    { id: "rosary_chain",  tier: "rare", name: "Rosary Chain",     cost: 320, desc: "Each GUSH combo kill: +1 spray dmg (max +10) until the chain breaks" },
+    { id: "backdraft_valve", tier: "rare", name: "Backdraft Valve", cost: 320, desc: "GUSH milestones blast a knockback ring that douses fires" },
+    // -- relic-grade (gold frame, 500+, minAct-gated build-arounds) --------
+    { id: "deputy_sprinkler", tier: "relic", name: "Deputy Sprinkler", cost: 500, minAct: 0,
+      desc: "A tank-mounted sprinkler auto-sprays the nearest enemy" },
+    { id: "hydro_lance",   tier: "relic", name: "Hydro Lance",     cost: 520, minAct: 0,
+      desc: "+18 dmg; a cutting beam that pierces the line, fading down it",
+      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
+    { id: "big_spigot",    tier: "relic", name: "The Big Spigot",  cost: 540, minAct: 0,
+      desc: "GUSH milestones detonate a 360° water blast around Jon" },
+    { id: "boiler_coil",   tier: "relic", name: "Boiler Coil",     cost: 560, minAct: 1,
+      desc: "2s of focused spray superheats: +30 dmg and splash to neighbors" },
   ];
+
+  // Relic behavior tunables (flat-gear rule: adders only, no multipliers).
+  JH.RELIC_TUNE = {
+    brassNozzleAdd: 10,     // + spray dmg to the primary stream target
+    spigotHealRate: 15,     // hp/s restored while a hydrant is refilling you
+    prayerBeadDur: 8,       // s of pressure buff at a boss's first enrage
+    spongeWindowBonus: 2,   // s added to GUSH regen windows
+    prayerBeadMult: 1.5,    // spray dmg mult while the pressure buff runs
+    lanceFalloff: [1, 0.7, 0.5, 0.35, 0.25], // pierce dmg mult by hit order; last entry repeats
+    bootsHp: 20,
+    socksBurnDpsCut: 2,       // subtracted from FIRE.burnDpsPerStack
+    socksBurnDpsFloor: 1,     // per-stack dps never below this
+    socksGraceBonus: 1,       // s added to burn i-frames
+    leashLungeBonus: 15,      // flat dmg vs charging/lunging enemies
+    rosaryPerKill: 1, rosaryCap: 10,
+    pulseRadius: 70,          // GUSH pulse ring radius (world px)
+    valveKnockback: 40, spigotDamage: 30,
+    sprinklerRange: 80, sprinklerDps: 8,
+    boilerHeatTime: 2,        // s of same-target spray to superheat
+    boilerBonus: 30,          // flat dps added on the heated target
+    boilerSplash: 12, boilerSplashR: 24,
+    boilerGap: 0.3,           // s of no-spray that resets the heat
+  };
 
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
@@ -411,6 +487,7 @@
   // ---- Fire element tunables (Burn DoT + FirePatch) ---------------------
   JH.FIRE = {
     burnDpsPerStack: 4,      // hp/s per stack (3 stacks = 12 hp/s for burnDuration)
+    douseBand: 18,           // patch-douse depth half-band (stays forgiving; DAMAGE band is PLAYER.sprayHitBand)
     burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
@@ -427,6 +504,7 @@
 
   // ---- Juice / game-feel tunables --------------------------------------
   JH.JUICE = {
+    upgradeBeat: 2.2,   // s each level-up stat-gain row holds (icon + delta above the bars)
     // Hit-stop tier table — every freeze routes through game.hitStop, which
     // takes the max of pending freezes (simultaneous kills never sum).
     // DESIGN RULE: moment-to-moment play NEVER freezes (it reads as clunk at
@@ -655,7 +733,9 @@
     // Truck collision footprint (screen-x half, depth half). Widened to the
     // sprite's chassis so hazards hit when they visibly touch the truck; depth
     // stays under the ~27px lane spacing so a lane change still dodges.
-    hitHX: 42, hitHD: 13,
+    hitHX: 56, hitHD: 13,   // half-extents of the collide rect: hitHX matches the 117px sprite (drawn centered), tiny inset
+    hitOX: 0,         // collide rect center = t.screenX = the sprite's center (drawImage anchors at -TRUCK_FW/2) — box stays true to the model
+    hitUpDraw: 78,     // KeyH overlay only: drawn box height off the ground line (≈ sprite height; collision stays the ground depth-band)
 
     // Truck integrity — VISIBLE bar. hp 0 wrecks the truck: short blast beat,
     // fade out, and the run restarts fresh (the escape never routes to the
@@ -671,6 +751,19 @@
     hoseBand: 18,        // depth half-band (used for the Firewall weak-spot match)
     knockback: 300,      // strong shove — it's a truck-mounted cannon
     douseRate: 4.5,      // fire-patch life/s the beam burns off (shoot out fires)
+
+    // WYSIWYG spray stream: fires STRAIGHT ahead from the ROOF cannon at its
+    // real height (truck.js CANNON_DY), then gravity droops it to the road
+    // across the final endFalloff fraction of hoseRange
+    // (TruckBalance.hoseStreamY — straight-then-droop). Ground hazards only
+    // take damage where the stream band (± hoseBandH) is low enough to touch
+    // their body; damage also tapers over the same tail down to
+    // endFalloffFloor (hoseDpsMult).
+    cannonH: 69,         // stream height above ground (|truck.js CANNON_DY|), held level until the droop
+    hoseBandH: 21,       // stream half-thickness (px above/below the centerline; +30% 2026-07-13 feel round)
+    endFalloff: 0.25,    // final fraction of range: dps tapers + gravity droop
+    endFalloffFloor: 0.4, // dps multiplier at max range
+    fuseHpMult: 0.5,     // truck-section fuse hp only (street fuse untouched)
 
     // Big tank — passive regen is a trickle; HYDRANTS are the real refill.
     tank: 180,
@@ -700,6 +793,25 @@
     collideSlow: 0.8,    // scroll-speed mult applied briefly on any collision
     collideSlowDur: 0.6, // s the slow lasts (lets the wall creep up)
 
+    // Fuse contact: an actual small blast (shake + sound + a cosmetic ember
+    // burst) instead of the fuse just vanishing. Burst particles carry no
+    // damage (see truck.js _fuseExplode / the ember `dud` flag).
+    fuseBlast: {
+      shake: 0.3, count: 10,
+      lifeMin: 0.3, lifeMax: 0.4,
+      speedMin: 60, speedMax: 140,
+    },
+
+    // Hydrant pop: a small upward water-droplet burst (cosmetic, reuses the
+    // spray droplet list — `splashed: true` so they skip the splashback hit
+    // test in _updateSpray).
+    hydrantBurst: {
+      count: 12,
+      lifeMin: 0.25, lifeMax: 0.4,
+      speedMin: 60, speedMax: 160,
+      spread: 0.9,   // fraction of PI either side of straight-up
+    },
+
     // Collapse wall — non-lethal rubber-band pressure.
     wall: {
       startGap: 220,     // world px behind the truck at start
@@ -713,11 +825,12 @@
     // while OPEN and lane-matched. SURGE bolt rolls down its lane (dodge by
     // lane); PORT SLAM punches forward (don't crowd it).
     firewall: {
-      atSec: 35, hp: 2652, screenX: 355, dmgMult: 1.4,
-      wsBand: 16,                                   // strict depth match to hit the core
+      atSec: 35, hp: 3182, screenX: 355, dmgMult: 1.4,   // +20% 2026-07-13 feel round (was 2652)
+      coreRaise: 30, coreHalfH: 12,                 // eye box on the wall: center feetScreenY(wsDepth)-coreRaise, ± coreHalfH (draw + hit share these)
       wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8, wsShut: 0.5,  // weak-spot cycle (s): closed→wind(opening)→open→shut(closing)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
       surgeCd: 3.0, surgeSpeed: 230, surgeDmg: 18,  // SURGE bolt along the core lane
+      surgeHitHX: 14, surgeHitHD: 12,               // bolt hit half-extents (screen-x / depth) — shared by test + KeyH overlay
       // PORT SLAM: a forward crush that SWEEPS across depth — the zone splits
       // into slamSections bands that slam one after another (slamSweepGap
       // apart). Be on a band that already fired (or hasn't yet) when each lands.
@@ -741,7 +854,34 @@
     // Essence economy (kept in-band with normal run income).
     crossVal: 1,
     crossCount: 6,
+    crossGrabX: 26, crossGrabD: 21,   // pickup box (~+30% over the truck's own hitHX/hitHD)
     cleanBonusTiers: [1, 2], // [decent run, flawless (full HP + no wall touch)]
+
+    // Rock-rain: a short chase beat of rapid consecutive debris drops (reuses
+    // the wreck drop-in telegraphy — shadow + fall + land solid). `at` are
+    // container-event times in buildTimeline; each window's actual drops are
+    // scheduled at runtime (TruckRun._startRockrain/_updateSequences) since a
+    // fixed count of individually-timelined wrecks would fight the
+    // never-block-every-lane guard built for the steady-state schedule.
+    rockrain: {
+      at: [16, 28],          // s into the run (jittered ±1s in buildTimeline)
+      dur: 4,                 // s the window stays live
+      dropsMin: 5, dropsMax: 7,
+      gapMin: 0.5, gapMax: 0.7,
+    },
+
+    // Fuse volley: 3-4 fuses arrive together, either drop-in (mirrors the
+    // debris telegraphy) or flung in from the left edge in an arc, landing at
+    // the truck's CURRENT depth (aimed where you were at spawn time).
+    fusevolley: {
+      at: [20, 32],           // s into the run (jittered ±1s in buildTimeline)
+      countMin: 3, countMax: 4,
+      gapMin: 0.2, gapMax: 0.35,   // stagger between each fuse's arrival within a volley
+      flingFromX: -40,        // screen-x the flung fuse launches from (off the left edge)
+      flingLandAhead: 170,    // landing distance ahead of the truck anchor (further than drop-ins: dodgeable)
+      flingDur: 0.65,          // s flight time (longer arc to the farther landing)
+      flingHeight: 90,         // arc peak height (px) above the landing point
+    },
 
     // Gate Crash finale — the authored beat after the Firewall breaks:
     // detonate (growing booms) → whiteout → reveal (cloud walkway) → crash

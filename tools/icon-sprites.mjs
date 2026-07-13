@@ -240,24 +240,126 @@ const BAKERS = {
     l(4, 3, 1, 3, GOLD_HI);
     l(1, 4, 1, 1, STEEL_DK); l(10, 4, 1, 1, STEEL_DK);  // ring-out ticks
   },
-
-  // -------------------------------------------------------------- frames --
-  // Overlay rings (transparent centers) drawn over an element icon.
-  // Two-tone diamond ring: |dx|+|dy| == 5 taxicab ring, left/right halves.
-  frame_duo(l) {
-    for (let x = 0; x < SIZE; x++) for (let y = 0; y < SIZE; y++) {
-      const d = Math.abs(x - 5.5) + Math.abs(y - 5.5);
-      if (d >= 4.6 && d <= 5.6) l(x, y, 1, 1, x <= 5 ? STEEL : STEEL_DK);
-    }
+  // Blue dash-trail boot: same silhouette as the speed boot, water-colored.
+  hydro_dash(l) {
+    l(1, 4, 3, 1, WATER_DK); l(2, 6, 3, 1, WATER_DK); l(1, 8, 2, 1, WATER_DK);  // wind/trail streaks
+    l(6, 2, 3, 5, WATER); l(6, 7, 5, 2, WATER);         // shaft + foot
+    l(6, 9, 5, 1, WATER_DK);                            // sole
+    l(6, 2, 1, 4, WATER_HI);
   },
-  // Gold circle ring + 4 cardinal star points.
-  frame_legendary(l) {
-    for (let x = 0; x < SIZE; x++) for (let y = 0; y < SIZE; y++) {
-      const d = Math.hypot(x - 5.5, y - 5.5);
-      if (d >= 4.4 && d <= 5.3) l(x, y, 1, 1, GOLD);
-    }
-    l(5, 0, 2, 1, GOLD_HI); l(5, 11, 2, 1, GOLD_HI);
-    l(0, 5, 1, 2, GOLD_HI); l(11, 5, 1, 2, GOLD_HI);
+  // Marshal shield badge with a fire-colored star.
+  fire_marshal(l) {
+    l(3, 1, 6, 1, GOLD); l(2, 2, 8, 1, GOLD); l(1, 3, 10, 5, GOLD);
+    l(2, 8, 8, 1, GOLD); l(3, 9, 6, 1, GOLD_DK); l(4, 10, 4, 1, GOLD_DK); l(5, 11, 2, 1, GOLD_DK);
+    l(1, 3, 10, 1, GOLD_HI);                            // top shine band
+    l(5, 4, 2, 1, FIRE); l(4, 5, 4, 1, FIRE); l(3, 6, 6, 2, FIRE); l(4, 8, 1, 1, FIRE); l(7, 8, 1, 1, FIRE);
+    l(5, 6, 2, 1, FIRE_HI);                             // star hot core
+  },
+  // Long tapered lance: steel shaft + grip collar, water-jet head.
+  hydro_lance(l) {
+    l(0, 5, 6, 2, STEEL); l(0, 6, 6, 1, STEEL_DK);       // shaft
+    l(6, 4, 2, 4, STEEL_DK);                             // grip collar
+    l(8, 3, 2, 6, WATER); l(10, 4, 1, 4, WATER);         // tapered nozzle head
+    l(8, 3, 2, 1, WATER_HI); l(11, 5, 1, 2, WATER_HI);   // shine + tip glint
+  },
+  // Kibble bowl: steel rim, wood-toned mound, a few gold kernel bits.
+  kibble(l) {
+    l(2, 6, 8, 1, STEEL_DK);                            // rim back
+    l(1, 7, 10, 3, STEEL); l(2, 9, 8, 1, STEEL_DK);      // bowl body + base shade
+    l(3, 6, 6, 1, WOOD);                                 // kibble mound
+    l(4, 5, 1, 1, WOOD_HI); l(6, 5, 1, 1, WOOD_HI); l(8, 5, 1, 1, WOOD);   // scattered pieces
+    l(5, 5, 1, 1, GOLD); l(7, 6, 1, 1, GOLD);            // gold kernel bits
+  },
+  // Sold out: empty open crate, red slash across it (empty vendor wheel slot).
+  sold_out(l) {
+    l(2, 4, 8, 6, WOOD); l(3, 5, 6, 4, "#241a10");       // crate + dark empty interior
+    l(2, 4, 8, 1, WOOD_HI);                              // top edge light
+    l(2, 9, 8, 1, "#5c4530");                            // base shade
+    l(1, 9, 2, 2, RED); l(3, 7, 2, 2, RED); l(5, 5, 2, 2, RED); l(7, 3, 2, 2, RED); l(9, 1, 2, 2, RED_HI); // diagonal slash
+  },
+
+  // ------------------------------------------------------ relics (rarity) --
+  // Full green welly, folded cuff band, pale sole. No motion lines — this is
+  // armor, not the speed/hydro_dash stat boots (which reserve left-edge space
+  // for wind streaks and sit smaller at x=6); this one fills the icon.
+  rubber_boots(l) {
+    l(3, 1, 6, 2, "#5fd45f");                            // folded cuff
+    l(3, 3, 6, 5, GREEN);                                // shaft
+    l(3, 8, 7, 2, GREEN);                                // foot
+    l(3, 10, 7, 1, STEEL_DK);                             // sole
+    l(3, 3, 1, 5, "#b0ffb0");                            // shine
+  },
+  // Grey sock pair, red heat flecks (fire resist).
+  asbestos_socks(l) {
+    l(3, 2, 2, 5, STEEL); l(2, 7, 3, 3, STEEL_DK);
+    l(7, 2, 2, 5, STEEL); l(8, 7, 3, 3, STEEL_DK);
+    l(4, 4, 1, 1, RED); l(8, 5, 1, 1, RED);
+  },
+  // T-handle + wide blade + water streaks squeegeed below.
+  squeegee(l) {
+    l(5, 1, 2, 5, WOOD); l(2, 6, 8, 2, STEEL); l(2, 8, 8, 1, STEEL_DK);
+    l(3, 10, 1, 1, WATER); l(6, 10, 1, 1, WATER); l(9, 10, 1, 1, WATER);
+  },
+  // Beaded strand across the top, dropping via a link to a big, isolated
+  // cross below — vertically separated from the beads (unlike an earlier
+  // draft where crossbar+upright overlapped into a single row and baked
+  // into a torch-shaped blob). Deliberately NOT prayer_bead's closed bead
+  // loop + tiny pendant dot.
+  rosary_chain(l) {
+    for (const x of [2, 4, 6, 8]) l(x, 1, 1, 1, GOLD);   // beaded strand, top
+    l(9, 2, 1, 1, GOLD_DK); l(9, 3, 1, 1, GOLD_DK);      // drop link to the cross
+    l(5, 4, 2, 7, GOLD);                                 // upright (pokes above crossbar)
+    l(3, 6, 6, 2, GOLD);                                 // crossbar
+    l(3, 8, 6, 1, GOLD_DK);                              // crossbar underside shade
+    l(5, 10, 2, 1, GOLD_DK);                              // base shade
+  },
+  // Solid octagon disc (the wheel) with a darker embossed spoke-cross and a
+  // bright hub — the OUTER silhouette is a round disc, not a plus/cross, so
+  // it can't be mistaken for rosary_chain's pendant even before color reads.
+  backdraft_valve(l) {
+    l(4, 2, 4, 1, RED); l(3, 3, 6, 1, RED); l(2, 4, 8, 4, RED); l(3, 8, 6, 1, RED); l(4, 9, 4, 1, RED); // disc
+    l(5, 2, 2, 8, RED_DK); l(2, 5, 8, 2, RED_DK);        // embossed spoke cross
+    l(5, 5, 2, 2, RED_HI);                               // hub
+    l(5, 10, 2, 2, STEEL_DK);                            // pipe stub
+  },
+  // Open collar RING (6px outer, genuinely transparent 4px center — the
+  // hole is the load-bearing feature) + gold tag hanging BELOW the ring +
+  // taut diagonal lead off the top-right. The `l` helper has no eraser, so
+  // the ring is 4 edge strips around an untouched center.
+  dog_leash(l) {
+    l(2, 4, 4, 1, EARTH);                                // ring top edge
+    l(2, 9, 4, 1, EARTH_DK);                             // ring bottom edge (shade)
+    l(1, 5, 1, 4, EARTH); l(6, 5, 1, 4, EARTH);          // ring left/right edge
+    // corner gaps left open on purpose: the rim pass bevels them, rounding
+    // the square frame into a ring
+    l(3, 10, 2, 2, GOLD); l(3, 10, 1, 1, GOLD_HI);       // tag hung below + shine
+    l(7, 3, 1, 1, WOOD); l(8, 2, 1, 1, WOOD); l(9, 1, 1, 1, WOOD); l(10, 0, 1, 1, WOOD); // taut lead
+  },
+  // Sprinkler head block + fanned droplet spray (boxy, not a teardrop).
+  deputy_sprinkler(l) {
+    l(4, 6, 4, 4, STEEL); l(5, 4, 2, 2, STEEL_DK);
+    l(2, 2, 1, 1, WATER); l(5, 1, 1, 1, WATER); l(9, 2, 1, 1, WATER);
+    l(1, 4, 1, 1, WATER_HI); l(10, 4, 1, 1, WATER_HI);
+  },
+  // Blocky wall-mount faucet body + knob + heavy gush (squat, not the
+  // tapered hose-cone of brass_nozzle or the horizontal shaft of hydro_lance).
+  big_spigot(l) {
+    l(3, 3, 6, 3, STEEL); l(8, 6, 2, 2, STEEL_DK); l(5, 1, 2, 2, STEEL_DK);
+    l(3, 3, 6, 1, "#f4f8ff");                            // top edge shine
+    l(8, 8, 2, 3, WATER); l(7, 10, 4, 1, WATER_HI);
+  },
+  // Open S-serpentine of hot wire: three 1px runs with 2px of EMPTY space
+  // between them, joined by alternating end connectors — the gaps between
+  // the turns are the load-bearing feature (no solid body). Steel terminal
+  // stubs at entry/exit; the entry end glows hottest.
+  boiler_coil(l) {
+    l(1, 2, 1, 1, STEEL_DK);                             // entry terminal
+    l(2, 2, 7, 1, FIRE); l(2, 2, 2, 1, FIRE_HI);         // top run + hot end
+    l(8, 3, 1, 2, FIRE);                                 // right connector down
+    l(2, 5, 7, 1, FIRE);                                 // middle run
+    l(2, 6, 1, 2, FIRE);                                 // left connector down
+    l(2, 8, 7, 1, FIRE);                                 // bottom run
+    l(9, 8, 1, 1, STEEL_DK);                             // exit terminal
   },
 };
 

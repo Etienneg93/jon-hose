@@ -487,6 +487,97 @@
     return true;
   };
 
+  // Benediction tier frame + glow around a baked 12px icon at (x, y) center.
+  // Edges are 1px pixel-fills (never strokeRect): crisp lines, and the duo
+  // split colors the border's left/right halves with NO seam through the
+  // icon. All tiers sit on a dark outer ring so the frame reads on any
+  // backdrop. Corner caps (2x2) mark the tier: element color for boon I,
+  // white for boon II (plus an outer band), split colors for duos, and
+  // shimmering gold for legendaries (plus the pulse glow).
+  Assets.tierFrame = function (ctx, x, y, d, rank, scale, t) {
+    const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;  // half-extent
+    const el = d.element || (d.needs && d.needs[0]) || "water";
+    const c1 = d.kind === "legendary" ? "#ffd23f" : (JH.SIGIL_COLORS[el] || "#ffd23f");
+    const c2 = d.needs ? (JH.SIGIL_COLORS[d.needs[1]] || c1) : c1;
+    // Border box: a 1px ring just outside the icon's half-extent.
+    const bx = Math.round(x - s) - 1, by = Math.round(y - s) - 1;
+    const bw = Math.round(s * 2) + 2, bh = Math.round(s * 2) + 2;
+    ctx.save();
+    const glow = d.kind === "legendary" ? 0.5 + 0.2 * Math.sin((t || 0) * 3)
+               : d.kind === "duo" ? 0.35 : rank >= 2 ? 0.3 : 0;
+    if (glow > 0) {
+      const g = ctx.createRadialGradient(x, y, s * 0.4, x, y, s * 2.1);
+      const gc = d.kind === "legendary" ? "255,210,63" : hexRgb(c1);
+      g.addColorStop(0, "rgba(" + gc + "," + glow.toFixed(3) + ")");
+      g.addColorStop(1, "rgba(" + gc + ",0)");
+      ctx.fillStyle = g; ctx.fillRect(x - s * 2.1, y - s * 2.1, s * 4.2, s * 4.2);
+    }
+    const px = (xa, ya, wa, ha, c) => { ctx.fillStyle = c; ctx.fillRect(xa, ya, wa, ha); };
+    const RIM = "rgba(10,14,24,0.85)";
+    px(bx - 1, by - 1, bw + 2, 1, RIM); px(bx - 1, by + bh, bw + 2, 1, RIM);
+    px(bx - 1, by, 1, bh, RIM);         px(bx + bw, by, 1, bh, RIM);
+    // Colored border; duo splits top/bottom at mid, one color per side edge.
+    if (d.kind === "duo") {
+      const mid = bx + (bw >> 1);
+      px(bx, by, mid - bx, 1, c1);          px(mid, by, bx + bw - mid, 1, c2);
+      px(bx, by + bh - 1, mid - bx, 1, c1); px(mid, by + bh - 1, bx + bw - mid, 1, c2);
+      px(bx, by + 1, 1, bh - 2, c1);        px(bx + bw - 1, by + 1, 1, bh - 2, c2);
+    } else {
+      px(bx, by, bw, 1, c1); px(bx, by + bh - 1, bw, 1, c1);
+      px(bx, by + 1, 1, bh - 2, c1); px(bx + bw - 1, by + 1, 1, bh - 2, c1);
+    }
+    // Corner caps (2x2). Duo: left corners in c1, right in c2.
+    [[bx, by], [bx + bw - 2, by], [bx, by + bh - 2], [bx + bw - 2, by + bh - 2]]
+      .forEach(([cxp, cyp], i) => {
+        let cc;
+        if (d.kind === "legendary")
+          cc = "rgba(255,247,194," + (0.65 + 0.35 * Math.sin((t || 0) * 5 + i * 1.57)).toFixed(3) + ")";
+        else if (d.kind === "duo") cc = (i % 2 === 0) ? c1 : c2;
+        else cc = rank >= 2 ? "#eaf6ff" : c1;
+        px(cxp, cyp, 2, 2, cc);
+      });
+    // Boon rank II: a soft outer band 2px out marks the upgrade. Drawn only
+    // at sigil scale — in the dense panel the white caps + glow + the name's
+    // "II" tag carry it, and the band would collide with neighboring rows.
+    if (d.kind === "boon" && rank >= 2 && (scale || 1) >= 1.05) {
+      ctx.globalAlpha = 0.55;
+      px(bx - 3, by - 3, bw + 6, 1, c1); px(bx - 3, by + bh + 2, bw + 6, 1, c1);
+      px(bx - 3, by - 2, 1, bh + 4, c1); px(bx + bw + 2, by - 2, 1, bh + 4, c1);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  };
+  // hexRgb helper: "#6cd3ff" -> "108,211,255" (add above tierFrame).
+  function hexRgb(h) {
+    return parseInt(h.slice(1, 3), 16) + "," + parseInt(h.slice(3, 5), 16) + "," + parseInt(h.slice(5, 7), 16);
+  }
+
+  // Relic gear frame, graded by rarity tier. Riveted metal — deliberately
+  // square/industrial so it never reads as a benediction tier frame:
+  // common = steel edge + bronze rivets; rare = brass edge + light rivets;
+  // relic = double gold edge, slow shimmer, NO pulse glow (that's legendary's).
+  Assets.gearFrame = function (ctx, x, y, scale, tier, t) {
+    const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;
+    const grades = {
+      common: { edge: "#8fa8c8", rivet: "#b08a5c" },
+      rare:   { edge: "#c9924a", rivet: "#ffd9a0" },
+      relic:  { edge: "#d4af37", rivet: "#fff7c2" },
+    };
+    const g = grades[tier] || grades.common;
+    ctx.save();
+    ctx.lineWidth = 1; ctx.strokeStyle = g.edge;
+    ctx.strokeRect(x - s, y - s, s * 2, s * 2);
+    if (tier === "relic") {
+      ctx.globalAlpha = 0.55 + 0.25 * Math.sin((t || 0) * 2);   // slow shimmer
+      ctx.strokeRect(x - s - 2, y - s - 2, s * 2 + 4, s * 2 + 4);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = g.rivet;
+    [[-s, -s], [s - 1, -s], [-s, s - 1], [s - 1, s - 1]].forEach(([dx, dy]) =>
+      ctx.fillRect(x + dx, y + dy, 1, 1));
+    ctx.restore();
+  };
+
   // Boon verb corner mark (procedural, no PNG): stream = bar, dash = chevron,
   // body = dot. (x, y) is the TOP-RIGHT corner of the icon the mark tags —
   // the mark hangs down-left from it. Unknown/missing verb draws nothing.
