@@ -834,7 +834,7 @@
     // while OPEN and lane-matched. SURGE bolt rolls down its lane (dodge by
     // lane); PORT SLAM punches forward (don't crowd it).
     firewall: {
-      atSec: 35, hp: 2652, screenX: 355, dmgMult: 1.4,
+      atSec: 35, hp: 3182, screenX: 355, dmgMult: 1.4,   // +20% 2026-07-13 feel round (was 2652)
       coreRaise: 30, coreHalfH: 12,                 // eye box on the wall: center feetScreenY(wsDepth)-coreRaise, ± coreHalfH (draw + hit share these)
       wsClosed: 2.4, wsWind: 0.7, wsOpen: 2.8, wsShut: 0.5,  // weak-spot cycle (s): closed→wind(opening)→open→shut(closing)
       wsRoam: 34, wsRetarget: 1.6,                  // depth drift px/s + retarget cadence
