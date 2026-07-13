@@ -193,7 +193,7 @@
     sprayDamage: 50,        // dmg/sec at FULL pressure (80-100% tank = bonus tier)
     sprayRange: 78,         // stream reach (px)
     sprayWidth: 12,         // VISUAL depth half-band of the droplet spray (tightens with Pressure)
-    sprayHitBand: 18,       // DAMAGE depth half-band — decoupled from visual so hits stay forgiving up/down
+    sprayHitBand: 9,        // DAMAGE depth half-band — matches the drawn jet; hit path is NOZZLE-anchored (Geo.inSprayPath)
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
@@ -516,6 +516,7 @@
   // ---- Fire element tunables (Burn DoT + FirePatch) ---------------------
   JH.FIRE = {
     burnDpsPerStack: 4,      // hp/s per stack (3 stacks = 12 hp/s for burnDuration)
+    douseBand: 18,           // patch-douse depth half-band (stays forgiving; DAMAGE band is PLAYER.sprayHitBand)
     burnDuration: 2.0,       // seconds burn lasts; refreshed (not extended) on reapply
     maxBurnStacks: 3,
     patchBurnInterval: 0.4,  // min seconds between burn-stack ticks while in a patch
