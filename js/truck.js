@@ -302,14 +302,14 @@
       for (let i = 0; i < count; i++) {
         const perp = (Math.random() - 0.5) * C.hoseBandH * 2 * spread;   // droplet scatter fills ± hoseBandH
         const vx = 210 + Math.random() * 150;
-        const droopStart = range * (1 - C.endFalloff);
-        const tDroop = Math.max(0.1, (range - droopStart) / vx);   // s inside the droop zone
+        const tFlight = range / vx;                 // s from muzzle to max range
         sc.spray.push({
           x: gunX + Math.random() * 4, y: gunY + perp * 0.35,
           vx: vx,
-          vy: perp * 0.15,                          // level flight — scatter only
-          g: 2 * C.cannonH / (tDroop * tDroop),     // gravity sized to land at range once the droop starts
-          droopX: gunX + droopStart,                // gravity switches on past this screen x
+          vy: perp * 0.15,                          // launch level — scatter only
+          // Constant gravity from launch, sized so THIS droplet lands at
+          // range: every droplet traces the same parabola in x — one beam.
+          g: 2 * C.cannonH / (tFlight * tFlight),
           groundY: groundY,
           life: range / 260 + Math.random() * 0.05,
           size: Math.random() > 0.5 ? 3 : 2,
@@ -322,10 +322,10 @@
       const sc = this.scene;
       for (const d of sc.spray) {
         d.x += d.vx * dt;
-        // Straight flight at cannon height; gravity only past the droop
-        // point, dropping the stream onto the road by max range; skim the
-        // road line, never sink through.
-        if (d.droopX == null || d.x >= d.droopX) d.vy += (d.g || 60) * dt;
+        // Ballistic from launch: constant per-droplet gravity (sized to land
+        // at max range) — the beam bends smoothly, no knee; skim the road
+        // line, never sink through.
+        d.vy += (d.g || 60) * dt;
         d.y += d.vy * dt;
         if (d.groundY != null && d.y >= d.groundY) { d.y = d.groundY; d.vy = 0; }
         d.life -= dt;
