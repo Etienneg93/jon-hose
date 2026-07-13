@@ -476,7 +476,9 @@
       this.rangeStations = null;
       this.dropBudget = { suds: 0, items: 0 };
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
-      this.clearsSinceVendor = 1;   // seeds the every-3rd-clear vendor cadence
+      this.clearsSinceVendor = 0;   // 0 seed: the wave-3 cadence hit lands on a pre-boss
+                                    // corridor and is suppressed, so the FIRST vendor spawns
+                                    // just before the wave-4 boss (~140 suds earned by then)
       this.waveIndex = -1; this.waveActive = false; this.waveCleared = false;
       this.waveTriggerX = null;                     // wave 0 uses the base arena anchor
       this.rangeMode = false;                       // set true only by devGotoRange

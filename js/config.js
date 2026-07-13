@@ -68,6 +68,7 @@
   JH.SHOP = {
     range: 28,
     relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
+    wheelAllCommonsBelowAct: 0,   // actLevel < this: every wheel slot rolls common (Act 1 wallets can't touch rares)
   };
 
   // Colour palette (kept central so procedural art + UI stay in sync).
