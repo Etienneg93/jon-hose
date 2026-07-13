@@ -415,7 +415,13 @@
         // them past); fuse chases the windshield.
         if (h.kind === "fuse") {
           h.worldX -= h.speed * dt;                       // closes faster than scroll
-          h.depth += Math.sign(t.depth - h.depth) * Math.min(Math.abs(t.depth - h.depth), h.speed * 0.6 * dt);
+          // Wanders up/down across the lane band (edge-bounce) — never homes
+          // on the truck's depth; dodging is positional, not a chase.
+          if (h.wanderDir == null) h.wanderDir = Math.random() < 0.5 ? -1 : 1;
+          h.depth += h.wanderDir * h.speed * 0.6 * dt;
+          const dMin = C.lanes[0], dMax = C.lanes[C.lanes.length - 1];
+          if (h.depth <= dMin) { h.depth = dMin; h.wanderDir = 1; }
+          else if (h.depth >= dMax) { h.depth = dMax; h.wanderDir = -1; }
         } else if (h.kind === "smelt") {
           if ((h.cd -= dt) <= 0) {                        // lob a fire-patch ahead
             h.cd = E.smelt.lobCd;
