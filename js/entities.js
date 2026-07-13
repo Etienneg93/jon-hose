@@ -2581,9 +2581,13 @@
       const spd = enraged ? d.speed * 1.6 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
 
-      // Summon reinforcements occasionally.
+      // Summon reinforcements occasionally — but only while the encounter's
+      // drop budget has anything left: once adds stop paying, more of them
+      // is mop-up noise, so the boss stops calling them.
       this.summonTimer -= dt;
-      if (this.summonTimer <= 0 && game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
+      const budgetLeft = !game.dropBudget || game.dropBudget.suds > 0 || game.dropBudget.items > 0;
+      if (this.summonTimer <= 0 && budgetLeft &&
+          game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
         this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
         game.spawnEnemy(this.summonType, this.x - this.facing * 40, this.y + 10, { infinite: true });
       }

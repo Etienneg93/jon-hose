@@ -288,7 +288,7 @@
     touchDmg: 14, contactCd: 0.9, suds: 120, color: "boss",
     slamDmg: 20, slamRange: 40, slamWind: 0.85,
     sweepDmg: 16, sweepRange: 56, sweepWind: 1.0,
-    summonCd: 6.5, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks
+    summonCd: 9, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks; summons also stop once dropBudget is dry
   };
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable

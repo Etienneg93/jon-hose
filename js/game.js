@@ -2013,7 +2013,13 @@
               e.spawnGrace = 0.2;
             }
           }
-          if (!this.wall || this.wall.dead) this.waveCleared_();
+          if (!this.wall || this.wall.dead) {
+            // Wall down = encounter beaten: remaining reinforcements leave
+            // without reward (same idiom as the garden harassers) instead of
+            // demanding a mop-up.
+            for (const e of this.enemies) if (!e.dead && !e.isBoss) e.dead = true;
+            this.waveCleared_();
+          }
         } else if (wave && wave.holdout) {
           this.holdoutTimer -= dt;
           this.wallSpawnTimer -= dt;
@@ -2029,8 +2035,9 @@
             e.spawnGrace = 0.2;
           }
           if (this.holdoutTimer <= 0) {
-            // Survived: the wave clears but any enemies still standing are left
-            // alive to keep harassing as the player moves on.
+            // Survived = encounter beaten: the field clears with the wave
+            // (rewardless, garden idiom) — no post-timer mop-up.
+            for (const e of this.enemies) if (!e.dead && !e.isBoss) e.dead = true;
             this.waveCleared_();
           }
         } else if (wave && (wave.garden || wave.douse)) {
