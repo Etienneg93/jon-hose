@@ -105,11 +105,18 @@
       "Why do I keep RESPAWNING? (existential)",
       "Top 10 hydrants that ATTACKED back",
     ],
+    quipEvery: 8,     // quip drip divisor — mean gap ≈ this/maxScale REAL s while seated (first quip is guaranteed on sit)
     quips: [
       "wait — it's ALL kibble?",
       "liked & subscribed",
       "just one more video",
       "the algorithm knows me",
+      "he's literally me",
+      "skipping the intro (again)",
+      "3 unskippable ads?? fine",
+      "the comments are FERAL",
+      "watching at 2x like a pro",
+      "this is research, actually",
     ],
   };
 

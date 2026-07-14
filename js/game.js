@@ -1452,6 +1452,16 @@
     // Deepdive TV interaction: sit (E) to fast-forward the world while banked
     // kibble drains; any move key or a second E stands Jon back up. Auto-ends
     // when the kibble bank empties.
+    // Random quip, never the same one twice in a row (bump to the next
+    // pool slot on a repeat roll).
+    pickQuip() {
+      const q = JH.DEEPDIVE.quips;
+      let i = Math.floor(Math.random() * q.length);
+      if (i === this._lastQuipIdx) i = (i + 1) % q.length;
+      this._lastQuipIdx = i;
+      return q[i];
+    },
+
     tickDeepdive() {
       const tv = this.deepdiveTV;
       if (!tv) return;
@@ -1465,14 +1475,16 @@
           this.input.consume("confirm");
           this.deepdiving = true;
           this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
+          // First quip fires on sit-down — every session gets at least one.
+          this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
         }
         return;
       }
       tv.videoT += JH.FIXED_DT * this.timeScale;   // cosmetic ramp makes the marquee race
-      // Quip floats: rare per scaled step, so they land roughly every ~4s of
-      // sat-there time regardless of how fast the world is currently running.
-      if (Math.random() < JH.FIXED_DT * this.timeScale / 4)
-        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff", { life: 1.8 });
+      // Quip drip: random per step, mean gap ~= quipEvery / timeScale real
+      // seconds (~4s at the full 2x ramp).
+      if (Math.random() < JH.FIXED_DT * this.timeScale / JH.DEEPDIVE.quipEvery)
+        this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
       // Dash bails and is NOT consumed here: Player.update runs earlier in the
       // step and consumes the buffered edge itself when the dash fires (dash is
       // never movement-gated), so a started dash is detected via dashTimer;

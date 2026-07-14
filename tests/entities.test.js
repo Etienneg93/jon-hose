@@ -2081,7 +2081,8 @@ test("deepdive: TV always spawns down-lane; SITTING is gated on kibble > thresho
   const sit = (kib) => {
     const s = { deepdiving: false, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
                 player: { x: 0, y: 0, kibbleTimer: kib },
-                input: mkInput(["confirm"]), audio: { play() {} } };
+                input: mkInput(["confirm"]), audio: { play() {} },
+                pickQuip: () => "", float() {} };   // sit-down fires a guaranteed quip
     JH.Game.tickDeepdive.call(s);
     return s.deepdiving;
   };
