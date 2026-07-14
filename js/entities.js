@@ -428,7 +428,11 @@
         const before = this.hp;
         this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * kdt);
         this.kibbleTickAcc += this.hp - before;
-        if (game.deepdiving) {
+        // Shield only once HP is actually full (the clamp leaves hp === maxHp
+        // exactly): below full, every drop of kibble is healing — the raw
+        // regen*kdt − (hp−before) difference carries float residue that would
+        // otherwise bank phantom overshield (and its 2px halo) while healing.
+        if (game.deepdiving && this.hp >= this.stats.maxHp) {
           const spill = Math.max(0, this.kibbleRegen * kdt - (this.hp - before));
           this.overshield = Math.min(this.stats.maxHp, (this.overshield || 0) + spill);
         }

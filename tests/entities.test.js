@@ -2131,6 +2131,28 @@ test("deepdive overshield: soaks hits first, depletes, never recharges", () => {
   assert.strictEqual(p.overshield, 0, "death path clears it");
 });
 
+test("deepdive drain: heals first — shield only accrues once HP is full", () => {
+  const p = makePlayer();
+  const g = dashStubGame(makeBufferedInput().In);
+  g.deepdiving = true;
+  p.kibbleRegen = 2; p.kibbleTimer = 30;
+  p.hp = p.stats.maxHp - 10;
+  while (p.hp < p.stats.maxHp && p.kibbleTimer > 0) {
+    p.update(0.016, g);
+    if (p.hp < p.stats.maxHp)
+      assert.strictEqual(p.overshield, 0, "zero shield (not even float residue) while HP below full");
+  }
+  assert.strictEqual(p.hp, p.stats.maxHp, "kibble healed to full before any shield");
+  // At full HP the whole drain converts to shield at the same rate.
+  const kib0 = p.kibbleTimer, sh0 = p.overshield;
+  assert.ok(kib0 > 0, "bank not exhausted by the heal");
+  for (let i = 0; i < 20; i++) p.update(0.016, g);
+  const spent = kib0 - p.kibbleTimer;
+  assert.ok(spent > 0, "bank still draining at full HP");
+  assert.ok(Math.abs((p.overshield - sh0) - spent * p.kibbleRegen) < 1e-9,
+    "every drained kibble-second converts to shield at kibbleRegen rate");
+});
+
 test("deepdive: auto-ends when kibble empties; move key bails", () => {
   const mkInput = (bufferedKeys, pressedKeys) => ({
     buffered: (k) => bufferedKeys.includes(k), consume: () => {},
