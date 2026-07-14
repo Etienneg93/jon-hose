@@ -34,11 +34,12 @@
   // domes, telegraphs) draws AND hits an ellipse (rx, rx * GROUND_RY) — the
   // hit test lives in Geo.inGroundEllipse (world.js).
   JH.GROUND_RY = 0.40;
-  JH.LEVEL_LEN = 11200;     // world length of level 1 (logical px)
+  JH.LEVEL_LEN = 12800;     // world length of level 1 (logical px)
   // Zone boundaries sit in the free-walk corridor after each act's boss so the
   // 500px tint ramp (world.js) never bleeds into the locked boss arena behind it.
   JH.ZONE2_START = 4250;    // ruined district (Act 3) — Switch at 3780, Rubble Row at 4160
   JH.ZONE3_START = 8950;    // Boiler District (fire world) — GK at 8720, Fire Intro at 9100
+  JH.ZONE4_START = 11500;   // cloudline street (Air World) — Jon arrives past the gate at +40
 
   // Interactive fire hydrants: stand next to one to refill fast (any water
   // level). Deliberately sparse — checkpoints, not crutches: one at the start,
@@ -57,6 +58,7 @@
     { x: 7480,  y: JH.DEPTH_MAX - 26 },   // Act 4 midpoint (before THE GARDEN)
     { x: 9000,  y: JH.DEPTH_MAX - 12 },   // after Gateway Krusher
     { x: 10140, y: JH.DEPTH_MAX - 26 },   // Fire midpoint (before FURNACE TRIAL)
+    { x: 11740, y: JH.DEPTH_MAX - 12 },   // Air World entry (before WAVE 30)
   ];
   JH.HYDRANT = { range: 30, lowFrac: 0.5, refill: 50 }; // water refill; HP only via Spigot Key relic
 
@@ -68,7 +70,7 @@
   JH.SHOP = {
     range: 28,
     vendorCollideR: 13,   // solid feet radius (Balance.propPushout, player-only)
-    relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
+    relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..4, all six acts declared)
     wheelAllCommonsBelowAct: 0,   // actLevel < this: every wheel slot rolls common (Act 1 wallets can't touch rares)
   };
 
@@ -158,6 +160,11 @@
     fuse: "#ff4810",       fuseDk: "#cc2800",
     furnaceBody: "#4a3020",furnaceDk: "#2a1808",furnaceHot: "#ff6820",
     firePatch: "#ff6010",  firePatchHi: "#ffd040",
+    plunger: "#b0543a", plungerDk: "#77351f",
+    tpmummy: "#e8e4d8", tpmummyDk: "#b3ad9c",
+    gasbag: "#7fae4a", gasbagDk: "#4f7a2a", gasbagHi: "#b9d98a",
+    stink: "#a7c25e",
+    bidet: "#e9edf2", bidetDk: "#a8b4c2", bidetHi: "#ffffff",
   };
 
   // ---- Baked UI icon atlas (sprites/icons/<key>.png, tools/icon-sprites.mjs).
@@ -334,6 +341,46 @@
       ventPatchDur: 2.6,       // how long the vent fire zone burns (s)
       suds: 44, dropMult: 1.8, bodyW: 22, bodyH: 36, color: "furnaceBody",
     },
+    // Air-world sanitation roster (Ass Man's warzone). All waterMult 1 —
+    // honest numbers; their teeth are the latch/snare/gas verbs, not soaks.
+    plunger: {
+      name: "Plunger Fiend", hp: 60, speed: 44, touchDmg: 6, contactCd: 0.8,
+      lungeSpeed: 190, lungeWind: 0.5, lungeDur: 0.5, lungeCd: 2.2, lungeDmg: 10,
+      latchDrain: 22,     // water units/s siphoned while latched (tank bar shows it live)
+      latchMax: 2.5,      // s a latch holds if never dash-broken
+      latchOffset: 10,    // px in front of Jon the latched body glues to
+      suds: 8, waterMult: 1, dropMult: 1.6, bodyW: 16, bodyH: 26, color: "plunger",
+    },
+    tpmummy: {
+      name: "TP Mummy", hp: 45, speed: 40, touchDmg: 8, contactCd: 0.8,
+      wrapRange: 130, wrapCd: 2.4, wrapWind: 0.45, wrapSpeed: 150, wrapDmg: 8,
+      wrapSlow: 0.6,      // moveSpeed multiplier while snared (soft — never a root)
+      wrapSlowDur: 1.2,   // s the snare lasts
+      driftH: 150,        // streamer drop-in start height
+      driftSpeed: 62,     // px/s float-down (vs the fuse's gravity slam)
+      puffRadius: 34,     // death gust: one-shot shove ellipse rx (no damage)
+      puffKnock: 240,     // shove impulse px/s
+      suds: 7, waterMult: 1, dropMult: 1.2, bodyW: 15, bodyH: 27, color: "tpmummy",
+    },
+    gasbag: {
+      name: "Gasbag", hp: 55, speed: 30, touchDmg: 8, contactCd: 0.8,
+      hoverZ: 26,         // cruise height — the spray band still reaches it (nozzleZ 30)
+      ventCd: 4.5,        // s between vents
+      ventWind: 0.8,      // inflate telegraph before the cloud starts growing
+      firstVent: 1.5,     // min s after spawn before the first vent can wind up
+      preferRange: 60,    // hover standoff from Jon
+      suds: 10, waterMult: 1, dropMult: 1.4, bodyW: 16, bodyH: 20, color: "gasbag",
+    },
+    bidet: {
+      name: "Bidet Turret", hp: 120, speed: 0, touchDmg: 0, contactCd: 99,
+      aimWind: 0.9,       // telegraph: landing ellipse drawn from wind start, target locked
+      lobCd: 2.6,
+      arcSpeed: 150,      // horizontal px/s of the water arc
+      arcGravity: 300,
+      landRadius: 26,     // landing ellipse rx — drawn AND hit (one shape)
+      landDmg: 12, landKnock: 140,
+      suds: 12, waterMult: 1, dropMult: 1.4, bodyW: 20, bodyH: 22, color: "bidet",
+    },
   };
 
   JH.BOSS = {
@@ -364,7 +411,7 @@
   // Attack tickets: max enemies simultaneously in a melee windup/attack,
   // indexed by actLevel+1 (like SPRINKLE.counts). Readability cap, not a
   // mercy rule — ticketless melee enemies hold at approach range instead.
-  JH.TICKETS = { budgets: [4, 4, 5, 5, 6] };
+  JH.TICKETS = { budgets: [4, 4, 5, 5, 6, 6] };
 
   // Wave spawn flow: fieldCap enemies open the wave; the rest queue. With
   // batchMin+ queued, reinforcements arrive as a batch (batchMin..batchMax
@@ -373,7 +420,7 @@
   // remainders trickle in singly (one per `trickle` sec). fieldCap is
   // indexed by actLevel+1 (like SPRINKLE.counts): Act 1 runs tight because
   // the kit has no AoE yet (pierce/split arrive with later purchases).
-  JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7], trickle: 1.1,
+  JH.WAVEFLOW = { fieldCap: [4, 6, 7, 7, 7, 8], trickle: 1.1,
                   batchMin: 3, batchMax: 5, batchPause: 2.0 };
 
   // Free-walk gating between waves, so collecting a benediction / drifting
@@ -391,7 +438,7 @@
   // mixes regular + elite (the gold-bar tier reads by contrast) instead of
   // every enemy turning elite the instant the first boss dies. Applied via
   // Game.nextEliteScale's even-spread accumulator, not a per-enemy coin flip.
-  JH.ELITE_FRAC = [0, 0.34, 0.55, 0.75, 0.9];
+  JH.ELITE_FRAC = [0, 0.34, 0.55, 0.75, 0.9, 0.9];
 
   // Per-type elite HP damp, applied in makeElite AFTER the eliteScale
   // multiplier. Heavies (big base hp) balloon past boss HP once the act-tier
@@ -411,17 +458,23 @@
     // Per-act hp damp applied on top of the type multiplier, indexed
     // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
     // their whole wave.
-    hpByAct: [0.55, 0.75, 0.9, 1, 1],
+    hpByAct: [0.55, 0.75, 0.9, 1, 1, 1],
   };
 
   // Wave sprinkle: extra enemies drawn from the already-introduced pool,
   // added on top of authored spawns (variety, not economy — counts stay low).
   // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
   JH.SPRINKLE = {
-    counts: [1, 1, 2, 3, 4],
-    weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2, bulwark: 0.5, furnace: 0.5, smelt: 0.5 },
+    counts: [1, 1, 2, 3, 4, 4],
+    weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2,
+               bulwark: 0.5, furnace: 0.5, smelt: 0.5,
+               plunger: 3, tpmummy: 3, gasbag: 2, bidet: 0 },  // bidet: pre-placed artillery, never sprinkled
     heavies: ["bulwark", "furnace", "smelt"],
     heavyCap: 1,
+    // First wave of the sprinkle pool by actLevel+1 (Balance.ticketBudget
+    // lookup). The air act (entry 29 = ACT_STARTS[5]) sprinkles ONLY types
+    // introduced from wave 29 on — earlier acts keep the full history.
+    poolFloor: [0, 0, 0, 0, 0, 29],
   };
 
   // Garden event: spray water on the planter to grow crops. Neighbor throws rocks.
@@ -968,8 +1021,9 @@
   };
 
   // Act-start wave indices (bounded by boss clears) — death respawns here.
-  // 0 Act1 · 5 Act2 (after Big Drip) · 10 Act3 (after Switch) · 16 Act4 (after Quake) · 23 Fire (after GK).
-  JH.ACT_STARTS = [0, 5, 10, 16, 23];
+  // 0 Act1 · 5 Act2 (after Big Drip) · 10 Act3 (after Switch) · 16 Act4 (after
+  // Quake) · 23 Fire (after GK) · 29 Air (after Slayer + the gate crash).
+  JH.ACT_STARTS = [0, 5, 10, 16, 23, 29];
 
   // ---- Level 1 waves --------------------------------------------------
   // Each wave: list of {type, count}. Gate progress until cleared, then
@@ -1011,6 +1065,12 @@
       { name: "FURNACE TRIAL", spawns: [{ type: "furnace", count: 1 }, { type: "fuse", count: 4 }, { type: "smelt", count: 1 }] },
       { name: "MELTDOWN", tough: true, superElite: "smelt", spawns: [{ type: "smelt", count: 1 }, { type: "fuse", count: 5 }] },
       { name: "THE SLAYER", boss: true, bossType: "slayer" },
+      // ---- Air World (Ass Man's warzone; waves 30+) ----
+      { name: "SANITATION 101", spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 2 }] },
+      { name: "TANGLED UP", gusts: [{ y: 43, dir: 1 }],
+        spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 4 }] },
+      { name: "GAS LEAK", tough: true, gusts: [{ y: 24, dir: 1 }, { y: 62, dir: -1 }],
+        spawns: [{ type: "gasbag", count: 2 }, { type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }] },
     ],
   };
 

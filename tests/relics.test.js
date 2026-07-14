@@ -42,8 +42,9 @@ test("RELIC_TUNE: rarity-pass tunables exist", () => {
     assert.strictEqual(typeof T[k], "number", k);
 });
 
-test("SHOP.relicGradeOdds is act-indexed for all five acts (-1..3)", () => {
-  assert.deepStrictEqual(JH.SHOP.relicGradeOdds, [0, 0.25, 0.5, 0.75, 0.75]);
+test("SHOP.relicGradeOdds is act-indexed for all six acts (-1..4)", () => {
+  assert.deepStrictEqual(JH.SHOP.relicGradeOdds, [0, 0.25, 0.5, 0.75, 0.75, 0.75]);
+  assert.strictEqual(JH.SHOP.relicGradeOdds.length, JH.ACT_STARTS.length);
 });
 
 test("minAct gates: lance from act 2 (>=0), boiler one act later (>=1)", () => {

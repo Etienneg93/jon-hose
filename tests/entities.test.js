@@ -1057,7 +1057,7 @@ test("waveCleared_: final (Slayer) wave clear keeps its sigil beat — cutscene,
   const g = Object.create(JH.Game);
   g.player = makePlayer();
   g.waveIndex = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
-  assert.strictEqual(g.waveIndex, JH.LEVEL1.waves.length - 1, "Slayer is the final wave (premise)");
+  assert.ok(g.waveIndex >= 0, "Slayer boss wave exists (premise)");
   g.beneUsedOnce = {}; g.sigils = [];
   let won = false;
   g.win = () => { won = true; };

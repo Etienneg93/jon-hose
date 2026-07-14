@@ -229,11 +229,12 @@
 
     // Enemy types introduced by authored waves up to and including waveIndex
     // (from their `spawns` lists — bosses have none). dummy/neighbor excluded.
-    // Order = first-seen order. Pure.
-    unlockedPool(waves, waveIndex) {
+    // Order = first-seen order. `fromWave` (default 0) floors the scan — the
+    // air act passes its act start so only air types sprinkle there. Pure.
+    unlockedPool(waves, waveIndex, fromWave) {
       const seen = [];
       const last = Math.min(waveIndex, waves.length - 1);
-      for (let i = 0; i <= last; i++) {
+      for (let i = (fromWave || 0); i <= last; i++) {
         (waves[i].spawns || []).forEach((g) => {
           if (g.type === "dummy" || g.type === "neighbor") return;
           if (!seen.includes(g.type)) seen.push(g.type);

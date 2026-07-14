@@ -16,7 +16,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000];
+  const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000, 11840, 12220, 12600];
   if (WAVE_TRIGGERS.length !== JH.LEVEL1.waves.length)
     console.warn("WAVE_TRIGGERS length (" + WAVE_TRIGGERS.length + ") !== waves length (" + JH.LEVEL1.waves.length + ") — progression will break");
 
@@ -634,7 +634,8 @@
         spawnList.forEach((g) => { for (let k = 0; k < g.count; k++) types.push(g.type); });
         const SPR = JH.SPRINKLE;
         const sprinkleCount = SPR.counts[actLevel + 1] || 0;
-        const pool = JH.Balance.unlockedPool(JH.LEVEL1.waves, this.waveIndex);
+        const poolFrom = JH.Balance.ticketBudget(actLevel, JH.SPRINKLE.poolFloor || [0]);
+        const pool = JH.Balance.unlockedPool(JH.LEVEL1.waves, this.waveIndex, poolFrom);
         const chargerRoom = Math.max(0, JH.WAVECAP.charger - types.filter((t) => t === "charger").length);
         types.push(...JH.Balance.pickSprinkles(pool, sprinkleCount, {
           weights: SPR.weights, heavies: SPR.heavies, heavyCap: SPR.heavyCap,
