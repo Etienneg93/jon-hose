@@ -2449,8 +2449,9 @@
   };
 
   // Stink cloud: billowing gas grown from a vent point. NO drawn ground
-  // ellipse — the puffs are generated FROM footprint() (centers at <=0.72*rx,
-  // drawn radius 0.28*rx*size, size<=1, so max extent == rx): the visible gas
+  // ellipse — the puffs are generated FROM footprint(): the center's radial
+  // coefficient (rad*0.72 + wobble) is capped at 0.72 and the drawn radius is
+  // 0.28*rx*size (size<=1), so max extent <= rx — the visible gas
   // edge IS the tested edge. Standing inside tags player.gasT (doSpray demotes
   // the pressure tier one step). Spraying it adds sprayProgress (see doSpray).
   // `friendly` clouds skip the player and cook enemies (Gasbag pop-fast reward).
@@ -2513,8 +2514,11 @@
       ctx.save();
       for (const p of this.puffs) {
         const wob = Math.sin(this.t * 1.6 + p.ph) * 0.05;
-        const cxp = sx + Math.cos(p.ang) * f.rx * (p.rad * 0.72 + wob);
-        const cyp = sy + Math.sin(p.ang) * f.ry * (p.rad * 0.72 + wob);
+        // Cap the wobbled center at 0.72 so center + 0.28*rx puff never
+        // draws past the tested rim (rim is hitbox).
+        const rc = Math.min(0.72, p.rad * 0.72 + wob);
+        const cxp = sx + Math.cos(p.ang) * f.rx * rc;
+        const cyp = sy + Math.sin(p.ang) * f.ry * rc;
         const pr = f.rx * 0.28 * p.size;
         ctx.globalAlpha = (0.28 + 0.22 * Math.sin(this.t * 2 + p.ph * 2)) * (1 - gone);
         ctx.fillStyle = this.friendly ? "#d6e89a" : JH.PAL.stink;
