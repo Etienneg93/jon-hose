@@ -156,3 +156,51 @@ test("friendly cloud cooks enemies, ignores the player; hostile stack check", ()
   assert.strictEqual(JH.spawnStinkCloud(g, 200, 40), null);
   assert.ok(JH.spawnStinkCloud(g, 200, 40, { friendly: true }) !== null);
 });
+
+test("gust lane rim: the drawn band edge is the push edge; telegraph never pushes", () => {
+  const G = JH.GUST;
+  const g = stubHazardGame(200, 40);
+  const lane = new JH.GustLane(40, 1);
+  g.gustLanes.push(lane);
+  lane.phase = "blow"; lane.phaseT = G.blowDur;
+  // inside the band
+  g.player.y = 40 + G.band - 1; const x0 = g.player.x;
+  lane.update(1 / 60, g);
+  assert.ok(g.player.x > x0, "inside the band: pushed along +X");
+  // just outside the band
+  g.player.y = 40 + G.band + 1; const x1 = g.player.x;
+  lane.update(1 / 60, g);
+  assert.strictEqual(g.player.x, x1, "outside the drawn edge: untouched");
+  // telegraph phase never pushes
+  lane.phase = "telegraph"; lane.phaseT = G.telegraph;
+  g.player.y = 40; const x2 = g.player.x;
+  lane.update(1 / 60, g);
+  assert.strictEqual(g.player.x, x2);
+});
+
+test("gust lane: displaces light enemies; emplacements and bosses hold fast", () => {
+  const g = stubHazardGame(200, 0);
+  const lane = new JH.GustLane(40, 1);
+  lane.phase = "blow"; lane.phaseT = JH.GUST.blowDur;
+  const mook = JH.makeEnemy("mook", 100, 40);
+  const turret = JH.makeEnemy("bidet", 140, 40);
+  const boss = JH.makeEnemy("mook", 180, 40); boss.isBoss = true;
+  g.enemies.push(mook, turret, boss);
+  lane.update(1 / 60, g);
+  assert.ok(mook.x > 100, "light enemy shoved");
+  assert.strictEqual(turret.x, 140, "speed-0 emplacement immune");
+  assert.strictEqual(boss.x, 180, "boss immune");
+});
+
+test("gust lane cycle: telegraph -> blow -> gap -> telegraph", () => {
+  const G = JH.GUST;
+  const g = stubHazardGame(0, 0);
+  const lane = new JH.GustLane(40, 1);
+  assert.strictEqual(lane.phase, "telegraph");
+  lane.update(G.telegraph + 0.01, g);
+  assert.strictEqual(lane.phase, "blow");
+  lane.update(G.blowDur + 0.01, g);
+  assert.strictEqual(lane.phase, "gap");
+  lane.update(G.gapDur + 0.01, g);
+  assert.strictEqual(lane.phase, "telegraph");
+});

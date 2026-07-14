@@ -604,6 +604,18 @@
     puffCount: 9,      // billow puffs per cloud
   };
 
+  // ---- Gust lanes (telegraphed horizontal wind bands) --------------------
+  // One shape feeds telegraph, draw, and shove (SwitchBoss.lineHits
+  // precedent): |y - laneY| <= band. Displaces along X; dodged by depth.
+  JH.GUST = {
+    band: 14,          // depth half-band — the drawn edge lines ARE the hit band
+    telegraph: 1.2,    // s of edge flash + faint streaks before the blow
+    blowDur: 3.5,      // s of active push
+    gapDur: 2.5,       // s of calm between blows
+    push: 120,         // px/s applied to Jon along the lane direction
+    pushEnemy: 100,    // px/s applied to light enemies (bosses/emplacements immune)
+  };
+
   // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
   // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
   // downgrades an active scald.)

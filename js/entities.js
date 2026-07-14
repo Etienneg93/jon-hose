@@ -2546,6 +2546,68 @@
     return c;
   };
 
+  // Telegraphed horizontal wind band. Cycles telegraph -> blow -> gap while it
+  // lives; wave terrain lanes (wave data `gusts`) persist until the wave
+  // clears. Push can't be outrun along X (120 vs moveSpeed 92) — the counter
+  // is depth. Dash (240) also escapes; dashing bodies still get pushed.
+  class GustLane {
+    constructor(y, dir) {
+      this.y = y; this.dir = dir >= 0 ? 1 : -1;
+      this.t = 0; this.phase = "telegraph"; this.phaseT = JH.GUST.telegraph;
+      this.dead = false;
+    }
+    inBand(y) { return Math.abs(y - this.y) <= JH.GUST.band; }
+    update(dt, game) {
+      const G = JH.GUST;
+      this.t += dt;
+      this.phaseT -= dt;
+      if (this.phaseT <= 0) {
+        if (this.phase === "telegraph") { this.phase = "blow"; this.phaseT = G.blowDur; }
+        else if (this.phase === "blow") { this.phase = "gap"; this.phaseT = G.gapDur; }
+        else { this.phase = "telegraph"; this.phaseT = G.telegraph; }
+      }
+      if (this.phase !== "blow") return;
+      const pl = game.player;
+      if (pl && pl.alive && this.inBand(pl.y))
+        pl.x = clamp(pl.x + this.dir * G.push * dt, game.bounds.minX, game.bounds.maxX);
+      for (const e of game.enemies) {
+        if (e.dead || e.dropping || e.isBoss) continue;
+        if (e.def && e.def.speed === 0) continue;   // emplacements hold fast
+        if (this.inBand(e.y))
+          e.x = clamp(e.x + this.dir * G.pushEnemy * dt, game.bounds.minX, game.bounds.maxX);
+      }
+    }
+    draw(ctx, cam) {
+      // Edge lines at laneY ± band = exactly the tested band (rim is hitbox).
+      const G = JH.GUST;
+      const yT = Geo.feetScreenY(this.y - G.band, 0), yB = Geo.feetScreenY(this.y + G.band, 0);
+      const blowing = this.phase === "blow";
+      const flash = this.phase === "telegraph" && (Math.floor(this.t * 8) & 1);
+      ctx.save();
+      ctx.globalAlpha = blowing ? 0.5 : this.phase === "telegraph" ? (flash ? 0.6 : 0.25) : 0.1;
+      ctx.strokeStyle = "#bfe6ff";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(0, yT); ctx.lineTo(JH.VIEW_W, yT); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, yB); ctx.lineTo(JH.VIEW_W, yB); ctx.stroke();
+      ctx.setLineDash([]);
+      // Wind streaks INSIDE the band only (never outside the tested edges).
+      if (blowing || this.phase === "telegraph") {
+        const n = blowing ? 9 : 4;
+        for (let i = 0; i < n; i++) {
+          const k = (this.t * (blowing ? 1.4 : 0.4) + i / n) % 1;
+          const lx = this.dir > 0 ? k * JH.VIEW_W : (1 - k) * JH.VIEW_W;
+          const ly = yT + 2 + ((i * 37) % Math.max(1, yB - yT - 4));
+          ctx.globalAlpha = (blowing ? 0.5 : 0.2) * (1 - Math.abs(k - 0.5) * 1.6);
+          ctx.fillStyle = "#dff2ff";
+          ctx.fillRect(Math.round(lx), Math.round(ly), 14, 1);
+        }
+      }
+      ctx.restore();
+    }
+  }
+  JH.GustLane = GustLane;
+
   // Trial by Fire's "burning" check: is this enemy standing in a live fire
   // patch's footprint? (Scald/burn-stack burning is checked separately by
   // the caller — this only covers ground patches.) Friendly patches don't

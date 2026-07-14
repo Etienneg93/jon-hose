@@ -562,6 +562,8 @@
       // Confine the player to the current screen ("arena").
       const left = JH.Camera.x + 20, right = JH.Camera.x + JH.VIEW_W - 20;
       this.bounds = { minX: left, maxX: right };
+      // Terrain wind: waves 31+ author gust lanes ({y, dir} rows in wave data).
+      this.gustLanes = (wave.gusts || []).map((gd) => new JH.GustLane(gd.y, gd.dir));
       this.dropBudget = { suds: 0, items: 0 };
 
       // Elite meter for this wave: nextEliteScale() hands out the elite scale
@@ -801,7 +803,7 @@
         this.spawnPickup("cross", this.player.x + 34, this.player.y, 1);
         this.grantXp(JH.LEVELS.setPieceXp);
       }
-      this.wall = null; this.gardens = []; // barricade / gardens (if any) are done
+      this.wall = null; this.gardens = []; this.gustLanes = []; // barricade / gardens / gusts (if any) are done
       JH.Camera.unlock();
       // The LAST wave (final boss) wins; a mid-boss just continues.
       if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
