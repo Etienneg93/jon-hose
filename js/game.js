@@ -1472,7 +1472,7 @@
       // Quip floats: rare per scaled step, so they land roughly every ~4s of
       // sat-there time regardless of how fast the world is currently running.
       if (Math.random() < JH.FIXED_DT * this.timeScale / 4)
-        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff", { life: 0.9 });
+        this.float(pl.x, pl.y - 30, JH.DEEPDIVE.quips[Math.floor(Math.random() * JH.DEEPDIVE.quips.length)], "#9be8ff", { life: 1.8 });
       // Dash bails and is NOT consumed here: Player.update runs earlier in the
       // step and consumes the buffered edge itself when the dash fires (dash is
       // never movement-gated), so a started dash is detected via dashTimer;
