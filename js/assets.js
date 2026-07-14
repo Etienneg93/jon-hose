@@ -893,6 +893,22 @@
     }
   });
 
+  // TP Mummy: banded white wrap, loose fluttering streamer, throw pose.
+  Assets.register("tpmummy", (p, opt) => {
+    const P = JH.PAL;
+    const step = opt.state === "walk" ? Math.floor((opt.t || 0) * 7) % 2 : 0;
+    p(-5, 0, 4, 6 + step, P.tpmummyDk);          // legs
+    p(1, 0, 4, 6 + (1 - step), P.tpmummyDk);
+    p(-6, 6, 12, 14, P.tpmummy);                 // wrapped body
+    for (let i = 0; i < 4; i++) p(-6, 7 + i * 3, 12, 1, P.tpmummyDk);
+    p(-4, 20, 9, 7, P.tpmummy);                  // head
+    p(-4, 22, 9, 1, P.tpmummyDk);
+    p(1, 23, 2, 2, "#2a2020");                   // eye slit
+    if (opt.wind) p(-10, 15, 4, 4, P.tpmummy);   // arm back with a wad
+    const fl = Math.floor((opt.t || 0) * 6) % 3;
+    p(-9, 10 - fl, 2, 6, P.tpmummy);             // loose streamer
+  });
+
   // ========================== CHARGER ================================
   const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;

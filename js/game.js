@@ -688,8 +688,9 @@
       const left = this.bounds.minX, right = this.bounds.maxX;
       const depthSpan = JH.DEPTH_MAX - JH.DEPTH_MIN - 16;
       const ey = JH.DEPTH_MIN + 8 + Math.random() * depthSpan;
-      if (type === "fuse") {
-        // Fuses drop in at a random arena spot (own landing ring telegraphs it).
+      if (type === "fuse" || type === "tpmummy") {
+        // Aerial entries land at a random arena spot (fuse: slam ring; tpmummy:
+        // streamer drift). Shared stagger cadence.
         const ex = left + 30 + Math.random() * (right - left - 60);
         return this.spawnEnemy(type, ex, ey, {
           elite: eliteScale, dropIn: true, dropDelay: (slot || 0) * JH.FUSE_DROP.stagger * 0.5,

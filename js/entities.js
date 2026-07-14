@@ -501,6 +501,9 @@
             { vsEnemies: true, slowMult: 0.7, dmgAmp: wakeRank >= 2 ? 1.1 : 1 }));
       }
       let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
+      // TP-wrap snare: a soft timed slow (never a root). Dash overrides speed
+      // entirely below, so dashing out remains full strength.
+      if (this.snareT > 0) speed *= this.snareMult;
       if (this.beneRank("tailwind"))
         speed *= 1 + Math.min(this.beneRank("tailwind") >= 2 ? 0.30 : 0.20, 0.02 * (game.combo || 0));
       if (this.stormT > 0 && this.beneRank("eye_of_storm") >= 2) speed *= 1.15;
@@ -5546,6 +5549,144 @@
     }
   };
 
+  // ---- TP Mummy: streamer drop-in harasser ----
+  // Thrown wrap = soft snare; death = one-shot gust puff that SHOVES (no
+  // damage) everything in its ellipse — Jon and light enemies alike.
+  class TPWrap {
+    constructor(x, y, tx, ty, d) {
+      this.x = x; this.y = y; this.z = 24;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      this.vx = ((tx - x) / dist) * d.wrapSpeed;
+      this.vy = ((ty - y) / dist) * d.wrapSpeed;
+      this.def = d; this.t = 0; this.dead = false;
+      this.life = d.wrapRange / d.wrapSpeed + 0.4;
+      this.isProjectile = true;   // Whirlwind Walk's dash sweep destroys these
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      const pl = game.player;
+      if (pl.alive && Math.abs(pl.x - this.x) < 10 && Math.abs(pl.y - this.y) < 9 && pl.z < 26) {
+        // Only a LANDED hit snares — i-frames/dash dodge wrap and slow together.
+        if (pl.invulnTimer <= 0 && pl.dashTimer <= 0 && pl.dashGraceT <= 0) {
+          pl.takeHit(this.def.wrapDmg, game, this.x);
+          pl.snareT = this.def.wrapSlowDur;
+          pl.snareMult = this.def.wrapSlow;
+        }
+        this.dead = true;
+      }
+      if (this.t >= this.life) this.dead = true;
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      const spin = Math.floor(this.t * 14) % 2;
+      ctx.save();
+      ctx.fillStyle = JH.PAL.tpmummy;
+      ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 3, 6, 6);
+      ctx.fillStyle = JH.PAL.tpmummyDk;
+      if (spin) ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 1, 6, 2);
+      else ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 3, 2, 6);
+      // trailing streamer
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = JH.PAL.tpmummy;
+      ctx.fillRect(Math.round(sx - this.vx * 0.06), Math.round(sy) - 1, 8, 1);
+      ctx.restore();
+    }
+  }
+  JH.TPWrap = TPWrap;
+
+  class TPMummy extends Enemy {
+    // Streamer entry: constant drift + sway — no gravity slam (harasser).
+    beginDrop(delay) {
+      this.dropping = true;
+      this.dropWait = delay || 0;
+      this.z = this.dropWait > 0 ? 0 : this.def.driftH;
+    }
+    update(dt, game) {
+      if (this.dropping) {
+        this.t += dt;
+        if (this.dropWait > 0) {
+          this.dropWait -= dt;
+          if (this.dropWait <= 0) this.z = this.def.driftH;
+          return;
+        }
+        this.z -= this.def.driftSpeed * dt;
+        this.x += Math.sin(this.t * 2.2) * 14 * dt;
+        if (this.z <= 0) { this.z = 0; this.dropping = false; this.spawnGrace = 0.3; }
+        return;
+      }
+      super.update(dt, game);
+    }
+    takeDamage(dmg, game, dirX, knock) {
+      if (this.dropping) return;   // inert until landed (fuse idiom)
+      super.takeDamage(dmg, game, dirX, knock);
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          game.embers.push(new TPWrap(this.x + this.facing * 8, this.y, pl.x, pl.y, d));
+          this.cdTimer = d.wrapCd;
+        }
+        return;
+      }
+      if (this.cdTimer > 0) this.cdTimer -= dt;
+      // Ranged harasser: no attack ticket (tickets meter melee attackers).
+      if (this.cdTimer <= 0 && dist < d.wrapRange && this.spawnGrace <= 0) {
+        this.windTimer = d.wrapWind; this.windDur = d.wrapWind; this.state = "wind";
+        return;
+      }
+      const want = dist < 70 ? -1 : dist > 120 ? 1 : 0;   // hold a loose midrange
+      if (want) {
+        this.x += (dx / (dist || 1)) * d.speed * want * dt;
+        this.y += (dy / (dist || 1)) * d.speed * want * dt * 0.8;
+        this.state = "walk";
+      } else this.state = "idle";
+    }
+    die(game) {
+      // Unravel: one-shot gust puff — shove only, no damage. Ellipse rx =
+      // puffRadius, ry via GROUND_RY (the burst FX below is drawn AT the rim).
+      const d = this.def, rx = d.puffRadius, ry = rx * JH.GROUND_RY;
+      const pl = game.player;
+      if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, rx, ry))
+        pl.applyKnockback(pl.x >= this.x ? 1 : -1, d.puffKnock);
+      for (const o of game.enemies) {
+        if (o === this || o.dead || o.isBoss) continue;
+        if (o.def && o.def.speed === 0) continue;
+        if (Geo.inGroundEllipse(o.x, o.y, this.x, this.y, rx, ry))
+          o.applyKnockback(o.x >= this.x ? 1 : -1, d.puffKnock);
+      }
+      burst(game, this.x, this.y, 8, JH.PAL.tpmummy, 14, { speed: 110, life: 0.5, up: 60, size: 2 });
+      super.die(game);
+    }
+  }
+  JH.TPMummy = TPMummy;
+
+  // Streamer drop-in visuals: dangling TP strips above, body swaying down.
+  TPMummy.prototype.draw = function (ctx, cam) {
+    if (this.dropping) {
+      if (this.dropWait > 0) return;   // not on screen yet
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = JH.PAL.tpmummy;
+      for (let i = -1; i <= 1; i++) {
+        const fl = Math.sin(this.t * 5 + i) * 2;
+        ctx.fillRect(Math.round(sx + i * 5 + fl), Math.round(sy - this.bodyH - 14), 2, 12);
+      }
+      ctx.restore();
+      Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), this.bodyW * 0.4);
+      Assets.draw(ctx, this.type, sx, sy, this.facing, { state: "walk", frame: this.frame, t: this.t });
+      return;
+    }
+    JH.Enemy.prototype.draw.call(this, ctx, cam);
+  };
+
   // ---- Plunger Fiend: lunging rusher that LATCHES and drains the tank ----
   // Attacks the weapon, not the HP bar: a held latch siphons water (visible
   // on the tank bar). A dash breaks it — the same counter-verb as chargers.
@@ -5622,6 +5763,7 @@
     if (type === "stalker") return new Stalker(type, x, y);
     if (type === "smelt") return new Smelt(type, x, y);
     if (type === "fuse") return new Fuse(type, x, y);
+    if (type === "tpmummy") return new TPMummy(type, x, y);
     if (type === "furnace") return new Furnace(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);

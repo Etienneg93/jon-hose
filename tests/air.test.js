@@ -248,3 +248,47 @@ test("makeElite scales the air-roster damage keys", () => {
   e.makeElite({ hp: 2, dmg: 1.5, speed: 1 });
   assert.strictEqual(e.def.lungeDmg, Math.round(base * 1.5));
 });
+
+test("tpmummy: streamer drop-in drifts down without a landing slam", () => {
+  const g = stubHazardGame(200, 40);
+  const e = JH.makeEnemy("tpmummy", 100, 40);
+  e.beginDrop(0);
+  assert.strictEqual(e.z, JH.ENEMIES.tpmummy.driftH);
+  g.player.x = 100; g.player.y = 40;
+  const hp0 = g.player.hp;
+  for (let i = 0; i < 400 && e.dropping; i++) e.update(1 / 60, g);
+  assert.strictEqual(e.dropping, false);
+  assert.strictEqual(e.z, 0);
+  assert.strictEqual(g.player.hp, hp0, "no landing slam — harasser entry");
+});
+
+test("tpmummy wrap: snares (soft slow) only when the hit lands", () => {
+  const g = stubHazardGame(100, 40);
+  const d = JH.ENEMIES.tpmummy;
+  const wrap = new JH.TPWrap(80, 40, 100, 40, d);
+  // i-framed: no hit, no snare
+  g.player.invulnTimer = 1;
+  for (let i = 0; i < 60 && !wrap.dead; i++) wrap.update(1 / 60, g);
+  assert.strictEqual(g.player.snareT, 0);
+  // clean hit: snare lands
+  const g2 = stubHazardGame(100, 40);
+  const wrap2 = new JH.TPWrap(80, 40, 100, 40, d);
+  for (let i = 0; i < 60 && !wrap2.dead; i++) wrap2.update(1 / 60, g2);
+  assert.ok(wrap2.dead);
+  assert.strictEqual(g2.player.snareT, d.wrapSlowDur);
+  assert.strictEqual(g2.player.snareMult, d.wrapSlow);
+});
+
+test("tpmummy death puff: shoves inside the rim, no damage, spares the rim-outside", () => {
+  const d = JH.ENEMIES.tpmummy;
+  const g = stubHazardGame(100 + d.puffRadius - 2, 40);
+  const e = JH.makeEnemy("tpmummy", 100, 40);
+  const hp0 = g.player.hp;
+  e.die(g);
+  assert.ok((g.player.knockVX || 0) > 0, "inside the puff rim: shoved");
+  assert.strictEqual(g.player.hp, hp0, "the puff never damages");
+  const g2 = stubHazardGame(100 + d.puffRadius + 3, 40);
+  const e2 = JH.makeEnemy("tpmummy", 100, 40);
+  e2.die(g2);
+  assert.strictEqual(g2.player.knockVX || 0, 0, "outside the rim: untouched");
+});
