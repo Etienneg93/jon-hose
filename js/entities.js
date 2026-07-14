@@ -209,6 +209,9 @@
       this.overshield = 0;       // Deepdive shield: banked past-full kibble healing; soaks damage, never recharges
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
+      this.gasT = 0;          // StinkCloud tag: doSpray demotes one pressure tier while > 0
+      this.snareT = 0;        // air-hazard snare window remaining, seconds (consumer wires later)
+      this.snareMult = 1;     // move-speed multiplier while snared
     }
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them,
@@ -271,6 +274,7 @@
       this.douseCdT = 0; this.dashGraceT = 0;
       this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
       this.overshield = 0;   // dive shield doesn't survive death
+      this.gasT = 0; this.snareT = 0;
     }
 
     // Deepdive overshield soaks damage first — depletes, never recharges.
@@ -324,6 +328,8 @@
       if (this.xpFlashT > 0) this.xpFlashT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
       if (this.vigorT > 0) this.vigorT -= dt;
+      if (this.gasT > 0) this.gasT -= dt;
+      if (this.snareT > 0) this.snareT -= dt;
       // Boiler Coil: a gap in the stream longer than boilerGap drops the heat
       // (doSpray zeroes boilerGapT every frame it fires; this only fires it up).
       if (this.boilerGapT != null) {
@@ -674,6 +680,15 @@
       // while any water remains — dry still sputters, 80%+ still gets bonus.
       else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
+      // Stink gas clogs the nozzle: while gassed (StinkCloud tag) output drops
+      // one PRESSURE TIER — bonus reads as full, full reads as low. The tank bar
+      // is untouched (honest numbers: the TIER is what the gas attacks).
+      // Deliberately overrides pressureFloor — the pillar guards tank fraction,
+      // not sabotage.
+      if (this.gasT > 0 && !dry) {
+        if (frac >= 0.80) { dmgScale = 1.00; rangeMult = 1.00; }
+        else { dmgScale = 0.40; rangeMult = 0.55; }
+      }
       // Pressure Sermon: arms after SERMON.charge seconds of continuous
       // non-dry spray — no pressure-tier requirement (a tier gate made it
       // near-unfireable: 100 tank / 36 drain keeps the top tier only ~0.56s).
@@ -1020,6 +1035,16 @@
             }
           }
         }
+      }
+      // Water washes air: spraying into a stink cloud disperses it — same
+      // stream test and damage scaling as the fire-patch douse above.
+      if (game.stinkClouds) for (const sc of game.stinkClouds) {
+        if (sc.dead || sc.friendly) continue;
+        const f = sc.footprint();
+        const fwd = (sc.x - ox) * this.facing;
+        if (fwd > 0 && fwd - this.bodyW * 0.5 - f.rx <= reach
+            && Math.abs(sc.y - oy) < JH.FIRE.douseBand)
+          sc.sprayProgress += dt * Math.max(1, (S.sprayDamage * dmgScale) / JH.PLAYER.sprayDamage);
       }
       // Garden boxes: face each box and match its depth to water it.
       if (game.gardens) {
@@ -2421,6 +2446,100 @@
     const p = new FirePatch(x, y, radius, dur, opts);
     game.firePatches.push(p);
     return p;
+  };
+
+  // Stink cloud: billowing gas grown from a vent point. NO drawn ground
+  // ellipse — the puffs are generated FROM footprint() (centers at <=0.72*rx,
+  // drawn radius 0.28*rx*size, size<=1, so max extent == rx): the visible gas
+  // edge IS the tested edge. Standing inside tags player.gasT (doSpray demotes
+  // the pressure tier one step). Spraying it adds sprayProgress (see doSpray).
+  // `friendly` clouds skip the player and cook enemies (Gasbag pop-fast reward).
+  class StinkCloud {
+    constructor(x, y, opts) {
+      this.x = x; this.y = y;
+      this.friendly = !!(opts && opts.friendly);
+      this.t = 0;
+      this.sprayProgress = 0;   // dispersal seconds accumulated (damage-scaled)
+      this.dead = false;
+      this.puffs = [];
+      for (let i = 0; i < JH.STINK.puffCount; i++)
+        this.puffs.push({
+          ang: Math.random() * Math.PI * 2,
+          rad: 0.25 + 0.75 * Math.random(),
+          size: 0.55 + 0.45 * Math.random(),
+          ph: Math.random() * Math.PI * 2,
+        });
+    }
+    // 0 fresh .. 1 gone: the larger of spray dispersal and end-of-life fade.
+    fadeFrac() {
+      const S = JH.STINK;
+      const sprayed = this.sprayProgress / S.disperseDur;
+      const life = this.friendly ? S.friendlyLife : S.life;
+      const fade = (this.t - (life - S.fizzle)) / S.fizzle;
+      return Math.min(1, Math.max(sprayed, fade, 0));
+    }
+    // ONE shape: grows in from the vent, shrinks as it disperses. Shared by
+    // the hit test AND the puff renderer.
+    footprint() {
+      const S = JH.STINK;
+      const grow = Math.min(1, this.t / S.growT);
+      const rx = Math.max(2, S.radius * grow * (1 - this.fadeFrac() * 0.6));
+      return { rx, ry: rx * JH.GROUND_RY };
+    }
+    update(dt, game) {
+      this.t += dt;
+      const f = this.footprint();
+      if (this.friendly) {
+        for (const e of game.enemies) {
+          if (e.dead || e.dropping) continue;
+          if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
+            e.takeDamage(JH.STINK.friendlyDps * dt, game, 0, 0);
+        }
+        if (this.t >= JH.STINK.friendlyLife) this.dead = true;
+        return;
+      }
+      const pl = game.player;
+      if (pl && pl.alive && (pl.z || 0) < 18) {
+        const pad = (pl.bodyW || 12) * 0.25;   // feet aren't a point (FirePatch idiom)
+        if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx + pad, f.ry + pad * JH.GROUND_RY))
+          pl.gasT = Math.max(pl.gasT || 0, 0.15);
+      }
+      if (this.fadeFrac() >= 1) this.dead = true;
+    }
+    draw(ctx, cam) {
+      const f = this.footprint();
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const gone = this.fadeFrac();
+      ctx.save();
+      for (const p of this.puffs) {
+        const wob = Math.sin(this.t * 1.6 + p.ph) * 0.05;
+        const cxp = sx + Math.cos(p.ang) * f.rx * (p.rad * 0.72 + wob);
+        const cyp = sy + Math.sin(p.ang) * f.ry * (p.rad * 0.72 + wob);
+        const pr = f.rx * 0.28 * p.size;
+        ctx.globalAlpha = (0.28 + 0.22 * Math.sin(this.t * 2 + p.ph * 2)) * (1 - gone);
+        ctx.fillStyle = this.friendly ? "#d6e89a" : JH.PAL.stink;
+        ctx.beginPath();
+        ctx.ellipse(cxp, cyp - pr * 0.3, pr, pr * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  JH.StinkCloud = StinkCloud;
+
+  // Hostile gas doesn't stack: a vent inside a live hostile cloud is a no-op
+  // (returns null). Friendly bursts always spawn — the pop-fast reward fires.
+  JH.spawnStinkCloud = function (game, x, y, opts) {
+    if (!(opts && opts.friendly)) {
+      for (const sc of game.stinkClouds) {
+        if (sc.dead || sc.friendly) continue;
+        const f = sc.footprint();
+        if (Geo.inGroundEllipse(x, y, sc.x, sc.y, f.rx, f.ry)) return null;
+      }
+    }
+    const c = new StinkCloud(x, y, opts);
+    game.stinkClouds.push(c);
+    return c;
   };
 
   // Trial by Fire's "burning" check: is this enemy standing in a live fire

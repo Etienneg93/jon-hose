@@ -590,6 +590,20 @@
     douseDmgScale: true,     // spray-douse speed scales with spray damage (base dmg = 1x, never slower)
   };
 
+  // ---- Stink clouds (air-element ground hazard) --------------------------
+  // Attacks the pressure TIER, never HP (player.gasT tag -> doSpray demotes
+  // one step). Sprayed dispersal mirrors fire-patch dousing (damage-scaled).
+  JH.STINK = {
+    radius: 34,        // full-grown footprint rx (world px)
+    growT: 0.9,        // s to grow in from the vent point (never spawns full size)
+    life: 6,           // s a hostile cloud lingers untouched
+    fizzle: 1.2,       // ...fading over these last seconds (like FIRE.patchFizzle)
+    disperseDur: 1.6,  // s of BASE-damage spray to disperse (scales up, never below 1x)
+    friendlyLife: 3,   // s the pop-fast reward cloud lives
+    friendlyDps: 8,    // enemy hp/s inside a friendly cloud
+    puffCount: 9,      // billow puffs per cloud
+  };
+
   // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
   // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
   // downgrades an active scald.)

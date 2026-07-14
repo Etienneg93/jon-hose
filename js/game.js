@@ -475,6 +475,7 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
+      this.stinkClouds = []; this.gustLanes = [];
       this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
@@ -1652,6 +1653,7 @@
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
+      this.stinkClouds = []; this.gustLanes = [];
       this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = [];   // usedOnce survives death; active boons are whatever the Reliquary gave back
@@ -1935,6 +1937,8 @@
       for (const e of this.enemies) e.update(dt, this);
       for (const s of this.shields) s.update(dt);
       for (const fp of this.firePatches) fp.update(dt, this);
+      for (const sc of this.stinkClouds) sc.update(dt, this);
+      for (const gl of this.gustLanes) gl.update(dt, this);
       this.player.zoneSlow = 1;
       for (const z of this.slowZones) z.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
@@ -2124,6 +2128,7 @@
       this.enemies = this.enemies.filter((e) => !e.dead);
       this.shields = this.shields.filter((s) => !s.dead);
       this.firePatches = this.firePatches.filter((fp) => !fp.dead);
+      this.stinkClouds = this.stinkClouds.filter((sc) => !sc.dead);
       this.slowZones = this.slowZones.filter((z) => !z.dead);
 
       // --- camera
@@ -2428,6 +2433,11 @@
 
         // fire patches (burning ground zones from Fuse deaths, Smelt smashes, etc.)
         for (const fp of this.firePatches) fp.draw(ctx, cam);
+
+        // gust lanes and stink clouds — drawn last of the ground hazards so
+        // gas billows over patches/lanes underneath.
+        for (const gl of this.gustLanes) gl.draw(ctx, cam);
+        for (const sc of this.stinkClouds) sc.draw(ctx, cam);
 
         // slow zones (super-Bulwark's landed shield)
         for (const z of this.slowZones) z.draw(ctx, cam);
