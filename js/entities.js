@@ -5808,6 +5808,105 @@
   }
   JH.Gasbag = Gasbag;
 
+  // ---- Bidet Turret: pre-placed porcelain artillery ----
+  // Lobs a water arc at a target LOCKED at wind start; the landing ellipse is
+  // drawn from the telegraph through the whole flight and IS the hit shape
+  // (SmeltBomb arc idiom + honest locked landing spots). Landing douses fire.
+  class BidetShot {
+    constructor(x, y, tx, ty, d) {
+      this.x = x; this.y = y; this.z = 20;
+      this.tx = tx; this.ty = ty;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      const flightT = Math.max(0.5, dist / d.arcSpeed);
+      this.vx = (tx - x) / flightT;
+      this.vy = (ty - y) / flightT;
+      this.vz = 0.5 * d.arcGravity * flightT - this.z / flightT;
+      this.def = d; this.t = 0; this.dead = false;
+      this.isProjectile = true;
+    }
+    update(dt, game) {
+      this.t += dt;
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vz -= this.def.arcGravity * dt; this.z += this.vz * dt;
+      if (this.z <= 0) {
+        const d = this.def, pl = game.player;
+        burst(game, this.x, this.y, 4, JH.PAL.waterHi, 12, { speed: 100, life: 0.4, up: 50, size: 2 });
+        game.shake(2); game.audio.play("whack");
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.landRadius))
+          pl.takeHit(d.landDmg, game, this.x);
+        // Returned water is still water: douse any fire the splash covers.
+        if (game.firePatches) for (const fp of game.firePatches) {
+          if (fp.dead || fp.friendly) continue;
+          if (Geo.inGroundEllipse(fp.x, fp.y, this.x, this.y, d.landRadius + fp.footprint().rx))
+            fp.sprayProgress = fp.extinguishDur;
+        }
+        this.dead = true;
+      }
+      return !this.dead;
+    }
+    draw(ctx, cam) {
+      const d = this.def;
+      // Landing telegraph: the SAME ellipse the landing tests, at the locked target.
+      const lx = this.tx - cam, ly = Geo.feetScreenY(this.ty, 0);
+      const flash = Math.floor(this.t * 10) & 1;
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = flash ? "#bfe6ff" : "rgba(120,200,255,0.5)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, d.landRadius, d.landRadius * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
+      Assets.glow(ctx, Math.round(sx), Math.round(sy), 10, JH.PAL.water, 0.7);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = flash ? JH.PAL.waterHi : JH.PAL.water;
+      ctx.beginPath(); ctx.arc(Math.round(sx), Math.round(sy), 5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+  JH.BidetShot = BidetShot;
+
+  class BidetTurret extends Enemy {
+    applyKnockback() {}   // porcelain emplacement — never slides
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      this.facing = pl.x >= this.x ? 1 : -1;
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        if (this.windTimer <= 0) {
+          game.embers.push(new BidetShot(this.x, this.y, this.aimX, this.aimY, d));
+          this.cdTimer = d.lobCd;
+        }
+        return;
+      }
+      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
+      if (this.spawnGrace <= 0) {
+        // Lock the landing spot NOW — the telegraph never chases.
+        this.aimX = pl.x; this.aimY = pl.y;
+        this.windTimer = d.aimWind; this.windDur = d.aimWind; this.state = "wind";
+      }
+    }
+  }
+  JH.BidetTurret = BidetTurret;
+
+  // Aim telegraph during the windup (the shot carries it through the flight).
+  BidetTurret.prototype.draw = function (ctx, cam) {
+    if (this.state === "wind" && this.aimX != null) {
+      const d = this.def;
+      const lx = this.aimX - cam, ly = Geo.feetScreenY(this.aimY, 0);
+      const flash = Math.floor(this.t * 10) & 1;
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = flash ? "#bfe6ff" : "rgba(120,200,255,0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, d.landRadius, d.landRadius * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    JH.Enemy.prototype.draw.call(this, ctx, cam);
+  };
+
   JH.makeEnemy = function (type, x, y) {
     if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
@@ -5819,6 +5918,7 @@
     if (type === "fuse") return new Fuse(type, x, y);
     if (type === "tpmummy") return new TPMummy(type, x, y);
     if (type === "gasbag") return new Gasbag(type, x, y);
+    if (type === "bidet") return new BidetTurret(type, x, y);
     if (type === "furnace") return new Furnace(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);

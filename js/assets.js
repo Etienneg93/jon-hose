@@ -923,6 +923,20 @@
     p(-1, 6, 3, 1, "#2a2a1a");
   });
 
+  // Bidet Turret: porcelain pedestal + basin; nozzle rises and spurts on windup.
+  Assets.register("bidet", (p, opt) => {
+    const P = JH.PAL;
+    p(-9, 0, 18, 4, P.bidetDk);                  // pedestal base
+    p(-6, 4, 12, 8, P.bidet);                    // column
+    p(-10, 12, 20, 7, P.bidet);                  // basin
+    p(-10, 17, 20, 2, P.bidetHi);                // rim highlight
+    p(-7, 13, 14, 3, P.bidetDk);                 // basin shadow
+    const nz = opt.wind ? 3 : 0;
+    p(-1, 19 + nz, 3, 3, P.bidetDk);             // nozzle
+    if (opt.wind && Math.floor((opt.t || 0) * 12) % 2)
+      p(-1, 22 + nz, 3, 2, P.water);             // pressurizing spurt
+  });
+
   // ========================== CHARGER ================================
   const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;

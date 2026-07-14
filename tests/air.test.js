@@ -338,3 +338,44 @@ test("gasbag hovers inside the spray band (nozzle can reach it)", () => {
   // stream line at nozzleZ must intersect the hover body
   assert.ok(JH.ENEMIES.gasbag.hoverZ < JH.PLAYER.nozzleZ + 10);
 });
+
+test("bidet shot: lands at the LOCKED target; the telegraph ellipse is the hit ellipse", () => {
+  const d = JH.ENEMIES.bidet;
+  // player stands just inside the landing rim
+  const g = stubHazardGame(200 + d.landRadius - 2, 40);
+  const shot = new JH.BidetShot(100, 40, 200, 40, d);
+  const hp0 = g.player.hp;
+  for (let i = 0; i < 600 && !shot.dead; i++) shot.update(1 / 60, g);
+  assert.ok(shot.dead);
+  assert.ok(Math.abs(shot.x - 200) < 8, "arc comes down at the locked spot");
+  assert.ok(g.player.hp < hp0, "inside the drawn rim: hit");
+  // just outside the rim: spared
+  const g2 = stubHazardGame(200 + d.landRadius + 4, 40);
+  const shot2 = new JH.BidetShot(100, 40, 200, 40, d);
+  const hp2 = g2.player.hp;
+  for (let i = 0; i < 600 && !shot2.dead; i++) shot2.update(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "outside the drawn rim: spared");
+});
+
+test("bidet shot: landing douses fire patches it touches (world consistency)", () => {
+  const d = JH.ENEMIES.bidet;
+  const g = stubHazardGame(400, 40);
+  const fp = new JH.FirePatch(200, 40, 20, 2.0);
+  g.firePatches.push(fp);
+  const shot = new JH.BidetShot(100, 40, 200, 40, d);
+  for (let i = 0; i < 600 && !shot.dead; i++) shot.update(1 / 60, g);
+  assert.ok(fp.sprayProgress >= fp.extinguishDur, "returned water still douses fire");
+});
+
+test("bidet turret: locks its aim at wind start and is knockback-immune", () => {
+  const g = stubHazardGame(180, 40);
+  const e = JH.makeEnemy("bidet", 100, 40);
+  e.spawnGrace = 0;
+  e.think(1 / 60, g);
+  assert.strictEqual(e.aimX, 180, "target locked when the wind starts");
+  g.player.x = 300;                       // player moves; telegraph must not chase
+  e.think(1 / 60, g);
+  assert.strictEqual(e.aimX, 180);
+  e.applyKnockback(1, 500);
+  assert.strictEqual(e.knockVX || 0, 0, "porcelain emplacement doesn't slide");
+});
