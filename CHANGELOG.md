@@ -7,6 +7,43 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
+## v0.31.0 — Deepdive (2026-07-14)
+
+There's a TV at the shop now. Sit down, log on, melt your kibble into
+health. The algorithm thanks you for your engagement.
+(Spec: `2026-07-06-deepdive-tv-design.md`.)
+
+### The Deepdive TV
+- **A TV materializes beside every shop vendor** the moment you have kibble
+  banked — CRT tune-in from a bright scanline — and switches back off when
+  the bank empties. No kibble, no TV.
+- **Sit (E) with any kibble banked:** Jon takes a seat (new sprite) and the
+  world appears to fast-forward — speed-lines, vignette, the video racing —
+  while the sim underneath honestly runs at 1x. The binge is a heal, not a
+  cheat.
+- **Kibble burns at 4x while seated,** converting to healing first, always:
+  every drop goes to HP until the bar is full, and only then spills into an
+  **overshield** — a purple halo over the HP bar, capped at max HP, that
+  soaks hits and burn ticks before your health does. It never recharges and
+  doesn't survive death.
+- **The screen is fake YouTube:** clickbait marquee titles ("Are FIRE
+  HYDRANTS conscious? (they answered)"), view counts, a racing scrub bar,
+  an up-next nub. Jon mutters as he watches — guaranteed quip on sit-down,
+  ten-entry pool, never the same one twice in a row.
+- **Standing up:** any move key, a second E, or a dash bails instantly;
+  running the bank dry auto-stands you and the TV powers down on cue.
+- The leaderboard clock counts real seconds mid-dive — bingeing costs you
+  FASTEST WINS time at face value, nothing hidden.
+- The vendor and the TV both have solid feet now — no more standing inside
+  the shopkeeper.
+
+### Also
+- The Air Act / Ass Man design spec is locked and committed
+  (`2026-07-12-air-act-ass-man-design.md`) — waves 30-36, the sanitation
+  roster, and the JHCU's first hero await their build pass.
+
+---
+
 ## v0.30.0 — Rummage Sale (2026-07-13)
 
 The shop grows up: relics come in three rarities, the wheel rolls by tier,
