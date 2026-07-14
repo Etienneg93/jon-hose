@@ -419,10 +419,10 @@
       }
       if (this.kibbleTimer > 0) {
         // Deepdive: the world sim stays 1x — the "fast-forward" is the
-        // KIBBLE running at maxScale while seated (drain + heal together),
+        // KIBBLE running at kibbleMult while seated (drain + heal together),
         // with healing past full HP converting to overshield (soaks damage
         // first, never recharges) — capped at max HP.
-        const kMult = game.deepdiving ? JH.DEEPDIVE.maxScale : 1;
+        const kMult = game.deepdiving ? JH.DEEPDIVE.kibbleMult : 1;
         const kdt = Math.min(this.kibbleTimer, dt * kMult);   // never burn past the bank
         this.kibbleTimer -= kdt;
         const before = this.hp;
@@ -1159,7 +1159,12 @@
       const bx = Math.round(sx - barW / 2);
       const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
       const wFrac  = Math.max(0, this.water / this.stats.maxWater);
-      const barTop = Math.round(sy - this.stats.bodyH - 30);
+      // While deepdiving the whole readout drops BELOW the seated sprite
+      // (bars on the ground, status rows just above them at his feet) so it
+      // never covers the TV screen he's parked in front of.
+      const barTop = (JH.Game && JH.Game.deepdiving)
+        ? Math.round(sy + 14)
+        : Math.round(sy - this.stats.bodyH - 30);
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
       // HP

@@ -84,12 +84,13 @@
     halfDepth: 26,   // depth half-band the front covers
   };
 
-  // Deepdive TV: kibble-accelerator shop prop. Sitting fast-forwards the WHOLE
-  // world (fixed-step count scales, per-step dt stays FIXED_DT). The run clock
-  // (elapsed) rides scaled time on purpose — a binge costs leaderboard seconds.
+  // Deepdive TV: kibble-accelerator shop prop. The sim never scales — the
+  // "fast-forward" is a cosmetic animation ramp plus seated kibble running
+  // at kibbleMult (drain + heal together, spill past full HP -> overshield).
   JH.DEEPDIVE = {
-    threshold: 10,    // s of banked kibble required to SIT (the TV always spawns; short bank shows [REQUIRES KIBBLE])
-    maxScale: 2,      // peak of the COSMETIC ramp AND the seated kibble accel factor (sim never scales)
+    threshold: 0,     // s of banked kibble required to SIT — any kibble at all (empty bank shows [REQUIRES KIBBLE])
+    maxScale: 2,      // peak of the COSMETIC animation ramp (sim never scales)
+    kibbleMult: 4,    // seated kibble drain/heal factor (4/s of bank per real second)
     rampUp:   0.8,    // s of REAL time to ramp 1 -> maxScale
     rampDown: 0.6,    // s of REAL time to ramp back to 1
     titleSwap: 2.5,   // s of SCALED time between fake-video title swaps
