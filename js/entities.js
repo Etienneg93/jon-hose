@@ -1434,6 +1434,9 @@
       if (d.meleeDmg)  d.meleeDmg  = Math.round(d.meleeDmg * s.dmg);
       if (d.chargeDmg) d.chargeDmg = Math.round(d.chargeDmg * s.dmg);
       if (d.emberDmg)  d.emberDmg  = Math.round(d.emberDmg * s.dmg);
+      if (d.lungeDmg)  d.lungeDmg  = Math.round(d.lungeDmg * s.dmg);
+      if (d.wrapDmg)   d.wrapDmg   = Math.round(d.wrapDmg * s.dmg);
+      if (d.landDmg)   d.landDmg   = Math.round(d.landDmg * s.dmg);
       if (d.speed)     d.speed    *= s.speed;
       if (d.bodyW)     d.bodyW = Math.round(d.bodyW * 1.22);
       if (d.bodyH)     d.bodyH = Math.round(d.bodyH * 1.16);
@@ -5543,9 +5546,77 @@
     }
   };
 
+  // ---- Plunger Fiend: lunging rusher that LATCHES and drains the tank ----
+  // Attacks the weapon, not the HP bar: a held latch siphons water (visible
+  // on the tank bar). A dash breaks it — the same counter-verb as chargers.
+  class PlungerFiend extends Enemy {
+    applyKnockback(dirX, force, dirY) {
+      if (this.state === "latch") return;   // suction holds through spray shove
+      super.applyKnockback(dirX, force, dirY);
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (this.state !== "lunge" && this.state !== "latch")
+        this.facing = dx >= 0 ? 1 : -1;
+
+      if (this.state === "latch") {
+        this.latchT -= dt;
+        // Glued to Jon's front; the stuck-on sprite state reads the clog.
+        this.x = pl.x + pl.facing * d.latchOffset;
+        this.y = pl.y;
+        this.facing = -pl.facing;
+        pl.water = Math.max(0, pl.water - d.latchDrain * dt);
+        const broken = pl.dashTimer > 0;
+        if (broken || this.latchT <= 0 || !pl.alive) {
+          this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false;
+          if (broken) {
+            super.applyKnockback(-pl.facing, 200);
+            game.audio.play("whack");
+          }
+        }
+        return;
+      }
+      if (this.state === "lunge") {
+        this.attackTimer -= dt;
+        this.x += Math.cos(this.aimAng) * d.lungeSpeed * dt;
+        this.y += Math.sin(this.aimAng) * d.lungeSpeed * dt * 0.6;
+        // Dash i-frames dodge the grab like any hit.
+        if (Geo.bodiesOverlap(this, pl) && pl.z < 20
+            && pl.dashTimer <= 0 && pl.dashGraceT <= 0) {
+          pl.takeHit(d.lungeDmg, game, this.x);
+          this.state = "latch"; this.latchT = d.latchMax;
+          game.audio.play("sizzle");
+          return;
+        }
+        if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false; }
+        return;
+      }
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";
+        this.aimAng = Math.atan2(dy, dx);
+        if (this.windTimer <= 0) { this.state = "lunge"; this.attackTimer = d.lungeDur; }
+        return;
+      }
+      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
+      if (dist < 120 && Math.abs(dy) < 16 && this.spawnGrace <= 0 && game.canAttack()) {
+        this.windTimer = d.lungeWind; this.windDur = d.lungeWind; this.state = "wind";
+        this.usingTicket = true;
+        this.aimAng = Math.atan2(dy, dx);
+      } else {
+        this.x += (dx / (dist || 1)) * d.speed * dt;
+        this.y += (dy / (dist || 1)) * d.speed * dt * 0.9;
+        this.state = "walk";
+      }
+    }
+  }
+  JH.PlungerFiend = PlungerFiend;
+
   JH.makeEnemy = function (type, x, y) {
     if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
+    if (type === "plunger") return new PlungerFiend(type, x, y);
     if (type === "pyro") return new Pyro(type, x, y);
     if (type === "bulwark") return new Bulwark(type, x, y);
     if (type === "stalker") return new Stalker(type, x, y);

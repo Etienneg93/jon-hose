@@ -204,3 +204,47 @@ test("gust lane cycle: telegraph -> blow -> gap -> telegraph", () => {
   lane.update(G.gapDur + 0.01, g);
   assert.strictEqual(lane.phase, "telegraph");
 });
+
+test("plunger: lunge contact latches and drains WATER, not HP", () => {
+  const g = stubHazardGame(100, 40);
+  const e = JH.makeEnemy("plunger", 90, 40);
+  g.enemies.push(e);
+  e.state = "lunge"; e.attackTimer = JH.ENEMIES.plunger.lungeDur;
+  e.aimAng = 0; e.spawnGrace = 0;
+  const hp0 = g.player.hp, w0 = g.player.water;
+  e.think(1 / 60, g);
+  assert.strictEqual(e.state, "latch");
+  e.think(1, g);   // one full latched second
+  assert.ok(w0 - g.player.water >= JH.ENEMIES.plunger.latchDrain * 0.99,
+    "latch drains latchDrain water/s");
+  assert.ok(g.player.hp >= hp0 - JH.ENEMIES.plunger.lungeDmg,
+    "only the lunge hit touches HP, the latch itself never does");
+});
+
+test("plunger: a dash breaks the latch; latch ignores spray knockback", () => {
+  const g = stubHazardGame(100, 40);
+  const e = JH.makeEnemy("plunger", 100, 40);
+  e.state = "latch"; e.latchT = 2;
+  e.applyKnockback(1, 500);
+  assert.strictEqual(e.knockVX || 0, 0, "suction holds through knockback");
+  g.player.dashTimer = 0.1;
+  e.think(1 / 60, g);
+  assert.notStrictEqual(e.state, "latch", "dash pops it off");
+  assert.ok(e.cdTimer > 0, "broken latch goes on lunge cooldown");
+});
+
+test("plunger: dash i-frames also dodge the lunge grab itself", () => {
+  const g = stubHazardGame(100, 40);
+  const e = JH.makeEnemy("plunger", 90, 40);
+  e.state = "lunge"; e.attackTimer = JH.ENEMIES.plunger.lungeDur; e.aimAng = 0;
+  g.player.dashTimer = 0.1;
+  e.think(1 / 60, g);
+  assert.notStrictEqual(e.state, "latch");
+});
+
+test("makeElite scales the air-roster damage keys", () => {
+  const e = JH.makeEnemy("plunger", 0, 0);
+  const base = JH.ENEMIES.plunger.lungeDmg;
+  e.makeElite({ hp: 2, dmg: 1.5, speed: 1 });
+  assert.strictEqual(e.def.lungeDmg, Math.round(base * 1.5));
+});

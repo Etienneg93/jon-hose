@@ -872,6 +872,27 @@
     p(opt.wind ? 6 : 4, 9, opt.wind ? 7 : 5, 5, PAL.mookDk); // arm/wind-up
   });
 
+  // Plunger Fiend: squat rubber imp with a plunger-cup head. Lip flares on
+  // windup/latch; suction ticks while latched.
+  Assets.register("plunger", (p, opt) => {
+    const P = JH.PAL;
+    const step = opt.state === "walk" ? Math.floor((opt.t || 0) * 8) % 2 : 0;
+    p(-5, 0, 4, 5 + step, P.plungerDk);          // legs
+    p(1, 0, 4, 5 + (1 - step), P.plungerDk);
+    p(-7, 5, 14, 9, P.plunger);                  // rubber body
+    p(-7, 5, 14, 2, P.plungerDk);
+    p(-4, 8, 2, 2, "#ffd23f");                   // eyes
+    p(2, 8, 2, 2, "#ffd23f");
+    p(-1, 14, 3, 6, "#a8763e");                  // wooden handle neck
+    const flare = (opt.state === "latch" || opt.wind) ? 2 : 0;
+    p(-8 - flare, 20, 16 + flare * 2, 3, P.plungerDk);   // cup lip
+    p(-6, 22, 12, 4, P.plunger);                          // cup dome
+    if (opt.state === "latch") {                 // suction lines
+      p(-11, 21, 2, 1, "#ffffff");
+      p(9, 21, 2, 1, "#ffffff");
+    }
+  });
+
   // ========================== CHARGER ================================
   const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;
