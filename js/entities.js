@@ -1187,18 +1187,24 @@
         }
         ctx.restore();
       }
-      // Deepdive overshield: translucent PURPLE halo laid over the healthbar
-      // from the left, width = shield fraction of maxHp — reads as an aura
-      // around the bar, not a second fill.
+      // Deepdive overshield: translucent PURPLE halo laid over the HP row
+      // ONLY (never the water row below) from the left, width = shield
+      // fraction of maxHp. A sweeping glint + softly pulsing rim mark it
+      // as a shield bubble rather than a second HP fill.
       if (this.overshield > 0) {
         const sw = Math.max(2, Math.round(barW * Math.min(1, this.overshield / this.stats.maxHp)));
         ctx.save();
         ctx.fillStyle = "rgba(196,110,255,0.22)";
-        ctx.fillRect(bx - 2, barTop - 3, sw + 4, 9);          // soft outer halo
+        ctx.fillRect(bx - 2, barTop - 2, sw + 4, 6);          // soft outer halo
         ctx.fillStyle = "rgba(196,110,255,0.38)";
-        ctx.fillRect(bx - 1, barTop - 2, sw + 2, 7);          // brighter core wash
-        ctx.strokeStyle = "rgba(224,170,255,0.8)"; ctx.lineWidth = 1;
-        ctx.strokeRect(bx - 1.5, barTop - 2.5, sw + 3, 8);    // crisp rim so the extent reads
+        ctx.fillRect(bx - 1, barTop - 1, sw + 2, 5);          // brighter core wash
+        // Glint: a 2px column of light loops left -> right through the halo.
+        const gx = bx - 1 + ((this.t * 22) % (sw + 8)) - 4;
+        ctx.fillStyle = "rgba(240,214,255,0.5)";
+        ctx.fillRect(Math.max(bx - 1, Math.min(bx + sw - 1, gx)), barTop - 1, 2, 5);
+        ctx.strokeStyle = "rgba(224,170,255," + (0.55 + 0.3 * Math.sin(this.t * 4)).toFixed(2) + ")";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx - 1.5, barTop - 1.5, sw + 3, 4.5);  // pulsing rim (bottom stroke stays off the water row)
         ctx.restore();
       }
       // H₂O
