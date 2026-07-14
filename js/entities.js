@@ -1088,7 +1088,8 @@
 
     // Returns true when the hit LANDED, false when it was negated (i-frames,
     // storm dodge window, dodge chance) — riders like snares key off this.
-    takeHit(dmg, game, fromX) {
+    // knock: caller-supplied knockback impulse px/s, default 90.
+    takeHit(dmg, game, fromX, knock) {
       if (this.invulnTimer > 0 || this.dashTimer > 0 || this.dashGraceT > 0) return false;
       if (this.stormT > 0) {
         burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
@@ -1107,7 +1108,7 @@
       if (this.beneRank("bedrock")) this.vigorT = 3;   // Bedrock Vigor: +20% knockback window
       const dir = this.x < fromX ? -1 : 1;
       // Standing Stone: braced turret stance eats the knockback; damage still lands.
-      if (!(this.stillT >= 0.5 && this.beneRank("standing_stone"))) this.applyKnockback(dir, 90);
+      if (!(this.stillT >= 0.5 && this.beneRank("standing_stone"))) this.applyKnockback(dir, knock || 90);
       game.audio.play("hurt");
       game.shake(5, dir);                       // kick away from the impact
       game.hitStop(JH.JUICE.hitstop.playerHit);
@@ -5833,7 +5834,7 @@
         burst(game, this.x, this.y, 4, JH.PAL.waterHi, 12, { speed: 100, life: 0.4, up: 50, size: 2 });
         game.shake(2); game.audio.play("whack");
         if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.landRadius))
-          pl.takeHit(d.landDmg, game, this.x);
+          pl.takeHit(d.landDmg, game, this.x, d.landKnock);
         // Returned water is still water: douse any fire the splash covers.
         if (game.firePatches) for (const fp of game.firePatches) {
           if (fp.dead || fp.friendly) continue;

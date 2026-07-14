@@ -379,3 +379,15 @@ test("bidet turret: locks its aim at wind start and is knockback-immune", () => 
   e.applyKnockback(1, 500);
   assert.strictEqual(e.knockVX || 0, 0, "porcelain emplacement doesn't slide");
 });
+
+test("bidet landing shoves at landKnock, not the default takeHit impulse", () => {
+  const d = JH.ENEMIES.bidet;
+  const g = stubHazardGame(200 + d.landRadius - 2, 40);
+  const shot = new JH.BidetShot(100, 40, 200, 40, d);
+  for (let i = 0; i < 600 && !shot.dead; i++) shot.update(1 / 60, g);
+  assert.ok(shot.dead);
+  // applyKnockback: knockVX += dir * force from 0 — a landed splash carries
+  // the config impulse exactly (no player physics ticks in this loop).
+  assert.strictEqual(Math.abs(g.player.knockVX), d.landKnock,
+    "pressurized-water shove derives from config landKnock");
+});
