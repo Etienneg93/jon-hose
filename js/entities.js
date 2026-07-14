@@ -421,7 +421,7 @@
         // Deepdive: the world sim stays 1x — the "fast-forward" is the
         // KIBBLE running at maxScale while seated (drain + heal together),
         // with healing past full HP converting to overshield (soaks damage
-        // first, never recharges) — capped at DEEPDIVE.shieldCap.
+        // first, never recharges) — capped at max HP.
         const kMult = game.deepdiving ? JH.DEEPDIVE.maxScale : 1;
         const kdt = Math.min(this.kibbleTimer, dt * kMult);   // never burn past the bank
         this.kibbleTimer -= kdt;
@@ -430,7 +430,7 @@
         this.kibbleTickAcc += this.hp - before;
         if (game.deepdiving) {
           const spill = Math.max(0, this.kibbleRegen * kdt - (this.hp - before));
-          this.overshield = Math.min(JH.DEEPDIVE.shieldCap, (this.overshield || 0) + spill);
+          this.overshield = Math.min(this.stats.maxHp, (this.overshield || 0) + spill);
         }
         this.kibbleTickT -= dt;
         if (this.kibbleTickT <= 0) {
