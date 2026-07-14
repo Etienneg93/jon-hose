@@ -305,3 +305,36 @@ test("tpmummy death puff: shoves inside the rim, no damage, spares the rim-outsi
   e2.die(g2);
   assert.strictEqual(g2.player.knockVX || 0, 0, "outside the rim: untouched");
 });
+
+test("gasbag: vents a hostile cloud beneath itself after the inflate telegraph", () => {
+  const g = stubHazardGame(400, 40);
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.spawnGrace = 0; e.ventT = 0; e.cdTimer = 0;
+  // run until the vent completes
+  for (let i = 0; i < 600 && g.stinkClouds.length === 0; i++) e.think(1 / 60, g);
+  assert.strictEqual(g.stinkClouds.length, 1);
+  assert.ok(!g.stinkClouds[0].friendly);
+  assert.ok(e._vented);
+});
+
+test("gasbag pop-fast: killed before its first vent, the payload bursts on ENEMIES", () => {
+  const g = stubHazardGame(400, 40);
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  g.enemies.push(e);
+  e.die(g);
+  assert.strictEqual(g.stinkClouds.length, 1);
+  assert.ok(g.stinkClouds[0].friendly, "pre-vent kill = friendly burst");
+  // after venting, death carries no payload
+  const g2 = stubHazardGame(400, 40);
+  const e2 = JH.makeEnemy("gasbag", 100, 40);
+  e2._vented = true;
+  e2.die(g2);
+  assert.strictEqual(g2.stinkClouds.length, 0);
+});
+
+test("gasbag hovers inside the spray band (nozzle can reach it)", () => {
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  assert.ok(e.z >= JH.ENEMIES.gasbag.hoverZ - 3);
+  // stream line at nozzleZ must intersect the hover body
+  assert.ok(JH.ENEMIES.gasbag.hoverZ < JH.PLAYER.nozzleZ + 10);
+});

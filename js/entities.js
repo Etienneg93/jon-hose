@@ -5758,6 +5758,56 @@
   }
   JH.PlungerFiend = PlungerFiend;
 
+  // ---- Gasbag: hovering stink spirit — zone control ----
+  // Vents a stink cloud beneath itself on a cycle. Popped BEFORE its first
+  // vent lands, the payload bursts on ENEMIES instead (friendly cloud) — the
+  // fast-target-priority skill reward.
+  class Gasbag extends Enemy {
+    constructor(type, x, y) {
+      super(type, x, y);
+      this.z = this.def.hoverZ;
+      this.ventT = this.def.firstVent + Math.random();  // first vent comes soon, not instantly
+      this._vented = false;
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      this.facing = dx >= 0 ? 1 : -1;
+      this.z = d.hoverZ + Math.sin(this.t * 2.4) * 3;   // hover bob
+      if (this.ventT > 0) this.ventT -= dt;
+      if (this.windTimer > 0) {
+        this.windTimer -= dt; this.state = "wind";      // inflate telegraph
+        if (this.windTimer <= 0) {
+          JH.spawnStinkCloud(game, this.x, this.y);
+          this._vented = true;
+          this.cdTimer = d.ventCd;
+          game.audio.play("sizzle");
+        }
+        return;
+      }
+      if (this.cdTimer > 0) this.cdTimer -= dt;
+      else if (this.spawnGrace <= 0 && this.ventT <= 0) {
+        this.windTimer = d.ventWind; this.windDur = d.ventWind; this.state = "wind";
+        return;
+      }
+      // Drift to a loose standoff — zone controller, not a chaser.
+      const err = dist - d.preferRange;
+      if (Math.abs(err) > 8) {
+        const dir = err > 0 ? 1 : -1;
+        this.x += (dx / (dist || 1)) * d.speed * dir * dt;
+        this.y += (dy / (dist || 1)) * d.speed * dir * dt * 0.8;
+        this.state = "walk";
+      } else this.state = "idle";
+    }
+    die(game) {
+      if (!this._vented)
+        JH.spawnStinkCloud(game, this.x, this.y, { friendly: true });
+      super.die(game);
+    }
+  }
+  JH.Gasbag = Gasbag;
+
   JH.makeEnemy = function (type, x, y) {
     if (type === "dummy") return new TargetDummy(x, y);
     if (type === "charger") return new Charger(type, x, y);
@@ -5768,6 +5818,7 @@
     if (type === "smelt") return new Smelt(type, x, y);
     if (type === "fuse") return new Fuse(type, x, y);
     if (type === "tpmummy") return new TPMummy(type, x, y);
+    if (type === "gasbag") return new Gasbag(type, x, y);
     if (type === "furnace") return new Furnace(type, x, y);
     if (type === "boss") return new Boss(x, y);
     if (type === "switch") return new SwitchBoss(x, y);

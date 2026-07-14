@@ -909,6 +909,20 @@
     p(-9, 10 - fl, 2, 6, P.tpmummy);             // loose streamer
   });
 
+  // Gasbag: sagging hover sack; inflates through the vent windup (windFrac).
+  Assets.register("gasbag", (p, opt) => {
+    const P = JH.PAL;
+    const inf = opt.wind ? Math.round(2 + 2 * (opt.windFrac || 0)) : 0;
+    const wob = Math.floor((opt.t || 0) * 5) % 2;
+    p(-6, 2 - wob, 12, 3, P.gasbagDk);                     // puckered vent base
+    p(-8 - inf, 4 - wob, 16 + inf * 2, 12 + inf, P.gasbag); // sack
+    p(-8 - inf, 13 - wob + inf, 16 + inf * 2, 3, P.gasbagHi);
+    p(-2, 16 + inf - wob, 4, 3, P.gasbagDk);               // knotted top
+    p(-4, 9, 2, 2, "#2a2a1a");                             // dopey face
+    p(3, 9, 2, 2, "#2a2a1a");
+    p(-1, 6, 3, 1, "#2a2a1a");
+  });
+
   // ========================== CHARGER ================================
   const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;
