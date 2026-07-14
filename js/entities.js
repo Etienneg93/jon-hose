@@ -1086,17 +1086,19 @@
       game.shake(hit ? 3 : 1);
     }
 
+    // Returns true when the hit LANDED, false when it was negated (i-frames,
+    // storm dodge window, dodge chance) — riders like snares key off this.
     takeHit(dmg, game, fromX) {
-      if (this.invulnTimer > 0 || this.dashTimer > 0 || this.dashGraceT > 0) return;
+      if (this.invulnTimer > 0 || this.dashTimer > 0 || this.dashGraceT > 0) return false;
       if (this.stormT > 0) {
         burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
         this.invulnTimer = 0.3;
-        return;
+        return false;
       }
       if (this.stats.dodgeChance > 0 && Math.random() < this.stats.dodgeChance) {
         burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
         this.invulnTimer = 0.3;
-        return;
+        return false;
       }
       dmg = this.soakOvershield(dmg);
       this.hp -= dmg;
@@ -1110,6 +1112,7 @@
       game.shake(5, dir);                       // kick away from the impact
       game.hitStop(JH.JUICE.hitstop.playerHit);
       if (this.hp <= 0) { this.hp = 0; this.alive = false; }
+      return true;
     }
 
     draw(ctx, cam) {
@@ -5567,9 +5570,9 @@
       this.x += this.vx * dt; this.y += this.vy * dt;
       const pl = game.player;
       if (pl.alive && Math.abs(pl.x - this.x) < 10 && Math.abs(pl.y - this.y) < 9 && pl.z < 26) {
-        // Only a LANDED hit snares — i-frames/dash dodge wrap and slow together.
-        if (pl.invulnTimer <= 0 && pl.dashTimer <= 0 && pl.dashGraceT <= 0) {
-          pl.takeHit(this.def.wrapDmg, game, this.x);
+        // Only a LANDED hit snares — takeHit reports dodges (i-frames, storm
+        // window, dodge chance) as false, and a dodged wrap applies nothing.
+        if (pl.takeHit(this.def.wrapDmg, game, this.x)) {
           pl.snareT = this.def.wrapSlowDur;
           pl.snareMult = this.def.wrapSlow;
         }
@@ -5649,8 +5652,9 @@
       } else this.state = "idle";
     }
     die(game) {
-      // Unravel: one-shot gust puff — shove only, no damage. Ellipse rx =
-      // puffRadius, ry via GROUND_RY (the burst FX below is drawn AT the rim).
+      // Unravel: one-shot gust puff — shove only, no damage. The shove test
+      // is the rx=puffRadius / ry=rx*GROUND_RY ellipse; the burst below is
+      // particles thrown outward from the death point.
       const d = this.def, rx = d.puffRadius, ry = rx * JH.GROUND_RY;
       const pl = game.player;
       if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, rx, ry))

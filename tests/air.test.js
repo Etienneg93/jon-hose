@@ -279,6 +279,19 @@ test("tpmummy wrap: snares (soft slow) only when the hit lands", () => {
   assert.strictEqual(g2.player.snareMult, d.wrapSlow);
 });
 
+test("tpmummy wrap: a dodged hit (dodge chance) applies NOTHING — no hp, no snare", () => {
+  const d = JH.ENEMIES.tpmummy;
+  const g = stubHazardGame(100, 40);
+  g.player.stats.dodgeChance = 1;   // Second Wind-style guaranteed dodge
+  const hp0 = g.player.hp;
+  const wrap = new JH.TPWrap(80, 40, 100, 40, d);
+  for (let i = 0; i < 60 && !wrap.dead; i++) wrap.update(1 / 60, g);
+  assert.ok(wrap.dead, "wrap still dies on contact");
+  assert.strictEqual(g.player.hp, hp0, "dodged wrap deals no damage");
+  assert.strictEqual(g.player.snareT, 0, "dodged wrap never snares");
+  assert.strictEqual(g.player.snareMult, 1);
+});
+
 test("tpmummy death puff: shoves inside the rim, no damage, spares the rim-outside", () => {
   const d = JH.ENEMIES.tpmummy;
   const g = stubHazardGame(100 + d.puffRadius - 2, 40);
