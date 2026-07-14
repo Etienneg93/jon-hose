@@ -1,6 +1,9 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert");
+global.window = global.window || {};
+require("../js/config.js");
+const JH = global.window.JH;
 const Balance = require("../js/balance.js");
 
 test("actLevelForWave maps wave index to elite act tier", () => {
@@ -26,6 +29,57 @@ test("dropThresholds scales item chances by mult and stays cumulative", () => {
   assert.ok(Math.abs(t.health - 0.324) < 1e-9); // 0.18 * 1.8
   assert.ok(Math.abs(t.water - 0.81) < 1e-9);   // 0.324 + 0.27*1.8 (0.486)
   assert.ok(t.water > t.health);
+});
+
+test("deepdiveRamp: reaches maxScale in ~rampUp s, returns in ~rampDown s, clamps, never overshoots", () => {
+  const D = JH.DEEPDIVE;
+  let s = 1, t = 0;
+  while (s < D.maxScale && t < 5) { s = JH.Balance.deepdiveRamp(s, true, 1 / 60, D); t += 1 / 60; }
+  assert.ok(Math.abs(t - D.rampUp) < 0.05, "ramp-up time ~" + D.rampUp + ", got " + t.toFixed(2));
+  assert.strictEqual(s, D.maxScale, "clamps at maxScale exactly");
+  s = JH.Balance.deepdiveRamp(s, true, 1, D);
+  assert.strictEqual(s, D.maxScale, "no overshoot while held");
+  t = 0;
+  while (s > 1 && t < 5) { s = JH.Balance.deepdiveRamp(s, false, 1 / 60, D); t += 1 / 60; }
+  assert.ok(Math.abs(t - D.rampDown) < 0.05, "ramp-down time ~" + D.rampDown);
+  assert.strictEqual(s, 1, "clamps at 1 exactly");
+});
+
+test("DEEPDIVE config shape", () => {
+  const D = JH.DEEPDIVE;
+  for (const k of ["threshold", "maxScale", "rampUp", "rampDown", "titleSwap", "laneGap"])
+    assert.strictEqual(typeof D[k], "number", k);
+  assert.ok(Array.isArray(D.titles) && D.titles.length >= 5);
+  assert.ok(Array.isArray(D.quips) && D.quips.length >= 3);
+  assert.ok(D.laneGap > JH.SHOP.range + 22, "TV interact zone must clear the shop-open zone");
+});
+
+test("propPushout: inside pushed to rim, outside null, depth flattened 2.4x", () => {
+  // Straight-left approach, well inside r=13: pushed to the rim along -x.
+  let p = Balance.propPushout(95, 40, 100, 40, 13);
+  assert.ok(p, "inside horizontally -> pushout");
+  assert.ok(Math.abs(p.x - 87) < 1e-9, "rim at propX - r, got " + p.x);
+  assert.ok(Math.abs(p.y - 40) < 1e-9, "no depth change on a pure-x approach");
+  // Exactly on the rim or beyond: no pushout.
+  assert.strictEqual(Balance.propPushout(87, 40, 100, 40, 13), null, "on-rim is outside");
+  assert.strictEqual(Balance.propPushout(60, 40, 100, 40, 13), null, "far away is outside");
+  // Depth flatten: 10px below at r=13 is OUTSIDE (10*2.4=24 > 13)...
+  assert.strictEqual(Balance.propPushout(100, 50, 100, 40, 13), null, "flattened depth escapes the ellipse");
+  // ...but 4px below is inside (4*2.4=9.6 < 13) and pushes to the depth rim r/2.4.
+  p = Balance.propPushout(100, 44, 100, 40, 13);
+  assert.ok(p, "4px below -> inside");
+  assert.ok(Math.abs(p.x - 100) < 1e-9, "pure-depth approach keeps x");
+  assert.ok(Math.abs(p.y - (40 + 13 / 2.4)) < 1e-9, "depth rim at propY + r/2.4, got " + p.y);
+  // Dead-center degenerate: still returns a rim point, never NaN.
+  p = Balance.propPushout(100, 40, 100, 40, 13);
+  assert.ok(p && Number.isFinite(p.x) && Number.isFinite(p.y), "center pushout is finite");
+});
+
+test("prop collide radii present and smaller than their interact zones", () => {
+  assert.strictEqual(typeof JH.SHOP.vendorCollideR, "number");
+  assert.strictEqual(typeof JH.DEEPDIVE.tvCollideR, "number");
+  assert.ok(JH.SHOP.vendorCollideR < JH.SHOP.range, "vendor rim inside shop-open range");
+  assert.ok(JH.DEEPDIVE.tvCollideR < 22, "TV rim inside the sit near-zone (+/-22)");
 });
 
 test("dropThresholds caps so drops are never guaranteed", () => {

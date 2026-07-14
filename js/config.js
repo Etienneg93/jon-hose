@@ -67,6 +67,7 @@
   // Walk-up shop vendor between fights.
   JH.SHOP = {
     range: 28,
+    vendorCollideR: 13,   // solid feet radius (Balance.propPushout, player-only)
     relicGradeOdds: [0, 0.25, 0.5, 0.75, 0.75],  // slot-3 upgrade chance by actLevel+1 (-1..3, all five acts declared)
     wheelAllCommonsBelowAct: 0,   // actLevel < this: every wheel slot rolls common (Act 1 wallets can't touch rares)
   };
@@ -81,6 +82,45 @@
     speed: 260,      // px/s wavefront travel
     range: 190,      // px before the wave dissipates
     halfDepth: 26,   // depth half-band the front covers
+  };
+
+  // Deepdive TV: kibble-accelerator shop prop. The sim never scales — the
+  // "fast-forward" is a cosmetic animation ramp plus seated kibble running
+  // at kibbleMult (drain + heal together, spill past full HP -> overshield).
+  JH.DEEPDIVE = {
+    threshold: 0,     // s of banked kibble required to SIT — any kibble at all (empty bank shows [REQUIRES KIBBLE])
+    maxScale: 2,      // peak of the COSMETIC animation ramp (sim never scales)
+    kibbleMult: 4,    // seated kibble drain/heal factor (4/s of bank per real second)
+    rampUp:   0.8,    // s of REAL time to ramp 1 -> maxScale
+    rampDown: 0.6,    // s of REAL time to ramp back to 1
+    titleSwap: 2.5,   // s of SCALED time between fake-video title swaps
+    laneGap:  130,    // px down-lane of the vendor (> SHOP.range + 22; clears the chalkboard, which spans vendor x -103..-63)
+    tvCollideR: 14,   // solid feet radius (Balance.propPushout, player-only) — matches the bigger cabinet
+    matIn:  0.35,     // s to materialize (CRT tune-in) once any kibble is banked; prompt + collision gate on full mat
+    matOut: 0.5,      // s to dematerialize when the bank empties (an active dive pins it solid)
+    titles: [
+      "Are FIRE HYDRANTS conscious? (they answered)",
+      "I ate only KIBBLE for 30 days",
+      "The DARK TRUTH about municipal water pressure",
+      "POV: you're a dog at 3am",
+      "This ONE hose trick BROKE the game",
+      "Why do I keep RESPAWNING? (existential)",
+      "Top 10 hydrants that ATTACKED back",
+    ],
+    quipEvery: 3,     // quip drip divisor — mean EXTRA gap ≈ this/maxScale REAL s past quipGap (first quip is guaranteed on sit)
+    quipGap:  2.0,    // s of REAL time after any quip before the next can roll (> float life 1.8 — quips never overlap)
+    quips: [
+      "wait — it's ALL kibble?",
+      "liked & subscribed",
+      "just one more video",
+      "the algorithm knows me",
+      "he's literally me",
+      "skipping the intro (again)",
+      "3 unskippable ads?? fine",
+      "the comments are FERAL",
+      "watching at 2x like a pro",
+      "this is research, actually",
+    ],
   };
 
   // Colour palette (kept central so procedural art + UI stay in sync).

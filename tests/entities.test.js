@@ -2069,6 +2069,120 @@ test("toggleRelic: grant folds apply() stats in, revoke folds out + clamps hp + 
   } finally { JH.Game = realGame; }
 });
 
+test("deepdive: TV always spawns down-lane; SITTING is gated on kibble > threshold", () => {
+  const D = JH.DEEPDIVE;
+  const g = { relics: {}, player: { kibbleTimer: 0, x: 0, y: 0 },
+              shopWheelEntries: () => [], };
+  JH.Game.spawnVendor.call(g, 300);
+  assert.ok(g.deepdiveTV, "TV anchored with zero kibble (materialization carries the gate)");
+  assert.strictEqual(g.deepdiveTV.x, 300 - D.laneGap, "down-lane by laneGap");
+  // Sit gate: E near the TV only arms above the threshold.
+  const mkInput = (buffered) => ({ buffered: (k) => buffered.includes(k), consume: () => {}, pressed: () => false });
+  const sit = (kib) => {
+    const s = { deepdiving: false, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0, mat: 1 },
+                player: { x: 0, y: 0, kibbleTimer: kib },
+                input: mkInput(["confirm"]), audio: { play() {} },
+                pickQuip: () => "", float() {} };   // sit-down fires a guaranteed quip
+    JH.Game.tickDeepdive.call(s);
+    return s.deepdiving;
+  };
+  assert.strictEqual(sit(D.threshold - 1), false, "short bank: E refused");
+  assert.strictEqual(sit(D.threshold + 1), true, "banked: sits");
+});
+
+test("deepdive TV materializes with banked kibble, dematerializes when it empties", () => {
+  const D = JH.DEEPDIVE;
+  const tv = new JH.DeepdiveTV(0, 0);
+  const realGame = JH.Game;
+  try {
+    JH.Game = { deepdiving: false, player: { kibbleTimer: 0 } };
+    tv.update(0.5);
+    assert.strictEqual(tv.mat, 0, "no kibble: stays immaterial");
+    JH.Game.player.kibbleTimer = 3;
+    tv.update(D.matIn / 2);
+    assert.ok(tv.mat > 0 && tv.mat < 1, "mid tune-in");
+    tv.update(D.matIn);
+    assert.strictEqual(tv.mat, 1, "fully materialized (clamped)");
+    // Bank drains to 0 mid-dive: the active dive pins it solid until stand-up.
+    JH.Game.player.kibbleTimer = 0;
+    JH.Game.deepdiving = true;
+    tv.update(0.2);
+    assert.strictEqual(tv.mat, 1, "active dive holds it solid at kibble 0");
+    JH.Game.deepdiving = false;
+    tv.update(D.matOut / 2);
+    assert.ok(tv.mat > 0 && tv.mat < 1, "mid tune-out");
+    tv.update(D.matOut);
+    assert.strictEqual(tv.mat, 0, "empty bank: fully dematerialized");
+  } finally { JH.Game = realGame; }
+});
+
+test("deepdive overshield: soaks hits first, depletes, never recharges", () => {
+  const p = makePlayer();
+  const g = dashStubGame(makeBufferedInput().In);
+  p.overshield = 20;
+  const hp0 = p.hp;
+  p.takeHit(30, g, p.x + 10);
+  assert.strictEqual(p.overshield, 0, "shield fully spent");
+  assert.strictEqual(p.hp, hp0 - 10, "only the overflow reaches HP");
+  p.invulnTimer = 0;
+  p.takeHit(10, g, p.x + 10);
+  assert.strictEqual(p.hp, hp0 - 20, "no shield left: full damage (no recharge)");
+  p.clearBuffs();
+  assert.strictEqual(p.overshield, 0, "death path clears it");
+});
+
+test("deepdive drain: heals first — shield only accrues once HP is full", () => {
+  const p = makePlayer();
+  const g = dashStubGame(makeBufferedInput().In);
+  g.deepdiving = true;
+  p.kibbleRegen = 2; p.kibbleTimer = 30;
+  p.hp = p.stats.maxHp - 10;
+  while (p.hp < p.stats.maxHp && p.kibbleTimer > 0) {
+    p.update(0.016, g);
+    if (p.hp < p.stats.maxHp)
+      assert.strictEqual(p.overshield, 0, "zero shield (not even float residue) while HP below full");
+  }
+  assert.strictEqual(p.hp, p.stats.maxHp, "kibble healed to full before any shield");
+  // At full HP the whole drain converts to shield at the same rate.
+  const kib0 = p.kibbleTimer, sh0 = p.overshield;
+  assert.ok(kib0 > 0, "bank not exhausted by the heal");
+  for (let i = 0; i < 20; i++) p.update(0.016, g);
+  const spent = kib0 - p.kibbleTimer;
+  assert.ok(spent > 0, "bank still draining at full HP");
+  assert.ok(Math.abs((p.overshield - sh0) - spent * p.kibbleRegen) < 1e-9,
+    "every drained kibble-second converts to shield at kibbleRegen rate");
+});
+
+test("deepdive: auto-ends when kibble empties; move key bails", () => {
+  const mkInput = (bufferedKeys, pressedKeys) => ({
+    buffered: (k) => bufferedKeys.includes(k), consume: () => {},
+    pressed: (k) => pressedKeys.includes(k),
+  });
+  const g = { deepdiving: true, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
+              player: { x: 0, y: 0, kibbleTimer: 0 },
+              input: mkInput([], []), audio: { play() {} } };
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "kibble 0 auto-ends");
+  g.deepdiving = true; g.player.kibbleTimer = 5; g.input = mkInput([], ["left"]);
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "move key bails");
+  g.deepdiving = true; g.input = mkInput(["confirm"], []);
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "second confirm bails");
+  let dashConsumed = false;
+  g.deepdiving = true;
+  g.input = { buffered: (k) => k === "dash", pressed: () => false,
+              consume: (k) => { if (k === "dash") dashConsumed = true; } };
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "dash bails");
+  assert.strictEqual(dashConsumed, false, "dash not consumed — it executes as the stand-up move");
+  // Real frame order: Player.update consumes the buffered dash BEFORE
+  // tickDeepdive runs — the started dash must still bail via dashTimer.
+  g.deepdiving = true; g.input = mkInput([], []); g.player.dashTimer = 0.2;
+  JH.Game.tickDeepdive.call(g);
+  assert.strictEqual(g.deepdiving, false, "in-flight dash (already-consumed edge) bails");
+});
+
 test("upgrade sequence: a grown stat queues an icon+delta entry; equal stats queue nothing", () => {
   const p = makePlayer();
   p.upgradeQ.length = 0;

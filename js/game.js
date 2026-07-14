@@ -29,7 +29,8 @@
     enemies: [], embers: [], pickups: [], particles: [], floaters: [], sigils: [],
     beneUsedOnce: {},
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
-    hydrants: [], shopNpc: null, nearShop: false, nearVendor: false, shopOpen: false,
+    hydrants: [], shopNpc: null, deepdiveTV: null, nearShop: false, nearVendor: false, shopOpen: false,
+    timeScale: 1, deepdiving: false,   // Deepdive TV: world fixed-step rate; ramped by Balance.deepdiveRamp
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
@@ -484,8 +485,9 @@
       this.deferredQueue = [];
       this.hitStopTimer = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
-      this.shopNpc = null; this.nearShop = false; this.nearVendor = false;
+      this.shopNpc = null; this.deepdiveTV = null; this.nearShop = false; this.nearVendor = false;
       this.shopOpen = false; this.shopCursor = 0;
+      this.timeScale = 1; this.deepdiving = false;
       this.wall = null; this.gardens = [];
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
@@ -550,6 +552,7 @@
       this.waveCleared = false;
       this.wavePool = [];   // reinforcement queue — only regular waves fill it
       this.shopNpc = null;          // vendor gets left behind once the fight starts
+      this.deepdiveTV = null; this.deepdiving = false;   // belt-and-suspenders — the TV is gone
       this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
       if (this.player.beneRank("eye_of_storm"))
         this.player.stormT = this.player.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
@@ -886,6 +889,7 @@
     // Dev/headless entry straight into the truck run (see main.js ?truck=1).
     debugEnterTruck() {
       if (!this.player) this.startGame();
+      this.deepdiving = false;
       JH.TruckRun.enter(this);
     },
 
@@ -1082,6 +1086,10 @@
     // vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
+      // Deepdive TV: anchored at every shop, but only materializes (tv.mat,
+      // CRT tune-in) while kibble is banked; sitting additionally needs
+      // bank > DEEPDIVE.threshold ([REQUIRES KIBBLE] otherwise).
+      this.deepdiveTV = new JH.DeepdiveTV(x - JH.DEEPDIVE.laneGap, JH.DEPTH_MIN + 6);
       this.relicStock = JH.Balance.rollWheelStock(JH.RELICS, this.relics, JH.Upgrades.currentActLevel, Math.random);
       // Wheel slots render from this fixed snapshot (bought cards go SOLD in
       // place, never shift); the reel spin arms on the first walk-up instead
@@ -1442,6 +1450,66 @@
       }
     },
 
+    // Deepdive TV interaction: sit (E) to fast-forward the world while banked
+    // kibble drains; any move key or a second E stands Jon back up. Auto-ends
+    // when the kibble bank empties.
+    // Random quip, never the same one twice in a row (bump to the next
+    // pool slot on a repeat roll).
+    pickQuip() {
+      const q = JH.DEEPDIVE.quips;
+      let i = Math.floor(Math.random() * q.length);
+      if (i === this._lastQuipIdx) i = (i + 1) % q.length;
+      this._lastQuipIdx = i;
+      return q[i];
+    },
+
+    tickDeepdive() {
+      const tv = this.deepdiveTV;
+      if (!tv) return;
+      const pl = this.player;
+      // An immaterial (tuning-in/out) TV is not interactable: near drives
+      // both the E prompt and the sit, so it waits for full materialization.
+      tv.near = tv.mat >= 1
+        && Math.abs(pl.x - tv.x) < 22 && Math.abs(pl.y - tv.y) < 28;
+      if (!this.deepdiving) {
+        // Sitting needs a real kibble bank (> threshold); a short bank shows
+        // [REQUIRES KIBBLE] at the prompt instead and E does nothing.
+        if (tv.near && this.input.buffered("confirm")
+            && pl.kibbleTimer > JH.DEEPDIVE.threshold) {
+          this.input.consume("confirm");
+          this.deepdiving = true;
+          this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
+          // First quip fires on sit-down — every session gets at least one.
+          this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
+          this._quipCdT = JH.DEEPDIVE.quipGap;
+        }
+        return;
+      }
+      tv.videoT += JH.FIXED_DT * this.timeScale;   // cosmetic ramp makes the marquee race
+      // Quip drip: every quip opens a quipGap cooldown (real time) so two
+      // never overlap; past it, the roll adds a mean quipEvery / timeScale
+      // real seconds on top.
+      this._quipCdT = (this._quipCdT || 0) - JH.FIXED_DT;
+      if (this._quipCdT <= 0
+          && Math.random() < JH.FIXED_DT * this.timeScale / JH.DEEPDIVE.quipEvery) {
+        this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
+        this._quipCdT = JH.DEEPDIVE.quipGap;
+      }
+      // Dash bails and is NOT consumed here: Player.update runs earlier in the
+      // step and consumes the buffered edge itself when the dash fires (dash is
+      // never movement-gated), so a started dash is detected via dashTimer;
+      // buffered("dash") covers a press held off by cooldown.
+      const bail = this.input.pressed("up") || this.input.pressed("down")
+                || this.input.pressed("left") || this.input.pressed("right")
+                || this.input.buffered("confirm")
+                || this.input.buffered("dash") || pl.dashTimer > 0;
+      if (bail || pl.kibbleTimer <= 0) {
+        if (this.input.buffered("confirm")) this.input.consume("confirm");
+        this.deepdiving = false;
+        this.audio.play("upgrade", { pitch: 1.6 });      // spin-down
+      }
+    },
+
     killJuice(e) {
       const J = JH.JUICE;
       const heavy = !!e.elite || J.heavyTypes.includes(e.type);
@@ -1592,7 +1660,8 @@
       this.combo = 0; this.comboTimer = 0; this.comboFlash = 0; this.rosaryBonus = 0;
       this.hydrants = JH.HYDRANTS.map((h) => ({ x: h.x, y: h.y, t: 0 }));
       this.wall = null; this.gardens = [];
-      this.shopNpc = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
+      this.shopNpc = null; this.deepdiveTV = null; this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
+      this.timeScale = 1; this.deepdiving = false;
       this.dropBudget = { suds: 0, items: 0 };
       this.rangeStations = null;   // a range death degrades to a normal respawn
       this.rangeMode = false;
@@ -1684,6 +1753,7 @@
     // Retired from the death path (death now routes to the Church via
     // startPlayerDeathSeq); kept for a future manual quit/give-up affordance.
     gameOver() {
+      this.deepdiving = false;
       this.state = "over";
       document.getElementById("over-stats").textContent =
         "You reached " + (JH.LEVEL1.waves[Math.max(0, this.waveIndex)].name) +
@@ -1692,6 +1762,10 @@
       this.showScreen("screen-over");
     },
     startPlayerDeathSeq() {
+      // Death ends a deepdive: tickDeepdive stops running outside "play", so
+      // without this the world stays at ~maxScale through the death sequence
+      // and Church visit. The frame() ramp eases timeScale back to 1.
+      this.deepdiving = false;
       // First death of the RUN: cue Father Jon's line; the pity Essence is a
       // cross he sets down in the church scene itself (church.js pityCross).
       this.deathCount = (this.deathCount || 0) + 1;
@@ -1745,6 +1819,10 @@
       let dt = (now - this.lastT) / 1000;
       this.lastT = now;
       if (dt > 0.25) dt = 0.25;          // tab-switch guard
+      // Deepdive's timeScale is COSMETIC only (overlay intensity, marquee
+      // race, kibble accel factor) — the world sim always runs at 1x, so
+      // none of the 10x edge cases (death seq, church, stalls) can exist.
+      this.timeScale = JH.Balance.deepdiveRamp(this.timeScale, this.deepdiving, dt, JH.DEEPDIVE);
       this.acc += dt;
       let steps = 0;
       while (this.acc >= JH.FIXED_DT && steps < JH.MAX_STEPS) {
@@ -1842,6 +1920,8 @@
         return;
       }
 
+      // Sim runs at 1x always (deepdive's speedup is cosmetic), so the run
+      // clock is plain real time again.
       this.elapsed += dt;
 
       // GUSH combo decay (only ticks during live play, frozen during hitstop).
@@ -1874,6 +1954,7 @@
       for (const h of this.hydrants) h.t += dt;
       this.tickRangeStations();
       this.tickSigils();
+      this.tickDeepdive();
       // Remember the last hydrant visited — death returns Jon here.
       if (this.player.nearHydrant) this.lastHydrantX = this.player.nearHydrant.x;
       // Victory portal (post-Slayer): walk in and confirm to finish the run.
@@ -1935,6 +2016,7 @@
           return;
         }
       }
+      if (this.deepdiveTV) this.deepdiveTV.update(dt);
       if (this.shopNpc) {
         this.shopNpc.update(dt, this.player);
         this.nearVendor = Math.abs(this.player.x - this.shopNpc.x) < JH.SHOP.range &&
@@ -2212,7 +2294,8 @@
       }
       const props = [
         [this.shopNpc, JH.SHOP && JH.SHOP.vendorCollideR],
-        [this.deepdiveTV, JH.DEEPDIVE && JH.DEEPDIVE.tvCollideR],
+        [this.deepdiveTV && this.deepdiveTV.mat > 0.5 ? this.deepdiveTV : null,
+          JH.DEEPDIVE && JH.DEEPDIVE.tvCollideR],
       ];
       for (const [prop, r] of props) {
         if (!prop || !r) continue;
@@ -2410,6 +2493,7 @@
         // Jon rides in the cab during the departure beat — don't double-draw him.
         if (!(this.truckBoard && this.truckBoard.departing)) actors.push(this.player);
         if (this.shopNpc) actors.push(this.shopNpc);
+        if (this.deepdiveTV) actors.push(this.deepdiveTV);
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
           // Dead entities can linger in the list while a death sequence has
@@ -2439,6 +2523,13 @@
             }
             e.draw(ctx, cam);
             ctx.restore();
+          } else if (e === this.player && this.deepdiving && this.deepdiveTV) {
+            // Seated at the TV: face it regardless of the last move direction
+            // (no bespoke sitting pose — his existing idle reads fine parked).
+            const savedFacing = e.facing;
+            e.facing = this.deepdiveTV.x >= e.x ? 1 : -1;
+            e.draw(ctx, cam);
+            e.facing = savedFacing;
           } else {
             e.draw(ctx, cam);
           }
@@ -2563,6 +2654,28 @@
         ctx.restore();
       }
 
+      // Deepdive time-distortion: vignette + jittering speed-lines that scale
+      // with how fast the world is currently running (Balance.deepdiveRamp's
+      // timeScale, 1..maxScale). Same draw budget as essenceDim above — one
+      // full-screen fill plus a handful of rects, no per-pixel work.
+      const ddk = (this.timeScale - 1) / (JH.DEEPDIVE.maxScale - 1);
+      if (ddk > 0.01 && this.state === "play") {
+        ctx.save();
+        const vg = ctx.createRadialGradient(
+          JH.VIEW_W / 2, JH.VIEW_H / 2, JH.VIEW_H * 0.2,
+          JH.VIEW_W / 2, JH.VIEW_H / 2, JH.VIEW_H * 0.7);
+        vg.addColorStop(0, "rgba(4,6,16,0)");
+        vg.addColorStop(1, "rgba(4,6,16," + (0.25 * ddk).toFixed(3) + ")");
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        ctx.fillStyle = "rgba(220,240,255," + (0.15 * ddk).toFixed(3) + ")";
+        for (let i = 0; i < 4; i++) {
+          const ly = (i + 0.5) * (JH.VIEW_H / 4) + (Math.random() - 0.5) * 8;
+          ctx.fillRect(0, ly, JH.VIEW_W, 1.5);
+        }
+        ctx.restore();
+      }
+
       // World floating text (essence/level-up/shop-buy feedback): drawn after
       // the essence-dim overlay so it always reads at full brightness.
       if (this.floaters && this.floaters.length && this.state === "play") {
@@ -2602,6 +2715,18 @@
         this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
         this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText("E  SHOP", psx + 1, psy + 1);
         this.ctx.fillStyle = "#ffd23f"; this.ctx.fillText("E  SHOP", psx, psy);
+        this.ctx.textAlign = "left";
+      }
+      // Walk-up prompt over the Deepdive TV while it's parked (not sat down).
+      if (this.state === "play" && this.deepdiveTV && this.deepdiveTV.near && !this.deepdiving) {
+        const tsx = Math.round(this.deepdiveTV.x - JH.Camera.x);
+        const tsy = Math.round(JH.Geo.feetScreenY(this.deepdiveTV.y, 0)) - 64;   // clears the 58px cabinet top
+        const armed = this.player.kibbleTimer > JH.DEEPDIVE.threshold;
+        const label = armed ? "E: DEEPDIVE" : "[REQUIRES KIBBLE]";
+        this.ctx.font = "bold 6px monospace"; this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "#0a0e18"; this.ctx.fillText(label, tsx + 1, tsy + 1);
+        this.ctx.fillStyle = armed ? "#ffd23f" : "#ff5a5a";
+        this.ctx.fillText(label, tsx, tsy);
         this.ctx.textAlign = "left";
       }
       if (this.nearShop && this.state === "play") {

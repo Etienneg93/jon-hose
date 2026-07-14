@@ -206,6 +206,7 @@
       this.freeSprayT = 0;    // Slipstream: spray drains no water while this is > 0
       this.xpFlashT = 0;      // overhead XP bar visibility: set on XP gain, fades out
       this.sermonReady = false;  // Pressure Sermon: this hold has sprayed >= SERMON.charge s (pip shown)
+      this.overshield = 0;       // Deepdive shield: banked past-full kibble healing; soaks damage, never recharges
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
     }
@@ -269,6 +270,16 @@
       this.stormT = 0; this.vigorT = 0;
       this.douseCdT = 0; this.dashGraceT = 0;
       this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
+      this.overshield = 0;   // dive shield doesn't survive death
+    }
+
+    // Deepdive overshield soaks damage first — depletes, never recharges.
+    // Returns the damage remaining after the soak.
+    soakOvershield(dmg) {
+      if (!(this.overshield > 0) || dmg <= 0) return dmg;
+      const soak = Math.min(this.overshield, dmg);
+      this.overshield -= soak;
+      return dmg - soak;
     }
 
     // Burn DoT lands in discrete beats (burnTickInterval): each tick chunks
@@ -285,7 +296,8 @@
         // burnTakenMult (Pillar of Fire): scales burn damage Jon takes (<1).
         const hpBefore = this.hp;
         const socksOwned = !!(game.relics && game.relics.asbestos_socks);
-        this.hp = Math.max(0, this.hp - JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1));
+        this.hp = Math.max(0, this.hp - this.soakOvershield(
+          JH.Balance.burnTickDps(this.burnStacks, socksOwned) * this.burnTickT * (this.stats.burnTakenMult || 1)));
         this.burnTickT = 0;
         this.hurt(true);
         burst(game, this.x, this.y, 20, JH.PAL.flame, 3, { speed: 30, life: 0.35, up: 40 });
@@ -377,13 +389,15 @@
       this.tickBurn(dt, game);
 
       // ---- movement vector
-      const wantSpray = In.held("spray") && this.dashTimer <= 0;
+      // Deepdive TV: seated Jon doesn't walk or spray (tickDeepdive still
+      // reads the raw move/confirm keys directly to detect the bail).
+      const wantSpray = !game.deepdiving && In.held("spray") && this.dashTimer <= 0;
       // Suppress horizontal movement while the shop cursor is on the wheel
       // row — left/right is card navigation there. Off the wheel row, walking
       // out of the shop with left/right still works. Dash is never suppressed.
-      let mx = this.shopWheelFocus ? 0 : ((In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0));
+      let mx = (this.shopWheelFocus || game.deepdiving) ? 0 : ((In.held("right") ? 1 : 0) - (In.held("left") ? 1 : 0));
       // Suppress vertical movement when near shop — up/down is used for shop navigation.
-      let my = this.nearShop ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
+      let my = (this.nearShop || game.deepdiving) ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
       // Facing is LOCKED while spraying so you can back-pedal and keep aim.
       if (mx !== 0 && !wantSpray) this.facing = mx > 0 ? 1 : -1;
       if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
@@ -404,10 +418,24 @@
         this.water = Math.min(S.maxWater, this.water + S.maxWater * dt);
       }
       if (this.kibbleTimer > 0) {
-        this.kibbleTimer -= dt;
+        // Deepdive: the world sim stays 1x — the "fast-forward" is the
+        // KIBBLE running at kibbleMult while seated (drain + heal together),
+        // with healing past full HP converting to overshield (soaks damage
+        // first, never recharges) — capped at max HP.
+        const kMult = game.deepdiving ? JH.DEEPDIVE.kibbleMult : 1;
+        const kdt = Math.min(this.kibbleTimer, dt * kMult);   // never burn past the bank
+        this.kibbleTimer -= kdt;
         const before = this.hp;
-        this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * dt);
+        this.hp = Math.min(this.stats.maxHp, this.hp + this.kibbleRegen * kdt);
         this.kibbleTickAcc += this.hp - before;
+        // Shield only once HP is actually full (the clamp leaves hp === maxHp
+        // exactly): below full, every drop of kibble is healing — the raw
+        // regen*kdt − (hp−before) difference carries float residue that would
+        // otherwise bank phantom overshield (and its 2px halo) while healing.
+        if (game.deepdiving && this.hp >= this.stats.maxHp) {
+          const spill = Math.max(0, this.kibbleRegen * kdt - (this.hp - before));
+          this.overshield = Math.min(this.stats.maxHp, (this.overshield || 0) + spill);
+        }
         this.kibbleTickT -= dt;
         if (this.kibbleTickT <= 0) {
           this.kibbleTickT += 0.5;
@@ -601,6 +629,19 @@
       // ---- bounds (game gates rightward progress during fights)
       this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
       this.y = Geo.clampDepth(this.y);
+
+      // ---- solid shop props (vendor, deepdive TV): elliptical feet pushout,
+      // player-only. Re-clamp after so the rim never shoves Jon out of bounds.
+      const props = [];
+      if (game.shopNpc) props.push([game.shopNpc, JH.SHOP.vendorCollideR]);
+      if (game.deepdiveTV && game.deepdiveTV.mat > 0.5) props.push([game.deepdiveTV, JH.DEEPDIVE.tvCollideR]);
+      for (const [pr, r] of props) {
+        const out = JH.Balance.propPushout(this.x, this.y, pr.x, pr.y, r);
+        if (out) {
+          this.x = clamp(out.x, game.bounds.minX, game.bounds.maxX);
+          this.y = Geo.clampDepth(out.y);
+        }
+      }
 
       // ---- animation
       const moving = (mx || my) && this.dashTimer <= 0;
@@ -1029,6 +1070,7 @@
         this.invulnTimer = 0.3;
         return;
       }
+      dmg = this.soakOvershield(dmg);
       this.hp -= dmg;
       this.invulnTimer = this.stats.invuln;
       this.hurt();
@@ -1066,15 +1108,20 @@
         const hot = flick > 0.75;   // color licks toward white-hot on peaks
         outlines.push([hot ? "#ffe070" : "#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
-      Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
-        state: this.state, frame: this.frame, t: this.t,
-        hurt: this.invulnTimer > 0 && this.flashTimer > 0,
-        hurtAlpha: this.flashTimer / 0.18,
-        squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
-        waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
-        walking: this.walking,
-        outlines,
-      });
+      if (JH.Game && JH.Game.deepdiving) {
+        // Seated pose while watching the deepdive TV (hand-supplied frame).
+        Assets.draw(ctx, "jonSit", sx, spriteSy, this.facing, { t: this.t });
+      } else {
+        Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
+          state: this.state, frame: this.frame, t: this.t,
+          hurt: this.invulnTimer > 0 && this.flashTimer > 0,
+          hurtAlpha: this.flashTimer / 0.18,
+          squash: this.squashT > 0 ? Math.min(1, this.squashT / JH.JUICE.squashDur) : 0,
+          waterFrac: Math.max(0, Math.min(1, this.water / this.stats.maxWater)),
+          walking: this.walking,
+          outlines,
+        });
+      }
       if (this.burnStacks > 0) {
         // Draw flame tongues rising from feet to show burn stacks
         const stacks = this.burnStacks, t = this.t;
@@ -1116,7 +1163,12 @@
       const bx = Math.round(sx - barW / 2);
       const hpFrac = Math.max(0, this.hp / this.stats.maxHp);
       const wFrac  = Math.max(0, this.water / this.stats.maxWater);
-      const barTop = Math.round(sy - this.stats.bodyH - 30);
+      // While deepdiving the whole readout drops BELOW the seated sprite
+      // (bars on the ground, status rows just above them at his feet) so it
+      // never covers the TV screen he's parked in front of.
+      const barTop = (JH.Game && JH.Game.deepdiving)
+        ? Math.round(sy + 14)
+        : Math.round(sy - this.stats.bodyH - 30);
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(bx - 1, barTop - 1, barW + 2, 9);
       // HP
@@ -1137,6 +1189,22 @@
           ctx.globalAlpha = 0.85 * (0.5 + 0.5 * Math.sin(ph));
           ctx.fillRect(bx + i, barTop, 1, 3);
         }
+        ctx.restore();
+      }
+      // Deepdive overshield: translucent PURPLE halo laid over the HP row
+      // ONLY (never the water row below) from the left, width = shield
+      // fraction of maxHp. The softly pulsing rim marks it as a shield
+      // bubble rather than a second HP fill.
+      if (this.overshield > 0) {
+        const sw = Math.max(2, Math.round(barW * Math.min(1, this.overshield / this.stats.maxHp)));
+        ctx.save();
+        ctx.fillStyle = "rgba(196,110,255,0.22)";
+        ctx.fillRect(bx - 2, barTop - 2, sw + 4, 6);          // soft outer halo
+        ctx.fillStyle = "rgba(196,110,255,0.38)";
+        ctx.fillRect(bx - 1, barTop - 1, sw + 2, 5);          // brighter core wash
+        ctx.strokeStyle = "rgba(224,170,255," + (0.55 + 0.3 * Math.sin(this.t * 4)).toFixed(2) + ")";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx - 1.5, barTop - 1.5, sw + 3, 4.5);  // pulsing rim (bottom stroke stays off the water row)
         ctx.restore();
       }
       // H₂O
@@ -2871,6 +2939,121 @@
     }
   }
   JH.ShopNPC = ShopNPC;
+
+  // ====================================================== DEEPDIVE TV
+  // Shop-interlude prop: spawns down-lane of the vendor when Jon arrives with
+  // a big banked kibble buff. Sitting at it (game.deepdiving) fast-forwards
+  // the whole world; see JH.DEEPDIVE and Game.tickDeepdive.
+  class DeepdiveTV {
+    constructor(x, y) {
+      this.x = x; this.y = y; this.z = 0; this.facing = 1;
+      this.t = 0; this.bodyW = 16; this.near = false;
+      this.mat = 0;   // materialization 0..1 — only on screen while kibble is banked
+      this.videoT = 0; this.titleIdx = 0; this.marqueeT = 0;
+    }
+    update(dt) {
+      this.t += dt;
+      // Materialization follows the kibble bank: any banked kibble (or an
+      // active dive) tunes the TV in, an empty bank tunes it out. Interaction
+      // (tv.near) and solid collision both gate on this.
+      const g = JH.Game, D = JH.DEEPDIVE;
+      const want = !!(g && (g.deepdiving || (g.player && g.player.kibbleTimer > 0)));
+      this.mat = Math.max(0, Math.min(1, this.mat + (want ? dt / D.matIn : -dt / D.matOut)));
+      // Marquee clock: advances every sim step (scaled while deepdiving, 1x
+      // parked) so the title always scrolls; per-title reset below makes each
+      // new title enter from the right edge.
+      this.marqueeT += dt;
+      // Title cycling rides videoT, which tickDeepdive only advances while
+      // sitting (scaled steps) — this no-ops while parked.
+      if (this.videoT >= JH.DEEPDIVE.titleSwap) {
+        this.videoT = 0;
+        this.marqueeT = 0;
+        this.titleIdx = (this.titleIdx + 1) % JH.DEEPDIVE.titles.length;
+      }
+    }
+    draw(ctx, cam) {
+      const D = JH.DEEPDIVE;
+      const m = this.mat;
+      if (m <= 0) return;
+      const on = !!(JH.Game && JH.Game.deepdiving);
+      const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
+      ctx.save();
+      ctx.globalAlpha = m;
+      Assets.shadow(ctx, sx, sy, 15);
+      // CRT tune-in: mid-materialization the whole prop is squashed onto a
+      // bright horizontal line at screen height (cy), expanding to full.
+      const cy = sy - 39, k = m * m * (3 - 2 * m);
+      if (m < 1) {
+        ctx.translate(sx, cy);
+        ctx.scale(1 + 0.4 * (1 - k), Math.max(0.04, k));
+        ctx.translate(-sx, -cy);
+      }
+      // Screen glow halo is the differentiator from the vendor's chalkboard
+      // sign (same dark-navy palette, no light source of its own) — the TV
+      // reads as a lit display even parked, and flares while deepdiving.
+      Assets.glow(ctx, sx, sy - 40, on ? 32 : 21, "#7ff0ff", on ? 0.6 : 0.32);
+
+      ctx.fillStyle = "#12161f"; ctx.fillRect(sx - 27, sy - 58, 54, 38);   // cabinet
+      ctx.fillStyle = "#232c3d"; ctx.fillRect(sx - 24, sy - 55, 48, 32);   // bezel
+      const screenX = sx - 23, screenY = sy - 54, screenW = 46, screenH = 30;
+      ctx.fillStyle = on ? "#c8f6ff" : "#5fd3ec";
+      ctx.fillRect(screenX, screenY, screenW, screenH);
+
+      // Fake-YouTube content, clipped to the screen so text/bars never bleed
+      // past the bezel at this tiny size.
+      ctx.save();
+      ctx.beginPath(); ctx.rect(screenX, screenY, screenW, screenH); ctx.clip();
+      ctx.fillStyle = "#0b2530";
+      ctx.fillRect(screenX, screenY, screenW, screenH - 6);   // video pane above the scrub row
+
+      // Title marquee: full string scrolls right-to-left on marqueeT (scaled
+      // time — races at ramp, which is the joke), looping with a gap; two
+      // copies one period apart keep the loop seamless under the clip.
+      ctx.textAlign = "left";
+      ctx.font = "bold 5px monospace"; ctx.fillStyle = "#eafcff";
+      const title = D.titles[this.titleIdx] || "";
+      const tw = ctx.measureText(title).width;
+      const period = tw + 24;                               // 24px inter-loop gap
+      const mx = screenX + screenW - ((this.marqueeT * 40) % period);
+      ctx.fillText(title, mx, screenY + 7);
+      ctx.fillText(title, mx + period, screenY + 7);
+
+      const views = (3 + this.titleIdx * 7) % 9 + 1;   // stable-per-title, no RNG, never 0M
+      ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
+      ctx.fillText(views + "M views", screenX + 1, screenY + 14);
+
+      // Scrub bar races over D.titleSwap scaled seconds — visible proof the
+      // video (and the world behind it) is running fast.
+      const frac = Math.max(0, Math.min(1, this.videoT / D.titleSwap));
+      ctx.fillStyle = "#1a3a44"; ctx.fillRect(screenX + 1, screenY + screenH - 4, screenW - 2, 2);
+      ctx.fillStyle = "#ff3b3b"; ctx.fillRect(screenX + 1, screenY + screenH - 4, (screenW - 2) * frac, 2);
+
+      // Up-next nub: bottom-right, below the title band so it never overdraws
+      // the marquee; sits just above the scrub row.
+      const nx = screenX + screenW - 9, ny = screenY + screenH - 11;
+      ctx.fillStyle = "#1a2230"; ctx.fillRect(nx, ny, 8, 6);
+      ctx.fillStyle = on ? "#7ff0ff" : "#4a8a9a";
+      ctx.beginPath();
+      ctx.moveTo(nx + 3, ny + 1.5);
+      ctx.lineTo(nx + 3, ny + 4.5);
+      ctx.lineTo(nx + 6, ny + 3);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = "#0d1420";
+      ctx.fillRect(sx - 17, sy - 20, 4, 20); ctx.fillRect(sx + 13, sy - 20, 4, 20);   // legs
+      ctx.restore();
+      if (m < 1) {   // tune-in scanline, brightest when the prop is thinnest
+        ctx.save();
+        ctx.globalAlpha = (1 - m) * 0.85;
+        ctx.fillStyle = "#c8f6ff";
+        const lw = 54 * (0.35 + 0.65 * k);
+        ctx.fillRect(sx - lw / 2, cy - 1, lw, 2);
+        ctx.restore();
+      }
+    }
+  }
+  JH.DeepdiveTV = DeepdiveTV;
 
   // ============================================ SWITCH OF DOOM (boss 2)
   // 8-port switch with Doc-Ock cable tentacles. Fires telegraphed FULL-WIDTH

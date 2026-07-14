@@ -752,6 +752,21 @@
     ctx.restore();
   });
 
+  // Seated Jon (deepdive TV): single 256x256 hand-supplied frame.
+  // Bottom-centered at Jon's feet; ~46 logical px tall (JON_H 53 standing).
+  const _jonSitImg = JH.Loader.img("sprites/jon/sit.png");
+  Assets.register("jonSit", (p, opt, ctx, x, y, facing) => {
+    const img = _jonSitImg;
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const H = 46, W = Math.round(H * img.naturalWidth / img.naturalHeight);
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(W / 2), -H, W, H);
+    ctx.restore();
+  });
+
   // Crashed-truck wreck (Gate Crash finale): single frame, baked at 4x by
   // tools/truck-sprite.mjs at the SAME scale as drive/board. Centered-bottom.
   const _truckWreckImg = JH.Loader.img("sprites/firetruck/wreck.png");
