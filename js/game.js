@@ -1477,14 +1477,20 @@
           this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
           // First quip fires on sit-down — every session gets at least one.
           this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
+          this._quipCdT = JH.DEEPDIVE.quipGap;
         }
         return;
       }
       tv.videoT += JH.FIXED_DT * this.timeScale;   // cosmetic ramp makes the marquee race
-      // Quip drip: random per step, mean gap ~= quipEvery / timeScale real
-      // seconds (~4s at the full 2x ramp).
-      if (Math.random() < JH.FIXED_DT * this.timeScale / JH.DEEPDIVE.quipEvery)
+      // Quip drip: every quip opens a quipGap cooldown (real time) so two
+      // never overlap; past it, the roll adds a mean quipEvery / timeScale
+      // real seconds on top.
+      this._quipCdT = (this._quipCdT || 0) - JH.FIXED_DT;
+      if (this._quipCdT <= 0
+          && Math.random() < JH.FIXED_DT * this.timeScale / JH.DEEPDIVE.quipEvery) {
         this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
+        this._quipCdT = JH.DEEPDIVE.quipGap;
+      }
       // Dash bails and is NOT consumed here: Player.update runs earlier in the
       // step and consumes the buffered edge itself when the dash fires (dash is
       // never movement-gated), so a started dash is detected via dashTimer;

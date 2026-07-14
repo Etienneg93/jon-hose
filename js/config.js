@@ -105,7 +105,8 @@
       "Why do I keep RESPAWNING? (existential)",
       "Top 10 hydrants that ATTACKED back",
     ],
-    quipEvery: 8,     // quip drip divisor — mean gap ≈ this/maxScale REAL s while seated (first quip is guaranteed on sit)
+    quipEvery: 3,     // quip drip divisor — mean EXTRA gap ≈ this/maxScale REAL s past quipGap (first quip is guaranteed on sit)
+    quipGap:  2.0,    // s of REAL time after any quip before the next can roll (> float life 1.8 — quips never overlap)
     quips: [
       "wait — it's ALL kibble?",
       "liked & subscribed",
