@@ -2074,12 +2074,12 @@ test("deepdive: TV always spawns down-lane; SITTING is gated on kibble > thresho
   const g = { relics: {}, player: { kibbleTimer: 0, x: 0, y: 0 },
               shopWheelEntries: () => [], };
   JH.Game.spawnVendor.call(g, 300);
-  assert.ok(g.deepdiveTV, "TV present with zero kibble (label carries the gate)");
+  assert.ok(g.deepdiveTV, "TV anchored with zero kibble (materialization carries the gate)");
   assert.strictEqual(g.deepdiveTV.x, 300 - D.laneGap, "down-lane by laneGap");
   // Sit gate: E near the TV only arms above the threshold.
   const mkInput = (buffered) => ({ buffered: (k) => buffered.includes(k), consume: () => {}, pressed: () => false });
   const sit = (kib) => {
-    const s = { deepdiving: false, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
+    const s = { deepdiving: false, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0, mat: 1 },
                 player: { x: 0, y: 0, kibbleTimer: kib },
                 input: mkInput(["confirm"]), audio: { play() {} },
                 pickQuip: () => "", float() {} };   // sit-down fires a guaranteed quip
@@ -2088,6 +2088,32 @@ test("deepdive: TV always spawns down-lane; SITTING is gated on kibble > thresho
   };
   assert.strictEqual(sit(D.threshold - 1), false, "short bank: E refused");
   assert.strictEqual(sit(D.threshold + 1), true, "banked: sits");
+});
+
+test("deepdive TV materializes with banked kibble, dematerializes when it empties", () => {
+  const D = JH.DEEPDIVE;
+  const tv = new JH.DeepdiveTV(0, 0);
+  const realGame = JH.Game;
+  try {
+    JH.Game = { deepdiving: false, player: { kibbleTimer: 0 } };
+    tv.update(0.5);
+    assert.strictEqual(tv.mat, 0, "no kibble: stays immaterial");
+    JH.Game.player.kibbleTimer = 3;
+    tv.update(D.matIn / 2);
+    assert.ok(tv.mat > 0 && tv.mat < 1, "mid tune-in");
+    tv.update(D.matIn);
+    assert.strictEqual(tv.mat, 1, "fully materialized (clamped)");
+    // Bank drains to 0 mid-dive: the active dive pins it solid until stand-up.
+    JH.Game.player.kibbleTimer = 0;
+    JH.Game.deepdiving = true;
+    tv.update(0.2);
+    assert.strictEqual(tv.mat, 1, "active dive holds it solid at kibble 0");
+    JH.Game.deepdiving = false;
+    tv.update(D.matOut / 2);
+    assert.ok(tv.mat > 0 && tv.mat < 1, "mid tune-out");
+    tv.update(D.matOut);
+    assert.strictEqual(tv.mat, 0, "empty bank: fully dematerialized");
+  } finally { JH.Game = realGame; }
 });
 
 test("deepdive overshield: soaks hits first, depletes, never recharges", () => {

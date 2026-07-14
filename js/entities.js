@@ -630,7 +630,7 @@
       // player-only. Re-clamp after so the rim never shoves Jon out of bounds.
       const props = [];
       if (game.shopNpc) props.push([game.shopNpc, JH.SHOP.vendorCollideR]);
-      if (game.deepdiveTV) props.push([game.deepdiveTV, JH.DEEPDIVE.tvCollideR]);
+      if (game.deepdiveTV && game.deepdiveTV.mat > 0.5) props.push([game.deepdiveTV, JH.DEEPDIVE.tvCollideR]);
       for (const [pr, r] of props) {
         const out = JH.Balance.propPushout(this.x, this.y, pr.x, pr.y, r);
         if (out) {
@@ -2944,10 +2944,17 @@
     constructor(x, y) {
       this.x = x; this.y = y; this.z = 0; this.facing = 1;
       this.t = 0; this.bodyW = 16; this.near = false;
+      this.mat = 0;   // materialization 0..1 — only on screen while kibble is banked
       this.videoT = 0; this.titleIdx = 0; this.marqueeT = 0;
     }
     update(dt) {
       this.t += dt;
+      // Materialization follows the kibble bank: any banked kibble (or an
+      // active dive) tunes the TV in, an empty bank tunes it out. Interaction
+      // (tv.near) and solid collision both gate on this.
+      const g = JH.Game, D = JH.DEEPDIVE;
+      const want = !!(g && (g.deepdiving || (g.player && g.player.kibbleTimer > 0)));
+      this.mat = Math.max(0, Math.min(1, this.mat + (want ? dt / D.matIn : -dt / D.matOut)));
       // Marquee clock: advances every sim step (scaled while deepdiving, 1x
       // parked) so the title always scrolls; per-title reset below makes each
       // new title enter from the right edge.
@@ -2962,10 +2969,21 @@
     }
     draw(ctx, cam) {
       const D = JH.DEEPDIVE;
+      const m = this.mat;
+      if (m <= 0) return;
       const on = !!(JH.Game && JH.Game.deepdiving);
       const sx = Math.round(this.x - cam), sy = Math.round(Geo.feetScreenY(this.y, 0));
-      Assets.shadow(ctx, sx, sy, 15);
       ctx.save();
+      ctx.globalAlpha = m;
+      Assets.shadow(ctx, sx, sy, 15);
+      // CRT tune-in: mid-materialization the whole prop is squashed onto a
+      // bright horizontal line at screen height (cy), expanding to full.
+      const cy = sy - 39, k = m * m * (3 - 2 * m);
+      if (m < 1) {
+        ctx.translate(sx, cy);
+        ctx.scale(1 + 0.4 * (1 - k), Math.max(0.04, k));
+        ctx.translate(-sx, -cy);
+      }
       // Screen glow halo is the differentiator from the vendor's chalkboard
       // sign (same dark-navy palette, no light source of its own) — the TV
       // reads as a lit display even parked, and flares while deepdiving.
@@ -3021,6 +3039,14 @@
       ctx.fillStyle = "#0d1420";
       ctx.fillRect(sx - 17, sy - 20, 4, 20); ctx.fillRect(sx + 13, sy - 20, 4, 20);   // legs
       ctx.restore();
+      if (m < 1) {   // tune-in scanline, brightest when the prop is thinnest
+        ctx.save();
+        ctx.globalAlpha = (1 - m) * 0.85;
+        ctx.fillStyle = "#c8f6ff";
+        const lw = 54 * (0.35 + 0.65 * k);
+        ctx.fillRect(sx - lw / 2, cy - 1, lw, 2);
+        ctx.restore();
+      }
     }
   }
   JH.DeepdiveTV = DeepdiveTV;

@@ -1086,8 +1086,9 @@
     // vendor spawn site rolls stock the same way.
     spawnVendor(x) {
       this.shopNpc = new JH.ShopNPC(x, JH.DEPTH_MIN + 6);
-      // Deepdive TV: always at the shop — sitting is gated live on the kibble
-      // bank (> DEEPDIVE.threshold), and a short bank reads [REQUIRES KIBBLE].
+      // Deepdive TV: anchored at every shop, but only materializes (tv.mat,
+      // CRT tune-in) while kibble is banked; sitting additionally needs
+      // bank > DEEPDIVE.threshold ([REQUIRES KIBBLE] otherwise).
       this.deepdiveTV = new JH.DeepdiveTV(x - JH.DEEPDIVE.laneGap, JH.DEPTH_MIN + 6);
       this.relicStock = JH.Balance.rollWheelStock(JH.RELICS, this.relics, JH.Upgrades.currentActLevel, Math.random);
       // Wheel slots render from this fixed snapshot (bought cards go SOLD in
@@ -1466,7 +1467,10 @@
       const tv = this.deepdiveTV;
       if (!tv) return;
       const pl = this.player;
-      tv.near = Math.abs(pl.x - tv.x) < 22 && Math.abs(pl.y - tv.y) < 28;
+      // An immaterial (tuning-in/out) TV is not interactable: near drives
+      // both the E prompt and the sit, so it waits for full materialization.
+      tv.near = tv.mat >= 1
+        && Math.abs(pl.x - tv.x) < 22 && Math.abs(pl.y - tv.y) < 28;
       if (!this.deepdiving) {
         // Sitting needs a real kibble bank (> threshold); a short bank shows
         // [REQUIRES KIBBLE] at the prompt instead and E does nothing.
@@ -2290,7 +2294,8 @@
       }
       const props = [
         [this.shopNpc, JH.SHOP && JH.SHOP.vendorCollideR],
-        [this.deepdiveTV, JH.DEEPDIVE && JH.DEEPDIVE.tvCollideR],
+        [this.deepdiveTV && this.deepdiveTV.mat > 0.5 ? this.deepdiveTV : null,
+          JH.DEEPDIVE && JH.DEEPDIVE.tvCollideR],
       ];
       for (const [prop, r] of props) {
         if (!prop || !r) continue;

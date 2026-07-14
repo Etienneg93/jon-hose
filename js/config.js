@@ -96,6 +96,8 @@
     titleSwap: 2.5,   // s of SCALED time between fake-video title swaps
     laneGap:  130,    // px down-lane of the vendor (> SHOP.range + 22; clears the chalkboard, which spans vendor x -103..-63)
     tvCollideR: 14,   // solid feet radius (Balance.propPushout, player-only) — matches the bigger cabinet
+    matIn:  0.35,     // s to materialize (CRT tune-in) once any kibble is banked; prompt + collision gate on full mat
+    matOut: 0.5,      // s to dematerialize when the bank empties (an active dive pins it solid)
     titles: [
       "Are FIRE HYDRANTS conscious? (they answered)",
       "I ate only KIBBLE for 30 days",
