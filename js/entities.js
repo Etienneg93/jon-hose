@@ -771,21 +771,28 @@
       this.sprayTick += dt;
       if (this.sprayTick > 0.05) { this.sprayTick = 0; if (!dry) game.audio.play("spray"); }
       this.sprayEmitAcc += (dry ? 70 : 150 * density) * dt;
+      // Gassed: the choked hose SPUTTERS — drops the odd droplet (stutter),
+      // spits weaker + more scattered, tinted sickly green + droops fast. The
+      // effect reads at the nozzle (the aura only says "gassed"; this says
+      // "your hose is clogged"). Range already shortened via rangeMult.
+      const gassed = this.gasT > 0 && !dry;
       while (this.sprayEmitAcc >= 1) {
         this.sprayEmitAcc -= 1;
-        const perpY = (Math.random() - 0.5) * sprayWidth * spread;  // depth jitter
-        const perpZ = (Math.random() - 0.5) * 6 * spread;             // vertical jitter
+        if (gassed && Math.random() < 0.3) continue;   // dropped droplet = visible stutter
+        const perpY = (Math.random() - 0.5) * sprayWidth * spread * (gassed ? 1.5 : 1);  // depth jitter
+        const perpZ = (Math.random() - 0.5) * 6 * spread * (gassed ? 1.6 : 1);            // vertical jitter
         game.particles.push(new Particle({
           x: ox + this.facing * Math.random() * 8,
           y: oy + perpY * 0.35,
           z: oz + perpZ,
-          vx: this.facing * (170 + Math.random() * 110),
-          vy: perpY * 0.9,                     // gentle outward drift = soft cone
+          vx: this.facing * (gassed ? 110 + Math.random() * 80 : 170 + Math.random() * 110),
+          vy: perpY * (gassed ? 1.3 : 0.9),    // gentle outward drift = soft cone (spittier when gassed)
           vz: perpZ * 0.4 - 4,
           life: blockDist / 210 + Math.random() * (pierce ? 0.12 : 0.04),
-          color: Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water,
-          size: dry ? 1 : (beam >= 2 ? 3 : 2),         // chunkier droplets at high Pressure
-          grav: dry ? 220 : 70,
+          color: gassed ? (Math.random() > 0.5 ? JH.PAL.stink : JH.PAL.gasbagDk)
+                        : (Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water),
+          size: dry ? 1 : (gassed ? 1 : (beam >= 2 ? 3 : 2)),   // chunkier droplets at high Pressure
+          grav: dry ? 220 : (gassed ? 120 : 70),                 // gassed droplets droop = spitty
         }));
       }
 
@@ -1145,8 +1152,13 @@
         outlines.push([hot ? "#ffe070" : "#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
       // Debuff edges ring on top of any buff/burn edges (a hazard read, not a
-      // buff): green while gassed, pale TP while snared.
-      if (this.gasT > 0)   outlines.push([JH.PAL.gasbagDk, 0.4 + 0.2 * Math.sin(this.t * 7)]);
+      // buff). Gassed uses a QUEASY unstable waver (two incommensurate waves +
+      // occasional dip) in sickly chartreuse — deliberately unlike kibble's
+      // clean bright-green heal pulse, so good/bad statuses never share a look.
+      if (this.gasT > 0) {
+        const q = 0.35 + 0.25 * Math.abs(Math.sin(this.t * 3.3) * Math.sin(this.t * 5.7 + 0.6));
+        outlines.push([JH.PAL.stink, q * (Math.random() < 0.06 ? 0.5 : 1)]);
+      }
       if (this.snareT > 0) outlines.push([JH.PAL.tpmummyDk, 0.4 + 0.2 * Math.sin(this.t * 9)]);
       if (JH.Game && JH.Game.deepdiving) {
         // Seated pose while watching the deepdive TV (hand-supplied frame).
@@ -1173,19 +1185,22 @@
         }
         ctx.restore();
       }
-      // Gassed: sickly-green haze coughs off Jon's head while the nozzle is
+      // Gassed: a continuous sickly wisp rises off Jon while the nozzle is
       // choked (StinkCloud tag) — the on-body tell that pairs with the stream
-      // visibly shortening. Shown regardless of burn/buffs (it's a debuff).
+      // shortening + sputtering. Each puff rides an upward cycle and fades as
+      // it climbs (gas coming off him, not a static buff ring). Debuff: shown
+      // regardless of burn/buffs.
       if (this.gasT > 0) {
         ctx.save();
-        for (let i = 0; i < 3; i++) {
-          const ph = this.t * 2.2 + i * 2.1;
-          const gx = sx + Math.sin(ph) * 7;
-          const gy = spriteSy - this.stats.bodyH * 0.72 - i * 5 - Math.sin(ph * 1.3) * 2;
-          const r = 4 + Math.sin(ph) * 1.5;
-          ctx.globalAlpha = 0.30 + 0.16 * Math.sin(ph * 1.7);
-          ctx.fillStyle = JH.PAL.stink;
-          ctx.beginPath(); ctx.ellipse(gx, gy - r * 0.3, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+        const N = 5;
+        for (let i = 0; i < N; i++) {
+          const cyc = (this.t * 0.9 + i / N) % 1;                 // 0 low → 1 up high
+          const gx = sx + Math.sin(this.t * 2.0 + i * 1.7) * 6 * (0.4 + cyc);
+          const gy = spriteSy - this.stats.bodyH * 0.5 - cyc * (this.stats.bodyH * 0.7 + 10);
+          const r = (3 + (i % 2)) * (0.7 + cyc * 0.6);
+          ctx.globalAlpha = 0.34 * (1 - cyc) * (0.7 + 0.3 * Math.sin(this.t * 4 + i));
+          ctx.fillStyle = i % 2 ? JH.PAL.stink : JH.PAL.gasbagHi;
+          ctx.beginPath(); ctx.ellipse(gx, gy, r, r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
       }
