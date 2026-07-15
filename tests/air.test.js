@@ -242,6 +242,22 @@ test("plunger: dash i-frames also dodge the lunge grab itself", () => {
   assert.notStrictEqual(e.state, "latch");
 });
 
+test("plunger: a dodged lunge (dodge chance) grabs nothing — no latch, no drain", () => {
+  const g = stubHazardGame(100, 40);
+  const e = JH.makeEnemy("plunger", 90, 40);
+  g.enemies.push(e);
+  e.state = "lunge"; e.attackTimer = JH.ENEMIES.plunger.lungeDur;
+  e.aimAng = 0; e.spawnGrace = 0; e.usingTicket = true;
+  g.player.stats.dodgeChance = 1;   // guaranteed dodge — takeHit reports false
+  const hp0 = g.player.hp, w0 = g.player.water;
+  e.think(1 / 60, g);
+  assert.strictEqual(e.state, "idle", "dodged lunge aborts instead of latching");
+  assert.ok(e.cdTimer > 0, "aborted lunge goes on lunge cooldown");
+  assert.strictEqual(e.usingTicket, false, "attack ticket released");
+  assert.strictEqual(g.player.hp, hp0, "dodged hit deals no damage");
+  assert.strictEqual(g.player.water, w0, "no latch tick ever runs");
+});
+
 test("makeElite scales the air-roster damage keys", () => {
   const e = JH.makeEnemy("plunger", 0, 0);
   const base = JH.ENEMIES.plunger.lungeDmg;
@@ -399,7 +415,9 @@ test("enterAirAct: arrival state — position, checkpoint, vendor, free-walk tri
   g.player = stubPlayer(0, 40);
   g.showScreen = () => {}; g.banner = () => {}; g.spawnVendor = function (x) { this._vendorX = x; };
   g.gatedTriggerX = JH.Game.gatedTriggerX;
-  g.stinkClouds = []; g.gustLanes = []; g.sigils = [];
+  g.stinkClouds = [{}]; g.gustLanes = [{}]; g.sigils = [];
+  g.enemies = [{}]; g.embers = [{}]; g.firePatches = [{}];   // leaked combat state
+  JH.Background.airOn = false;
   g.enterAirAct();
   assert.strictEqual(g.player.x, JH.ZONE4_START + 40);
   assert.strictEqual(g.checkpointWave, airStart);
@@ -407,6 +425,38 @@ test("enterAirAct: arrival state — position, checkpoint, vendor, free-walk tri
   assert.ok(g.bounds.minX >= JH.ZONE4_START, "no walking back through the gate");
   assert.ok(g._vendorX > JH.ZONE4_START && g._vendorX < g.waveTriggerX,
     "act-boundary vendor sits in the arrival corridor");
+  assert.strictEqual(JH.Background.airOn, true, "cloudline art turns on at arrival");
+  for (const k of ["enemies", "embers", "firePatches", "stinkClouds", "gustLanes"])
+    assert.strictEqual(g[k].length, 0, k + " cleared on arrival");
+});
+
+test("afterSlayerCutscene: stale wave trigger disarmed — the walk to the truck rolls NO wave", () => {
+  const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
+  const slayerIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "slayer");
+  assert.strictEqual(slayerIdx + 1, airStart, "the slayer is the last pre-gate wave");
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(11000, 40);
+  g.showScreen = () => {}; g.banner = () => {};
+  g.cutscene = {}; g.state = "cutscene";
+  g.waveIndex = slayerIdx; g.waveActive = false;
+  g.waveTriggerX = 11000;   // stale from wave 28's arming — pre-fix this rolled wave 29
+  g.sigils = [{}];          // the Slayer's benediction lineup, unpicked
+  let started = null;
+  g.startWave = (i) => { started = i; };
+  const doc = global.document;
+  global.document = { getElementById: () => ({ textContent: "", classList: { add() {}, remove() {} }, style: {} }) };
+  try {
+    g.afterSlayerCutscene(slayerIdx + 1);
+    assert.strictEqual(g.waveTriggerX, Infinity, "stale trigger disarmed (enterAirAct re-arms)");
+    assert.ok(g.bounds.maxX <= JH.ZONE4_START - 60,
+      "free-walk capped short of the air gate (got " + g.bounds.maxX + ")");
+    // Walk all the way to the truck stop point: no wave may roll.
+    g.player.x = g.bounds.maxX;
+    g.checkWaveTrigger();
+    assert.strictEqual(started, null,
+      "no wave starts post-Slayer — wave " + airStart + " belongs to enterAirAct");
+    assert.strictEqual(g.sigils.length, 1, "the benediction lineup survives the walk");
+  } finally { global.document = doc; }
 });
 
 test("respawnFromChurch: corridor death past the gate respawns AT the gate, never behind it", () => {

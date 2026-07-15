@@ -364,7 +364,7 @@
     },
     gasbag: {
       name: "Gasbag", hp: 55, speed: 30, touchDmg: 8, contactCd: 0.8,
-      hoverZ: 26,         // cruise height — the spray band still reaches it (nozzleZ 30)
+      hoverZ: 16,         // cruise height — inside the |dz|<20 contact band (bob ±3 keeps max 19) and under nozzleZ 30
       ventCd: 4.5,        // s between vents
       ventWind: 0.8,      // inflate telegraph before the cloud starts growing
       firstVent: 1.5,     // min s after spawn before the first vent can wind up
@@ -433,7 +433,7 @@
   JH.WAVE_GATE = { minWalk: 170, maxOver: 90, sigilGap: 110 };
 
   // Fraction of a `tough` wave's enemies that spawn elite, indexed
-  // actLevel+1 (Act1..Fire; actLevelForWave returns -1..3). Elites are
+  // actLevel+1 (Act1..Fire; actLevelForWave returns -1..4). Elites are
   // INTRODUCED as a minority and grow common across acts, so a tough wave
   // mixes regular + elite (the gold-bar tier reads by contrast) instead of
   // every enemy turning elite the instant the first boss dies. Applied via
@@ -463,7 +463,7 @@
 
   // Wave sprinkle: extra enemies drawn from the already-introduced pool,
   // added on top of authored spawns (variety, not economy — counts stay low).
-  // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..3).
+  // counts is indexed by actLevel+1 (Balance.actLevelForWave returns -1..4).
   JH.SPRINKLE = {
     counts: [1, 1, 2, 3, 4, 4],
     weights: { mook: 3, pyro: 3, fuse: 3, stalker: 3, charger: 2,
@@ -497,7 +497,7 @@
   // (brass, 250-350, a combat-moment mechanic), relic (gold, 500+, a
   // minAct-gated build-around). minAct (replaces the old boolean actGate):
   // null/absent = available from Act 1; a number = actLevel must be >= it
-  // (actLevelForWave returns -1..3, so minAct: 0 means "Act 2 on").
+  // (actLevelForWave returns -1..4, so minAct: 0 means "Act 2 on").
   JH.RELICS = [
     // -- common (steel frame, 60-100): one honest felt effect --------------
     { id: "dowsing_rod",   tier: "common", name: "Dowsing Rod",    cost: 80,  desc: "Pickups magnet from farther away; water cans +50% value" },

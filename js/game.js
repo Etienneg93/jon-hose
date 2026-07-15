@@ -479,6 +479,7 @@
       this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
+      if (JH.Background) JH.Background.airOn = false;   // fresh run starts pre-gate
       this.voucher50 = false;
       this.relics = {}; this.relicStock = [];
       this.shopWheelSlot = 0; this.wheelStock = []; this.wheelSpinT = 0;
@@ -860,7 +861,14 @@
       // Fire World is beaten. Pick the Slayer's benediction first (spawned by
       // waveCleared_); choosing it triggers the escape sequence
       // (startTruckArrival): rumble, dread sting, and the truck driving in.
-      this.bounds = { minX: 8, maxX: JH.LEVEL_LEN - 8 };
+      // The air corridor begins past the gate — enterAirAct owns everything
+      // beyond ZONE4_START, so cap the free-walk short of it. waveTriggerX
+      // is also cleared: it's still live from wave 28's arming (~11k) and
+      // checkWaveTrigger runs every frame post-Slayer, so left un-set it
+      // would roll wave 29 (SANITATION 101) into the Fire World the moment
+      // the player walks toward the truck stop.
+      this.bounds = { minX: 8, maxX: JH.ZONE4_START - 60 };
+      this.waveTriggerX = Infinity;
       this.slayerBeneBeat = true;
       this.showScreen("hud");
       this.banner("THE SLAYER JOINS YOUR SIDE!  —  CHOOSE ONE", 2.6);
@@ -904,6 +912,12 @@
       this.checkpointWave = airStart;
       this.waveActive = false; this.waveCleared = false;
       this.sigils = [];
+      // Defensive clear: the truck run and the Slayer beat leave no live
+      // combat state, but this guards the arrival regardless of how it's
+      // reached (dev-warp, headless entry).
+      this.enemies = []; this.embers = []; this.firePatches = [];
+      this.stinkClouds = []; this.gustLanes = [];
+      if (JH.Background) JH.Background.airOn = true;   // cloudline art turns on
       this.waveTriggerX = this.gatedTriggerX(airStart, p.x);
       this.bounds = { minX: JH.ZONE4_START + 8, maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = 0;
@@ -1684,6 +1698,9 @@
       p.alive = true;
       JH.Camera.snapTo(p);   // fade in AT the hydrant, don't scroll across the map
       this.sweepCrosses();   // bank any cross the death left uncollected
+      // Church deaths past the air gate come back to the cloudline; earlier
+      // checkpoints come back to whatever pre-gate act was active.
+      if (JH.Background) JH.Background.airOn = (this.checkpointWave >= JH.ACT_STARTS[JH.ACT_STARTS.length - 1]);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
       this.stinkClouds = []; this.gustLanes = [];
       this.pulseRings = []; this.sermonWaves = [];
@@ -2280,6 +2297,7 @@
           const e1 = a[i], e2 = a[j];
           if (e1.isBoss || e2.isBoss) continue;
           if (e1.dropping || e2.dropping) continue;  // don't shove airborne drop-ins
+          if ((e1.def && e1.def.speed === 0) || (e2.def && e2.def.speed === 0)) continue;  // emplacements hold fast
           const dx = e2.x - e1.x, dy = e2.y - e1.y;
           const minX = (e1.bodyW + e2.bodyW) * 0.5, minY = 10;
           if (Math.abs(dx) < minX && Math.abs(dy) < minY) {

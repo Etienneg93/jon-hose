@@ -524,8 +524,9 @@
           }
         }
         // Whirlwind Walk: the dash body destroys projectiles it touches
-        // (isProjectile whitelist — Ember/Fireball/SmeltBomb/Rock/ShieldLob;
-        // boss patterns, KillPops and other FX riders are never swept) and
+        // (isProjectile whitelist — Ember/Fireball/SmeltBomb/Rock/ShieldLob/
+        // TPWrap/BidetShot; boss patterns, KillPops and other FX riders are
+        // never swept) and
         // gusts overlapping non-boss enemies aside, each once per dash
         // (own _gustTouched set — independent of Backdraft's).
         if (this.beneRank("whirlwind_walk")) {
@@ -5728,12 +5729,15 @@
         this.attackTimer -= dt;
         this.x += Math.cos(this.aimAng) * d.lungeSpeed * dt;
         this.y += Math.sin(this.aimAng) * d.lungeSpeed * dt * 0.6;
-        // Dash i-frames dodge the grab like any hit.
-        if (Geo.bodiesOverlap(this, pl) && pl.z < 20
-            && pl.dashTimer <= 0 && pl.dashGraceT <= 0) {
-          pl.takeHit(d.lungeDmg, game, this.x);
-          this.state = "latch"; this.latchT = d.latchMax;
-          game.audio.play("sizzle");
+        if (Geo.bodiesOverlap(this, pl) && pl.z < 20) {
+          // Latch rides the hit: takeHit reports dodges (i-frames, storm window,
+          // dodge chance) as false, and a dodged lunge grabs nothing.
+          if (pl.takeHit(d.lungeDmg, game, this.x)) {
+            this.state = "latch"; this.latchT = d.latchMax;
+            game.audio.play("sizzle");
+          } else {
+            this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false;
+          }
           return;
         }
         if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false; }
@@ -5780,10 +5784,14 @@
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";      // inflate telegraph
         if (this.windTimer <= 0) {
-          JH.spawnStinkCloud(game, this.x, this.y);
-          this._vented = true;
-          this.cdTimer = d.ventCd;
-          game.audio.play("sizzle");
+          // A vent inside a live hostile cloud is a no-op (null return) — only
+          // count it as vented / play the sizzle when the cloud actually
+          // spawns, so a suppressed vent doesn't close the pop-fast window.
+          if (JH.spawnStinkCloud(game, this.x, this.y)) {
+            this._vented = true;
+            game.audio.play("sizzle");
+          }
+          this.cdTimer = d.ventCd;   // unconditional — no re-vent spam either way
         }
         return;
       }

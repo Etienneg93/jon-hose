@@ -115,6 +115,11 @@
     buildings: [],
     farBuildings: [],
     props: [],
+    // True only once the Air World is actually entered (enterAirAct) or a
+    // Church respawn floors at that checkpoint. Gates every air-variant draw
+    // below so camera POSITION alone (e.g. the truck run's synthetic scroll
+    // crossing ZONE4_START) can never paint the cloudline over other scenes.
+    airOn: false,
     init() {
       this.buildings = [];
       this.farBuildings = [];
@@ -199,8 +204,12 @@
       ctx.fill();
 
       // Air World (cloudline street) — fades in past ZONE4_START and damps
-      // the older acts' tints out so the sky reads as a clean handoff.
-      const airT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500));
+      // the older acts' tints out so the sky reads as a clean handoff. Gated
+      // on airOn, not just camera position, so the fire-truck run's
+      // synthetic scroll (which crosses this X) can't bleach into cloudline.
+      const airT = this.airOn
+        ? Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500))
+        : 0;
       // Ruined-district smog haze — fades in as you approach Act 3.
       const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
       if (zoneT > 0) {
@@ -254,13 +263,17 @@
       for (const b of this.buildings) {
         const sx = b.x - pNear;
         if (sx + b.w < 0 || sx > W) continue;
-        ctx.fillStyle = b.c;
+        // Air-positioned buildings only read gold once the Air World is
+        // actually on (this.airOn) — otherwise they're distant dark
+        // silhouettes, same fill as the rest of the near skyline, so camera
+        // position alone (e.g. the truck run) can't paint gold towers.
+        ctx.fillStyle = (b.air && !this.airOn) ? "#1b2740" : b.c;
         if (b.broken && b.jag) {
           for (const s of b.jag) ctx.fillRect(Math.round(sx + s.x), top - s.h, s.w, s.h);
         } else {
           ctx.fillRect(Math.round(sx), top - b.h, b.w, b.h);
         }
-        if (b.air) {
+        if (b.air && this.airOn) {
           ctx.fillStyle = "#e0cd80";
           ctx.fillRect(Math.round(sx), top - b.h, b.w, 3);
         }
@@ -313,8 +326,10 @@
       ctx.fillRect(0, top + 2, W, 6);
 
       // Air World floor: fades in past ZONE4_START and damps the older acts'
-      // tints out, same pattern as draw().
-      const airT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500));
+      // tints out, same pattern as draw(). Gated on airOn — see draw().
+      const airT = this.airOn
+        ? Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500))
+        : 0;
       // Ruined-district floor: dust tint.
       const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
       if (zoneT > 0) {
