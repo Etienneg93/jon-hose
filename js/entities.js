@@ -1583,7 +1583,9 @@
         const scaldDmg = this.scaldDps * dt;
         this.hp -= scaldDmg;
         this.accrueDmgNum(scaldDmg, game);   // fire DoT feeds the same tally (reads orange while burning)
-        if (Math.random() < 6 * dt) burst(game, this.x, this.y, this.bodyH * 0.6, JH.PAL.firePatchHi, 1, { speed: 20, life: 0.3, up: 30, size: 1 });
+        // Steam motes puff up off the enemy (rising, drifting) — the boil read.
+        if (Math.random() < 7 * dt) burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.6, this.y,
+          this.bodyH * 0.4, JH.PAL.steamHi, 1, { speed: 12, life: 0.5, up: 42, grav: -18, size: 1 });
         // Bushfire: once per application, contagion jumps to nearby enemies
         // at this enemy's dps/dur. Spread targets have their own flag
         // pre-set so the jump can't chain past depth 1.
@@ -1723,15 +1725,29 @@
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
-      // Scald tint: a pulsing orange ring around the body while the DoT runs.
+      // Scald: steam boils off the enemy (water on heat) while the DoT runs —
+      // the status read that pairs with the orange damage tally. Wisps rise and
+      // fade, warm at the base (the heat) turning pale steam as they climb, over
+      // a faint heat shimmer at the feet.
       if (this.scaldT > 0) {
         ctx.save();
-        ctx.globalAlpha = 0.4 + 0.2 * Math.sin(this.t * 8);
-        ctx.strokeStyle = "#ff8030";
-        ctx.lineWidth = 1.5;
+        // Warm heat glow hugging the body (the "hot" read under the steam).
+        ctx.globalAlpha = 0.24 + 0.08 * Math.sin(this.t * 6);
+        ctx.fillStyle = JH.PAL.steamLo;
         ctx.beginPath();
-        ctx.ellipse(sx, sy - this.bodyH * 0.5, this.bodyW * 0.6, this.bodyH * 0.55, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.ellipse(sx, sy - this.bodyH * 0.45, this.bodyW * 0.5, this.bodyH * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Rising steam column — more, bigger, and brighter than a single ring.
+        const N = 7;
+        for (let i = 0; i < N; i++) {
+          const cyc = (this.t * 1.15 + i / N) % 1;                // 0 at body → 1 up high
+          const px = sx + Math.sin(this.t * 3 + i * 1.9) * this.bodyW * 0.4 * (0.3 + cyc);
+          const py = sy - this.bodyH * 0.3 - cyc * (this.bodyH + 14);
+          const r = (2.5 + (i % 3)) * (0.9 + cyc * 0.8);
+          ctx.globalAlpha = 0.6 * (1 - cyc * 0.85) * (0.75 + 0.25 * Math.sin(this.t * 5 + i));
+          ctx.fillStyle = Assets.lerpHex(JH.PAL.steamLo, JH.PAL.steamHi, Math.min(1, cyc * 1.3));
+          ctx.beginPath(); ctx.ellipse(px, py, r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.restore();
       }
       // tiny hp pip when damaged

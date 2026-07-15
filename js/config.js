@@ -160,6 +160,7 @@
     fuse: "#ff4810",       fuseDk: "#cc2800",
     furnaceBody: "#4a3020",furnaceDk: "#2a1808",furnaceHot: "#ff6820",
     firePatch: "#ff6010",  firePatchHi: "#ffd040",
+    steamLo: "#ffb060",  steamHi: "#eef4ff",   // scald steam: warm base → pale steam as it rises
     plunger: "#b0543a", plungerDk: "#77351f",
     tpmummy: "#e8e4d8", tpmummyDk: "#b3ad9c",
     gasbag: "#7fae4a", gasbagDk: "#4f7a2a", gasbagHi: "#b9d98a",
