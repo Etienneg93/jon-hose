@@ -1023,7 +1023,9 @@ test("super bulwark's thrown shield lands as barrier dome + slow zone", () => {
   for (let i = 0; i < 200 && !lob.dead; i++) lob.update(1 / 60, g);
   assert.strictEqual(g.slowZones.length, 1, "slow zone landed");
   assert.strictEqual(g.shields.length, 1, "barrier dome landed");
-  assert.strictEqual(g.shields[0].radius, 34);
+  // The thrown dome is FULL size — a super-elite's shield must not read smaller
+  // than a regular Bulwark's planted dome (was a half-size 34).
+  assert.strictEqual(g.shields[0].radius, JH.ENEMIES.bulwark.domeRadius);
   assert.strictEqual(b.shield, g.shields[0]);
   // Reclaim: zone expiry restores the shield and removes the dome.
   b.phase = "brawl"; b.thrownZone = g.slowZones[0]; b.hasShield = false;
@@ -1484,7 +1486,7 @@ test("lance falloff: pierce damage fades down the line per RELIC_TUNE.lanceFallo
   const p = g.player;
   p.water = p.stats.maxWater; p.facing = 1;
   p.stats.sprayRange = 300;
-  p.stats.beam = 3;   // Hydro Lance tier: pierce
+  p.stats.beam = 3; p.stats.pierceMax = 99;   // uncapped pierce — exercise the full falloff ladder
   const a = new JH.Enemy("mook", p.x + 30, p.y);
   const b = new JH.Enemy("mook", p.x + 60, p.y);
   const c = new JH.Enemy("mook", p.x + 90, p.y);
@@ -1499,12 +1501,30 @@ test("lance falloff: pierce damage fades down the line per RELIC_TUNE.lanceFallo
   assert.ok(Math.abs(lossC / lossA - L[2]) < 0.01, "3rd hit scales by lanceFalloff[2]");
 });
 
+test("Hydro Lance caps at pierceMax: target + 1 behind; a 3rd enemy in line is untouched", () => {
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  p.stats.sprayRange = 300;
+  JH.RELICS.find((r) => r.id === "hydro_lance").apply(p.stats);   // real relic → pierceMax 2
+  assert.strictEqual(p.stats.pierceMax, 2, "Hydro Lance sets pierceMax 2");
+  const a = new JH.Enemy("mook", p.x + 30, p.y);
+  const b = new JH.Enemy("mook", p.x + 60, p.y);
+  const c = new JH.Enemy("mook", p.x + 90, p.y);
+  g.enemies = [a, b, c];
+  const a0 = a.hp, b0 = b.hp, c0 = c.hp;
+  p.doSpray(0.1, g);
+  assert.ok(a.hp < a0, "target is hit");
+  assert.ok(b.hp < b0, "the one enemy behind is hit");
+  assert.strictEqual(c.hp, c0, "the third enemy in line is NOT pierced (was pierce-all before)");
+});
+
 test("lance falloff: hit indices past the ladder's length repeat the LAST entry", () => {
   const g = makeThinkGame(60, 40);
   const p = g.player;
   p.water = p.stats.maxWater; p.facing = 1;
   p.stats.sprayRange = 300;
-  p.stats.beam = 3;   // Hydro Lance tier: pierce
+  p.stats.beam = 3; p.stats.pierceMax = 99;   // uncapped pierce — exercise the full falloff ladder
   const L = JH.RELIC_TUNE.lanceFalloff;
   const n = L.length + 1;   // one more enemy than the ladder has entries
   const enemies = [];
@@ -1566,7 +1586,7 @@ test("dome shelter: pierce beam — enemy in front is hit, enemy inside the dome
   const p = g.player;
   p.water = p.stats.maxWater; p.facing = 1;
   p.stats.sprayRange = 300;
-  p.stats.beam = 3;   // Hydro Lance tier: pierce (planted shields still hard-block)
+  p.stats.beam = 3; p.stats.pierceMax = 99;   // uncapped pierce — exercise the full falloff ladder (planted shields still hard-block)
   const dome = new JH.DeployedShield(p.x + 100, p.y, null);
   g.shields = [dome];
   const front  = new JH.Enemy("mook", p.x + 30, p.y);        // before the dome, in the open
@@ -1590,7 +1610,7 @@ test("Brass Nozzle: pierce beam (Hydro Lance) — bonus lands on the nearest ene
   const p = g.player;
   p.water = p.stats.maxWater; p.facing = 1;
   p.stats.sprayRange = 300;
-  p.stats.beam = 3;                        // Hydro Lance tier: pierce, blocker can only be a planted shield
+  p.stats.beam = 3; p.stats.pierceMax = 2;  // Hydro Lance: target + 1 behind (2-target pierce)
   g.relics = { brass_nozzle: true };
   const near = new JH.Enemy("mook", p.x + 40, p.y);
   const far  = new JH.Enemy("mook", p.x + 120, p.y);

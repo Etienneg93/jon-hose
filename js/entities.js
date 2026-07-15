@@ -715,12 +715,14 @@
       const oz = this.z + JH.PLAYER.nozzleZ;   // nozzle height — static, matches new sprite
       const reach = S.sprayRange * rangeMult;  // range shrinks with pressure
       this._dbgReach = reach;   // live value for the KeyH hitbox overlay
-      const beam = S.beam | 0;                 // concentration tier 0..3
+      const beam = S.beam | 0;                 // concentration tier 0..3 (VISUAL only)
+      const pierceMax = Math.max(1, S.pierceMax | 0);   // enemies the stream damages
 
-      // Hydro Lance (beam=3) pierces the whole line; default stops at first
-      // target. A planted DeployedShield (Bulwark's thrown shield) hard-blocks
-      // the stream at every beam tier — nothing else blocks pierce.
-      const pierce = beam >= 3;
+      // Multi-target mode: the stream passes through and hits up to pierceMax
+      // enemies (nearest-first). Hydro Lance sets pierceMax 2 (target + 1
+      // behind); default 1 stops at the first. A planted DeployedShield
+      // (Bulwark's thrown shield) hard-blocks the stream regardless.
+      const pierce = pierceMax > 1;
       let blocker = null;
       let minFwd = Infinity;   // near-edge distance of the chosen blocker (used below)
       {
@@ -890,8 +892,10 @@
         targets.push({ e, fwd });
       }
       if (pierce) targets.sort((p, q) => p.fwd - q.fwd);
+      // Cap to pierceMax nearest targets (Hydro Lance = target + 1 behind).
+      const hitList = pierce ? targets.slice(0, pierceMax) : targets;
       const LF = JH.RELIC_TUNE.lanceFalloff;
-      targets.forEach(({ e }, idx) => {
+      hitList.forEach(({ e }, idx) => {
         // Hydro Lance: pierce damage fades down the hit line (ladder repeats
         // its last entry past its length); non-pierce hits take falloff 1.
         const falloff = pierce ? LF[Math.min(idx, LF.length - 1)] : 1;
@@ -1747,31 +1751,6 @@
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
         scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
-      // Scald: steam boils off the enemy (water on heat) while the DoT runs —
-      // the status read that pairs with the orange damage tally. Wisps rise and
-      // fade, warm at the base (the heat) turning pale steam as they climb, over
-      // a faint heat shimmer at the feet.
-      if (this.scaldT > 0) {
-        ctx.save();
-        // Warm heat glow hugging the body (the "hot" read under the steam).
-        ctx.globalAlpha = 0.24 + 0.08 * Math.sin(this.t * 6);
-        ctx.fillStyle = JH.PAL.steamLo;
-        ctx.beginPath();
-        ctx.ellipse(sx, sy - this.bodyH * 0.45, this.bodyW * 0.5, this.bodyH * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Rising steam column — more, bigger, and brighter than a single ring.
-        const N = 7;
-        for (let i = 0; i < N; i++) {
-          const cyc = (this.t * 1.15 + i / N) % 1;                // 0 at body → 1 up high
-          const px = sx + Math.sin(this.t * 3 + i * 1.9) * this.bodyW * 0.4 * (0.3 + cyc);
-          const py = sy - this.bodyH * 0.3 - cyc * (this.bodyH + 14);
-          const r = (2.5 + (i % 3)) * (0.9 + cyc * 0.8);
-          ctx.globalAlpha = 0.6 * (1 - cyc * 0.85) * (0.75 + 0.25 * Math.sin(this.t * 5 + i));
-          ctx.fillStyle = Assets.lerpHex(JH.PAL.steamLo, JH.PAL.steamHi, Math.min(1, cyc * 1.3));
-          ctx.beginPath(); ctx.ellipse(px, py, r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.restore();
-      }
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 4;
@@ -1793,11 +1772,34 @@
         ctx.fillText(this.def.name.toUpperCase(), Math.round(sx), by - 4);
         ctx.textAlign = "left";
       }
-      // Damage-number running tally (dev toggle): the session total drawn above
-      // the HP bar. Size + brightness ramp with magnitude; fades as the hold
-      // timer runs out. Colour: orange while burning (DoT), hot-white on a CRIT
-      // tick (bonus pressure / amped), else yellow. Each increment scale-punches
-      // (bigger on crits). Drawn on the enemy, so it never touches the cap.
+    }
+
+    // Status overlays drawn OVER every enemy by the game render loop (not in
+    // draw()), so bosses/Furnace/Smelt with custom draw() get them too: scald
+    // steam and the damage-number running tally.
+    drawStatusFx(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      // Scald: steam boils off the enemy (water on heat) — rising wisps that
+      // fade warm→pale as they climb. NO drawn oval; the wisps are the read.
+      if (this.scaldT > 0) {
+        ctx.save();
+        const N = 8;
+        for (let i = 0; i < N; i++) {
+          const cyc = (this.t * 1.25 + i / N) % 1;                 // 0 at body → 1 up high
+          const px = sx + Math.sin(this.t * 3.2 + i * 1.9) * this.bodyW * 0.42 * (0.25 + cyc);
+          const py = sy - this.bodyH * 0.35 - cyc * (this.bodyH + 16);
+          const r = (2.8 + (i % 3)) * (0.9 + cyc * 0.9);
+          ctx.globalAlpha = 0.62 * (1 - cyc * 0.8) * (0.78 + 0.22 * Math.sin(this.t * 5 + i));
+          ctx.fillStyle = Assets.lerpHex(JH.PAL.steamLo, JH.PAL.steamHi, Math.min(1, cyc * 1.35));
+          ctx.beginPath(); ctx.ellipse(px, py, r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+      // Damage-number running tally (dev toggle): the session total. Size +
+      // brightness ramp with magnitude; fades as the hold timer runs out.
+      // Colour: orange while burning (DoT), hot gold→white on a CRIT tick
+      // (bonus pressure / amped), else yellow. Each increment scale-punches
+      // (bigger on crits). Never a floater, so it can't spam the cap.
       if (JH.Game && JH.Game.showDmgNumbers && this._dmgAccum > 0) {
         const D = JH.DMGNUM;
         const st = JH.Balance.dmgNumberScale(this._dmgAccum);
@@ -1806,12 +1808,11 @@
         const col = this.scaldT > 0 ? Assets.lerpHex(D.fireLo, D.fireHi, st.bright)
                   : crit           ? Assets.lerpHex(D.critLo, D.critHi, st.bright)
                   :                  Assets.lerpHex(D.enemyLo, D.enemyHi, st.bright);
-        // Punch: overshoot that settles over punchDur; crits punch harder.
         const pk = Math.max(0, (this._dmgPunchT || 0) / D.punchDur);
         const scale = 1 + (crit ? D.critScale : D.punchScale) * pk * pk;
         const ty = Math.round(sy - this.bodyH - 14);
         const txt = String(Math.round(this._dmgAccum));
-        const fontPx = st.size + (crit ? D.critSizeBump : 0);   // crits render bigger
+        const fontPx = st.size + (crit ? D.critSizeBump : 0);
         ctx.save();
         ctx.globalAlpha = 0.45 + 0.55 * fade;
         ctx.font = "bold " + fontPx + "px monospace"; ctx.textAlign = "center";
@@ -2874,12 +2875,13 @@
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.vz -= 300 * dt; this.z += this.vz * dt;
       if (this.z <= 0) {
-        const zone = new JH.SlowZone(this.x, this.y, 30, 5);
+        const zone = new JH.SlowZone(this.x, this.y, 40, 5);
         game.slowZones.push(zone);
-        // The landed shield IS a barrier: a half-size dome (blocks spray from
-        // outside, shelters) lasting exactly as long as the slow zone.
+        // The landed shield IS a barrier: a full-size dome (matches a regular
+        // Bulwark's planted dome — a super-elite's shield must not read smaller)
+        // that blocks spray from outside and shelters, lasting as long as the
+        // slow zone. radius defaults to bulwark.domeRadius via DeployedShield.
         const dome = new JH.DeployedShield(this.x, this.y, this.owner);
-        dome.radius = 34;
         dome.domeDur = dome.domeT = 5;
         game.shields.push(dome);
         if (this.owner) { this.owner.thrownZone = zone; this.owner.shield = dome; this.owner.lob = null; }
@@ -5525,15 +5527,6 @@
         this.y += (dy / (dist || 1)) * sp * dt * 0.7;
         this.state = "walk";
       } else { this.state = "idle"; }
-    }
-    die(game) {
-      // The death explosion hurls one slag at Jon's position — a last spiteful
-      // lob using the smelt-bomb arc (small patch on landing).
-      const pl = game.player;
-      game.embers.push(new JH.SmeltBomb(this.x, this.y, pl.x, pl.y, {
-        lobBombSpeed: 120, lobGravity: 300, lobBombRadius: 24, lobBombDur: 1.8,
-      }));
-      super.die(game);
     }
   }
   JH.Furnace = Furnace;

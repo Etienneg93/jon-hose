@@ -213,7 +213,8 @@
     sprayWidth: 12,         // VISUAL depth half-band of the droplet spray (tightens with Pressure)
     sprayHitBand: 9,        // jet half-thickness in SCREEN px around the nozzle-height stream line (Geo.inSprayPath: stream rect vs BODY rect)
     knockback: 115,         // px/sec impulse imparted by spray (punchy)
-    beam: 0,                // stream concentration tier (0=hose spray .. 3=lance)
+    beam: 0,                // stream concentration tier (0=hose spray .. 3=lance) — VISUAL only
+    pierceMax: 1,           // max enemies the stream damages (1 = closest only; Hydro Lance → 2)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
 
     // Melee fallback (no water cost) — deliberately weak so the hose wins at
@@ -529,9 +530,9 @@
     // -- relic-grade (gold frame, 500+, minAct-gated build-arounds) --------
     { id: "deputy_sprinkler", tier: "relic", name: "Deputy Sprinkler", cost: 500, minAct: 0,
       desc: "A tank-mounted sprinkler auto-sprays the nearest enemy" },
-    { id: "hydro_lance",   tier: "relic", name: "Hydro Lance",     cost: 520, minAct: 0,
-      desc: "+18 dmg; a cutting beam that pierces the line, fading down it",
-      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.knockback += 20; } },
+    { id: "hydro_lance",   tier: "relic", name: "Hydro Lance",     cost: 580, minAct: 0,
+      desc: "+18 dmg; a cutting beam that pierces ONE enemy behind its target",
+      apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.pierceMax = 2; s.knockback += 20; } },
     { id: "big_spigot",    tier: "relic", name: "The Big Spigot",  cost: 540, minAct: 0,
       desc: "GUSH milestones detonate a 360° water blast around Jon" },
     { id: "boiler_coil",   tier: "relic", name: "Boiler Coil",     cost: 560, minAct: 1,
