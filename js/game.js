@@ -816,7 +816,7 @@
       // pre-boss one, so the vendor never appears in two corridors in a row.
       const next = this.waveIndex + 1;
       this.waveTriggerX = this.gatedTriggerX(next, this.player.x);
-      this.bounds = { minX: 8, maxX: this.waveTriggerX + 30 };
+      this.bounds = { minX: this.freeWalkMinX(), maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = (this.clearsSinceVendor || 0) + 1;
       const isBoss = !!(clearedWave && clearedWave.boss);
       const nextIsBoss = !!(JH.LEVEL1.waves[next] && JH.LEVEL1.waves[next].boss);
@@ -897,6 +897,7 @@
       const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
       const p = this.player;
       p.x = JH.ZONE4_START + 40; p.y = JH.DEPTH_MAX * 0.6; p.z = 0;
+      p.clearBurn();   // scene boundary: no Fire World DoT carries through the gate
       JH.Camera.snapTo(p);
       if (JH.Music && JH.Music.setTrack) JH.Music.setTrack("level");
       this.waveIndex = airStart - 1;   // cleared-through marker: the walk trigger rolls WAVE 30
@@ -1651,21 +1652,30 @@
 
       function connector() { const c = document.createElement("div"); c.className = "tree-link"; return c; }
     },
-    // Return from the Church: rebuild the world at the act-start checkpoint.
-    // Keeps the player's build (no Upgrades.reset) and Suds.
+    // Free-walk left edge: past the air gate the corridor floors at the gate
+    // mouth (the gate is one-way — see enterAirAct's bounds).
+    freeWalkMinX() {
+      return this.checkpointWave >= JH.ACT_STARTS[JH.ACT_STARTS.length - 1]
+        ? JH.ZONE4_START + 8 : 8;
+    },
+
     // Return from the Church: warp Jon back in at the last fire hydrant he
     // visited (or the level start), re-arm the wave he died in so it spawns
     // fresh as he walks back ("try again"), and fade the world in. Build +
     // Suds are kept (no Upgrades.reset).
     respawnFromChurch() {
-      const next = Math.max(0, this.diedWave);     // the wave to re-fight
+      // The wave to re-fight — floored at the act checkpoint: a death can
+      // never respawn EARLIER than the checkpoint (e.g. an arrival-corridor
+      // death past the air gate still has waveIndex at airStart-1).
+      const next = Math.max(this.checkpointWave || 0, this.diedWave);
       const p = this.player;
       // Benedictions were washed at the death moment (startPlayerDeathSeq) —
       // NOT reset here, or Reliquary reclaims made in the Church would be
       // wiped on the way out. Stat refresh picks up whatever is active now.
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
       const maxX = WAVE_TRIGGERS[next] + 30;
-      p.x = clamp(this.lastHydrantX || 60, 12, maxX - 12);
+      const minX = this.freeWalkMinX();
+      p.x = clamp(this.lastHydrantX || 60, minX + 4, maxX - 12);
       p.y = JH.DEPTH_MAX - 24;
       p.hp = p.stats.maxHp;
       p.water = p.stats.maxWater;
@@ -1697,7 +1707,7 @@
       // Re-arm the trigger for the wave being re-fought; player spawns far
       // left at a hydrant, so this resolves to the normal arena-anchor trigger.
       this.waveTriggerX = this.gatedTriggerX(next, p.x);
-      this.bounds = { minX: 8, maxX: Math.max(maxX, this.waveTriggerX + 30) };
+      this.bounds = { minX: minX, maxX: Math.max(maxX, this.waveTriggerX + 30) };
       // Church-return arrival: hold on black, then a water jet drops Jon from the
       // sky into a splash landing. updateArrival() drives it; player logic is
       // frozen until it finishes. Jon starts high (z) and eases to the ground.

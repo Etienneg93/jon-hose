@@ -408,3 +408,23 @@ test("enterAirAct: arrival state — position, checkpoint, vendor, free-walk tri
   assert.ok(g._vendorX > JH.ZONE4_START && g._vendorX < g.waveTriggerX,
     "act-boundary vendor sits in the arrival corridor");
 });
+
+test("respawnFromChurch: corridor death past the gate respawns AT the gate, never behind it", () => {
+  // Death in the arrival corridor (WAVE 30 not yet rolled): waveIndex/diedWave
+  // sit at airStart-1, but checkpointWave is the act start — the respawn must
+  // floor at the checkpoint or Jon lands near WAVE_TRIGGERS[28] behind the gate.
+  const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(JH.ZONE4_START + 60, 40);
+  g.showScreen = () => {}; g.banner = () => {}; g.sweepCrosses = () => {};
+  g.gatedTriggerX = JH.Game.gatedTriggerX;
+  g.diedWave = airStart - 1;
+  g.checkpointWave = airStart;
+  g.lastHydrantX = 0;   // never touched a hydrant past the gate
+  JH.Music = JH.Music || { reset() {}, start() {} };   // node has no music module
+  g.respawnFromChurch();
+  assert.ok(g.player.x >= JH.ZONE4_START,
+    "respawn position floors at the gate (got " + g.player.x + ")");
+  assert.ok(g.bounds.minX >= JH.ZONE4_START + 8,
+    "respawn bounds keep the gate one-way (got " + g.bounds.minX + ")");
+});
