@@ -52,6 +52,7 @@
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
     devPowerSim: false,   // dev-menu warp grants the act-expected level/bene power (KeyP toggles)
+    showDmgNumbers: false, // dev-menu KeyN: floating damage numbers (enemy tally + player -N)
     dyingBoss: null, deathSeqT: 0,
     checkpointWave: 0,
     diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0,
@@ -209,6 +210,13 @@
           e.preventDefault();
           this.devPowerSim = !this.devPowerSim;
           this.banner("SIM POWER " + (this.devPowerSim ? "ON" : "OFF"), 1.0);
+          return;
+        }
+        // N — toggle floating damage numbers (enemy running tally + player -N).
+        if (e.code === "KeyN") {
+          e.preventDefault();
+          this.showDmgNumbers = !this.showDmgNumbers;
+          this.banner("DMG NUMBERS " + (this.showDmgNumbers ? "ON" : "OFF"), 1.0);
           return;
         }
         const count = JH.LEVEL1.waves.length + 4;  // +1 cutscene, +1 target range, +1 wall boss, +1 post-firewall
@@ -2895,10 +2903,15 @@
       ctx.font = "bold 7px monospace";
       ctx.textAlign = "center";
       ctx.fillText("DEV — JUMP TO WAVE", MID, PY + 9);
-      // Sim-power state (P toggles) — warps in at the wave's expected power.
+      // Toggle states (P sim-power, N damage numbers) under the title.
       ctx.font = "5px monospace";
       ctx.fillStyle = this.devPowerSim ? "#7dff5a" : "#556";
-      ctx.fillText("P: SIM POWER " + (this.devPowerSim ? "ON" : "OFF"), MID, PY + 16);
+      ctx.textAlign = "right";
+      ctx.fillText("P: SIM POWER " + (this.devPowerSim ? "ON" : "OFF"), MID - 4, PY + 16);
+      ctx.fillStyle = this.showDmgNumbers ? "#7dff5a" : "#556";
+      ctx.textAlign = "left";
+      ctx.fillText("N: DMG " + (this.showDmgNumbers ? "ON" : "OFF"), MID + 4, PY + 16);
+      ctx.textAlign = "center";
 
       // Wave rows (only those inside the scroll window)
       waves.forEach((wave, i) => {

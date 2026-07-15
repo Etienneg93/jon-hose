@@ -67,6 +67,21 @@ test("expectedPowerForWave: real config — air-act start ramps Jon past mid-gam
   assert.ok(air.beneCount >= 5, "at least the 5 boss/set-piece beats before the air act");
 });
 
+test("dmgNumberScale: ramps size + brightness with magnitude, kill bump on top", () => {
+  const T = JH.DMGNUM;
+  const small = Balance.dmgNumberScale(1);
+  const big = Balance.dmgNumberScale(T.fullAt);
+  const huge = Balance.dmgNumberScale(T.fullAt * 3);   // past saturation
+  assert.strictEqual(small.size, T.minSize, "tiny hit = min size");
+  assert.strictEqual(big.size, T.maxSize, "hit at fullAt = max size");
+  assert.strictEqual(huge.size, T.maxSize, "past fullAt clamps at max, never larger");
+  assert.ok(small.bright < big.bright, "brightness ramps with magnitude");
+  assert.ok(big.bright <= 1 && small.bright >= 0, "brightness stays in 0..1");
+  // Killing blow pops bigger than the same value mid-fight.
+  const kill = Balance.dmgNumberScale(T.fullAt, true);
+  assert.strictEqual(kill.size, T.maxSize + T.killBump, "kill total gets the bump");
+});
+
 test("dropThresholds reproduces base rates at mult 1", () => {
   const t = Balance.dropThresholds(1);
   assert.strictEqual(t.health, 0.18);

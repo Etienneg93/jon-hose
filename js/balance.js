@@ -285,6 +285,16 @@
     // XP needed to climb from level n-1 to n.
     xpForLevel(n) { return 20 + 12 * (n | 0); },
 
+    // Damage-number style for a shown value: font size + brightness (0..1 for a
+    // pale→bright colour lerp) ramped by magnitude, saturating at DMGNUM.fullAt.
+    // `kill` adds DMGNUM.killBump so the killing-blow total pops largest. Pure.
+    dmgNumberScale(value, kill) {
+      const T = (root.JH && root.JH.DMGNUM) || { minSize: 6, maxSize: 13, fullAt: 60, killBump: 3 };
+      const f = Math.max(0, Math.min(1, (value || 0) / T.fullAt));
+      return { size: Math.round(T.minSize + (T.maxSize - T.minSize) * f) + (kill ? T.killBump : 0),
+               bright: f };
+    },
+
     // Passive power a real player would hold ENTERING waveIndex, for the dev
     // sim-power warp: XP levels from cumulative authored kill income (+ set-
     // piece/boss XP) and benediction count from sigil beats passed. Pure — all

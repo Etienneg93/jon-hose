@@ -563,6 +563,21 @@
   // Seconds a kill keeps the GUSH combo chain alive (cosmetic feedback only).
   JH.COMBO_WINDOW = 2.5;
 
+  // Damage numbers (dev-toggle feature, JH.Game.showDmgNumbers). Enemy damage
+  // shows as a per-enemy RUNNING TALLY drawn above its HP bar (accumulates all
+  // sources — hose, melee, fire DoT — never a floater, so it can't spam the
+  // cap); the killing-blow total hands off to a floater. Damage Jon TAKES is a
+  // discrete red -N floater. Size + brightness ramp with magnitude.
+  JH.DMGNUM = {
+    minSize: 6, maxSize: 13,   // logical font px, ramped by the tally magnitude
+    fullAt: 60,                // value at which size/brightness saturate
+    killBump: 3,               // extra px on the killing-blow total pop
+    holdT: 0.5,                // s the enemy tally holds after the last hit, then resets
+    enemyLo: "#d8c86a", enemyHi: "#fff2a0",   // pale→bright yellow (hose/melee)
+    fireLo:  "#ff8a30", fireHi:  "#ffd060",   // tally leans orange while the enemy is burning (DoT read)
+    playerColor: "#ff5a5a",    // red -N for damage Jon takes
+  };
+
   // XP level-ups: kills grant xp = the enemy's def.suds; each level applies
   // the next step of this repeating cycle instantly (no pick, no pause).
   JH.LEVELS = {

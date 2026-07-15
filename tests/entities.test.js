@@ -585,6 +585,27 @@ function makeThinkGame(px, py) {
   };
 }
 
+test("damage-number tally: accrues on damage, holds, then resets after the gap", () => {
+  const e = JH.makeEnemy("mook", 100, 40);
+  const g = makeThinkGame(300, 40);   // player far away so think() is a no-op here
+  g.showDmgNumbers = true; g.float = () => {};
+  e.takeDamage(10, g, 1, 0);
+  assert.strictEqual(e._dmgAccum, 10, "first hit starts the tally");
+  e.takeDamage(5, g, 1, 0);
+  assert.strictEqual(e._dmgAccum, 15, "further hits accumulate the running total");
+  assert.ok(e._dmgHoldT > 0, "each hit refreshes the hold timer");
+  // Let the hold elapse via update — the tally resets for a fresh session.
+  e._dmgHoldT = 0.01;
+  e.update(0.05, g);
+  assert.strictEqual(e._dmgAccum, 0, "tally resets once the hold gap passes");
+});
+
+test("damage-number tally: no accrual when the dev toggle is off", () => {
+  const e = JH.makeEnemy("mook", 100, 40);
+  e.takeDamage(10, { showDmgNumbers: false }, 1, 0);
+  assert.ok(!e._dmgAccum, "toggle off: no tally state churned");
+});
+
 test("mook holds its windup when no attack ticket is free", () => {
   const g = makeThinkGame(60, 40);
   const m = new JH.Enemy("mook", 62, 40);           // inside meleeRange (20)

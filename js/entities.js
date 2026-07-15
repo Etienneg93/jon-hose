@@ -1114,6 +1114,12 @@
       }
       dmg = this.soakOvershield(dmg);
       this.hp -= dmg;
+      // Damage-number: discrete red -N off Jon for the HP actually lost (dev
+      // toggle). Post-soak, so an overshielded hit reads what it really cost.
+      if (game.showDmgNumbers && dmg > 0 && game.float)
+        game.float(this.x, this.y, "-" + Math.round(dmg), JH.DMGNUM.playerColor,
+          { life: 0.8, rise: 24, h: this.stats.bodyH + 18,
+            big: JH.Balance.dmgNumberScale(dmg).size >= 10 });
       this.invulnTimer = this.stats.invuln;
       this.hurt();
       if (this.beneRank("bedrock")) this.vigorT = 3;   // Bedrock Vigor: +20% knockback window
@@ -1454,11 +1460,22 @@
     takeDamage(dmg, game, dirX, knock) {
       if (this.dead) return;
       this.hp -= dmg;
+      this.accrueDmgNum(dmg, game);   // damage-number running tally (dev toggle)
       this.hurt();
       // The hose soaks: each hit builds wetness; it dries in update().
       this.wetness = Math.min(1, this.wetness + JH.JUICE.wetPerHit);
       if (knock) this.applyKnockback(dirX, knock);
       if (this.hp <= 0) this.die(game);
+    }
+
+    // Damage-number tally: accumulate every damage source into a per-enemy
+    // running total drawn above the HP bar, held for DMGNUM.holdT after the
+    // last hit then reset (so a new spray session starts fresh). No-op unless
+    // the dev toggle is on. Fire DoT routes here too (see update's scald block).
+    accrueDmgNum(dmg, game) {
+      if (!game || !game.showDmgNumbers || dmg <= 0) return;
+      this._dmgAccum = (this._dmgAccum || 0) + dmg;
+      this._dmgHoldT = JH.DMGNUM.holdT;
     }
 
     // Bosses stand their ground — the hose can knock back mooks, not them.
@@ -1470,6 +1487,12 @@
     die(game) {
       if (this.dead) return;
       this.dead = true;
+      // Damage-number kill pop: hand the session total to a floater (big +
+      // bright) so it persists as the corpse vanishes — the accumulator
+      // already includes the killing hit (takeDamage accrues before die).
+      if (game.showDmgNumbers && this._dmgAccum > 0 && game.float)
+        game.float(this.x, this.y, String(Math.round(this._dmgAccum)),
+          JH.DMGNUM.enemyHi, { life: 0.85, rise: 26, h: this.bodyH + 12, big: true });
       game.killJuice(this);
       // Burst waits for the KillPop collapse to finish flattening (~150ms).
       const bx = this.x, by = this.y, bz = this.z, col = this.colorOf();
@@ -1542,6 +1565,9 @@
       }
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
+      // Damage-number tally: hold after the last hit, then reset so a new spray
+      // session starts a fresh count (fire keeps refreshing it while burning).
+      if (this._dmgHoldT > 0) { this._dmgHoldT -= dt; if (this._dmgHoldT <= 0) this._dmgAccum = 0; }
       // Wetness dries off over time; visibly soaked enemies drip.
       if (this.wetness > 0) {
         this.wetness = Math.max(0, this.wetness - JH.JUICE.wetDryPerSec * dt);
@@ -1554,7 +1580,9 @@
       // burning tick never triggers knockback or re-wets the enemy.
       if (this.scaldT > 0) {
         this.scaldT = Math.max(0, this.scaldT - dt);
-        this.hp -= this.scaldDps * dt;
+        const scaldDmg = this.scaldDps * dt;
+        this.hp -= scaldDmg;
+        this.accrueDmgNum(scaldDmg, game);   // fire DoT feeds the same tally (reads orange while burning)
         if (Math.random() < 6 * dt) burst(game, this.x, this.y, this.bodyH * 0.6, JH.PAL.firePatchHi, 1, { speed: 20, life: 0.3, up: 30, size: 1 });
         // Bushfire: once per application, contagion jumps to nearby enemies
         // at this enemy's dps/dur. Spread targets have their own flag
@@ -1725,6 +1753,28 @@
         ctx.fillStyle = "#ff3a3a";
         ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         ctx.fillText(this.def.name.toUpperCase(), Math.round(sx), by - 4);
+        ctx.textAlign = "left";
+      }
+      // Damage-number running tally (dev toggle): the session total drawn above
+      // the HP bar, size + brightness ramped by magnitude, fading as the hold
+      // timer runs out. Orange while the enemy is burning (DoT read), else
+      // yellow. Drawn on the enemy, so it never touches the floater cap.
+      if (JH.Game && JH.Game.showDmgNumbers && this._dmgAccum > 0) {
+        const D = JH.DMGNUM;
+        const st = JH.Balance.dmgNumberScale(this._dmgAccum);
+        const fade = Math.min(1, (this._dmgHoldT || 0) / D.holdT);
+        const burning = this.scaldT > 0;
+        const col = burning ? Assets.lerpHex(D.fireLo, D.fireHi, st.bright)
+                            : Assets.lerpHex(D.enemyLo, D.enemyHi, st.bright);
+        const ty = Math.round(sy - this.bodyH - 14);
+        ctx.save();
+        ctx.globalAlpha = 0.45 + 0.55 * fade;
+        ctx.font = "bold " + st.size + "px monospace"; ctx.textAlign = "center";
+        ctx.fillStyle = "#0a0e18";
+        ctx.fillText(String(Math.round(this._dmgAccum)), sx + 1, ty + 1);
+        ctx.fillStyle = col;
+        ctx.fillText(String(Math.round(this._dmgAccum)), sx, ty);
+        ctx.restore();
         ctx.textAlign = "left";
       }
     }
@@ -4939,6 +4989,7 @@
     takeDamage(dmg, game, dirX, knock) {
       if (this.dead) return;
       this.hp = Math.max(1, this.hp - dmg);
+      this.accrueDmgNum(dmg, game);   // show the running tally on the test dummy too
       this.hurt();
       this.regenTimer = 2.5;
     }
@@ -4946,6 +4997,7 @@
     update(dt, game) {
       this.basePhysics(dt);
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
+      if (this._dmgHoldT > 0) { this._dmgHoldT -= dt; if (this._dmgHoldT <= 0) this._dmgAccum = 0; }
       if (this.regenTimer > 0) this.regenTimer -= dt;
       else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 500 * dt);
       // Scald wears off here too — this update() overrides Enemy's, so without
