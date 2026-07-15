@@ -113,16 +113,26 @@ test("stink cloud rim: inside tags player.gasT, outside (x and depth) does not",
   assert.strictEqual(g.player.gasT, 0, "depth uses the flattened ellipse");
 });
 
-test("gas demotes the pressure tier one step (full -> low reach)", () => {
+test("gas chokes the nozzle to the STINK clog scales at EVERY tank level", () => {
   const g = stubHazardGame(100, 40);
   const p = g.player;
-  p.water = p.stats.maxWater * 0.5;   // full tier (0.25..0.8)
+  // Mid tank: gassed reach = clog rangeMult (was the only case that bit before).
+  p.water = p.stats.maxWater * 0.5;
   p.gasT = 0; p.doSpray(1 / 60, g);
-  const cleanReach = p._dbgReach;
+  const midClean = p._dbgReach;
   p.gasT = 0.15; p.doSpray(1 / 60, g);
-  assert.ok(p._dbgReach < cleanReach, "gassed reach must shrink");
-  assert.ok(Math.abs(p._dbgReach - p.stats.sprayRange * 0.55) < 0.001,
-    "full tier demotes to the LOW tier rangeMult");
+  assert.ok(p._dbgReach < midClean, "mid-tank gassed reach must shrink");
+  assert.ok(Math.abs(p._dbgReach - p.stats.sprayRange * JH.STINK.gasRangeMult) < 0.001,
+    "gassed range = STINK.gasRangeMult");
+  // Full tank: the regression case — the stream must ALSO shorten here (a
+  // one-tier demote left it at full range, so gas read as nothing on top).
+  p.water = p.stats.maxWater;
+  p.gasT = 0; p.doSpray(1 / 60, g);
+  const fullClean = p._dbgReach;
+  p.gasT = 0.15; p.doSpray(1 / 60, g);
+  assert.ok(p._dbgReach < fullClean, "full-tank gassed reach must shrink too");
+  assert.ok(Math.abs(p._dbgReach - p.stats.sprayRange * JH.STINK.gasRangeMult) < 0.001,
+    "full-tank gassed range clamps to the same clog scale");
 });
 
 test("spraying into a cloud disperses it; speed scales with spray damage", () => {

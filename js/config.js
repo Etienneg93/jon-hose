@@ -602,6 +602,12 @@
     friendlyLife: 3,   // s the pop-fast reward cloud lives
     friendlyDps: 8,    // enemy hp/s inside a friendly cloud
     puffCount: 9,      // billow puffs per cloud
+    // Clogged nozzle: while gassed the hose is CHOKED to these output scales
+    // regardless of tank fill (the stream visibly shortens even at full tank —
+    // the readable bite). Honest: the tank is untouched, only the weapon
+    // output is throttled. FEEL KNOBS — raise toward 1 to soften the choke.
+    gasDmgScale: 0.4,   // spray dmg multiplier while gassed (low-tier value)
+    gasRangeMult: 0.55, // spray range multiplier while gassed
   };
 
   // ---- Gust lanes (telegraphed horizontal wind bands) --------------------

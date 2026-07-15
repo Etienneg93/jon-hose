@@ -684,14 +684,15 @@
       // while any water remains — dry still sputters, 80%+ still gets bonus.
       else if (frac >= 0.25 || S.pressureFloor) { dmgScale = 1.00; rangeMult = 1.00; }
       else                   { dmgScale = 0.40; rangeMult = 0.55; }
-      // Stink gas clogs the nozzle: while gassed (StinkCloud tag) output drops
-      // one PRESSURE TIER — bonus reads as full, full reads as low. The tank bar
-      // is untouched (honest numbers: the TIER is what the gas attacks).
-      // Deliberately overrides pressureFloor — the pillar guards tank fraction,
-      // not sabotage.
+      // Stink gas clogs the nozzle: while gassed (StinkCloud tag) the hose is
+      // CHOKED to the STINK clog scales regardless of tank — the stream visibly
+      // shortens even at full tank (a one-tier demote was invisible at the top,
+      // where players spend most time). The tank bar is untouched (honest
+      // numbers: the weapon is what's attacked). Overrides pressureFloor — the
+      // pillar guards tank fraction, not sabotage.
       if (this.gasT > 0 && !dry) {
-        if (frac >= 0.80) { dmgScale = 1.00; rangeMult = 1.00; }
-        else { dmgScale = 0.40; rangeMult = 0.55; }
+        dmgScale = JH.STINK.gasDmgScale;
+        rangeMult = JH.STINK.gasRangeMult;
       }
       // Pressure Sermon: arms after SERMON.charge seconds of continuous
       // non-dry spray — no pressure-tier requirement (a tier gate made it
@@ -1141,6 +1142,10 @@
         const hot = flick > 0.75;   // color licks toward white-hot on peaks
         outlines.push([hot ? "#ffe070" : "#ffb020", fp], ["#ff6a20", fp * 0.6], ["#ff3a00", fp * 0.35]);
       }
+      // Debuff edges ring on top of any buff/burn edges (a hazard read, not a
+      // buff): green while gassed, pale TP while snared.
+      if (this.gasT > 0)   outlines.push([JH.PAL.gasbagDk, 0.4 + 0.2 * Math.sin(this.t * 7)]);
+      if (this.snareT > 0) outlines.push([JH.PAL.tpmummyDk, 0.4 + 0.2 * Math.sin(this.t * 9)]);
       if (JH.Game && JH.Game.deepdiving) {
         // Seated pose while watching the deepdive TV (hand-supplied frame).
         Assets.draw(ctx, "jonSit", sx, spriteSy, this.facing, { t: this.t });
@@ -1163,6 +1168,34 @@
         ctx.globalAlpha = 0.85;
         for (const ox of offsets) {
           Assets.drawFx(ctx, "fire-jon", sx + ox, spriteSy + 2, t + (ox + 8) * 0.13, { scale: 0.5 });
+        }
+        ctx.restore();
+      }
+      // Gassed: sickly-green haze coughs off Jon's head while the nozzle is
+      // choked (StinkCloud tag) — the on-body tell that pairs with the stream
+      // visibly shortening. Shown regardless of burn/buffs (it's a debuff).
+      if (this.gasT > 0) {
+        ctx.save();
+        for (let i = 0; i < 3; i++) {
+          const ph = this.t * 2.2 + i * 2.1;
+          const gx = sx + Math.sin(ph) * 7;
+          const gy = spriteSy - this.stats.bodyH * 0.72 - i * 5 - Math.sin(ph * 1.3) * 2;
+          const r = 4 + Math.sin(ph) * 1.5;
+          ctx.globalAlpha = 0.30 + 0.16 * Math.sin(ph * 1.7);
+          ctx.fillStyle = JH.PAL.stink;
+          ctx.beginPath(); ctx.ellipse(gx, gy - r * 0.3, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+      // Snared: TP streamers drag off Jon's legs while the soft slow runs
+      // (mirrors the burn/kibble on-body status reads the user asked for).
+      if (this.snareT > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = JH.PAL.tpmummy;
+        for (let i = -1; i <= 1; i++) {
+          const fl = Math.sin(this.t * 8 + i * 1.3) * 2.5;
+          ctx.fillRect(Math.round(sx + i * 5 - this.facing * 3 + fl), Math.round(spriteSy - 9), 2, 8);
         }
         ctx.restore();
       }
