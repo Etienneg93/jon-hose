@@ -6,7 +6,7 @@ punches, Jon blasts foes with a high-pressure water hose. Water is limited, so y
 tank that drains as you spray and recharges over time — and you spend the cash dropped by
 enemies on upgrades between fights.
 
-> Status: **Live for playtesters (v0.27.x) — 29 waves across five elemental acts**
+> Status: **Live for playtesters (v0.31.0) — 29 waves across five elemental acts**
 > (4-4-5-6-6 escalation curve), each capped by a boss with its own distinct dodge:
 > **The Big Drip** (step out of ground slams), **The Switch of Doom** (change depth
 > lane), **Quake Walker** (dash through shockwaves in the earth-themed rubble),
@@ -18,8 +18,12 @@ enemies on upgrades between fights.
 > signature moves, and a death loop through the **Church of the Holy Hose** — pillars
 > bought with Holy Essence, a Reliquary that ransoms back your washed boons, and
 > Father Jon. The streamlined kit is move + spray + dash (no jump/melee — by design).
-> All enemies wear baked pixel-art sprites. Every merge to main is a named release —
-> see `CHANGELOG.md`.
+> The released combat roster wears baked pixel-art sprites. Every merge to main
+> is a named release — see `CHANGELOG.md`.
+>
+> **Unreleased branch note:** `air-act` currently extends the campaign to wave 32
+> with the sixth, Air-themed act. Its remaining waves, set-piece, Ass Man boss,
+> and release work are still in progress and remain gated on playtesting.
 
 ---
 
@@ -71,8 +75,11 @@ key/click (browser autoplay policy).
 2. **Spray** a high-pressure water beam to damage and knock back foes. Pyros take bonus damage. Facing locks while you spray, so you can back-pedal and keep aiming.
 3. **Manage water** — drain vs. passive recharge, hydrant top-ups, and tank upgrades. Stand next to a **fire hydrant** while low to refill fast.
 4. **Collect Suds** (currency) and health/water drops from downed enemies.
-5. **Walk up to the vendor** (Old Spigot, at the back of the street — he shows up from the second wave onward) and press `E` for the **skill tree** plus a repeatable **Patch-Up Kit** (15 Suds → 35% HP); he's left behind as you push on.
-6. **Beat the boss** at the end of the level to win the slice.
+5. **Visit the event shop** when Old Spigot appears and press `E` to spin its
+   rotating relic wheel, buy a signature build, or take the Kibble Pack
+   lifeline; he is left behind as you push on.
+6. **Advance through the elemental acts**, bosses, and authored set-pieces;
+   each cleared act establishes the next checkpoint.
 
 ---
 
@@ -210,8 +217,9 @@ handbook); specs and executed plans live in `docs/superpowers/`. Headlines:
 
 - **Areas & World pass**: between-level area choices (Hades room-choice feel) paired
   with a background/floor art upgrade.
-- **The air world**: the Ass Man boss + a new air-themed enemy roster (each act's
-  enemies match its boss's element).
+- **The air world**: currently in development on `air-act`; Plan 1 provides the
+  cloudline backdrop, air hazards, new roster, and waves 30–32. The holdout,
+  waves 33–35, Ass Man, and the act's bookends remain.
 - Boss phase language, more levels, co-op — and permanent Church meta-progression,
   **deliberately parked** until the game is long enough that a fresh-run start stops
   being the better experience.

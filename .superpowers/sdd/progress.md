@@ -1,48 +1,71 @@
-# SDD Progress — Fire-Truck Escape
+# SDD Progress — Air Act / Ass Man
 
-Plan: `docs/superpowers/plans/2026-07-06-fire-truck-escape.md`
-Spec: `docs/superpowers/specs/2026-07-06-fire-truck-escape-design.md`
-Branch: `claude/fire-truck-minigame-concept-2pdlg0`
+Spec: `docs/superpowers/specs/2026-07-12-air-act-ass-man-design.md`
+Plan 1: `docs/superpowers/plans/2026-07-14-air-act-1-world-roster-core.md`
+Branch: `air-act`
 
-| # | Task | Status |
-|---|------|--------|
-| 1 | Config block + pure balance helpers | ☑ done (224/224 tests) |
-| 2 | Scene skeleton + state wiring + debug entry | ☑ done (headless-verified) |
-| 3 | Truck hose (big blast, tank, pressure) | ☑ done (headless-verified) |
-| 4 | Fire-roster hazards + collisions + honest HP | ☑ done (headless-verified) |
-| 5 | Hydrants (refuel + lane-wash) | ☑ done (headless-verified) |
-| 6 | Collapse-wall pressure loop | ☑ done (headless-verified) |
-| 7 | Furnace climax + essence + clean bonus | ☑ done (headless-verified) |
-| 8 | Arrival → benediction beat + Slayer entry + air handoff | ☑ done (headless-verified) |
-| 8b | Boarding beat (crumbling world + drive-in truck, press E) | ☑ done (user request, headless-verified) |
-| 8c | Reorder: Slayer benediction FIRST → pick triggers rumble+dread+truck-in (right edge) → board | ☑ done (user request, headless-verified) |
-| 9 | Procedural art pass | ◐ in progress |
-| 9a | Seamless world backdrop (shared Background) + real sprite swap | ☑ done (user request, headless-verified) |
-| 9b | Hose-style spray cone, douse fires, big tank + hydrant refill | ☑ done (user request, headless-verified) |
-| 9c | Boss changed Furnace → Firewall (WALLBOSS mechanics on the road) | ☑ done (user request, headless-verified) |
-| 10 | Handoff (test, headless capture, STOP for playtest) | ☐ not started |
+## Status
 
-## Log
+**Plan 1 complete and pushed; branch held for user playtest.** The campaign
+currently ends after wave 32. Plans 2 and 3 are not written. Nothing merges to
+`main` before explicit playtest approval.
 
-- 2026-07-06: plan + spec written.
-- 2026-07-06: Task 1 done — JH.TRUCKRUN config block, js/truckrun.balance.js
-  (truckPressure/douse/cleanBonus/beamCovers/buildTimeline/gapExists, pure +
-  dual-export), tests/truckrun.test.js (10 tests). Full suite 224/224. Committed
-  to feature branch.
-- 2026-07-06: Task 2 done — js/truck.js JH.TruckRun scene (intro→run→arrive
-  phase machine, depth/throttle/dash driving, placeholder render), state="truck"
-  dispatch in game.js (update+render), afterTruckRun()→win() stub, debugEnterTruck
-  + ?truck=1 hook in main.js, truck.js registered in index.html. Headless
-  (chromium /opt/pw-browsers): entry→truck state, phase reaches run, Down moves
-  depth 43→86, scroll advances, dash fires, scene end→win, 0 pageerrors.
-  Screenshot scratchpad/t2-run.png. Suite 224/224. Next: Task 3 (hose).
+Current verification baseline: **342/342 unit tests green**. Plan 1 received
+unit, review, and headless coverage; the ignored task reports and scripts in
+this directory retain the detailed transcripts.
 
-## Gate Crash finale (plan: docs/superpowers/plans/2026-07-07-gate-crash-finale.md)
+## Plan 1 execution
 
-- Task 1: complete (commits b5556d1..53e89c0, review clean). Minor (for final review): finale config lead comment narrates the beat (plan-mandated text); several finale keys unconsumed until Task 3 (by design).
-- Task 2: complete (commits 53e89c0..eb1b694, review clean incl. approved cleanDarkMatte border+maxC extension for a source matte bar). Minor (for final review): border+maxC drop rule is unsafe for future wholly-dark border-touching source art (documented in baker comment); baker comment at ~349 leans rationale-ish.
-- Task 3: complete (working-tree only, playtest-held — js/truck.js finale machine + walkway render; headless: all 5 phases + win reached, 0 pageerrors; review clean). Minor (for final review): banner painted under full-white in road path (cosmetic); reveal→crash has no timeout beyond truck travel; standDelay clocks from crash start not landing.
-- Task 4: complete (docs-only commit; no new game code). Honest end-to-end headless run (msedge): fast-forwarded to the boss (only rig), then really FOUGHT the Firewall with held keys (depth-match the roaming weak spot + spray wind/open windows) — killed in ~10s, hp 1360→0, NO hp-cut needed. Finale played untouched: detonate→whiteout→reveal→crash→walk all in order, essence +3, Jon walked into the gate, scene torn down, Game.state==="win". Zero pageerrors/JS errors; only console noise = known sprites/church/* 404s. npm test 229/229. 8-screenshot pack captured (t4-01..t4-08 in the session scratchpad) + read/described. Docs updated: fire-truck-art-handoff §3 marked done + §5 finale summary. EVERYTHING feel-bearing (js/truck.js, js/assets.js) stays UNCOMMITTED for the user's playtest — do NOT merge/release until they play.
-- Task 4: complete (docs commit c79d61c; honest e2e: 10.3s fight, all phases, win, 0 errors, 8 screenshots).
-- Final whole-branch review: APPROVED for playtest, no Critical/Important. Post-review fix wave in uncommitted truck.js (spray clear + kill-frame hose return, +essence banner, landing poof, crash micro-flash, comment) re-reviewed clean. Fix-later notes: reveal→crash config-sanity assert; 0.12 flash duration duplicated; landPoofT/flashT not in finale seed.
-- STATUS: held UNCOMMITTED (js/truck.js, js/assets.js) for the user playtest, per the gate.
+| # | Task | Status | Commits / evidence |
+|---|---|---|---|
+| 1 | Sixth-act config, wave 30–32 data, act arrays, sprinkle floor | done | `4d3dee8`; 305 tests |
+| 2 | Stink cloud footprint, gas pressure choke, spray dispersal | done | `ce481d6`, rim correction `81f1c0e`; task-2 report |
+| 3 | Gust lanes and wave-terrain lifecycle | done | `190e7a9`; task-3 report |
+| 4 | Plunger Fiend lunge/latch/tank drain/dash break | done | `22155c7`; task-4 report |
+| 5 | TP Mummy drop-in, wrap snare, death shove | done | `0a4af22`, landed-hit fix `65c003f`; task-5 report |
+| 6 | Gasbag vent cycle and pop-fast friendly burst | done | `3196c65`; task-6 report |
+| 7 | Bidet Turret and locked-target water arcs | done | `ba6fecc`, knockback wiring `4299dda`; task-7 report |
+| 8 | Air arrival, cloudline scene, vendor/checkpoint handoff | done | `57c87a2`, respawn floor `f634aae`; task-8 report + `t8-verify.mjs` |
+| 9 | Whole-plan review and cross-system fix wave | done | `30f65f0`; `fixwave-report.md` + `fixwave-verify.mjs` |
+
+## Review findings resolved
+
+- Post-Slayer free-walk can no longer roll wave 30 before the truck sequence.
+- The cloudline backdrop is gated by scene truth and does not bleed into the
+  truck run.
+- Air arrival clears stale combat arrays and establishes the gate as the
+  minimum free-walk/respawn position.
+- Plunger and TP Mummy riders apply only when `Player.takeHit` returns a
+  landed hit; dodges never latch or snare.
+- Gasbag remains in the hose/contact band, only records a vent after a cloud
+  actually spawns, and preserves its pop-fast reward window.
+- Bidet Turret is immune to separation and uses its configured landing shove.
+- Stink-cloud puff wobble is capped at the shared hit footprint rim.
+
+## Live-playtest support rounds
+
+| Round | Result | Commits |
+|---|---|---|
+| Dev sim-power | Wave warps can grant act-expected levels, benedictions, and wallet so late-wave reads are not fresh-stat slaughter | `28a1b1b` |
+| Gas readability | Full-tank bite, lingering burn-style choke, status indicators, sickly aura, and green sputter | `8c97d32`, `1a1cf1a`, `07b32c2` |
+| Damage numbers | Dev-toggle enemy running tallies, incoming damage, crit punch, kill slam, and universal boss status pass | `aa69e15`, `60b8bec` |
+| Scald / balance follow-up | Scald reads as steam; boss overlays cover custom draws; super-bulwark/furnace regressions fixed; Hydro Lance capped at target + one enemy | `82ddf82`, `bede4bb` |
+
+## Cross-cutting API state
+
+- `Player.takeHit(dmg, game, fromX, knock)` returns `true` only for a landed
+  hit and accepts an optional knockback amount.
+- `Enemy.takeDamage(dmg, game, dirX, knock, crit)` accepts an optional crit
+  flag for damage-number presentation.
+- `Balance.unlockedPool(waves, waveIndex, fromWave)` accepts a floor so Air
+  sprinkling cannot pull earlier-world enemies.
+
+## Next work
+
+1. User playtest gate for the current branch.
+2. Plan 2: Super Plunger, Super Gasbag, Cloudline Holdout, Bidet placement,
+   waves 33–35, quantified threat-score pass.
+3. Plan 3: three-phase Ass Man, entry/outro bookends, K-9 Unit, leaderboard
+   comparator/payload, victory-flow move, and named minor release.
+4. Deferred art: Air roster baking and Plunger silhouette polish after feel
+   survives playtest.

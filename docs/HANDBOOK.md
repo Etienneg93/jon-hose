@@ -1,8 +1,9 @@
 # Jon Hose — Project Handbook
 
 The committed source of truth for design principles, the systems map, and
-the forward vision. Written 2026-07-06 at v0.27.5, when the game was live
-for external playtesters. If you are an AI assistant working on this repo:
+the forward vision. Written 2026-07-06 and refreshed 2026-07-15 at v0.31.0
+while the unreleased `air-act` branch was in playtest development. If you are
+an AI assistant working on this repo:
 read this before touching gameplay code, and keep it current when design
 decisions change — this file is the successor's briefing, not a museum.
 
@@ -11,9 +12,11 @@ decisions change — this file is the successor's briefing, not a museum.
 ## 1. What this game is
 
 A vanilla-JS canvas beat 'em up (no bundler, `file://`-runnable, global
-namespace `JH`). Jon Hose walks a 29-wave street across five elemental
-acts, spraying a pressure-managed water hose — his only weapon. Move,
-spray, dash. **No jump, no melee: cut from the design; do not reintroduce.**
+namespace `JH`). The released v0.31.0 campaign is a 29-wave street across
+five elemental acts. The unreleased `air-act` branch currently extends it
+through wave 32 and a sixth act, with waves 33–36 still planned. Jon sprays a
+pressure-managed water hose — his only weapon. Move, spray, dash. **No jump,
+no melee: cut from the design; do not reintroduce.**
 
 The run structure is Hades-shaped: XP levels give steady numbers,
 **benedictions** (element boons picked at sigil beats after bosses and
@@ -55,9 +58,9 @@ pending).
 
 **World-element theming.** Each act's roster matches its boss's element:
 Act 3 is earth (bulwarks in the rubble), the Fire World is fire
-(smelt/fuse/furnace). The future air act (Ass Man) requires a NEW
-air-themed roster designed in its own brainstorm — do not reuse fire
-enemies there.
+(smelt/fuse/furnace), and the Air World is Ass Man's sanitation-horror
+warzone (plunger/TP mummy/gasbag/bidet). Do not reuse a prior world's roster
+as a new world's authored core.
 
 **Readability beats mercy.** Attack tickets cap simultaneous attackers so
 crowds stay readable at any size — they are NOT spawn control. Spawn flow
@@ -76,11 +79,11 @@ programmatic keypress must span ≥2 frames or the edge is lost.
 
 | System | Files | Notes |
 |---|---|---|
-| Tunables — ALL of them | `js/config.js` | Single source of truth; nothing else hardcodes gameplay constants. Act-indexed arrays use `Balance.ticketBudget(actLevel, arr)`, indexed `actLevel+1` (actLevelForWave returns -1..3): SPRINKLE.counts, TICKETS.budgets, WAVEFLOW.fieldCap, SUPER_TUNE.hpByAct. |
+| Tunables — ALL of them | `js/config.js` | Single source of truth; nothing else hardcodes gameplay constants. Act-indexed arrays use `Balance.ticketBudget(actLevel, arr)`, indexed `actLevel+1` (the Air branch returns -1..4): SPRINKLE.counts, TICKETS.budgets, WAVEFLOW.fieldCap, SUPER_TUNE.hpByAct, SHOP.relicGradeOdds. |
 | Pure balance math | `js/balance.js` | eliteScale, powerCount, superEliteDef, drop rolls. Dual-export (browser + node:test). Unit-test anything here. |
-| Entities | `js/entities.js` | Player, all enemies, bosses, projectiles, FirePatch, Pickup, Sigil. Player transient buffs must be cleared at respawn (`clearBuffs`) — timers freeze through the Church and resume otherwise. |
+| Entities | `js/entities.js` | Player, all enemies, bosses, projectiles, ground hazards, Pickup, Sigil. Player transient buffs must be cleared at respawn (`clearBuffs`) — timers freeze through the Church and resume otherwise. |
 | Game orchestration | `js/game.js` | Waves (wavePool/trickle/batch), tickets (`canAttack`), sigil beats, shop (`priceOf` = single discount source: Punch Card, voucher50), XP levels, death seq, stat panel, HUD. |
-| Benedictions | `js/benedictions.js` | DEFS (17 boons/3 duos/4 legendaries), active/washed maps, wash() at death, reclaimNext() for the Reliquary, pickOffers (pure, injectable rng). Dual-export. |
+| Benedictions | `js/benedictions.js` | DEFS (17 boons/3 duos/4 legendaries), active/washed maps, wash() at death, redeemAll() for the Reliquary, pickOffers (pure, injectable rng). Dual-export. |
 | Church | `js/church.js` | Meta state (essence, pillars) + the walkable nave scene (sermon gates movement; pillars, Reliquary, pity voucher, portal). Text over the backdrop must use `otext` (outlined) — raw fillText muddles. |
 | Pillars | `js/pillars.js` | Element pillar ranks; applied via `Upgrades.computeStats`. |
 | Stat chain | `js/upgrades.js` | `computeStats` folds: base → shop signatures/repeatables → levels (`JH.LEVELS.cycle`) → pillars → `Benedictions.applyStats`. `player.applyStats` diff-tracks for the upgrade-sequence juice. |
@@ -93,10 +96,12 @@ programmatic keypress must span ≥2 frames or the edge is lost.
    (`docs/superpowers/plans/`) → subagent-driven execution with review
    gates (ledger: `.superpowers/sdd/progress.md`). Small live-support
    rounds are inline.
-2. **Playtest gate**: gameplay changes stay uncommitted until the user
-   plays them and says push. Verify headlessly first (see the
-   `headless-playtest` skill in `.claude/skills/`) — full loops, not
-   smoke: drive real keys through the church, buy at the shop, clear waves.
+2. **Playtest gate**: gameplay changes may be committed and pushed to their
+   feature branch so the user can pull and playtest them, but nothing merges
+   to `main` until the user explicitly approves it. Verify headlessly before
+   claiming behavior works (see the `headless-playtest` skill in
+   `.claude/skills/`) — full loops, not smoke: drive real keys through the
+   church, buy at the shop, clear waves.
 3. **Release ritual** (see the `release` skill): version bump + CHANGELOG
    + `release: v{X} - {Name}` merge title, every merge to main. Minor
    bumps only for full designed passes; playtest follow-ups are patches on
@@ -115,9 +120,12 @@ programmatic keypress must span ≥2 frames or the edge is lost.
 - Logical-vs-device resolution: generate art ~4x+ the logical target
   (480×270 logical maps onto a dpr-scaled native buffer; a 53-logical-px
   character is ~212 real px at 1080p).
-- Imagen generation is out of credits (429s); bake with the node tools.
+- The released combat roster is baked. The Air roster is intentionally using
+  procedural painters until its mechanics and silhouettes survive playtest.
+- If remote generation is unavailable, bake with the node tools; never make
+  the runtime depend on a remote art service.
 
-## 6. Balance reference (v0.27.5 state)
+## 6. Balance reference (v0.31.0 baseline)
 
 - Player: 100hp, 100 water tank (~2.8s spray), 50 dps at full pressure,
   pressure tiers green/yellow/red by tank fraction.
@@ -136,26 +144,29 @@ programmatic keypress must span ≥2 frames or the edge is lost.
 
 ## 7. Future vision (the queue, in rough order)
 
-1. **v0.28 — Areas & World pass** (recorded bucket): between-level area
-   choices (Hades room-choice feel) + background/floor art upgrade —
-   these pair; choices need visually distinct backdrops.
-2. **Air world / Ass Man boss**: entry idea recorded (plain clothes → dog
-   pees on holy hydrant → rage suit-up cutscene → fight). Needs its own
-   brainstorm: air-themed enemy roster (world-theming directive), boss
-   moves, where it slots in the act structure.
-3. **Boss phase language**: playtest critique that bosses are one-pattern;
-   phases/pattern-mixing pass (ideas INDEX).
-4. **Overpressure PSI dial**: parked until church persistence unparks and
-   boss patterns ship.
-5. **Church persistence**: PARKED BY DESIGN — fresh run every boot is
+1. **Air world / Ass Man boss — ACTIVE on `air-act`:** approved spec and
+   Plan 1 are built through wave 32. Plan 2 adds the Cloudline Holdout,
+   super-elites, Bidet placement, waves 33–35, and the threat-score pass.
+   Plan 3 adds the three-phase Ass Man fight, bookends, K-9 Unit, leaderboard
+   ordering, victory move, and the act's release.
+2. **Areas & World pass** (recorded bucket): between-level area choices
+   (Hades room-choice feel) + background/floor art upgrade — these pair;
+   choices need visually distinct backdrops.
+3. **Boss phase language**: Ass Man debuts the first full three-phase fight;
+   the older bosses still need the planned phases/pattern-mixing pass.
+4. **Hose Aspects**: strong replayability proposal in the ideas index; not
+   yet approved for implementation.
+5. **Overpressure PSI dial**: parked until boss patterns ship and the
+   progression prerequisites are revisited.
+6. **Church persistence**: PARKED BY DESIGN — fresh run every boot is
    intentional until the game is long enough that a fresh start stops
    being the better experience. Built code sits on the
    `church-persistence` branch; don't re-propose early.
-6. **Deferred art/content**: Slayer post-defeat portrait/dialogue/Church
+7. **Deferred art/content**: Slayer post-defeat portrait/dialogue/Church
    NPC (cutscene stub live, no art); furnace super-elite (needs a designed
-   move); fuse idle wick cleanup; Firewall chassis bake; procedural
-   painters remain fallbacks everywhere.
-7. **Longer term** (README roadmap): more levels, co-op, level-select.
+   move); fuse idle wick cleanup; Firewall chassis bake; Air roster baking;
+   procedural painters remain fallbacks everywhere.
+8. **Longer term** (README roadmap): more levels, co-op, level-select.
 
 ## 8. Known playtest history (what got us here)
 
