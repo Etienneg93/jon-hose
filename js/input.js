@@ -16,7 +16,7 @@
   };
 
   // Logical actions the game cares about.
-  const ACTIONS = ["up", "down", "left", "right", "spray", "whack", "dash", "jump", "confirm", "pause", "toggleStats"];
+  const ACTIONS = ["up", "down", "left", "right", "spray", "dash", "confirm", "pause", "toggleStats"];
 
   // Keyboard map (multiple keys per action).
   const KEYMAP = {

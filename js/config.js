@@ -198,12 +198,10 @@
     dashSpeed: 240,
     dashTime: 0.18,         // seconds of dash
     dashCd: 0.7,            // cooldown seconds
-    jumpV: 165,             // initial jump velocity (z px/sec)
-    gravity: 620,           // z gravity px/sec^2
+    gravity: 620,           // shared vertical gravity for airborne entities (z px/sec^2)
     invuln: 0.6,            // i-frames after taking a hit (sec)
 
     // Water / hose — SMALL tank, punchy short bursts, quick recovery.
-    // At good pressure the hose out-DPSes melee; melee is the dry fallback.
     maxWater: 100,
     waterDrain: 36,         // units/sec while spraying (~2.8s per full tank)
     waterRegen: 18,         // units/sec passive recovery (was 14)
@@ -216,13 +214,6 @@
     beam: 0,                // stream concentration tier (0=hose spray .. 3=lance) — VISUAL only
     pierceMax: 1,           // max enemies the stream damages (1 = closest only; Hydro Lance → 2)
     waterReturn: 0,         // water units/sec refunded while hosing a target (Closed Loop)
-
-    // Melee fallback (no water cost) — deliberately weak so the hose wins at
-    // any decent pressure; melee is just for when you're dry.
-    meleeDamage: 11,
-    meleeRange: 26,
-    meleeCd: 0.34,
-    meleeKnock: 110,
 
     dodgeChance: 0,         // fraction chance to negate a hit entirely (Second Wind)
     burnTakenMult: 1,       // damage multiplier for burn taken (Pillar of Fire rank 3+)
@@ -395,7 +386,7 @@
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable
   // tentacles. Fires telegraphed full-width LINE attacks along a depth row;
-  // dodge by moving up/down a lane (or jumping).
+  // dodge by moving up/down to another lane.
   JH.SWITCH = {
     name: "The Switch of Doom", hp: 1000, speed: 30, bodyW: 48, bodyH: 30,
     touchDmg: 14, contactCd: 0.9, suds: 240, color: "switchBody",
@@ -567,7 +558,7 @@
 
   // Damage numbers (dev-toggle feature, JH.Game.showDmgNumbers). Enemy damage
   // shows as a per-enemy RUNNING TALLY drawn above its HP bar (accumulates all
-  // sources — hose, melee, fire DoT — never a floater, so it can't spam the
+  // sources — hose, Scald, friendly hazards — never a floater, so it can't spam the
   // cap); the killing-blow total hands off to a floater. Damage Jon TAKES is a
   // discrete red -N floater. Size + brightness ramp with magnitude.
   JH.DMGNUM = {
@@ -575,7 +566,7 @@
     fullAt: 60,                // value at which size/brightness saturate
     killBump: 3,               // extra px on the killing-blow total pop
     holdT: 0.5,                // s the enemy tally holds after the last hit, then resets
-    enemyLo: "#d8c86a", enemyHi: "#fff2a0",   // pale→bright yellow (hose/melee)
+    enemyLo: "#d8c86a", enemyHi: "#fff2a0",   // pale→bright yellow (hose/direct damage)
     fireLo:  "#ff8a30", fireHi:  "#ffd060",   // tally leans orange while the enemy is burning (DoT read)
     critLo:  "#ffd24a", critHi:  "#ffffff",   // hot gold→white while the tick is a CRIT (bonus pressure / amped)
     playerColor: "#ff5a5a",    // red -N for damage Jon takes
@@ -805,8 +796,8 @@
   // the WEAK SPOT (an exposed port/core) takes damage, and only while OPEN. The
   // weak spot also ROAMS in depth — its lane (this.y) is what the stream is
   // tested against, so the player must stand in its lane. Attacks: PORT SLAM
-  // slab in front of the face (back off) and a SURGE shockwave along the floor
-  // (jump). Not in JH.LEVEL1.waves; wire in with
+  // slab in front of the face (back off) and a SURGE shockwave along its depth
+  // lane (step out). Not in JH.LEVEL1.waves; wire in with
   //   { name: "THE FIREWALL", boss: true, bossType: "wallboss" }  (game.js maps it).
   JH.WALLBOSS = {
     name: "The Firewall", hp: 1500, suds: 540, color: "wallbossBody",

@@ -35,6 +35,16 @@ function makePlayer() {
   return new JH.Player(60, 40);
 }
 
+test("Player exposes no cut jump or melee state", () => {
+  const p = makePlayer();
+  for (const key of ["jumpV", "meleeDamage", "meleeRange", "meleeCd", "meleeKnock"])
+    assert.ok(!Object.hasOwn(JH.PLAYER, key), key + " must not return to player config");
+  for (const key of ["meleeTimer", "meleeCdTimer", "meleeFxTimer"])
+    assert.ok(!Object.hasOwn(p, key), key + " must not return to Player state");
+  assert.strictEqual(typeof p.doMelee, "undefined");
+  assert.strictEqual(typeof p.drawMeleeArc, "undefined");
+});
+
 test("Player.applyBurn: adds stacks and resets timer", () => {
   const p = makePlayer();
   assert.strictEqual(p.burnStacks, 0);

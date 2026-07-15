@@ -116,7 +116,7 @@
       this.frame = 0; this.animTimer = 0; this.state = "idle";
       this.t = 0;
     }
-    // Shared physics: jump arc + knockback decay + depth clamp.
+    // Shared physics: airborne z motion + knockback decay + depth clamp.
     basePhysics(dt) {
       this.t += dt;
       if (this.z > 0 || this.vz !== 0) {
@@ -168,7 +168,6 @@
       this.sudsEarned = 0;
       this.dashTimer = 0; this.dashCdTimer = 0; this.dashBoostTimer = 0;
       this.dashGraceT = 0;         // post-dash i-frames (Pillar of Air III), set at dash end
-      this.meleeTimer = 0; this.meleeCdTimer = 0;
       this.invulnTimer = 0;
       this.burnGraceT = 0;         // i-frames for burn stacks (mirrors hit invuln)
       this.burnTickT = 0;          // time accrued toward the next burn damage beat
@@ -177,7 +176,6 @@
       this.sprayDry = false;
       this.sprayTick = 0;
       this.sprayEmitAcc = 0;       // fractional particle emitter for the stream
-      this.meleeFxTimer = 0;       // drives the melee swing arc
       this.concertaTimer = 0;      // Concerta pill: unlimited water while > 0
       this.pressureBuffT = 0;      // Prayer Bead pressure buff, sec remaining
       this.kibbleTimer = 0;        // Kibble: HP regen over 6 s while > 0
@@ -320,7 +318,6 @@
       if (this.burnGraceT > 0) this.burnGraceT -= dt;
       if (this.dashGraceT > 0) this.dashGraceT -= dt;
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
-      if (this.meleeCdTimer > 0) this.meleeCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
       if (this.douseCdT > 0) this.douseCdT -= dt;
@@ -406,7 +403,6 @@
       let my = (this.nearShop || game.deepdiving) ? 0 : ((In.held("down") ? 1 : 0) - (In.held("up") ? 1 : 0));
       // Facing is LOCKED while spraying so you can back-pedal and keep aim.
       if (mx !== 0 && !wantSpray) this.facing = mx > 0 ? 1 : -1;
-      if (this.meleeFxTimer > 0) this.meleeFxTimer -= dt;
 
       // Standing Stone: stillT counts seconds with no movement input and no
       // dash in flight; any movement or dash resets it to 0.
@@ -568,16 +564,6 @@
       const len = Math.hypot(mx, my) || 1;
       this.x += (mx / len) * speed * dt;
       this.y += (my / len) * speed * dt;
-
-      // ---- jump
-      if (In.pressed("jump") && this.z === 0) { this.vz = S.jumpV; game.audio.play("jump"); }
-
-      // ---- melee whack
-      if (In.pressed("whack") && this.meleeCdTimer <= 0) {
-        this.meleeCdTimer = S.meleeCd; this.meleeTimer = 0.18;
-        this.doMelee(game);
-      }
-      if (this.meleeTimer > 0) this.meleeTimer -= dt;
 
       // ---- spray hose (held)
       this.spraying = false;
@@ -1080,31 +1066,6 @@
       }
     }
 
-    doMelee(game) {
-      const S = this.stats;
-      game.audio.play("whack");
-      this.meleeFxTimer = 0.18;   // drives the swing-arc visual (shows reach)
-      let hit = false;
-      for (const e of game.enemies) {
-        if (e.dead) continue;
-        if (Geo.inHitArc(this, e, this.facing, S.meleeRange, 16)) {
-          e.takeDamage(S.meleeDamage, game, this.facing, S.meleeKnock);
-          e.applyKnockback(this.facing, S.meleeKnock * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.1);
-          burst(game, e.x, e.y, e.z + 14, "#fff", 4, { speed: 90, life: 0.2 });
-          hit = true;
-        }
-      }
-      // Barricade also takes melee hits.
-      const wall = game.wall;
-      if (wall && !wall.dead) {
-        const fwd = (wall.x - this.x) * this.facing;
-        if (fwd > 0 && fwd - this.bodyW * 0.5 - wall.bodyW * 0.5 <= S.meleeRange) {
-          wall.takeDamage(S.meleeDamage, game); hit = true;
-        }
-      }
-      game.shake(hit ? 3 : 1);
-    }
-
     // Returns true when the hit LANDED, false when it was negated (i-frames,
     // storm dodge window, dodge chance) — riders like snares key off this.
     // knock: caller-supplied knockback impulse px/s, default 90.
@@ -1233,8 +1194,6 @@
         }
         ctx.restore();
       }
-      if (this.meleeFxTimer > 0) this.drawMeleeArc(ctx, cam);
-
       // Pressure Sermon pip: pulsing water diamond at the nozzle side while
       // the hold is armed — "release now" reads at a glance.
       if (this.sermonReady) {
@@ -1412,25 +1371,6 @@
       }
     }
 
-    // Hose-whip swing arc that visualises melee reach.
-    drawMeleeArc(ctx, cam) {
-      const prog = 1 - this.meleeFxTimer / 0.18;       // 0..1 through the swing
-      const cx = this.x - cam, cy = Geo.feetScreenY(this.y, this.z) - 14;
-      const r = this.stats.meleeRange + this.stats.bodyW * 0.5;
-      const a0 = -1.1, a1 = 1.1;                        // top -> bottom sweep
-      const a = a0 + (a1 - a0) * prog;
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.scale(this.facing, 1);
-      ctx.globalAlpha = 0.85 * (1 - prog * 0.5);
-      ctx.strokeStyle = "#dff3ff";
-      ctx.lineWidth = 3; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.arc(0, 0, r, a - 0.5, a + 0.4); ctx.stroke();
-      // a couple of speed lines
-      ctx.globalAlpha *= 0.6; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(0, 0, r - 4, a - 0.4, a + 0.3); ctx.stroke();
-      ctx.restore();
-    }
   }
   JH.Player = Player;
   // Rank of an owned benediction (0 if not owned, or module not loaded).
@@ -3405,8 +3345,8 @@
 
   // ============================================ SWITCH OF DOOM (boss 2)
   // 8-port switch with Doc-Ock cable tentacles. Fires telegraphed FULL-WIDTH
-  // line attacks along a depth row — dodge by changing lane (up/down) or
-  // jumping over. Distinct from the Big Drip's positional zone attack.
+  // line attacks along a depth row — dodge by changing lane (up/down).
+  // Distinct from the Big Drip's positional zone attack.
   class SwitchBoss extends Enemy {
     constructor(x, y) {
       super("mook", x, y);
@@ -3719,7 +3659,7 @@
 
   // ============================================== QUAKE SHOCKWAVE
   // A tremor that rolls along the FLOOR from a stomp. Spans the whole depth
-  // band and only hits a GROUNDED player — jump over it. Runs through the
+  // band; dash through its moving rim. Runs through the
   // game.embers pipeline (update(dt,game)->keep, draw(ctx,cam)).
   class Shockwave {
     constructor(x, dir, speed, def) {
@@ -4755,7 +4695,7 @@
 
     applyKnockback() { /* immovable — the hose can't shove a wall */ }
 
-    // Armoured everywhere except the OPEN core. Spray/melee route through here.
+    // Armoured everywhere except the OPEN core. Spray damage routes through here.
     takeDamage(dmg, game) {
       if (this.dead) return;
       if (this.wsState !== "open") {

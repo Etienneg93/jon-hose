@@ -18,6 +18,14 @@ function reset() {
 }
 function frame(ms) { now += ms; Input.poll(); }
 
+test("player action surface has no jump or melee verb", () => {
+  reset();
+  assert.ok(Object.hasOwn(Input.state, "spray"));
+  assert.ok(Object.hasOwn(Input.state, "dash"));
+  assert.ok(!Object.hasOwn(Input.state, "jump"));
+  assert.ok(!Object.hasOwn(Input.state, "whack"));
+});
+
 test("buffered: press edge stays pending within 130ms", () => {
   reset();
   Input._keys.dash = true; frame(16);        // edge lands
