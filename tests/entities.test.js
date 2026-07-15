@@ -591,9 +591,11 @@ test("damage-number tally: accrues on damage, holds, then resets after the gap",
   g.showDmgNumbers = true; g.float = () => {};
   e.takeDamage(10, g, 1, 0);
   assert.strictEqual(e._dmgAccum, 10, "first hit starts the tally");
-  e.takeDamage(5, g, 1, 0);
+  assert.ok(e._dmgPunchT > 0, "each hit arms the tick-punch");
+  e.takeDamage(5, g, 1, 0, true);   // crit hit
   assert.strictEqual(e._dmgAccum, 15, "further hits accumulate the running total");
   assert.ok(e._dmgHoldT > 0, "each hit refreshes the hold timer");
+  assert.ok(e._dmgCritT > 0, "a crit hit arms the crit-flash window");
   // Let the hold elapse via update — the tally resets for a fresh session.
   e._dmgHoldT = 0.01;
   e.update(0.05, g);

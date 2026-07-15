@@ -1236,7 +1236,8 @@
     float(x, y, text, color, opts) {
       const o = opts || {};
       this.floaters.push({ x, y, t: 0, text, color,
-        life: o.life || 0.9, rise: o.rise || 22, h: o.h || 0, big: !!o.big });
+        life: o.life || 0.9, rise: o.rise || 22, h: o.h || 0, big: !!o.big,
+        size: o.size || 0, punch: o.punch || 0, punchDur: o.punchDur || 0.18 });
       if (this.floaters.length > 20) this.floaters.shift();
     },
     tickFloaters(dt) {
@@ -2813,18 +2814,26 @@
         for (const f of this.floaters) {
           const k = f.t / (f.life || 0.9);
           ctx.globalAlpha = Math.max(0, 1 - k);
-          if (f.big) ctx.font = "bold 8px monospace";
+          const px = f.size || (f.big ? 8 : 6);   // custom size wins, else big/normal
+          ctx.font = "bold " + px + "px monospace";
           const fx = f.x - cam;
           const fy = JH.Geo.feetScreenY(f.y, 0) - (f.h || 0) - (f.rise || 22) * k;
-          // Big floaters get a dark outline so they read over any backdrop.
-          if (f.big) {
+          // Punch: scale overshoot early in life, settling to 1 (WoW pop).
+          let scale = 1;
+          if (f.punch) { const pk = Math.max(0, 1 - f.t / f.punchDur); scale = 1 + f.punch * pk * pk; }
+          // Emphasized floaters (big / sized / punched) get a dark outline.
+          const outlined = f.big || f.size || f.punch;
+          ctx.save();
+          ctx.translate(fx, fy);
+          if (scale !== 1) ctx.scale(scale, scale);
+          if (outlined) {
             ctx.fillStyle = "#0a0e18";
-            ctx.fillText(f.text, fx + 1, fy + 1); ctx.fillText(f.text, fx - 1, fy + 1);
-            ctx.fillText(f.text, fx + 1, fy - 1); ctx.fillText(f.text, fx - 1, fy - 1);
+            ctx.fillText(f.text, 1, 1); ctx.fillText(f.text, -1, 1);
+            ctx.fillText(f.text, 1, -1); ctx.fillText(f.text, -1, -1);
           }
           ctx.fillStyle = f.color;
-          ctx.fillText(f.text, fx, fy);
-          if (f.big) ctx.font = "bold 6px monospace";
+          ctx.fillText(f.text, 0, 0);
+          ctx.restore();
         }
         ctx.globalAlpha = 1;
         ctx.textAlign = "left";

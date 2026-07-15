@@ -576,7 +576,17 @@
     holdT: 0.5,                // s the enemy tally holds after the last hit, then resets
     enemyLo: "#d8c86a", enemyHi: "#fff2a0",   // pale→bright yellow (hose/melee)
     fireLo:  "#ff8a30", fireHi:  "#ffd060",   // tally leans orange while the enemy is burning (DoT read)
+    critLo:  "#ffd24a", critHi:  "#ffffff",   // hot gold→white while the tick is a CRIT (bonus pressure / amped)
     playerColor: "#ff5a5a",    // red -N for damage Jon takes
+    // Juice (WoW-flavored). Punch = scale overshoot that settles back to 1x.
+    punchDur: 0.18,   // s a tick-punch takes to settle
+    punchScale: 0.35, // peak extra scale on a normal tick (1 + this)
+    critScale: 0.65,  // peak extra scale on a CRIT tick + a brief crit-color flash
+    critSizeBump: 2,  // extra px while critting, so a crit reads bigger (not just a flash)
+    critFlashT: 0.14, // s a crit tick keeps the hot color after landing
+    killPunch: 0.9,   // extra scale on the kill-slam floater at spawn
+    killLife: 1.05,   // s the kill total hangs (slower rise than normal floaters)
+    playerMinSize: 11, playerPunch: 0.5,   // incoming -N: bold floor size + punch-in
   };
 
   // XP level-ups: kills grant xp = the enemy's def.suds; each level applies

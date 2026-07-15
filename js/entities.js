@@ -905,9 +905,13 @@
         const leashAdd = (game.relics && game.relics.dog_leash && (e.state === "charge" || e.state === "lunge"))
           ? JH.RELIC_TUNE.leashLungeBonus : 0;
         const rosaryAdd = (game.relics && game.relics.rosary_chain && game.rosaryBonus) ? game.rosaryBonus : 0;
-        const flatDmg = S.sprayDamage + (e === nozzleTarget ? nozzleAdd : 0) + leashAdd + rosaryAdd;
+        const nozzleHit = (e === nozzleTarget ? nozzleAdd : 0);
+        const flatDmg = S.sprayDamage + nozzleHit + leashAdd + rosaryAdd;
         const dmg = flatDmg * falloff * dmgScale * mult * pressureMult * beneMult * ssMult * dt;
-        e.takeDamage(dmg, game, this.facing, 0);
+        // Crit (damage-number juice): bonus pressure tier OR any amp/relic bonus.
+        const crit = dmgScale >= 1.2 || pressureMult > 1 || beneMult > 1 || ssMult > 1
+                   || leashAdd > 0 || rosaryAdd > 0 || nozzleHit > 0;
+        e.takeDamage(dmg, game, this.facing, 0, crit);
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
         // fire pillar's baseline capstone are independent sources — both can land.
         if (scaldRank && dmgScale >= 1.2) {
@@ -1116,10 +1120,13 @@
       this.hp -= dmg;
       // Damage-number: discrete red -N off Jon for the HP actually lost (dev
       // toggle). Post-soak, so an overshielded hit reads what it really cost.
-      if (game.showDmgNumbers && dmg > 0 && game.float)
-        game.float(this.x, this.y, "-" + Math.round(dmg), JH.DMGNUM.playerColor,
-          { life: 0.8, rise: 24, h: this.stats.bodyH + 18,
-            big: JH.Balance.dmgNumberScale(dmg).size >= 10 });
+      // Always bold + outlined + a punch-in so a hit reads clearly as an impact.
+      if (game.showDmgNumbers && dmg > 0 && game.float) {
+        const D = JH.DMGNUM;
+        const size = Math.max(D.playerMinSize, JH.Balance.dmgNumberScale(dmg).size);
+        game.float(this.x, this.y, "-" + Math.round(dmg), D.playerColor,
+          { life: 0.85, rise: 22, h: this.stats.bodyH + 18, size, punch: D.playerPunch });
+      }
       this.invulnTimer = this.stats.invuln;
       this.hurt();
       if (this.beneRank("bedrock")) this.vigorT = 3;   // Bedrock Vigor: +20% knockback window
@@ -1457,10 +1464,10 @@
       this.scaldT = Math.max(this.scaldT, dur);
     }
 
-    takeDamage(dmg, game, dirX, knock) {
+    takeDamage(dmg, game, dirX, knock, crit) {
       if (this.dead) return;
       this.hp -= dmg;
-      this.accrueDmgNum(dmg, game);   // damage-number running tally (dev toggle)
+      this.accrueDmgNum(dmg, game, crit);   // damage-number running tally (dev toggle)
       this.hurt();
       // The hose soaks: each hit builds wetness; it dries in update().
       this.wetness = Math.min(1, this.wetness + JH.JUICE.wetPerHit);
@@ -1472,10 +1479,21 @@
     // running total drawn above the HP bar, held for DMGNUM.holdT after the
     // last hit then reset (so a new spray session starts fresh). No-op unless
     // the dev toggle is on. Fire DoT routes here too (see update's scald block).
-    accrueDmgNum(dmg, game) {
+    // `crit` (bonus pressure / amped hit) flags a hotter flash + a bigger punch.
+    accrueDmgNum(dmg, game, crit) {
       if (!game || !game.showDmgNumbers || dmg <= 0) return;
+      const D = JH.DMGNUM;
       this._dmgAccum = (this._dmgAccum || 0) + dmg;
-      this._dmgHoldT = JH.DMGNUM.holdT;
+      this._dmgHoldT = D.holdT;
+      this._dmgPunchT = D.punchDur;            // tick-punch on every increment
+      if (crit) this._dmgCritT = D.critFlashT; // hot crit flash window
+    }
+    // Advance the damage-number timers (hold/punch/crit); reset the tally once
+    // the hold gap passes. Shared by Enemy.update and TargetDummy.update.
+    tickDmgNum(dt) {
+      if (this._dmgHoldT > 0) { this._dmgHoldT -= dt; if (this._dmgHoldT <= 0) this._dmgAccum = 0; }
+      if (this._dmgPunchT > 0) this._dmgPunchT -= dt;
+      if (this._dmgCritT > 0) this._dmgCritT -= dt;
     }
 
     // Bosses stand their ground — the hose can knock back mooks, not them.
@@ -1487,12 +1505,18 @@
     die(game) {
       if (this.dead) return;
       this.dead = true;
-      // Damage-number kill pop: hand the session total to a floater (big +
-      // bright) so it persists as the corpse vanishes — the accumulator
-      // already includes the killing hit (takeDamage accrues before die).
-      if (game.showDmgNumbers && this._dmgAccum > 0 && game.float)
-        game.float(this.x, this.y, String(Math.round(this._dmgAccum)),
-          JH.DMGNUM.enemyHi, { life: 0.85, rise: 26, h: this.bodyH + 12, big: true });
+      // Damage-number KILL SLAM: hand the session total to a floater that pops
+      // big with an overshoot punch + a spark burst and hangs a beat longer —
+      // the payoff. The accumulator already includes the killing hit.
+      if (game.showDmgNumbers && this._dmgAccum > 0 && game.float) {
+        const D = JH.DMGNUM;
+        const st = JH.Balance.dmgNumberScale(this._dmgAccum, true);
+        game.float(this.x, this.y, String(Math.round(this._dmgAccum)), D.enemyHi,
+          { life: D.killLife, rise: 30, h: this.bodyH + 12, size: st.size,
+            punch: D.killPunch, punchDur: 0.26 });
+        burst(game, this.x, this.y, this.bodyH * 0.5, D.critHi, 10,
+          { speed: 120, life: 0.4, up: 60, size: 2 });
+      }
       game.killJuice(this);
       // Burst waits for the KillPop collapse to finish flattening (~150ms).
       const bx = this.x, by = this.y, bz = this.z, col = this.colorOf();
@@ -1565,9 +1589,7 @@
       }
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
-      // Damage-number tally: hold after the last hit, then reset so a new spray
-      // session starts a fresh count (fire keeps refreshing it while burning).
-      if (this._dmgHoldT > 0) { this._dmgHoldT -= dt; if (this._dmgHoldT <= 0) this._dmgAccum = 0; }
+      this.tickDmgNum(dt);   // damage-number hold/punch/crit timers
       // Wetness dries off over time; visibly soaked enemies drip.
       if (this.wetness > 0) {
         this.wetness = Math.max(0, this.wetness - JH.JUICE.wetDryPerSec * dt);
@@ -1772,24 +1794,34 @@
         ctx.textAlign = "left";
       }
       // Damage-number running tally (dev toggle): the session total drawn above
-      // the HP bar, size + brightness ramped by magnitude, fading as the hold
-      // timer runs out. Orange while the enemy is burning (DoT read), else
-      // yellow. Drawn on the enemy, so it never touches the floater cap.
+      // the HP bar. Size + brightness ramp with magnitude; fades as the hold
+      // timer runs out. Colour: orange while burning (DoT), hot-white on a CRIT
+      // tick (bonus pressure / amped), else yellow. Each increment scale-punches
+      // (bigger on crits). Drawn on the enemy, so it never touches the cap.
       if (JH.Game && JH.Game.showDmgNumbers && this._dmgAccum > 0) {
         const D = JH.DMGNUM;
         const st = JH.Balance.dmgNumberScale(this._dmgAccum);
         const fade = Math.min(1, (this._dmgHoldT || 0) / D.holdT);
-        const burning = this.scaldT > 0;
-        const col = burning ? Assets.lerpHex(D.fireLo, D.fireHi, st.bright)
-                            : Assets.lerpHex(D.enemyLo, D.enemyHi, st.bright);
+        const crit = (this._dmgCritT || 0) > 0;
+        const col = this.scaldT > 0 ? Assets.lerpHex(D.fireLo, D.fireHi, st.bright)
+                  : crit           ? Assets.lerpHex(D.critLo, D.critHi, st.bright)
+                  :                  Assets.lerpHex(D.enemyLo, D.enemyHi, st.bright);
+        // Punch: overshoot that settles over punchDur; crits punch harder.
+        const pk = Math.max(0, (this._dmgPunchT || 0) / D.punchDur);
+        const scale = 1 + (crit ? D.critScale : D.punchScale) * pk * pk;
         const ty = Math.round(sy - this.bodyH - 14);
+        const txt = String(Math.round(this._dmgAccum));
+        const fontPx = st.size + (crit ? D.critSizeBump : 0);   // crits render bigger
         ctx.save();
         ctx.globalAlpha = 0.45 + 0.55 * fade;
-        ctx.font = "bold " + st.size + "px monospace"; ctx.textAlign = "center";
+        ctx.font = "bold " + fontPx + "px monospace"; ctx.textAlign = "center";
+        ctx.translate(sx, ty);
+        ctx.scale(scale, scale);
         ctx.fillStyle = "#0a0e18";
-        ctx.fillText(String(Math.round(this._dmgAccum)), sx + 1, ty + 1);
+        ctx.fillText(txt, 1, 1); ctx.fillText(txt, -1, 1);
+        ctx.fillText(txt, 1, -1); ctx.fillText(txt, -1, -1);
         ctx.fillStyle = col;
-        ctx.fillText(String(Math.round(this._dmgAccum)), sx, ty);
+        ctx.fillText(txt, 0, 0);
         ctx.restore();
         ctx.textAlign = "left";
       }
@@ -5002,10 +5034,10 @@
       super("dummy", x, y);
       this.regenTimer = 0;
     }
-    takeDamage(dmg, game, dirX, knock) {
+    takeDamage(dmg, game, dirX, knock, crit) {
       if (this.dead) return;
       this.hp = Math.max(1, this.hp - dmg);
-      this.accrueDmgNum(dmg, game);   // show the running tally on the test dummy too
+      this.accrueDmgNum(dmg, game, crit);   // show the running tally on the test dummy too
       this.hurt();
       this.regenTimer = 2.5;
     }
@@ -5013,7 +5045,7 @@
     update(dt, game) {
       this.basePhysics(dt);
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
-      if (this._dmgHoldT > 0) { this._dmgHoldT -= dt; if (this._dmgHoldT <= 0) this._dmgAccum = 0; }
+      this.tickDmgNum(dt);
       if (this.regenTimer > 0) this.regenTimer -= dt;
       else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 500 * dt);
       // Scald wears off here too — this update() overrides Enemy's, so without
