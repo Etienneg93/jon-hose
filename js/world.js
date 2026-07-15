@@ -127,10 +127,12 @@
         // screen width so the first broken silhouette enters from the right
         // edge as the player crosses into the district, not two acts later).
         const broken = x > (JH.ZONE2_START - 200) * 0.5 + JH.VIEW_W;
+        const air = x > (JH.ZONE4_START - 200) * 0.5 + JH.VIEW_W;
         const b = {
-          x, w, h, broken, jag: null, windows: [],
-          c: broken ? (rA() > 0.5 ? "#241f24" : "#2b242a")
-                    : (rA() > 0.5 ? "#1b2740" : "#202d4a"),
+          x, w, h: air ? Math.round(h * 0.7) : h, broken: broken && !air, air, jag: null, windows: [],
+          c: air ? "#c8b060"
+            : broken ? (rA() > 0.5 ? "#241f24" : "#2b242a")
+                     : (rA() > 0.5 ? "#1b2740" : "#202d4a"),
         };
         if (broken) {
           // Collapsed skyline: per-slice top heights, with the odd big gap.
@@ -142,11 +144,15 @@
         }
         // Windows baked in BUILDING-LOCAL coords so they scroll with the
         // building. Ruined buildings: only lower floors, mostly blown out.
-        const wy0 = broken ? Math.floor(h * 0.42) : 6;
-        for (let wy = wy0; wy < h - 6; wy += 9) {
-          for (let wx = 4; wx < w - 4; wx += 8) {
-            if (rA() > (broken ? 0.55 : 0.35))
-              b.windows.push({ x: wx, y: wy, lit: broken ? rA() > 0.82 : rA() > 0.5 });
+        // Air buildings skip windows — they read as distant golden porcelain
+        // monuments, not towers.
+        if (!air) {
+          const wy0 = broken ? Math.floor(h * 0.42) : 6;
+          for (let wy = wy0; wy < h - 6; wy += 9) {
+            for (let wx = 4; wx < w - 4; wx += 8) {
+              if (rA() > (broken ? 0.55 : 0.35))
+                b.windows.push({ x: wx, y: wy, lit: broken ? rA() > 0.82 : rA() > 0.5 });
+            }
           }
         }
         this.buildings.push(b);
@@ -165,7 +171,7 @@
       // Debris piles scattered through the ruined district (Act 3).
       this.debris = [];
       const rC = rng(7);
-      for (let x = JH.ZONE2_START + 40; x < JH.LEVEL_LEN; ) {
+      for (let x = JH.ZONE2_START + 40; x < JH.ZONE4_START - 200; ) {
         this.debris.push({ x, y: JH.DEPTH_MIN + rC() * (JH.DEPTH_MAX - JH.DEPTH_MIN), s: 0.7 + rC() * 0.9 });
         x += 70 + rC() * 150;
       }
@@ -192,8 +198,11 @@
       ctx.arc(W - 58, 36, 12, 0, Math.PI * 2);
       ctx.fill();
 
+      // Air World (cloudline street) — fades in past ZONE4_START and damps
+      // the older acts' tints out so the sky reads as a clean handoff.
+      const airT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500));
       // Ruined-district smog haze — fades in as you approach Act 3.
-      const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500));
+      const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
       if (zoneT > 0) {
         ctx.fillStyle = "rgba(70,45,30," + (0.5 * zoneT).toFixed(3) + ")";
         ctx.fillRect(0, 0, W, top);
@@ -205,7 +214,7 @@
 
       // Boiler District (fire world) — hot red sky wash + molten horizon glow.
       // Ramps in past ZONE3_START, same pattern as the Act-3 haze above.
-      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500));
+      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airT);
       if (fireT > 0) {
         ctx.fillStyle = "rgba(120,20,0," + (0.42 * fireT).toFixed(3) + ")";
         ctx.fillRect(0, 0, W, top);
@@ -213,6 +222,23 @@
         fg.addColorStop(0, "rgba(255,90,20,0)");
         fg.addColorStop(1, "rgba(255,110,20," + (0.55 * fireT).toFixed(3) + ")");
         ctx.fillStyle = fg; ctx.fillRect(0, top - 60, W, 60);
+      }
+
+      // Cloudline: bright sky wash, a white cloud horizon, drifting TP streamers.
+      if (airT > 0) {
+        ctx.fillStyle = "rgba(140,190,240," + (0.55 * airT).toFixed(3) + ")";
+        ctx.fillRect(0, 0, W, top);
+        const ag = ctx.createLinearGradient(0, top - 50, 0, top);
+        ag.addColorStop(0, "rgba(235,244,252,0)");
+        ag.addColorStop(1, "rgba(235,244,252," + (0.7 * airT).toFixed(3) + ")");
+        ctx.fillStyle = ag; ctx.fillRect(0, top - 50, W, 50);
+        ctx.fillStyle = "rgba(255,255,255," + (0.6 * airT).toFixed(3) + ")";
+        for (let i = 0; i < 6; i++) {
+          const tpx = ((i * 173 - cam * 0.3) % (W + 40) + W + 40) % (W + 40) - 20;
+          const tpy = 22 + ((i * 31) % (top - 80));
+          ctx.fillRect(Math.round(tpx), tpy, 2, 9);
+          ctx.fillRect(Math.round(tpx) + 2, tpy + 3, 2, 7);
+        }
       }
 
       // Far skyline (slow parallax)
@@ -233,6 +259,10 @@
           for (const s of b.jag) ctx.fillRect(Math.round(sx + s.x), top - s.h, s.w, s.h);
         } else {
           ctx.fillRect(Math.round(sx), top - b.h, b.w, b.h);
+        }
+        if (b.air) {
+          ctx.fillStyle = "#e0cd80";
+          ctx.fillRect(Math.round(sx), top - b.h, b.w, 3);
         }
         // Windows are anchored to the building, so they scroll with it.
         const by = top - b.h;
@@ -282,16 +312,24 @@
       ctx.fillStyle = "#39405440";
       ctx.fillRect(0, top + 2, W, 6);
 
+      // Air World floor: fades in past ZONE4_START and damps the older acts'
+      // tints out, same pattern as draw().
+      const airT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500));
       // Ruined-district floor: dust tint.
-      const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500));
+      const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
       if (zoneT > 0) {
         ctx.fillStyle = "rgba(74,64,50," + (0.5 * zoneT).toFixed(3) + ")";
         ctx.fillRect(0, top, W, H - top);
       }
       // Boiler District floor: scorched warm tint.
-      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500));
+      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airT);
       if (fireT > 0) {
         ctx.fillStyle = "rgba(120,40,10," + (0.5 * fireT).toFixed(3) + ")";
+        ctx.fillRect(0, top, W, H - top);
+      }
+      // Cloud-deck wash under the Air World street.
+      if (airT > 0) {
+        ctx.fillStyle = "rgba(215,230,245," + (0.5 * airT).toFixed(3) + ")";
         ctx.fillRect(0, top, W, H - top);
       }
     },

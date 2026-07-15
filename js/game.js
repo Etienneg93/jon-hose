@@ -881,14 +881,33 @@
 
     // Called by JH.TruckRun when the escape reaches the Air World gate. The
     // benediction was already chosen (pre-truck), so this just tallies the
-    // essence banked on the road and hands off to the Air World entrance —
-    // stubbed to win() until the Ass Man act exists.
+    // essence banked on the road and hands off to the Air World entrance.
     afterTruckRun() {
       this.state = "play";
       document.getElementById("hud").classList.remove("hidden");
       this.showScreen("hud");
       if (JH.AudioFX && JH.AudioFX.play) JH.AudioFX.play("win");
-      this.win();
+      this.enterAirAct();
+    },
+
+    // Air World arrival (post-Gate Crash). Banner-beat stub of the Ass Man
+    // entry cutscene (bookends pass replaces it): Jon steps onto the cloudline
+    // street, vendor at the act boundary, free-walk to WAVE 30.
+    enterAirAct() {
+      const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
+      const p = this.player;
+      p.x = JH.ZONE4_START + 40; p.y = JH.DEPTH_MAX * 0.6; p.z = 0;
+      JH.Camera.snapTo(p);
+      if (JH.Music && JH.Music.setTrack) JH.Music.setTrack("level");
+      this.waveIndex = airStart - 1;   // cleared-through marker: the walk trigger rolls WAVE 30
+      this.checkpointWave = airStart;
+      this.waveActive = false; this.waveCleared = false;
+      this.sigils = [];
+      this.waveTriggerX = this.gatedTriggerX(airStart, p.x);
+      this.bounds = { minX: JH.ZONE4_START + 8, maxX: this.waveTriggerX + 30 };
+      this.clearsSinceVendor = 0;
+      this.spawnVendor(WAVE_TRIGGERS[airStart] - 150);
+      this.banner("THE AIR WORLD", 2.6);
     },
 
     // Dev/headless entry straight into the truck run (see main.js ?truck=1).

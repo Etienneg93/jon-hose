@@ -391,3 +391,20 @@ test("bidet landing shoves at landKnock, not the default takeHit impulse", () =>
   assert.strictEqual(Math.abs(g.player.knockVX), d.landKnock,
     "pressurized-water shove derives from config landKnock");
 });
+
+test("enterAirAct: arrival state — position, checkpoint, vendor, free-walk trigger", () => {
+  // Game.init touches the DOM; drive enterAirAct on a shallow clone instead.
+  const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(0, 40);
+  g.showScreen = () => {}; g.banner = () => {}; g.spawnVendor = function (x) { this._vendorX = x; };
+  g.gatedTriggerX = JH.Game.gatedTriggerX;
+  g.stinkClouds = []; g.gustLanes = []; g.sigils = [];
+  g.enterAirAct();
+  assert.strictEqual(g.player.x, JH.ZONE4_START + 40);
+  assert.strictEqual(g.checkpointWave, airStart);
+  assert.strictEqual(g.waveIndex, airStart - 1, "next walk trigger rolls WAVE 30");
+  assert.ok(g.bounds.minX >= JH.ZONE4_START, "no walking back through the gate");
+  assert.ok(g._vendorX > JH.ZONE4_START && g._vendorX < g.waveTriggerX,
+    "act-boundary vendor sits in the arrival corridor");
+});
