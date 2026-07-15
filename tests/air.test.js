@@ -135,6 +135,23 @@ test("gas chokes the nozzle to the STINK clog scales at EVERY tank level", () =>
     "full-tank gassed range clamps to the same clog scale");
 });
 
+test("gas debuff lingers like burn: one contact sets the full window", () => {
+  const g = stubHazardGame(100, 40);
+  const p = g.player;
+  const c = new JH.StinkCloud(100, 40); c.t = JH.STINK.growT;   // full grown, on the player
+  g.stinkClouds.push(c);
+  p.gasT = 0;
+  c.update(1 / 60, g);
+  // A single contact refreshes to the FULL debuff window (was a 0.15s flicker
+  // that vanished the instant you left — the "too short" report).
+  assert.ok(Math.abs(p.gasT - JH.STINK.gasDebuffDur) < 1e-9, "contact sets gasDebuffDur");
+  assert.ok(JH.STINK.gasDebuffDur > 1, "the window is impactful, not a flicker");
+  // Refresh (not stack): re-contact holds at the cap, never climbs past it.
+  p.gasT = JH.STINK.gasDebuffDur - 0.5;
+  c.update(1 / 60, g);
+  assert.ok(Math.abs(p.gasT - JH.STINK.gasDebuffDur) < 1e-9, "re-contact refreshes to the cap");
+});
+
 test("spraying into a cloud disperses it; speed scales with spray damage", () => {
   const g = stubHazardGame(100, 40);
   const c = new JH.StinkCloud(150, 40); c.t = JH.STINK.growT;

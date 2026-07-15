@@ -209,7 +209,7 @@
       this.overshield = 0;       // Deepdive shield: banked past-full kibble healing; soaks damage, never recharges
       this.stillT = 0;        // Standing Stone: seconds stationary (no move input, not dashing)
       this.vigorT = 0;        // Bedrock Vigor: +20% knockback window after taking a hit, sec remaining
-      this.gasT = 0;          // StinkCloud tag: doSpray demotes one pressure tier while > 0
+      this.gasT = 0;          // poison debuff window (s): chokes spray dmg/range + regen while > 0; lingers after leaving the cloud
       this.snareT = 0;        // air-hazard snare window remaining, seconds (consumer wires later)
       this.snareMult = 1;     // move-speed multiplier while snared
     }
@@ -604,7 +604,9 @@
       // ---- water regen (after a short delay since last spray)
       if (!this.spraying && this.regenLock <= 0 && this.water < S.maxWater) {
         const moveBon = ((mx !== 0 || my !== 0) && S.moveRegen > 0) ? S.moveRegen : 0;
-        this.water = Math.min(S.maxWater, this.water + (S.waterRegen + moveBon) * dt);
+        // Gas chokes recovery too: while the poison debuff lingers, regen is cut.
+        const gasCut = this.gasT > 0 ? JH.STINK.gasRegenMult : 1;
+        this.water = Math.min(S.maxWater, this.water + (S.waterRegen + moveBon) * gasCut * dt);
       }
 
       // ---- hydrant: stand next to one to refill water only. HP is NOT healed
@@ -2496,9 +2498,11 @@
   // ellipse — the puffs are generated FROM footprint(): the center's radial
   // coefficient (rad*0.72 + wobble) is capped at 0.72 and the drawn radius is
   // 0.28*rx*size (size<=1), so max extent <= rx — the visible gas
-  // edge IS the tested edge. Standing inside tags player.gasT (doSpray demotes
-  // the pressure tier one step). Spraying it adds sprayProgress (see doSpray).
-  // `friendly` clouds skip the player and cook enemies (Gasbag pop-fast reward).
+  // edge IS the tested edge. Standing inside sets player.gasT to the full
+  // debuff window (STINK.gasDebuffDur, refreshed like burn); the choke then
+  // LINGERS after you step out (doSpray cuts dmg/range, update() cuts regen).
+  // Spraying it adds sprayProgress (see doSpray). `friendly` clouds skip the
+  // player and cook enemies (Gasbag pop-fast reward).
   class StinkCloud {
     constructor(x, y, opts) {
       this.x = x; this.y = y;
@@ -2547,7 +2551,7 @@
       if (pl && pl.alive && (pl.z || 0) < 18) {
         const pad = (pl.bodyW || 12) * 0.25;   // feet aren't a point (FirePatch idiom)
         if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx + pad, f.ry + pad * JH.GROUND_RY))
-          pl.gasT = Math.max(pl.gasT || 0, 0.15);
+          pl.gasT = Math.max(pl.gasT || 0, JH.STINK.gasDebuffDur);   // refresh the full window (burn idiom)
       }
       if (this.fadeFrac() >= 1) this.dead = true;
     }
