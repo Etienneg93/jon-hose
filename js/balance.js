@@ -285,6 +285,34 @@
     // XP needed to climb from level n-1 to n.
     xpForLevel(n) { return 20 + 12 * (n | 0); },
 
+    // Passive power a real player would hold ENTERING waveIndex, for the dev
+    // sim-power warp: XP levels from cumulative authored kill income (+ set-
+    // piece/boss XP) and benediction count from sigil beats passed. Pure — all
+    // game data injected via opts {enemySuds{type:suds}, bossSuds{bossType:
+    // suds}, setPieceXp, xpForLevel(n)}. Sprinkles and elite/super suds bumps
+    // are ignored: this is a baseline estimate, not a replay.
+    expectedPowerForWave(waves, waveIndex, opts) {
+      const o = opts || {};
+      const enemySuds = o.enemySuds || {};
+      const bossSuds = o.bossSuds || {};
+      const setPieceXp = o.setPieceXp || 0;
+      const xpForLevel = o.xpForLevel || (() => Infinity);
+      let xp = 0, beneCount = 0;
+      const last = Math.max(0, Math.min(waveIndex | 0, waves.length));
+      for (let i = 0; i < last; i++) {
+        const w = waves[i];
+        if (w.boss) { xp += bossSuds[w.bossType || "boss"] || 0; beneCount++; }
+        else {
+          (w.spawns || []).forEach((g) => { xp += (enemySuds[g.type] || 0) * (g.count || 0); });
+          // Sigil-granting set-pieces (same predicate as waveCleared_).
+          if (w.garden || w.wall || w.holdout || w.douse) { xp += setPieceXp; beneCount++; }
+        }
+      }
+      let level = 0;
+      while (xp >= xpForLevel(level + 1)) { xp -= xpForLevel(level + 1); level++; }
+      return { levelCount: level, beneCount };
+    },
+
     // Summed stat deltas for `levelCount` level-ups walking the repeating
     // gain cycle. Returns {statKey: total}.
     levelGains(levelCount, cycle) {

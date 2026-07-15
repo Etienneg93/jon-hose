@@ -18,6 +18,55 @@ test("actLevelForWave maps wave index to elite act tier", () => {
   assert.strictEqual(Balance.actLevelForWave(13, AS), 2);
 });
 
+test("expectedPowerForWave: cumulative XP → level count, and benediction beats passed", () => {
+  // Minimal authored list: a regular wave, a set-piece, a boss, then the target.
+  const waves = [
+    { spawns: [{ type: "mook", count: 4 }] },      // 4 × 5 suds = 20 xp
+    { garden: true },                               // set-piece → +setPieceXp, +1 bene
+    { boss: true, bossType: "boss" },               // boss suds → xp, +1 bene
+    { spawns: [{ type: "mook", count: 2 }] },       // TARGET (index 3) — not counted
+  ];
+  const opts = {
+    enemySuds: { mook: 5 },
+    bossSuds: { boss: 120 },
+    setPieceXp: 30,
+    xpForLevel: (n) => 20 + 12 * n,                 // same ladder as Balance.xpForLevel
+  };
+  const r = Balance.expectedPowerForWave(waves, 3, opts);
+  // XP entering wave 3 = 20 (mooks) + 30 (garden) + 120 (boss) = 170.
+  // Ladder: L1 needs 32, L2 needs 44, L3 needs 56 → 32+44+56 = 132 ≤ 170,
+  // next (L4 = 68) would need 200 > 170 → level 3.
+  assert.strictEqual(r.levelCount, 3);
+  // Sigil beats passed before the target: the garden + the boss = 2.
+  assert.strictEqual(r.beneCount, 2);
+});
+
+test("expectedPowerForWave: wave 0 has no accrued power", () => {
+  const waves = [{ spawns: [{ type: "mook", count: 4 }] }, { boss: true }];
+  const r = Balance.expectedPowerForWave(waves, 0, {
+    enemySuds: { mook: 5 }, bossSuds: {}, setPieceXp: 30, xpForLevel: (n) => 20 + 12 * n,
+  });
+  assert.strictEqual(r.levelCount, 0);
+  assert.strictEqual(r.beneCount, 0);
+});
+
+test("expectedPowerForWave: real config — air-act start ramps Jon past mid-game", () => {
+  // Derive from live config, no literals: entering the air act (ACT_STARTS[5])
+  // must accrue more level + benediction power than entering Act 2.
+  const enemySuds = {};
+  for (const t in JH.ENEMIES) enemySuds[t] = JH.ENEMIES[t].suds || 0;
+  const bossSuds = {
+    boss: JH.BOSS.suds, switch: JH.SWITCH.suds, quake: JH.QUAKE.suds,
+    gatewaykrusher: JH.GATEWAYKRUSHER.suds, slayer: JH.SLAYER.suds,
+  };
+  const opts = { enemySuds, bossSuds, setPieceXp: JH.LEVELS.setPieceXp,
+                 xpForLevel: (n) => Balance.xpForLevel(n) };
+  const air = Balance.expectedPowerForWave(JH.LEVEL1.waves, JH.ACT_STARTS[5], opts);
+  const act2 = Balance.expectedPowerForWave(JH.LEVEL1.waves, JH.ACT_STARTS[1], opts);
+  assert.ok(air.levelCount > act2.levelCount, "air act accrues more levels than Act 2");
+  assert.ok(air.beneCount >= 5, "at least the 5 boss/set-piece beats before the air act");
+});
+
 test("dropThresholds reproduces base rates at mult 1", () => {
   const t = Balance.dropThresholds(1);
   assert.strictEqual(t.health, 0.18);

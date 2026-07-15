@@ -51,6 +51,7 @@
     _wheelSettled: [false, false, false],   // one-shot "coin" SFX per reel as it settles
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
+    devPowerSim: false,   // dev-menu warp grants the act-expected level/bene power (KeyP toggles)
     dyingBoss: null, deathSeqT: 0,
     checkpointWave: 0,
     diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0,
@@ -202,6 +203,14 @@
           return;
         }
         if (!this.devMenu) return;
+        // P — toggle sim-power: warps grant the act-expected level + benediction
+        // power so difficulty reads true (enemy scaling tracks powerCount too).
+        if (e.code === "KeyP") {
+          e.preventDefault();
+          this.devPowerSim = !this.devPowerSim;
+          this.banner("SIM POWER " + (this.devPowerSim ? "ON" : "OFF"), 1.0);
+          return;
+        }
         const count = JH.LEVEL1.waves.length + 4;  // +1 cutscene, +1 target range, +1 wall boss, +1 post-firewall
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
@@ -227,6 +236,48 @@
       this.devMenu = false;
     },
 
+    // Grant the passive power a real player would hold entering waveIndex —
+    // XP levels + a rolled set of benedictions + a working wallet — so a dev
+    // warp gauges the wave at true difficulty (enemy elite/boss scaling reads
+    // the same levelCount via Balance.powerCount). Call AFTER startGame, before
+    // startWave. Returns the derived {levelCount, beneCount}.
+    applyDevPower(waveIndex) {
+      const enemySuds = {};
+      for (const t in JH.ENEMIES) enemySuds[t] = JH.ENEMIES[t].suds || 0;
+      const bossSuds = {
+        boss: JH.BOSS.suds, switch: JH.SWITCH.suds, quake: JH.QUAKE.suds,
+        gatewaykrusher: JH.GATEWAYKRUSHER.suds, slayer: JH.SLAYER.suds,
+        wallboss: JH.WALLBOSS.suds,
+      };
+      const exp = JH.Balance.expectedPowerForWave(JH.LEVEL1.waves, waveIndex, {
+        enemySuds, bossSuds, setPieceXp: JH.LEVELS.setPieceXp,
+        xpForLevel: (n) => JH.Balance.xpForLevel(n),
+      });
+      // Levels: set the count Balance.powerCount reads, XP mid-level at 0.
+      this.playerLevel = exp.levelCount;
+      this.playerXp = 0;
+      JH.Upgrades.levelCount = exp.levelCount;
+      // Benedictions: roll the expected number from the live pool (a real run's
+      // boons vary too). Mirror the Sigil.pick bookkeeping for duos/legendaries.
+      for (let n = 0; n < exp.beneCount; n++) {
+        const offers = JH.Benedictions.pickOffers({
+          active: JH.Benedictions.active,
+          pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
+          usedOnce: this.beneUsedOnce, censer: false,
+        }, Math.random);
+        if (!offers.length) break;
+        const pick = offers[Math.floor(Math.random() * offers.length)];
+        JH.Benedictions.take(pick.id);
+        const d = JH.Benedictions.byId(pick.id);
+        if (d && (d.kind === "duo" || d.kind === "legendary")) this.beneUsedOnce[pick.id] = true;
+      }
+      const p = this.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      p.hp = p.stats.maxHp; p.water = p.stats.maxWater;
+      p.suds = 1500;   // a working wallet to buy signatures/relics if desired
+      return exp;
+    },
+
     devGotoWave(i) {
       const waves = JH.LEVEL1.waves;
       i = Math.max(0, Math.min(waves.length - 1, i));
@@ -236,11 +287,18 @@
       this.player.x = px;
       this.player.y = JH.DEPTH_MAX * 0.5;
       this.player.suds = 999;   // enough to test any upgrade
+      // Sim-power: gear Jon to the wave's expected level/benediction power
+      // (also ramps enemy scaling via powerCount) before the arena locks.
+      const exp = this.devPowerSim ? this.applyDevPower(i) : null;
+      // Cloudline backdrop follows the warp target (else air waves show a dark
+      // sky until a respawn — the airT flag is scene-truth, not camera-driven).
+      if (JH.Background) JH.Background.airOn = i >= JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
       // Snap camera so startWave locks the right arena window
       JH.Camera.x = Math.max(0, px - Math.floor(JH.VIEW_W * 0.38));
       JH.Camera.locked = false;
       this.waveIndex = i - 1;
       this.startWave(i);
+      if (exp) this.banner("SIM: LV " + exp.levelCount + " · " + exp.beneCount + " BOONS", 1.8);
       this.devMenu = false;
     },
 
@@ -2837,6 +2895,10 @@
       ctx.font = "bold 7px monospace";
       ctx.textAlign = "center";
       ctx.fillText("DEV — JUMP TO WAVE", MID, PY + 9);
+      // Sim-power state (P toggles) — warps in at the wave's expected power.
+      ctx.font = "5px monospace";
+      ctx.fillStyle = this.devPowerSim ? "#7dff5a" : "#556";
+      ctx.fillText("P: SIM POWER " + (this.devPowerSim ? "ON" : "OFF"), MID, PY + 16);
 
       // Wave rows (only those inside the scroll window)
       waves.forEach((wave, i) => {
