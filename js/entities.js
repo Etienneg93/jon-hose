@@ -5781,7 +5781,32 @@
   // ---- Plunger Fiend: lunging rusher that LATCHES and drains the tank ----
   // Attacks the weapon, not the HP bar: a held latch siphons water (visible
   // on the tank bar). A dash breaks it — the same counter-verb as chargers.
+  class PlungerDeathSprite {
+    constructor(x, y, facing) {
+      this.x = x; this.y = y; this.facing = facing;
+      this.t = 0; this.life = 0.55;
+    }
+    update(dt) { this.t += dt; return this.t < this.life; }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const fade = this.t > 0.37 ? 1 - (this.t - 0.37) / (this.life - 0.37) : 1;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+      Assets.shadow(ctx, sx, sy, 10);
+      Assets.draw(ctx, "plunger", sx, sy, this.facing, { state: "death", t: this.t });
+      ctx.restore();
+    }
+  }
+
   class PlungerFiend extends Enemy {
+    die(game) {
+      if (this.dead) return;
+      // A visual-only corpse rides the cosmetic particle list. super.die()
+      // still marks the enemy dead immediately, so wave truth never waits on
+      // the half-second deflation beat.
+      if (game.particles) game.particles.push(new PlungerDeathSprite(this.x, this.y, this.facing));
+      super.die(game);
+    }
     applyKnockback(dirX, force, dirY) {
       if (this.state === "latch") return;   // suction holds through spray shove
       super.applyKnockback(dirX, force, dirY);

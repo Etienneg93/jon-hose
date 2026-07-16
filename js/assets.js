@@ -872,9 +872,38 @@
     p(opt.wind ? 6 : 4, 9, opt.wind ? 7 : 5, 5, PAL.mookDk); // arm/wind-up
   });
 
-  // Plunger Fiend: squat rubber imp with a plunger-cup head. Lip flares on
-  // windup/latch; suction ticks while latched.
-  Assets.register("plunger", (p, opt) => {
+  // Plunger Fiend: generated character frames normalized to a shared 40x40
+  // logical canvas (4x source pixels), feet baseline at row 38. All source
+  // art faces right; the painter mirrors it for left-facing gameplay. The
+  // procedural block-in remains as the image-load fallback.
+  const _plungerImgs = {};
+  {
+    const load = (n) => { _plungerImgs[n] = JH.Loader.img("sprites/plunger/" + n + ".png"); };
+    ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3",
+      "wind", "lunge", "latch", "death"].forEach(load);
+  }
+  const PLUNGER_ART = { w: 40, h: 40, feet: 38 };
+  Assets.register("plunger", (p, opt, ctx, x, y, facing) => {
+    const f = opt.frame | 0;
+    const pose = opt.state === "death" ? "death"
+      : opt.state === "latch" ? "latch"
+      : opt.state === "lunge" ? "lunge"
+      : (opt.state === "wind" || opt.wind) ? "wind"
+      : opt.state === "walk" ? "walk" + (f & 3)
+      : "idle" + (Math.floor((opt.t || 0) * 3) & 1);
+    const img = _plungerImgs[pose];
+    if (img && img.complete && img.naturalWidth) {
+      const s = opt.scale || 1;
+      ctx.save();
+      ctx.translate(x, y);
+      if (facing < 0) ctx.scale(-1, 1);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img,
+        Math.round(-PLUNGER_ART.w * s / 2), Math.round(-PLUNGER_ART.feet * s),
+        Math.round(PLUNGER_ART.w * s), Math.round(PLUNGER_ART.h * s));
+      ctx.restore();
+      return;
+    }
     const P = JH.PAL;
     const step = opt.state === "walk" ? Math.floor((opt.t || 0) * 8) % 2 : 0;
     p(-5, 0, 4, 5 + step, P.plungerDk);          // legs

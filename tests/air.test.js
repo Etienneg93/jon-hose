@@ -1,6 +1,9 @@
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
+const { PNG } = require("pngjs");
 
 // Capture the WAVE_TRIGGERS-length warning game.js emits at require time.
 const warnings = [];
@@ -58,6 +61,44 @@ test("air act: waves 30-32 are authored per spec (pair, +gusts, +gasbags/tough)"
   // All four defs exist and are honest (waterMult 1).
   for (const t of ["plunger", "tpmummy", "gasbag", "bidet"])
     assert.strictEqual(JH.ENEMIES[t].waterMult, 1, t + " must not hide a soak");
+});
+
+test("dev range catalog exposes every implemented combat enemy and boss", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "js", "entities.js"), "utf8");
+  const factory = source.slice(source.indexOf("JH.makeEnemy = function"));
+  const explicit = [...factory.matchAll(/type === "([^"]+)"/g)].map((m) => m[1]);
+  const implemented = new Set(["mook", ...explicit.filter((id) => id !== "dummy")]);
+  const catalog = JH.RANGE_CATALOG_ENEMIES.map((e) => e.id);
+  assert.strictEqual(new Set(catalog).size, catalog.length, "catalog entries must be unique");
+  assert.deepStrictEqual([...catalog].sort(), [...implemented].sort());
+  for (const id of ["plunger", "tpmummy", "gasbag", "bidet"])
+    assert.ok(catalog.includes(id), id + " must be dispensable in the range");
+  for (const id of ["boss", "switch", "quake", "gatewaykrusher", "wallboss", "slayer"])
+    assert.ok(catalog.includes(id), id + " boss must be dispensable in the range");
+});
+
+test("plunger art: every runtime pose is a normalized transparent PNG frame", () => {
+  const decoded = {};
+  for (const pose of ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3",
+    "wind", "lunge", "latch", "death"]) {
+    const png = fs.readFileSync(path.join(__dirname, "..", "sprites", "plunger", pose + ".png"));
+    assert.strictEqual(png.toString("ascii", 1, 4), "PNG", pose + " must be a PNG");
+    assert.strictEqual(png.readUInt32BE(16), 160, pose + " width");
+    assert.strictEqual(png.readUInt32BE(20), 160, pose + " height");
+    decoded[pose] = PNG.sync.read(png);
+  }
+  const differingPixels = (a, b) => {
+    let n = 0;
+    for (let i = 0; i < a.data.length; i += 4)
+      if (a.data[i] !== b.data[i] || a.data[i + 1] !== b.data[i + 1]
+          || a.data[i + 2] !== b.data[i + 2] || a.data[i + 3] !== b.data[i + 3]) n++;
+    return n;
+  };
+  // The contact frames must be visibly opposite strides. The hand-cleaned
+  // cycle intentionally reuses the neutral pass pose for frames 1 and 3.
+  assert.ok(differingPixels(decoded.walk0, decoded.walk2) > 2500, "walk2 must oppose walk0");
+  assert.ok(differingPixels(decoded.walk0, decoded.walk1) > 2500, "walk1 must be a distinct pass pose");
+  assert.ok(differingPixels(decoded.walk2, decoded.walk3) > 2500, "walk3 must be a distinct pass pose");
 });
 
 test("air act: sprinkle pool floor keeps fire enemies out of the air roster", () => {
@@ -283,6 +324,18 @@ test("plunger: a dodged lunge (dodge chance) grabs nothing — no latch, no drai
   assert.strictEqual(e.usingTicket, false, "attack ticket released");
   assert.strictEqual(g.player.hp, hp0, "dodged hit deals no damage");
   assert.strictEqual(g.player.water, w0, "no latch tick ever runs");
+});
+
+test("plunger: death frame lingers cosmetically without delaying enemy death", () => {
+  const g = stubHazardGame(100, 40);
+  const e = JH.makeEnemy("plunger", 90, 40);
+  e.facing = 1;
+  e.die(g);
+  assert.strictEqual(e.dead, true, "wave truth sees the kill immediately");
+  assert.strictEqual(g.particles.length, 1, "a visual-only death sprite is spawned");
+  assert.strictEqual(g.particles[0].facing, 1);
+  assert.strictEqual(g.particles[0].update(0.1), true, "corpse holds for a readable beat");
+  assert.strictEqual(g.particles[0].update(0.5), false, "corpse self-culls from particles");
 });
 
 test("makeElite scales the air-roster damage keys", () => {

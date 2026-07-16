@@ -8,6 +8,30 @@
   const JH = (window.JH = window.JH || {});
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+  const RANGE_CATALOG_TABS = ["boons", "relics", "enemies"];
+  const RANGE_CATALOG_ENEMIES = [
+    { id: "mook", name: "Mook" },
+    { id: "charger", name: "Charger" },
+    { id: "pyro", name: "Pyro" },
+    { id: "stalker", name: "Stalker" },
+    { id: "fuse", name: "Fuse" },
+    { id: "smelt", name: "Smelt" },
+    { id: "bulwark", name: "Bulwark" },
+    { id: "furnace", name: "Furnace" },
+    { id: "plunger", name: "Plunger Fiend", air: true },
+    { id: "tpmummy", name: "TP Mummy", air: true },
+    { id: "gasbag", name: "Gasbag", air: true },
+    { id: "bidet", name: "Bidet Turret", air: true },
+    { id: "neighbor", name: "The Neighbor", setpiece: true },
+    { id: "boss", name: "The Big Drip", boss: true },
+    { id: "switch", name: "Switch", boss: true },
+    { id: "quake", name: "Quake Walker", boss: true },
+    { id: "gatewaykrusher", name: "Gateway Krusher", boss: true },
+    { id: "wallboss", name: "The Firewall", boss: true },
+    { id: "slayer", name: "The Slayer", boss: true },
+  ];
+  JH.RANGE_CATALOG_ENEMIES = RANGE_CATALOG_ENEMIES;
+
   // Escapes a value for safe injection into innerHTML (leaderboard handles).
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
@@ -312,8 +336,13 @@
 
     devGotoRange() {
       this.startGame();
+      // startGame's campaign callout covers the supply fixtures for its whole
+      // first beat. The range is an explicit dev-menu destination, so suppress
+      // that onboarding banner here.
+      this.bannerTimer = 0;
+      document.getElementById("banner").classList.add("hidden");
       const py = Math.round(JH.DEPTH_MAX * 0.5);
-      this.player.x = 100;
+      this.player.x = 80;
       this.player.y = py;
       this.player.suds = 999;
       JH.Camera.x = 0;
@@ -324,88 +353,56 @@
       // nodes buyable at the range's shop.
       JH.Upgrades.currentActLevel = JH.Balance.actLevelForWave(this.waveIndex, JH.ACT_STARTS);
       this.waveActive = false;
-      this.bounds = { minX: 8, maxX: 900 };
-      // Buff test stations: walk up + press E (see tickRangeStations).
+      // Keep the whole lab compact. The TEST-O-MAT holds the old world-space
+      // boon/relic racks plus every implemented enemy, so fixtures do not turn
+      // the range into a second campaign corridor.
+      this.bounds = { minX: 8, maxX: 1220 };
       this.rangeStations = [
-        { kind: "kibble", x: 180, y: py, near: false },
-        { kind: "gush", x: 230, y: py, near: false },
+        { kind: "superelite", x: 110, y: py + 25, near: false },
+        { kind: "kibble", x: 160, y: py + 25, near: false },
+        { kind: "gush", x: 210, y: py + 25, near: false },
+        { kind: "catalog", x: 190, y: py - 20, near: false },
       ];
+      this.spawnVendor(360);
+      // TARGET LAB: a short mechanics lane and a clear live-spawn pad.
       // Isolated dummy for basic pierce / splash testing
-      this.spawnEnemy("dummy", 320, py);
+      this.spawnEnemy("dummy", 430, py);
       // Charge-cycling dummy: state flips to "charge" 1.2s of every 4s so the
       // Dog Leash bonus window is visible on demand (no real charger AI).
-      const cd = this.spawnEnemy("dummy", 390, py);
+      const cd = this.spawnEnemy("dummy", 510, py);
       cd.rangeChargeCycle = true;
       // Group of three: two in-line (pierce) + one off-depth (split stream)
-      const gx = 460, gy = py;
+      const gx = 610, gy = py;
       this.spawnEnemy("dummy", gx,      gy);       // front  — primary target
       this.spawnEnemy("dummy", gx + 40, gy);       // behind — pierce target
       this.spawnEnemy("dummy", gx,      gy - 28);  // off-depth — split stream target
       // Hydrant just in front of the group
       this.hydrants.push({ x: gx - 55, y: gy, t: 0 });
-      // Shop NPC visible from spawn
-      this.spawnVendor(220);
-      // Sprite gallery along the top row: every combat entity as a frozen,
-      // unkillable statue for visual inspection (labels via drawRangeStations).
-      let gx2 = 300;
-      for (const type of ["mook", "charger", "pyro", "stalker", "fuse", "smelt",
-                          "bulwark", "furnace", "boss", "switch",
-                          "quake", "gatewaykrusher", "slayer"]) {
-        const e = JH.makeEnemy(type, 0, JH.DEPTH_MIN + 6);
-        e.x = gx2 + e.bodyW / 2;
-        gx2 += e.bodyW + 30;
-        e.facing = -1;                       // face the approaching player
-        e.state = "idle";                    // t keeps ticking → idle anims play
-        e.update = function (dt) { this.t += dt; };   // statue: no AI/contact/physics
-        e.takeDamage = () => {};                       // display dummy — unkillable
-        e.isGallery = true;
-        this.enemies.push(e);
-      }
-      this.bounds.maxX = Math.max(this.bounds.maxX, gx2 + 80);
-      // Benediction picking section (dev only): one walk-up sigil per
-      // benediction in two rows below the dummies. In the range they DON'T
-      // clear each other (rangeMode), so you can grab any combo to test;
-      // re-picking one deepens it to rank II. The nearest one's name/desc
-      // shows in the bottom card (drawSigilCard).
-      const beneRowY = [58, 80];
-      let beneMaxX = 0;
-      JH.Benedictions.DEFS.forEach((d, i) => {
-        const bxp = 140 + (i % 12) * 46;
-        this.sigils.push(new JH.Sigil(bxp, beneRowY[i < 12 ? 0 : 1], { id: d.id, deepen: false }));
-        beneMaxX = Math.max(beneMaxX, bxp);
-      });
-      this.bounds.maxX = Math.max(this.bounds.maxX, beneMaxX + 50);
-      // Relic rack: one toggle station per relic, roster order (common → rare →
-      // relic-grade reads left to right), two rows right of the sigil rows.
-      const rackX0 = 700, rackDX = 36, rackRowY = [58, 80];
-      let rackMaxX = 0;
-      JH.RELICS.forEach((r, i) => {
-        const rx = rackX0 + (i % 11) * rackDX;
-        this.rangeStations.push({ kind: "relic", relic: r.id, x: rx, y: rackRowY[i < 11 ? 0 : 1], near: false });
-        rackMaxX = Math.max(rackMaxX, rx);
-      });
-      this.bounds.maxX = Math.max(this.bounds.maxX, rackMaxX + 80);
-      // Scenario props (relic testing) --------------------------------------
       // Slow puddle: permanent player-slow zone (rubber_boots immunity test).
-      this.slowZones.push(new JH.SlowZone(380, 70, 26, 1e9));
+      const slow = new JH.SlowZone(720, py - 28, 26, 1e9);
+      slow.rangeFixture = true;
+      this.slowZones.push(slow);
+      this.rangeStations.push(
+        { kind: "firepatch", x: 720, y: py + 25, near: false },
+      );
+      this.rangeSpawnX = 820;
+      this.rangeSpawnY = py;
       // Dome pair: permanent dome, one dummy sheltered + one outside
       // (deputy_sprinkler shelter check, lance blocker feel).
-      const dome = new JH.DeployedShield(1220, py, null);
+      const dome = new JH.DeployedShield(1050, py, null);
       dome.domeDur = dome.domeT = 1e9;
+      dome.rangeFixture = true;
       this.shields.push(dome);
-      this.spawnEnemy("dummy", 1220, py);                       // sheltered
-      this.spawnEnemy("dummy", 1220 + dome.radius + 26, py);    // outside
-      this.bounds.maxX = Math.max(this.bounds.maxX, 1220 + dome.radius + 110);
+      this.spawnEnemy("dummy", 1050, py);                       // sheltered
+      this.spawnEnemy("dummy", 1050 + dome.radius + 26, py);   // outside
       // Generous drop budget so spawner-mook kills pay out (dowsing_rod / plate).
       this.dropBudget = { suds: 999, items: 99 };
-      // Stations: super-elite proc button, mook spawner, fire patch spawner.
-      this.rangeStations.push(
-        { kind: "superelite", x: 140, y: py, near: false },
-        { kind: "mook",       x: 520, y: py, near: false },
-        { kind: "firepatch",  x: 600, y: py, near: false },
-      );
       this.rangeMode = true;
-      this.banner("TARGET RANGE  — HOSE MECHANICS TEST", 2.2);
+      this.rangeCatalogOpen = false;
+      this.rangeCatalogTab = 0;
+      this.rangeCatalogCursor = 0;
+      // No full-screen arrival banner: the dev menu selection already names
+      // the destination, and the banner obscured the first screen of fixtures.
       this.devMenu = false;
     },
 
@@ -422,6 +419,73 @@
       if (!this.relics.rosary_chain) this.rosaryBonus = 0;
       if (!this.relics.boiler_coil) { p.boilerTarget = null; p.boilerHeat = 0; p.boilerGapT = 0; }
       return !owned;
+    },
+
+    rangeCatalogEntries() {
+      const tab = RANGE_CATALOG_TABS[this.rangeCatalogTab] || "boons";
+      if (tab === "boons") return JH.Benedictions.DEFS;
+      if (tab === "relics") return JH.RELICS;
+      return RANGE_CATALOG_ENEMIES;
+    },
+
+    refreshPlayerStats() {
+      const p = this.player;
+      p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
+      if (p.hp > p.stats.maxHp) p.hp = p.stats.maxHp;
+    },
+
+    useRangeCatalog(entry) {
+      const tab = RANGE_CATALOG_TABS[this.rangeCatalogTab];
+      if (tab === "boons") {
+        const rank = JH.Benedictions.rank(entry.id);
+        if (rank >= 2) delete JH.Benedictions.active[entry.id];
+        else JH.Benedictions.take(entry.id);
+        this.refreshPlayerStats();
+        if (entry.id === "eye_of_storm" && JH.Benedictions.rank(entry.id))
+          this.player.stormT = JH.Benedictions.rank(entry.id) >= 2 ? 1.5 : 1;
+        this.audio.play(rank >= 2 ? "hurt" : "upgrade", { pitch: rank >= 2 ? 0.8 : 0.95 });
+        return;
+      }
+      if (tab === "relics") {
+        const on = this.toggleRelic(entry.id);
+        this.audio.play(on ? "buy" : "hurt", { pitch: on ? 1 : 0.8 });
+        return;
+      }
+
+      // One live catalog specimen at a time. Clearing its hazards as well as
+      // its body prevents repeated tests from rebuilding the old clutter.
+      this.enemies = this.enemies.filter((e) => !e.rangeCatalogSpawn);
+      this.embers = [];
+      this.stinkClouds = [];
+      this.gustLanes = [];
+      this.firePatches = [];
+      this.shields = this.shields.filter((s) => s.rangeFixture);
+      this.slowZones = this.slowZones.filter((z) => z.rangeFixture);
+      const e = this.spawnEnemy(entry.id, this.rangeSpawnX, this.rangeSpawnY);
+      e.rangeCatalogSpawn = true;
+      e.spawnGrace = Math.max(e.spawnGrace || 0, 0.8);
+      e.facing = -1;
+      this.rangeCatalogOpen = false;
+      this.audio.play("buy");
+    },
+
+    tickRangeCatalog() {
+      const entries = this.rangeCatalogEntries();
+      if (this.input.pressed("left") || this.input.pressed("right")) {
+        const d = this.input.pressed("left") ? -1 : 1;
+        this.rangeCatalogTab = (this.rangeCatalogTab + d + RANGE_CATALOG_TABS.length) % RANGE_CATALOG_TABS.length;
+        this.rangeCatalogCursor = 0;
+        this.audio.play("coin", { pitch: 0.9 + this.rangeCatalogTab * 0.1 });
+        return;
+      }
+      if (this.input.pressed("up"))
+        this.rangeCatalogCursor = (this.rangeCatalogCursor - 1 + entries.length) % entries.length;
+      if (this.input.pressed("down"))
+        this.rangeCatalogCursor = (this.rangeCatalogCursor + 1) % entries.length;
+      if (this.input.buffered("confirm")) {
+        this.input.consume("confirm");
+        this.useRangeCatalog(entries[this.rangeCatalogCursor]);
+      }
     },
 
     // Standalone test arena for the wall boss (not in the wave list yet).
@@ -561,6 +625,8 @@
       this.cutscene = null; this.victoryPortal = null;
       this.truckBoard = null; this.worldCrumble = null; this.slayerBeneBeat = false;
       this.rangeStations = null;
+      this.rangeCatalogOpen = false; this.rangeCatalogTab = 0; this.rangeCatalogCursor = 0;
+      this.rangeSpawnX = 0; this.rangeSpawnY = 0;
       this.dropBudget = { suds: 0, items: 0 };
       this.dryStreak = 0;   // consecutive scripted-wave kills with no item drop (pity counter)
       this.clearsSinceVendor = 0;   // 0 seed: the wave-3 cadence hit lands on a pre-boss
@@ -1506,7 +1572,11 @@
       }
       if (act && this.input.buffered("confirm")) {
         this.input.consume("confirm");
-        if (act.kind === "kibble") {
+        if (act.kind === "catalog") {
+          this.rangeCatalogOpen = true;
+          this.rangeCatalogCursor = 0;
+          this.audio.play("coin");
+        } else if (act.kind === "kibble") {
           // Drop a real health pickup at Jon's feet — exercises the actual
           // collect path (incl. kibble stacking).
           this.spawnPickup("health", pl.x, pl.y, 25);
@@ -1961,7 +2031,8 @@
       if (this.input.pressed("pause") && (this.state === "play" || this.state === "pause"
         || this.state === "church" || this.state === "churchPause"
         || this.state === "truck" || this.state === "truckPause")) {
-        if (this.state === "play" && this.shopOpen) this.shopOpen = false;
+        if (this.state === "play" && this.rangeCatalogOpen) this.rangeCatalogOpen = false;
+        else if (this.state === "play" && this.shopOpen) this.shopOpen = false;
         else this.togglePause();
       }
 
@@ -2036,6 +2107,14 @@
         this.hitStopTimer -= dt;
         this.embers = this.embers.filter((p) => p.update(dt, this));
         this.particles = this.particles.filter((p) => p.update(dt));
+        return;
+      }
+
+      // The catalog owns directional/confirm input while open. Freezing the
+      // lab also makes reading long item text safe with a live boss selected.
+      if (this.rangeCatalogOpen) {
+        this.tickRangeCatalog();
+        this.updateHUD();
         return;
       }
 
@@ -2430,11 +2509,27 @@
     },
 
     drawRangeStations(ctx, cam) {
-      const RANGE_LABELS = { kibble: "KIBBLE", gush: "GUSH", superelite: "SUPER-ELITE", mook: "SPAWN MOOK", firepatch: "FIRE PATCH" };
+      const RANGE_LABELS = { kibble: "KIBBLE", gush: "GUSH", superelite: "SUPER-ELITE", firepatch: "FIRE PATCH" };
       for (const st of this.rangeStations) {
         const sx = Math.round(st.x - cam), sy = Math.round(JH.Geo.feetScreenY(st.y, 0));
         ctx.save();
-        if (st.kind === "relic") {
+        if (st.kind === "catalog") {
+          // Chunky code-native vending cabinet: one screen replaces dozens of
+          // floor pickups/statues while remaining legible as a world fixture.
+          ctx.fillStyle = "#07101b";
+          ctx.beginPath(); ctx.ellipse(sx, sy + 1, 15, 5, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = "#26364c"; ctx.fillRect(sx - 13, sy - 39, 26, 39);
+          ctx.fillStyle = "#0b1624"; ctx.fillRect(sx - 10, sy - 36, 20, 20);
+          ctx.strokeStyle = "#6cd3ff"; ctx.strokeRect(sx - 10.5, sy - 36.5, 21, 21);
+          ctx.fillStyle = "#6cd3ff"; ctx.fillRect(sx - 7, sy - 32, 14, 3);
+          ctx.fillStyle = "#ffd23f"; ctx.fillRect(sx - 7, sy - 26, 4, 4);
+          ctx.fillStyle = "#c9924a"; ctx.fillRect(sx - 2, sy - 26, 4, 4);
+          ctx.fillStyle = "#ff5a5a"; ctx.fillRect(sx + 3, sy - 26, 4, 4);
+          ctx.fillStyle = "#101a28"; ctx.fillRect(sx - 8, sy - 12, 16, 7);
+          ctx.fillStyle = "#8fa8c8"; ctx.fillRect(sx - 5, sy - 9, 10, 2);
+          ctx.font = "bold 5px monospace"; ctx.textAlign = "center";
+          ctx.fillStyle = "#9be8ff"; ctx.fillText("TEST-O-MAT", sx, sy - 44);
+        } else if (st.kind === "relic") {
           const rd = JH.RELICS.find((r) => r.id === st.relic);
           const owned = !!this.relics[st.relic];
           ctx.globalAlpha = owned ? 1 : 0.5;
@@ -2475,14 +2570,14 @@
         ctx.textAlign = "left";
         ctx.restore();
       }
-      // Gallery labels: entity type over each statue on the top row.
+      // Labels for the cycling charge dummy and the one live catalog spawn.
       ctx.save();
       ctx.font = "bold 5px monospace"; ctx.textAlign = "center"; ctx.fillStyle = "#7fa0c0";
       for (const e of this.enemies) {
-        if (!e.isGallery && !e.rangeChargeCycle) continue;
+        if (!e.rangeCatalogSpawn && !e.rangeChargeCycle) continue;
         const sx = Math.round(e.x - cam);
         if (sx < -30 || sx > JH.VIEW_W + 30) continue;
-        const label = e.rangeChargeCycle ? (e.state === "charge" ? "CHARGING!" : "CHARGE DUMMY") : e.type.toUpperCase();
+        const label = e.rangeChargeCycle ? (e.state === "charge" ? "CHARGING!" : "CHARGE DUMMY") : "LIVE: " + e.type.toUpperCase();
         const color = (e.rangeChargeCycle && e.state === "charge") ? "#ff5a5a" : "#7fa0c0";
         ctx.fillStyle = color;
         ctx.fillText(label, sx, JH.Geo.feetScreenY(e.y, 0) - e.bodyH - 8);
@@ -2492,10 +2587,103 @@
       ctx.restore();
     },
 
+    drawRangeCatalog(ctx) {
+      const tab = RANGE_CATALOG_TABS[this.rangeCatalogTab] || "boons";
+      const entries = this.rangeCatalogEntries();
+      const cursor = clamp(this.rangeCatalogCursor, 0, entries.length - 1);
+      const selected = entries[cursor];
+      const visible = 9;
+      const start = clamp(cursor - 4, 0, Math.max(0, entries.length - visible));
+      const X = 24, Y = 18, W = 432, H = 234;
+      const tierColors = { common: "#8fa8c8", rare: "#c9924a", relic: "#ffd23f" };
+      const elementColors = { water: "#6cd3ff", fire: "#ff8030", earth: "#c8a050", air: "#bfe8ff" };
+      const wrap = (text, max) => {
+        const words = String(text || "").split(/\s+/), lines = [];
+        let line = "";
+        for (const word of words) {
+          if ((line + " " + word).trim().length > max && line) { lines.push(line); line = word; }
+          else line = (line + " " + word).trim();
+        }
+        if (line) lines.push(line);
+        return lines;
+      };
+
+      ctx.save();
+      ctx.fillStyle = "rgba(3,7,13,0.96)"; ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = "#6cd3ff"; ctx.lineWidth = 2; ctx.strokeRect(X, Y, W, H);
+      ctx.fillStyle = "#dfe8f5"; ctx.font = "bold 9px monospace"; ctx.textAlign = "left";
+      ctx.fillText("TEST-O-MAT", X + 12, Y + 15);
+      ctx.font = "5px monospace"; ctx.fillStyle = "#7fa0c0";
+      ctx.fillText("RANGE INVENTORY & LIVE SPECIMEN DISPENSER", X + 86, Y + 15);
+
+      const tabW = 86;
+      for (let i = 0; i < RANGE_CATALOG_TABS.length; i++) {
+        const tx = X + 12 + i * (tabW + 4), active = i === this.rangeCatalogTab;
+        ctx.fillStyle = active ? "#17334a" : "#0b1420"; ctx.fillRect(tx, Y + 23, tabW, 16);
+        ctx.strokeStyle = active ? "#6cd3ff" : "#31445c"; ctx.strokeRect(tx, Y + 23, tabW, 16);
+        ctx.fillStyle = active ? "#dff7ff" : "#71849c"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+        ctx.fillText(["BENEDICTIONS", "RELICS", "ENEMIES + BOSSES"][i], tx + tabW / 2, Y + 34);
+      }
+
+      ctx.fillStyle = "#09111d"; ctx.fillRect(X + 12, Y + 47, 200, 153);
+      ctx.strokeStyle = "#26384e"; ctx.strokeRect(X + 12, Y + 47, 200, 153);
+      for (let row = 0; row < visible; row++) {
+        const i = start + row;
+        if (i >= entries.length) break;
+        const e = entries[i], yy = Y + 58 + row * 16, active = i === cursor;
+        if (active) { ctx.fillStyle = "#17334a"; ctx.fillRect(X + 16, yy - 9, 192, 14); }
+        let status = "";
+        if (tab === "boons") {
+          const rank = JH.Benedictions.rank(e.id);
+          status = rank ? (rank >= 2 ? "II" : "I") : "";
+        } else if (tab === "relics") status = this.relics[e.id] ? "ON" : "";
+        else status = e.boss ? "BOSS" : e.air ? "AIR" : e.setpiece ? "SET" : "";
+        ctx.textAlign = "left"; ctx.font = active ? "bold 6px monospace" : "6px monospace";
+        ctx.fillStyle = active ? "#ffffff" : "#aebdd4"; ctx.fillText(e.name, X + 21, yy);
+        ctx.textAlign = "right"; ctx.fillStyle = tab === "relics" ? (tierColors[e.tier] || "#8fa8c8")
+          : tab === "boons" ? (elementColors[e.element] || "#bfe8ff") : e.boss ? "#ff5a5a" : e.air ? "#bfe8ff" : "#7fa0c0";
+        ctx.fillText(status, X + 202, yy);
+      }
+      if (start > 0) { ctx.fillStyle = "#6cd3ff"; ctx.textAlign = "center"; ctx.fillText("▲", X + 206, Y + 54); }
+      if (start + visible < entries.length) { ctx.fillStyle = "#6cd3ff"; ctx.textAlign = "center"; ctx.fillText("▼", X + 206, Y + 196); }
+
+      const DX = X + 226;
+      ctx.textAlign = "left"; ctx.font = "bold 8px monospace"; ctx.fillStyle = "#ffffff";
+      ctx.fillText(selected.name.toUpperCase(), DX, Y + 61);
+      let badge = "";
+      if (tab === "boons") badge = (selected.kind || "boon").toUpperCase() + "  ·  " + (selected.element || (selected.needs || []).join(" + ")).toUpperCase();
+      else if (tab === "relics") badge = selected.tier.toUpperCase() + " RELIC";
+      else badge = selected.boss ? "LIVE BOSS" : selected.air ? "AIR ACT ENEMY" : selected.setpiece ? "LIVE SET-PIECE" : "LIVE ENEMY";
+      ctx.font = "bold 6px monospace"; ctx.fillStyle = tab === "relics" ? tierColors[selected.tier]
+        : tab === "boons" ? (elementColors[selected.element] || "#bfe8ff") : selected.boss ? "#ff5a5a" : "#9be8ff";
+      ctx.fillText(badge, DX, Y + 74);
+      let desc;
+      if (tab === "boons") desc = JH.Benedictions.effectText(selected.id, JH.Benedictions.rank(selected.id));
+      else if (tab === "relics") desc = selected.desc;
+      else {
+        const d = JH.ENEMIES[selected.id];
+        desc = selected.boss ? "Replaces the previous live specimen and starts the complete boss AI in the spawn bay."
+          : d ? "HP " + d.hp + "  ·  SPEED " + d.speed + ". Replaces the previous live specimen in the spawn bay."
+          : "Replaces the previous live specimen and starts its complete encounter AI in the spawn bay.";
+      }
+      ctx.font = "6px monospace"; ctx.fillStyle = "#aebdd4";
+      wrap(desc, 31).slice(0, 7).forEach((line, i) => ctx.fillText(line, DX, Y + 91 + i * 10));
+      ctx.fillStyle = "#182538"; ctx.fillRect(DX, Y + 171, 190, 29);
+      ctx.font = "bold 6px monospace"; ctx.fillStyle = "#80ff80";
+      let action;
+      if (tab === "boons") action = JH.Benedictions.rank(selected.id) >= 2 ? "E  REMOVE" : "E  GRANT NEXT RANK";
+      else if (tab === "relics") action = this.relics[selected.id] ? "E  SWITCH OFF" : "E  SWITCH ON";
+      else action = "E  DISPENSE LIVE";
+      ctx.fillText(action, DX + 8, Y + 184);
+      ctx.font = "5px monospace"; ctx.fillStyle = "#7fa0c0";
+      ctx.fillText("← → TAB   ↑ ↓ SELECT   ESC CLOSE", X + 12, Y + H - 9);
+      ctx.restore();
+    },
+
     updateHUD() {
       if (!this.player) return;
       const hud = document.getElementById("hud");
-      if (hud) hud.style.visibility = (this.state === "play" && this.nearShop) ? "hidden" : "";
+      if (hud) hud.style.visibility = (this.state === "play" && (this.nearShop || this.rangeCatalogOpen)) ? "hidden" : "";
       document.getElementById("hud-suds").textContent = Math.floor(this.player.suds);
     },
 
@@ -2844,7 +3032,7 @@
       }
       // Stat panel: always on in play (collapsed), named near the vendor,
       // full character sheet when Tab-toggled.
-      if (this.state === "play")
+      if (this.state === "play" && !this.rangeCatalogOpen)
         this.drawStatPanel(this.ctx);
       // Hover shop panel — drawn outside shake transform so it stays stable.
       // Walk-up prompt over the vendor while the shop is closed.
@@ -2875,6 +3063,7 @@
       }
       if (this.state === "play") this.drawSigilCard(this.ctx);
       if (this.rangeMode) this.drawRelicRackCard(this.ctx);
+      if (this.rangeCatalogOpen) this.drawRangeCatalog(this.ctx);
       // Cutscene overlay (drawn after everything else).
       if (this.state === "cutscene" && this.cutscene) this.drawCutscene(this.ctx);
       // Dev menu drawn last so it's always on top.
