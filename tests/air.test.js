@@ -194,6 +194,7 @@ test("cloudline holdout: timer expiry clears infinite enemies + gusts + edge, an
     g.bounds = { minX: 0, maxX: 480 };
     g.gustLanes = [new JH.GustLane({ y: 18, dir: 1 }), new JH.GustLane({ y: 68, dir: 1 })];
     g.cloudlineEdge = new JH.CloudlineEdge(400);
+    g.windHazards = [new JH.WindHazard(50, 40)];
     const mook = JH.makeEnemy("mook", 100, 40); mook.infinite = true;
     const boss = JH.makeEnemy("mook", 120, 40); boss.infinite = true; boss.isBoss = true;
     g.enemies = [mook, boss];
@@ -208,6 +209,7 @@ test("cloudline holdout: timer expiry clears infinite enemies + gusts + edge, an
     assert.strictEqual(boss.dead, false, "the isBoss guard is respected (never force-killed)");
     assert.deepStrictEqual(g.gustLanes, [], "gust lanes clear with the wave");
     assert.strictEqual(g.cloudlineEdge, null, "the cloud edge hazard clears with the wave");
+    assert.deepStrictEqual(g.windHazards, [], "wave clear removes hazards");
     assert.strictEqual(crossCalls, 1, "cross reward granted exactly once");
     assert.strictEqual(xpCalls, 1, "set-piece XP granted exactly once");
     assert.strictEqual(g.waveActive, false, "waveActive flips off so the same expiry can't fire twice");
@@ -676,6 +678,65 @@ test("cloudline edge: repeated update after reset cannot multi-hit on adjacent f
   edge.update(1 / 60, g);   // very next fixed-step frame
   assert.strictEqual(g.player.hp, hpAfterFirst, "no second HP hit lands on the adjacent frame");
   assert.strictEqual(g.player.x, xAfterFirst, "no second reset displaces Jon further on the adjacent frame");
+});
+
+test("wind hazard rim: drawn ellipse IS the hit ellipse; chip + cooldown; enemies shoved not hurt", () => {
+  const H = JH.WIND_HAZARD;
+  const g = stubHazardGame(100, 40);
+  const hz = new JH.WindHazard(100, 40);
+  const f = hz.footprint();
+  assert.strictEqual(f.rx, H.rx, "footprint rx comes from config");
+  assert.ok(Math.abs(f.ry - f.rx * JH.GROUND_RY) < 0.001, "depth uses the flattened ellipse");
+  // Player inside the rim: one chip through takeHit, then the cooldown gates.
+  g.player.x = 100 + f.rx - 1; g.player.y = 40;
+  const hp0 = g.player.hp;
+  hz.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - H.dmg, "chip damage lands once");
+  hz.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - H.dmg, "contact cooldown blocks per-frame ticking");
+  // Outside the rim: nothing.
+  const hz2 = new JH.WindHazard(300, 40);
+  g.player.x = 300 + hz2.footprint().rx + 2; g.player.hp = hp0;
+  hz2.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0, "outside the rim takes nothing");
+  // Enemy inside: knockback + stagger, zero damage.
+  const e = JH.makeEnemy("tpmummy", 100 + f.rx - 1, 40);
+  const ehp = e.hp;
+  g.enemies.push(e);
+  hz.contactCd = 0; g.player.x = 900;   // player out of the way
+  hz.update(1 / 60, g);
+  assert.strictEqual(e.hp, ehp, "enemies take zero damage");
+  assert.ok(e.knockVX > 0, "enemy shoved away from the hazard center");
+  assert.ok(e.staggerT > 0, "enemy staggered");
+  // Emplacements immune.
+  const b = JH.makeEnemy("bidet", 100 + f.rx - 1, 40);
+  g.enemies.push(b);
+  hz.update(1 / 60, g);
+  assert.ok(!b.knockVX, "speed-0 emplacements hold fast");
+});
+
+test("wind hazard: staggered enemies skip think until the timer runs out", () => {
+  const g = stubHazardGame(400, 40);
+  const e = JH.makeEnemy("tpmummy", 100, 40);
+  e.spawnGrace = 0; e.staggerT = 0.2;
+  const x0 = e.x;
+  e.update(1 / 60, g);
+  assert.strictEqual(e.x, x0, "no self-movement while staggered (think skipped)");
+  for (let i = 0; i < 20; i++) e.update(1 / 60, g);
+  assert.ok(e.staggerT <= 0, "stagger expires");
+  assert.strictEqual(e.state, "walk", "think resumes after the stagger (player far -> approach)");
+});
+
+test("wind hazards: wave data places them; they are terrain, not wave members", () => {
+  const w = JH.LEVEL1.waves;
+  assert.ok(!w[32].hazards, "wave 33 has no mid-field hazards (the edge is its hazard)");
+  assert.strictEqual(w[33].hazards.length, 1, "wave 34: one hazard");
+  assert.strictEqual(w[34].hazards.length, 2, "wave 35: two hazards");
+  for (const wave of [w[33], w[34]])
+    for (const h of wave.hazards) {
+      assert.ok(h.x >= 0 && h.x <= JH.VIEW_W - 40, "inside the arena band");
+      assert.ok(h.y >= JH.DEPTH_MIN && h.y <= JH.DEPTH_MAX, "inside the depth band");
+    }
 });
 
 test("plunger: lunge contact latches and drains WATER, not HP", () => {

@@ -57,6 +57,7 @@
     timeScale: 1, deepdiving: false,   // Deepdive TV: world fixed-step rate; ramped by Balance.deepdiveRamp
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     cloudlineEdge: null,   // wave 33's walkway-edge hazard (JH.CloudlineEdge); live only during that holdout
+    windHazards: [],
     dropBudget: { suds: 0, items: 0 },   // anti-farm cap for infinite spawns
     bounds: { minX: 8, maxX: JH.LEVEL_LEN - 8 },
 
@@ -606,7 +607,7 @@
       JH.Camera.reset();
       this.player = new JH.Player(60, JH.DEPTH_MAX - 24);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
-      this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null;
+      this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null; this.windHazards = [];
       this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = []; this.beneUsedOnce = {};
@@ -703,6 +704,8 @@
       this.cloudlineEdge = wave.cloudlineEdge
         ? new JH.CloudlineEdge(this.bounds.maxX - JH.CLOUDLINE_HOLDOUT.edgeInset)
         : null;
+      this.windHazards = (wave.hazards || []).map((h) =>
+        new JH.WindHazard(this.bounds.minX + h.x, h.y));
       this.dropBudget = { suds: 0, items: 0 };
 
       // Elite meter for this wave: nextEliteScale() hands out the elite scale
@@ -983,7 +986,7 @@
         this.spawnPickup("cross", this.player.x + 34, this.player.y, 1);
         this.grantXp(JH.LEVELS.setPieceXp);
       }
-      this.wall = null; this.gardens = []; this.gustLanes = []; this.cloudlineEdge = null; // barricade / gardens / gusts / cloud edge (if any) are done
+      this.wall = null; this.gardens = []; this.gustLanes = []; this.cloudlineEdge = null; this.windHazards = []; // barricade / gardens / gusts / cloud edge / wind hazards (if any) are done
       JH.Camera.unlock();
       // The LAST wave (final boss) wins; a mid-boss just continues.
       if (this.waveIndex >= JH.LEVEL1.waves.length - 1) { this.win(); return; }
@@ -1094,7 +1097,7 @@
       // combat state, but this guards the arrival regardless of how it's
       // reached (dev-warp, headless entry).
       this.enemies = []; this.embers = []; this.firePatches = [];
-      this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null;
+      this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null; this.windHazards = [];
       if (JH.Background) JH.Background.airOn = true;   // cloudline art turns on
       this.waveTriggerX = this.gatedTriggerX(airStart, p.x);
       this.bounds = { minX: JH.ZONE4_START + 8, maxX: this.waveTriggerX + 30 };
@@ -1885,7 +1888,7 @@
       // checkpoints come back to whatever pre-gate act was active.
       if (JH.Background) JH.Background.airOn = (this.checkpointWave >= JH.ACT_STARTS[JH.ACT_STARTS.length - 1]);
       this.enemies = []; this.embers = []; this.pickups = []; this.particles = []; this.shields = []; this.firePatches = []; this.slowZones = []; this.wavePool = [];
-      this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null;
+      this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null; this.windHazards = [];
       this.pulseRings = []; this.sermonWaves = [];
       this.floaters = [];
       this.sigils = [];   // usedOnce survives death; active boons are whatever the Reliquary gave back
@@ -2182,6 +2185,7 @@
       for (const gl of this.gustLanes) gl.update(dt, this);
       // After gust lanes so a gust push across the edge resolves the same step.
       if (this.cloudlineEdge) this.cloudlineEdge.update(dt, this);
+      for (const hz of this.windHazards) hz.update(dt, this);
       this.player.zoneSlow = 1;
       for (const z of this.slowZones) z.update(dt, this);
       this.embers = this.embers.filter((p) => p.update(dt, this));
@@ -2793,6 +2797,7 @@
         for (const gl of this.gustLanes) gl.draw(ctx, cam);
         for (const sc of this.stinkClouds) sc.draw(ctx, cam);
         if (this.cloudlineEdge) this.cloudlineEdge.draw(ctx, cam);
+        for (const hz of this.windHazards) hz.draw(ctx, cam);
 
         // slow zones (super-Bulwark's landed shield)
         for (const z of this.slowZones) z.draw(ctx, cam);

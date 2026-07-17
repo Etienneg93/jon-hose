@@ -694,6 +694,12 @@
     edgeDmg: 12,       // HP routed through Player.takeHit on every crossing
   };
 
+  // ---- Wind hazard ("sky vent"): stationary wave terrain gusts blow you
+  // into. Player takes dmg via the normal takeHit path + knockback, gated
+  // by contactCd. Enemies: knockback + staggerT only, never damage.
+  JH.WIND_HAZARD = { rx: 14, dmg: 8, knock: 140, enemyKnock: 120,
+                     staggerT: 0.35, contactCd: 0.6 };
+
   // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
   // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
   // downgrades an active scald.)
@@ -1188,6 +1194,7 @@
       // slots: six regulars open, four sprinkle-pool extras queue behind them.
       { name: "PORCELAIN PATROL", tough: true, superElite: "plunger",
         placements: [{ type: "bidet", x: 344, y: 18 }],
+        hazards: [{ x: 180, y: 44 }],
         gusts: [{ yMin: 24, yMax: 62, dirs: [1, -1] }],
         spawns: [{ type: "plunger", count: 2 }, { type: "tpmummy", count: 2 }, { type: "gasbag", count: 2 }] },
       // Two pre-placed Bidets + superElite reserve three of eight: five
@@ -1197,6 +1204,7 @@
         gusts: [{ yMin: 14, yMax: 40, dirs: [1] },
                 { yMin: 46, yMax: 72, dirs: [-1], phase: 3.6 }],
         placements: [{ type: "bidet", x: 112, y: 18 }, { type: "bidet", x: 344, y: 68 }],
+        hazards: [{ x: 150, y: 30 }, { x: 290, y: 56 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
     ],
   };

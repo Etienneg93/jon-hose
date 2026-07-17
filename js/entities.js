@@ -1582,7 +1582,8 @@
         if (!this._puddleSlow) this._puddleSlow = 0.7;
       }
       const prePx = this.x, prePy = this.y;
-      this.think(dt, game);
+      if (this.staggerT > 0) this.staggerT -= dt;   // hazard shove: skip think
+      else this.think(dt, game);
       if (this._puddleSlow) {
         this.x = prePx + (this.x - prePx) * this._puddleSlow;
         this.y = prePy + (this.y - prePy) * this._puddleSlow;
@@ -2802,6 +2803,69 @@
     }
   }
   JH.CloudlineEdge = CloudlineEdge;
+
+  // Wind hazard ("sky vent"): stationary wave terrain. ONE ellipse is both
+  // the drawn rim and the hit test (FirePatch.footprint idiom). Player:
+  // chip via takeHit + knockback, gated by contactCd (the cd re-arms even
+  // on a dodged hit — no per-frame retries against i-frames). Enemies:
+  // knockback + stagger, zero damage; emplacements/bosses immune.
+  class WindHazard {
+    constructor(x, y) {
+      this.x = x; this.y = y;
+      this.t = 0; this.contactCd = 0; this.dead = false;
+    }
+    footprint() {
+      const rx = JH.WIND_HAZARD.rx;
+      return { rx, ry: rx * JH.GROUND_RY };
+    }
+    update(dt, game) {
+      const H = JH.WIND_HAZARD;
+      this.t += dt;
+      if (this.contactCd > 0) this.contactCd -= dt;
+      const f = this.footprint(), pl = game.player;
+      if (pl && pl.alive && this.contactCd <= 0
+          && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx, f.ry)) {
+        pl.takeHit(H.dmg, game, this.x, H.knock);
+        this.contactCd = H.contactCd;
+      }
+      for (const e of game.enemies) {
+        if (e.dead || e.dropping || e.isBoss) continue;
+        if (e.def && e.def.speed === 0) continue;   // emplacements hold fast
+        if (e._hazardCd > 0) { e._hazardCd -= dt; continue; }
+        if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry)) {
+          e.applyKnockback(e.x >= this.x ? 1 : -1, H.enemyKnock);
+          e.staggerT = Math.max(e.staggerT || 0, H.staggerT);
+          e._hazardCd = H.contactCd;
+        }
+      }
+    }
+    draw(ctx, cam) {
+      // Procedural fallback: broken fan disc + spark flicker + exact rim.
+      const f = this.footprint();
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      ctx.save();
+      // rim = hitbox
+      ctx.strokeStyle = "#8d97ad"; ctx.globalAlpha = 0.7; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2); ctx.stroke();
+      // squat vent body + lazily spinning broken blade
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#454f63"; ctx.fillRect(Math.round(sx) - 8, Math.round(sy) - 10, 16, 9);
+      ctx.fillStyle = "#2c3344"; ctx.fillRect(Math.round(sx) - 8, Math.round(sy) - 3, 16, 2);
+      const a = this.t * 2.2;
+      ctx.strokeStyle = "#98a4bd"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx - Math.cos(a) * 6, sy - 6 - Math.sin(a) * 2.4);
+      ctx.lineTo(sx + Math.cos(a) * 6, sy - 6 + Math.sin(a) * 2.4);
+      ctx.stroke();
+      // spark flicker
+      if ((Math.floor(this.t * 9) % 4) === 0) {
+        ctx.fillStyle = "#ffd23f";
+        ctx.fillRect(Math.round(sx + Math.sin(this.t * 7) * 5), Math.round(sy) - 12, 2, 2);
+      }
+      ctx.restore();
+    }
+  }
+  JH.WindHazard = WindHazard;
 
   // Trial by Fire's "burning" check: is this enemy standing in a live fire
   // patch's footprint? (Scald/burn-stack burning is checked separately by

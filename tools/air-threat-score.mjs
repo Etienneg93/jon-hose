@@ -139,7 +139,7 @@ line();
 // =====================================================================
 line("==== Air wave composition audit (waves 30-35) ====");
 hr();
-line("wave  name                  authored  placements  queued  peakField  toughFrac  super");
+line("wave  name                  authored  placements  hazards  queued  peakField  toughFrac  super");
 
 function waveStats(idx) {
   const wave = JH.LEVEL1.waves[idx];
@@ -147,6 +147,7 @@ function waveStats(idx) {
   const cap = Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
   const toughFrac = wave.tough ? (JH.ELITE_FRAC[actLevel + 1] || 0) : 0;
   const superName = wave.superElite || "none";
+  const hazards = (wave.hazards || []).length;
 
   if (wave.holdout) {
     // Holdout branch (game.js ~753): no placements/opening slice — a pool of
@@ -156,7 +157,7 @@ function waveStats(idx) {
     // mirrors Game.holdoutCadence (game.js ~860): cloudlineEdge holdouts use
     // CLOUDLINE_HOLDOUT.maxAlive, every other holdout keeps JH.WALL.maxAlive.
     const maxAlive = wave.cloudlineEdge ? JH.CLOUDLINE_HOLDOUT.maxAlive : JH.WALL.maxAlive;
-    return { authoredCount, placementCount: 0, queued: authoredCount, peak: maxAlive, cap, toughFrac, superName, kind: "holdout" };
+    return { authoredCount, placementCount: 0, hazards, queued: authoredCount, peak: maxAlive, cap, toughFrac, superName, kind: "holdout" };
   }
 
   // Regular branch (game.js ~771-822): placements + superElite reserve
@@ -171,7 +172,7 @@ function waveStats(idx) {
   const opened = Math.min(openCount, availableToOpen);
   const queued = Math.max(0, authoredCount - openCount);   // authored-only leftover (sprinkles are opportunistic extras)
   const peak = placementCount + (wave.superElite ? 1 : 0) + opened;
-  return { authoredCount, placementCount, queued, peak, cap, toughFrac, superName, kind: "regular" };
+  return { authoredCount, placementCount, hazards, queued, peak, cap, toughFrac, superName, kind: "regular" };
 }
 
 for (const idx of AIR_WAVE_IDX) {
@@ -181,6 +182,7 @@ for (const idx of AIR_WAVE_IDX) {
   line(
     `${String(gameWave).padStart(4)}  ${wave.name.padEnd(22)}`
     + `${String(s.authoredCount).padStart(8)}${String(s.placementCount).padStart(12)}`
+    + `${String(s.hazards).padStart(9)}`
     + `${String(s.queued).padStart(8)}${String(s.peak).padStart(11)}`
     + `${fmt(s.toughFrac).padStart(11)}  ${s.superName}`
   );
