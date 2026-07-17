@@ -5826,6 +5826,9 @@
         this.x += (dx / (dist || 1)) * d.speed * want * dt;
         this.y += (dy / (dist || 1)) * d.speed * want * dt * 0.8;
         this.state = "walk";
+        // Backing up: face the travel direction so the walk cycle reads as
+        // walking away. The release beat keeps aiming at the target.
+        if (want < 0 && !(this.releaseT > 0)) this.facing = -this.facing;
       } else this.state = "idle";
       if (this.releaseT > 0) this.state = "release";   // pose only; movement above still applies
     }

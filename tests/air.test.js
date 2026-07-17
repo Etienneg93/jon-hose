@@ -775,6 +775,30 @@ test("tpmummy death puff: shoves inside the rim, no damage, spares the rim-outsi
   assert.strictEqual(g2.player.knockVX || 0, 0, "outside the rim: untouched");
 });
 
+test("tpmummy retreat: turns to face its travel direction, not a backward moonwalk", () => {
+  const g = stubHazardGame(100, 40);
+  // Inside the 70px comfort ring -> retreats; must face away (travel direction).
+  const e = JH.makeEnemy("tpmummy", 140, 40);
+  e.spawnGrace = 0; e.cdTimer = 99;
+  e.think(1 / 60, g);
+  assert.strictEqual(e.state, "walk");
+  assert.ok(e.x > 140, "backs away from the player");
+  assert.strictEqual(e.facing, 1, "faces the travel direction while backing up");
+  // Beyond 120px -> approaches; faces the player as before.
+  const e2 = JH.makeEnemy("tpmummy", 300, 40);
+  e2.spawnGrace = 0; e2.cdTimer = 99;
+  e2.think(1 / 60, g);
+  assert.strictEqual(e2.state, "walk");
+  assert.ok(e2.x < 300, "closes toward the player");
+  assert.strictEqual(e2.facing, -1, "faces the player while approaching");
+  // Winding up at close range still faces the player (the throw aims at Jon).
+  const e3 = JH.makeEnemy("tpmummy", 140, 40);
+  e3.spawnGrace = 0; e3.cdTimer = 0;
+  e3.think(1 / 60, g);
+  assert.strictEqual(e3.state, "wind");
+  assert.strictEqual(e3.facing, -1, "faces the player during the windup");
+});
+
 test("gasbag: vents a hostile cloud beneath itself after the inflate telegraph", () => {
   const g = stubHazardGame(400, 40);
   const e = JH.makeEnemy("gasbag", 100, 40);
