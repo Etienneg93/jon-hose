@@ -645,6 +645,18 @@
     pushEnemy: 100,    // px/s applied to light enemies (bosses/emplacements immune)
   };
 
+  // ---- Cloudline Holdout: wave 33's walkway-edge hazard + reinforcement
+  // cadence (Task 3 wires holdDur/spawnEvery/maxAlive into the holdout
+  // spawn loop; Task 2 uses edgeInset/resetDist/edgeDmg for JH.CloudlineEdge).
+  JH.CLOUDLINE_HOLDOUT = {
+    holdDur: 24,
+    spawnEvery: 1.35,
+    maxAlive: 4,
+    edgeInset: 28,     // px inward from bounds.maxX where the edge line sits
+    resetDist: 54,     // px inward from the edge a crossing resets Jon to
+    edgeDmg: 12,       // HP routed through Player.takeHit on every crossing
+  };
+
   // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
   // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
   // downgrades an active scald.)

@@ -380,6 +380,56 @@ test("gust lane cycle: telegraph -> blow -> gap -> telegraph", () => {
   assert.strictEqual(lane.phase, "telegraph");
 });
 
+test("cloudline edge rim: front rim one epsilon inside does not cross; touching crosses", () => {
+  const edge = new JH.CloudlineEdge(400);
+  const p = stubPlayer(0, 40);
+  const half = p.bodyW * 0.5;
+  p.x = edge.x - half - 0.01;
+  assert.strictEqual(edge.crossed(p), false, "one epsilon inside must not cross");
+  p.x = edge.x - half;
+  assert.strictEqual(edge.crossed(p), true, "front rim touching the line crosses");
+});
+
+test("cloudline edge: crossing resets Jon inward and the 12 HP penalty routes through takeHit only", () => {
+  const C = JH.CLOUDLINE_HOLDOUT;
+  const g = stubHazardGame(400, 40);
+  const edge = new JH.CloudlineEdge(400);
+  g.cloudlineEdge = edge;
+  const hp0 = g.player.hp;
+  g.player.x = edge.x;   // touching the line -> crossed
+  edge.update(1 / 60, g);
+  assert.ok(Math.abs(g.player.x - (edge.x - C.resetDist)) < 0.001,
+    "crossing resets to edge.x - resetDist");
+  assert.strictEqual(hp0 - g.player.hp, C.edgeDmg,
+    "exactly the configured edge damage lands, through Player.takeHit");
+  assert.ok(g.player.alive, "never an instant kill by a special path — normal takeHit owns HP/death");
+});
+
+test("cloudline edge: positional reset happens even when takeHit negates the hit (i-frames)", () => {
+  const C = JH.CLOUDLINE_HOLDOUT;
+  const g = stubHazardGame(400, 40);
+  const edge = new JH.CloudlineEdge(400);
+  g.player.invulnTimer = 1;   // takeHit will return false and skip HP loss
+  const hp0 = g.player.hp;
+  g.player.x = edge.x;
+  edge.update(1 / 60, g);
+  assert.ok(Math.abs(g.player.x - (edge.x - C.resetDist)) < 0.001,
+    "positional reset is unconditional, independent of takeHit's landed/negated result");
+  assert.strictEqual(g.player.hp, hp0, "a negated hit costs no HP");
+});
+
+test("cloudline edge: repeated update after reset cannot multi-hit on adjacent frames", () => {
+  const g = stubHazardGame(400, 40);
+  const edge = new JH.CloudlineEdge(400);
+  g.player.x = edge.x;
+  edge.update(1 / 60, g);
+  const hpAfterFirst = g.player.hp;
+  const xAfterFirst = g.player.x;
+  edge.update(1 / 60, g);   // very next fixed-step frame
+  assert.strictEqual(g.player.hp, hpAfterFirst, "no second HP hit lands on the adjacent frame");
+  assert.strictEqual(g.player.x, xAfterFirst, "no second reset displaces Jon further on the adjacent frame");
+});
+
 test("plunger: lunge contact latches and drains WATER, not HP", () => {
   const g = stubHazardGame(100, 40);
   const e = JH.makeEnemy("plunger", 90, 40);

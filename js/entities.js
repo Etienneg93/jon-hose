@@ -2710,6 +2710,64 @@
   }
   JH.GustLane = GustLane;
 
+  // ---- CloudlineEdge: the Cloudline Holdout's walkway boundary ----------
+  // One vertical world-X line. `crossed()` and `draw()` share the exact
+  // same x (rim is hitbox). Crossing resets Jon inward unconditionally —
+  // even a hit takeHit negates (i-frames/dodge) still gets pulled back, so
+  // dashing off the walkway can never strand the player past the edge.
+  class CloudlineEdge {
+    constructor(x) {
+      this.x = x;
+      this.t = 0;
+      this.flashT = 0;   // post-crossing rim flash / gust-burst window (cosmetic)
+    }
+    // Forward rim = the entity's rightward body edge — the edge always
+    // sits at the far/right side of the locked arena (Game.startWave).
+    crossed(entity) {
+      const half = (entity.bodyW || 12) * 0.5;
+      return (entity.x + half) >= this.x;
+    }
+    update(dt, game) {
+      this.t += dt;
+      if (this.flashT > 0) this.flashT -= dt;
+      const pl = game.player;
+      if (!pl || !pl.alive || !this.crossed(pl)) return;
+      const C = JH.CLOUDLINE_HOLDOUT;
+      // Positional truth first: reset happens regardless of whether the
+      // HP hit below actually lands.
+      pl.x = clamp(this.x - C.resetDist, game.bounds.minX, game.bounds.maxX);
+      pl.takeHit(C.edgeDmg, game, this.x);
+      this.flashT = 0.35;
+      game.shake(5, -1);
+      burst(game, this.x, pl.y, 14, "#dff2ff", 10, { speed: 140, life: 0.4, up: 60 });
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 10;
+      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 6;
+      ctx.save();
+      const flashing = this.flashT > 0 && (Math.floor(this.t * 16) & 1);
+      ctx.strokeStyle = flashing ? "#ffffff" : "#bfe6ff";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(Math.round(sx), yT); ctx.lineTo(Math.round(sx), yB); ctx.stroke();
+      ctx.setLineDash([]);
+      // Wind streaks falling away on the unsafe (far) side only.
+      const burstOn = this.flashT > 0;
+      const n = burstOn ? 10 : 5;
+      for (let i = 0; i < n; i++) {
+        const k = (this.t * (burstOn ? 2.2 : 0.5) + i / n) % 1;
+        const lx = sx + 3 + k * 22;
+        const ly = yT + 4 + ((i * 41) % Math.max(1, yB - yT - 8));
+        ctx.globalAlpha = (burstOn ? 0.6 : 0.22) * (1 - k);
+        ctx.fillStyle = "#dff2ff";
+        ctx.fillRect(Math.round(lx), Math.round(ly), 10, 1);
+      }
+      ctx.restore();
+    }
+  }
+  JH.CloudlineEdge = CloudlineEdge;
+
   // Trial by Fire's "burning" check: is this enemy standing in a live fire
   // patch's footprint? (Scald/burn-stack burning is checked separately by
   // the caller — this only covers ground patches.) Friendly patches don't
