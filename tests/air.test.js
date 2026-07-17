@@ -797,6 +797,26 @@ test("tpmummy retreat: turns to face its travel direction, not a backward moonwa
   e3.think(1 / 60, g);
   assert.strictEqual(e3.state, "wind");
   assert.strictEqual(e3.facing, -1, "faces the player during the windup");
+  // Hysteresis: retreat engages under 70px, holds until 82px, releases after.
+  const e4 = JH.makeEnemy("tpmummy", 140, 40);
+  e4.spawnGrace = 0; e4.cdTimer = 99;
+  e4.think(1 / 60, g);
+  assert.ok(e4.retreating, "premise: engaged under 70px");
+  e4.x = 175;                       // dist 75 — inside the 70..82 hold band
+  e4.think(1 / 60, g);
+  assert.strictEqual(e4.state, "walk", "still backing up inside the hysteresis band");
+  assert.strictEqual(e4.facing, 1, "keeps facing away between 70 and 82px");
+  e4.x = 190;                       // dist 90 — past the release threshold
+  e4.think(1 / 60, g);
+  assert.ok(!e4.retreating, "releases past 82px");
+  assert.strictEqual(e4.state, "idle");
+  assert.strictEqual(e4.facing, -1, "faces the player again once released");
+  // A fresh mummy inside the hold band but never engaged does NOT retreat.
+  const e5 = JH.makeEnemy("tpmummy", 175, 40);
+  e5.spawnGrace = 0; e5.cdTimer = 99;
+  e5.think(1 / 60, g);
+  assert.ok(!e5.retreating, "75px without prior engagement holds ground");
+  assert.strictEqual(e5.state, "idle");
 });
 
 test("gasbag: vents a hostile cloud beneath itself after the inflate telegraph", () => {

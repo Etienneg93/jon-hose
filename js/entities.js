@@ -5821,7 +5821,10 @@
         this.windTimer = d.wrapWind; this.windDur = d.wrapWind; this.state = "wind";
         return;
       }
-      const want = dist < 70 ? -1 : dist > 120 ? 1 : 0;   // hold a loose midrange
+      // Retreat engages under 70px and holds until 82px (hysteresis) so a
+      // player dancing on the boundary can't strobe the turn-around.
+      this.retreating = this.retreating ? dist < 82 : dist < 70;
+      const want = this.retreating ? -1 : dist > 120 ? 1 : 0;   // hold a loose midrange
       if (want) {
         this.x += (dx / (dist || 1)) * d.speed * want * dt;
         this.y += (dy / (dist || 1)) * d.speed * want * dt * 0.8;
