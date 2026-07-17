@@ -149,6 +149,27 @@ test("air act: placements + super + opening regulars never exceed the Air field 
   }
 });
 
+test("air act: pre-existing superElite waves without placements keep the old cap+1 opening field", () => {
+  // Placement-slot reservation (js/game.js startWave) must apply ONLY to
+  // waves that carry placements. Seven shipped, already-playtested waves
+  // (STALKER AMBUSH, WAVE 6, WAVE 7, OVERRUN, FIRE INTRO, EMBER RUSH,
+  // MELTDOWN) authored superElite with no placements and must keep opening
+  // fieldCap regulars plus the super on top (peak cap+1) exactly as before.
+  const idx = JH.LEVEL1.waves.findIndex((w) => w.name === "STALKER AMBUSH");
+  const wave = JH.LEVEL1.waves[idx];
+  assert.ok(wave.superElite && !wave.placements, "STALKER AMBUSH must stay a superElite wave with no placements");
+  const actLevel = Balance.actLevelForWave(idx, JH.ACT_STARTS);
+  const cap = Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
+  JH.Camera.reset();
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(0, 40);
+  g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+  g.sigils = []; g.banner = () => {};
+  g.startWave(idx);
+  assert.strictEqual(g.enemies.length, cap + 1,
+    "a superElite wave without placements must open fieldCap (" + cap + ") regulars plus the super, not fewer");
+});
+
 test("dev range catalog exposes every implemented combat enemy and boss", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "js", "entities.js"), "utf8");
   const factory = source.slice(source.indexOf("JH.makeEnemy = function"));

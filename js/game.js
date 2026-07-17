@@ -783,11 +783,15 @@
         // big waves ramp instead of dumping everything at frame one.
         // (ticketBudget = generic act-indexed clamped lookup.)
         const cap = JH.Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
-        // Pre-placed enemies (e.g. Bidets) and the authored super each
-        // reserve a live field-cap slot ahead of the opening regular batch,
-        // so peak field count never exceeds cap even on placement waves.
         const placementCount = this.spawnWavePlacements(wave);
-        const openCount = Math.max(0, cap - placementCount - (wave.superElite ? 1 : 0));
+        // Placement waves reserve a live field-cap slot for each pre-placed
+        // enemy AND the authored super ahead of the opening regular batch, so
+        // peak field count never exceeds cap. Waves with no placements keep
+        // the pre-existing behavior (open cap regulars, super spawns on top,
+        // peak cap+1) — do not extend this reservation to them.
+        const openCount = placementCount > 0
+          ? Math.max(0, cap - placementCount - (wave.superElite ? 1 : 0))
+          : cap;
         let slot = 0;
         types.slice(0, openCount).forEach((type) => {
           this.spawnWaveEnemy(type, this.nextEliteScale(), slot);
