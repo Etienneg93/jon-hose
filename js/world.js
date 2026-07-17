@@ -73,6 +73,38 @@
       const dyS = Geo.feetScreenY(py, 0) - Geo.feetScreenY(cy, 0);
       return (dx * dx) / (rx * rx) + (dyS * dyS) / (ry * ry) < 1;
     },
+
+    // Forward-facing trapezoid wedge rooted at (cx,cy), pointed along
+    // `angle`, widening from `nearHalf` (at the origin) to `farHalf` (at
+    // `range`). Returns the 4 world-space polygon corners in draw order
+    // (near-left, far-left, far-right, near-right) — the SAME shape
+    // inGroundWedge tests, so the drawn rim is exactly the hit rim.
+    groundWedgePoints(cx, cy, angle, range, nearHalf, farHalf) {
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const toWorld = (fwd, lat) => ({ x: cx + fwd * cos - lat * sin, y: cy + fwd * sin + lat * cos });
+      return [
+        toWorld(0, -nearHalf),
+        toWorld(range, -farHalf),
+        toWorld(range, farHalf),
+        toWorld(0, nearHalf),
+      ];
+    },
+
+    // Is world point (px,py) inside the wedge above? Inverse-rotates into
+    // local forward/lateral space (same transform groundWedgePoints uses);
+    // the lateral bound interpolates linearly nearHalf -> farHalf across
+    // [0, range] — exactly the trapezoid's straight side edges. Boundary
+    // points (fwd===0, fwd===range, |lat|===half) test as inside (rim is
+    // hitbox: the drawn edge itself must catch a hit).
+    inGroundWedge(px, py, cx, cy, angle, range, nearHalf, farHalf) {
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const dx = px - cx, dy = py - cy;
+      const fwd = dx * cos + dy * sin;
+      const lat = -dx * sin + dy * cos;
+      if (fwd < 0 || fwd > range) return false;
+      const half = nearHalf + (farHalf - nearHalf) * (fwd / range);
+      return Math.abs(lat) <= half;
+    },
   };
   JH.Geo = Geo;
 

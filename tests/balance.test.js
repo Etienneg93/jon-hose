@@ -368,6 +368,14 @@ test("ticketBudget indexes budgets by actLevel+1 and clamps", () => {
   assert.strictEqual(Balance.ticketBudget(9, B), 6);   // clamped high
 });
 
+test("superEliteDef: doubles lungeDmg (Super Plunger) without mutating the base def", () => {
+  const base = { hp: 60, speed: 44, touchDmg: 6, lungeDmg: 10, latchDrain: 22, suds: 8, bodyW: 16, bodyH: 26 };
+  const d = Balance.superEliteDef(base, { hp: 2 });
+  assert.strictEqual(d.lungeDmg, 20);
+  assert.strictEqual(d.latchDrain, 22, "latchDrain is not a listed damage key — untouched");
+  assert.strictEqual(base.lungeDmg, 10, "clone, not mutation");
+});
+
 test("superEliteDef honors a per-type hp override; other multipliers unchanged", () => {
   const base = { hp: 300, speed: 26, touchDmg: 10, suds: 12, bodyW: 22, bodyH: 34 };
   const d = Balance.superEliteDef(base, { hp: 3 });

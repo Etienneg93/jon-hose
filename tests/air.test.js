@@ -575,6 +575,37 @@ test("plunger: death frame lingers cosmetically without delaying enemy death", (
   assert.strictEqual(g.particles[0].update(0.5), false, "corpse self-culls from particles");
 });
 
+test("Geo ground wedge: near edge, far widening edge, outside lateral edge, behind origin, draw/hit agreement", () => {
+  const Geo = JH.Geo;
+  const SP = JH.SUPER_PLUNGER;
+  const cx = 100, cy = 40, angle = 0;   // facing +X
+  const pts = Geo.groundWedgePoints(cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf);
+  assert.strictEqual(pts.length, 4, "trapezoid has 4 corners");
+  // draw-point/hit agreement: every polygon vertex the draw call consumes
+  // must test as inside/edge against the same hit test.
+  for (const p of pts)
+    assert.ok(Geo.inGroundWedge(p.x, p.y, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf),
+      `polygon vertex (${p.x},${p.y}) must test inside/edge`);
+  // near edge: at the origin, right at the near half-width — inside/edge.
+  assert.ok(Geo.inGroundWedge(cx, cy + SP.pullNearHalf, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf));
+  // far widening edge: at max range, right at the far half-width — inside/edge.
+  assert.ok(Geo.inGroundWedge(cx + SP.pullRange, cy + SP.pullFarHalf, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf));
+  // outside lateral edge: just beyond the far half-width at max range.
+  assert.ok(!Geo.inGroundWedge(cx + SP.pullRange, cy + SP.pullFarHalf + 2, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf));
+  // behind origin: directly behind the locked aim.
+  assert.ok(!Geo.inGroundWedge(cx - 5, cy, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf));
+});
+
+test("Geo ground wedge: rotates with the locked aim, not axis-locked", () => {
+  const Geo = JH.Geo;
+  const SP = JH.SUPER_PLUNGER;
+  const cx = 100, cy = 40, angle = Math.PI / 2;   // aim locked straight into depth (+Y)
+  assert.ok(!Geo.inGroundWedge(cx + 50, cy, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf),
+    "perpendicular to the locked aim: outside");
+  assert.ok(Geo.inGroundWedge(cx, cy + 50, cx, cy, angle, SP.pullRange, SP.pullNearHalf, SP.pullFarHalf),
+    "along the locked aim: inside");
+});
+
 test("makeElite scales the air-roster damage keys", () => {
   const e = JH.makeEnemy("plunger", 0, 0);
   const base = JH.ENEMIES.plunger.lungeDmg;

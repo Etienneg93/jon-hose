@@ -916,6 +916,119 @@ test("super stalker feints in FRONT first, then blinks behind and strikes", () =
   assert.strictEqual(s.state, "strike");
 });
 
+// ---- super plunger: telegraphed triple vacuum pull before lunge/latch ----
+
+test("super plunger: regular Plunger windup still resolves straight into lunge (no pull state)", () => {
+  const g = makeThinkGame(90, 40);
+  const e = JH.makeEnemy("plunger", 60, 40);
+  e.spawnGrace = 0; e.windTimer = 0.01; e.state = "wind"; e.aimAng = 0;
+  e.think(0.02, g);
+  assert.strictEqual(e.state, "lunge", "regular plunger skips straight to lunge, never pull");
+});
+
+test("super plunger: windup locks aim then fires exactly 3 pulses over pullWind before lunging", () => {
+  const SP = JH.SUPER_PLUNGER;
+  const g = makeThinkGame(60, 40);
+  const e = JH.makeEnemy("plunger", 200, 40);
+  e.makeSuper(); e.spawnGrace = 0;
+  e.windTimer = 0.01; e.state = "wind";
+  e.think(0.02, g);                              // windup expires -> enters "pull"
+  assert.strictEqual(e.state, "pull");
+  const lockedAim = e.aimAng;
+  const x0 = g.player.x;
+  const dt = SP.pullWind / SP.pullPulses;
+  for (let i = 0; i < SP.pullPulses; i++) {
+    e.think(dt, g);
+    assert.strictEqual(e.aimAng, lockedAim, "aim stays locked through the pull");
+  }
+  assert.strictEqual(e.pulseIdx, SP.pullPulses, "exactly 3 pulses fired");
+  assert.strictEqual(e.state, "lunge", "the third pulse ends the windup into the existing lunge");
+  assert.strictEqual(g.player.x - x0, SP.pullPulses * SP.pullStep,
+    "each of the 3 pulses pulled Jon pullStep toward the Plunger");
+});
+
+test("super plunger pull: a target inside the locked wedge is pulled; behind it is not", () => {
+  const SP = JH.SUPER_PLUNGER;
+  const gIn = makeThinkGame(140, 40);
+  const eIn = JH.makeEnemy("plunger", 200, 40);
+  eIn.makeSuper(); eIn.aimAng = Math.PI; eIn.state = "pull"; eIn.pullT = SP.pullWind; eIn.pulseIdx = 0;
+  const x0 = gIn.player.x;
+  eIn.think(SP.pullWind / SP.pullPulses, gIn);
+  assert.ok(gIn.player.x > x0, "inside the wedge: pulled toward the Plunger");
+
+  const gOut = makeThinkGame(260, 40);            // opposite side of the locked aim
+  const eOut = JH.makeEnemy("plunger", 200, 40);
+  eOut.makeSuper(); eOut.aimAng = Math.PI; eOut.state = "pull"; eOut.pullT = SP.pullWind; eOut.pulseIdx = 0;
+  const ox0 = gOut.player.x;
+  eOut.think(SP.pullWind / SP.pullPulses, gOut);
+  assert.strictEqual(gOut.player.x, ox0, "behind the locked aim: untouched");
+});
+
+test("super plunger pull: pulses never change HP or water", () => {
+  const SP = JH.SUPER_PLUNGER;
+  const g = makeThinkGame(60, 40);
+  const e = JH.makeEnemy("plunger", 200, 40);
+  e.makeSuper(); e.aimAng = Math.PI; e.state = "pull"; e.pullT = SP.pullWind; e.pulseIdx = 0;
+  const hp0 = g.player.hp, w0 = g.player.water;
+  const dt = SP.pullWind / SP.pullPulses;
+  for (let i = 0; i < SP.pullPulses; i++) e.think(dt, g);
+  assert.strictEqual(g.player.hp, hp0, "pull deals no damage");
+  assert.strictEqual(g.player.water, w0, "pull does not drain water");
+});
+
+test("super plunger: after 3 pulses, the existing lunge resolves along the locked aim and can latch", () => {
+  const SP = JH.SUPER_PLUNGER;
+  const g = makeThinkGame(60, 40);
+  const e = JH.makeEnemy("plunger", 100, 40);
+  e.makeSuper(); e.spawnGrace = 0;
+  e.aimAng = Math.PI; e.state = "pull"; e.pullT = SP.pullWind; e.pulseIdx = 0;
+  const dt = SP.pullWind / SP.pullPulses;
+  for (let i = 0; i < SP.pullPulses; i++) e.think(dt, g);
+  assert.strictEqual(e.state, "lunge");
+  for (let i = 0; i < 300 && e.state === "lunge"; i++) e.think(1 / 60, g);
+  assert.strictEqual(e.state, "latch", "the resolved lunge can still latch onto Jon");
+});
+
+test("super plunger: dash i-frames dodge a pulse; dash still breaks the eventual latch", () => {
+  const SP = JH.SUPER_PLUNGER;
+  const g = makeThinkGame(80, 40);
+  const e = JH.makeEnemy("plunger", 100, 40);
+  e.makeSuper(); e.aimAng = Math.PI; e.state = "pull"; e.pullT = SP.pullWind; e.pulseIdx = 0;
+  g.player.dashTimer = 0.1;
+  const x0 = g.player.x;
+  e.think(SP.pullWind / SP.pullPulses, g);
+  assert.strictEqual(g.player.x, x0, "dash i-frames dodge the pull");
+  assert.strictEqual(e.pulseIdx, 1, "the pulse still fires/counts, it just whiffs");
+
+  e.state = "latch"; e.latchT = 2; g.player.dashTimer = 0.1;
+  e.think(1 / 60, g);
+  assert.notStrictEqual(e.state, "latch", "dash pops a super's latch exactly like a regular's");
+});
+
+test("super plunger: usingTicket releases when the target dies mid-pull, and on a post-pull lunge miss", () => {
+  const SP = JH.SUPER_PLUNGER;
+  const g = makeThinkGame(80, 40);
+  const e = JH.makeEnemy("plunger", 100, 40);
+  e.makeSuper(); e.aimAng = Math.PI; e.state = "pull"; e.pullT = SP.pullWind; e.pulseIdx = 0;
+  e.usingTicket = true;
+  g.player.alive = false;
+  e.think(SP.pullWind / SP.pullPulses, g);
+  assert.strictEqual(e.state, "idle", "a dead/interrupted target aborts the pull");
+  assert.strictEqual(e.usingTicket, false, "attack ticket released");
+
+  const g2 = makeThinkGame(60, 40);
+  const e2 = JH.makeEnemy("plunger", 100, 40);
+  e2.makeSuper(); e2.spawnGrace = 0;
+  e2.aimAng = Math.PI; e2.state = "pull"; e2.pullT = SP.pullWind; e2.pulseIdx = 0; e2.usingTicket = true;
+  g2.player.stats.dodgeChance = 1;
+  const dt = SP.pullWind / SP.pullPulses;
+  for (let i = 0; i < SP.pullPulses; i++) e2.think(dt, g2);
+  assert.strictEqual(e2.state, "lunge");
+  for (let i = 0; i < 300 && e2.state === "lunge"; i++) e2.think(1 / 60, g2);
+  assert.strictEqual(e2.state, "idle", "dodged lunge off the pull path still aborts");
+  assert.strictEqual(e2.usingTicket, false, "ticket released on the miss");
+});
+
 // ---- fuse: proximity-lit self-destruct + elite/super death-split ----
 
 test("fuse ignites on proximity and drains its own hp while lit", () => {

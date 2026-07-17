@@ -1685,7 +1685,9 @@
       Assets.draw(ctx, this.type, sx, Geo.feetScreenY(this.y, this.z), this.facing, {
         state: this.state, frame: this.frame, t: this.t,
         wet: this.wetness,   // soak tint IS the enemy hurt read (no flash/squash)
-        wind: this.state === "wind", elite: this.elite,
+        // Super Plunger's "pull" state (locked vacuum windup) reuses the
+        // wind pose — no separate art.
+        wind: this.state === "wind" || this.state === "pull", elite: this.elite,
         // 0→1 windup progress for multi-frame windup anims (0 when windDur unset)
         windFrac: this.windDur > 0 ? Math.min(1, Math.max(0, 1 - this.windTimer / this.windDur)) : 0,
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
@@ -5869,11 +5871,28 @@
       if (this.state === "latch") return;   // suction holds through spray shove
       super.applyKnockback(dirX, force, dirY);
     }
+    // Super only: fires one locked-wedge vacuum pulse. Deals no damage and
+    // drains no water. Dash i-frames dodge it (same counter-verb as the
+    // lunge grab). A landed pulse pulls Jon at most pullStep toward the
+    // Plunger, clamped to arena/depth bounds, capped at the remaining
+    // distance so it can never pull through/past the Plunger.
+    firePulse(game) {
+      const pl = game.player, SP = JH.SUPER_PLUNGER;
+      if (pl.dashTimer > 0) return;
+      if (!Geo.inGroundWedge(pl.x, pl.y, this.x, this.y, this.aimAng,
+        SP.pullRange, SP.pullNearHalf, SP.pullFarHalf)) return;
+      const dx = this.x - pl.x, dy = this.y - pl.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist <= 0) return;
+      const step = Math.min(SP.pullStep, dist);
+      pl.x = clamp(pl.x + (dx / dist) * step, game.bounds.minX, game.bounds.maxX);
+      pl.y = Geo.clampDepth(pl.y + (dy / dist) * step);
+    }
     think(dt, game) {
       const pl = game.player, d = this.def;
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
-      if (this.state !== "lunge" && this.state !== "latch")
+      if (this.state !== "lunge" && this.state !== "latch" && this.state !== "pull")
         this.facing = dx >= 0 ? 1 : -1;
 
       if (this.state === "latch") {
@@ -5911,10 +5930,43 @@
         if (this.attackTimer <= 0) { this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false; }
         return;
       }
+      // Super only: the locked pull windup. Aim was captured going into
+      // this state and is never re-read here (locked), unlike "wind" below.
+      // A dead/gone target aborts immediately and releases the ticket —
+      // the pull can't hang on an interrupted target.
+      if (this.state === "pull") {
+        if (!pl.alive) {
+          this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false;
+          return;
+        }
+        const SP = JH.SUPER_PLUNGER;
+        this.pullT -= dt;
+        const pulseDur = SP.pullWind / SP.pullPulses;
+        const elapsed = SP.pullWind - this.pullT;
+        // Epsilon guards float error at exact pulse boundaries (dt steps
+        // landing precisely on 0.4/0.8/1.2 must not floor short a pulse).
+        const targetIdx = Math.min(SP.pullPulses, Math.floor(elapsed / pulseDur + 1e-9));
+        while (this.pulseIdx < targetIdx) {
+          this.pulseIdx++;
+          this.firePulse(game);
+        }
+        // Pulse count (not the float timer) gates the transition: the third
+        // pulse always ends the windup, even if float error leaves pullT a
+        // hair above zero on the exact tick it should complete.
+        if (this.pulseIdx >= SP.pullPulses) { this.state = "lunge"; this.attackTimer = d.lungeDur; }
+        return;
+      }
       if (this.windTimer > 0) {
         this.windTimer -= dt; this.state = "wind";
         this.aimAng = Math.atan2(dy, dx);
-        if (this.windTimer <= 0) { this.state = "lunge"; this.attackTimer = d.lungeDur; }
+        if (this.windTimer <= 0) {
+          if (this.superElite) {
+            // Ticket stays held: the pull windup continues the same attack.
+            this.state = "pull"; this.pullT = JH.SUPER_PLUNGER.pullWind; this.pulseIdx = 0;
+          } else {
+            this.state = "lunge"; this.attackTimer = d.lungeDur;
+          }
+        }
         return;
       }
       if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
@@ -5930,6 +5982,46 @@
     }
   }
   JH.PlungerFiend = PlungerFiend;
+  // No new art: the "pull" state reuses the wind pose (Enemy.draw's wind
+  // flag above includes it); this override only adds the locked-wedge
+  // telegraph UNDER the actor.
+  PlungerFiend.prototype.draw = function (ctx, cam) {
+    if (this.state === "pull") {
+      const SP = JH.SUPER_PLUNGER;
+      const toScreen = (wx, wy) => ({ x: wx - cam, y: Geo.feetScreenY(wy, 0) });
+      const pts = Geo.groundWedgePoints(this.x, this.y, this.aimAng,
+        SP.pullRange, SP.pullNearHalf, SP.pullFarHalf).map((p) => toScreen(p.x, p.y));
+      const flash = Math.floor(this.t * 10) & 1;
+      ctx.save();
+      // Translucent fill + exact rim — the SAME polygon inGroundWedge tests.
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(80,180,255,0.14)";
+      ctx.fill();
+      ctx.strokeStyle = flash ? "#8fd8ff" : "rgba(80,180,255,0.4)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Central aim streak.
+      const origin = toScreen(this.x, this.y);
+      const tip = toScreen(this.x + Math.cos(this.aimAng) * SP.pullRange,
+        this.y + Math.sin(this.aimAng) * SP.pullRange);
+      ctx.strokeStyle = "rgba(220,245,255,0.55)";
+      ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+      // Three pulse beats along the streak; lit ones mark pulses already fired.
+      for (let i = 1; i <= SP.pullPulses; i++) {
+        const frac = i / SP.pullPulses;
+        const b = toScreen(this.x + Math.cos(this.aimAng) * SP.pullRange * frac,
+          this.y + Math.sin(this.aimAng) * SP.pullRange * frac);
+        const lit = (this.pulseIdx || 0) >= i;
+        ctx.fillStyle = lit ? "#dff2ff" : "rgba(220,245,255,0.3)";
+        ctx.beginPath(); ctx.arc(b.x, b.y, lit ? 2.6 : 1.8, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+    JH.Enemy.prototype.draw.call(this, ctx, cam);
+  };
 
   // ---- Gasbag: hovering stink spirit — zone control ----
   // Vents a stink cloud beneath itself on a cycle. Popped BEFORE its first

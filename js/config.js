@@ -645,6 +645,21 @@
     pushEnemy: 100,    // px/s applied to light enemies (bosses/emplacements immune)
   };
 
+  // ---- Super Plunger: Triple Latch — a locked ground wedge (Geo.
+  // groundWedgePoints/inGroundWedge, world.js) telegraphs 3 evenly spaced
+  // vacuum pulses before the existing lunge/latch resolves along the same
+  // locked aim. Pulses never damage or drain water; each successful pulse
+  // moves Jon pullStep toward the Plunger (clamped to arena/depth bounds,
+  // never past the Plunger itself).
+  JH.SUPER_PLUNGER = {
+    pullWind: 1.2,       // s total locked windup the 3 pulses fire across
+    pullPulses: 3,       // pulse count (evenly spaced, last one ends the windup)
+    pullRange: 150,      // wedge reach along the locked aim (px)
+    pullNearHalf: 12,    // wedge half-width at the Plunger's own position (px)
+    pullFarHalf: 44,     // wedge half-width at pullRange (px) — widens outward
+    pullStep: 20,        // px pulled toward the Plunger per landed pulse
+  };
+
   // ---- Cloudline Holdout: wave 33's walkway-edge hazard + reinforcement
   // cadence. holdDur/spawnEvery/maxAlive feed Game.startWave/holdoutCadence
   // for the cloudlineEdge holdout (the ONLY source — the wave data carries

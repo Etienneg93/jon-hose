@@ -102,6 +102,7 @@
       if (d.emberDmg)  d.emberDmg  = Math.round(d.emberDmg * 2);
       if (d.strikeDmg) d.strikeDmg = Math.round(d.strikeDmg * 2);
       if (d.slamDmg)   d.slamDmg   = Math.round(d.slamDmg * 2);
+      if (d.lungeDmg)  d.lungeDmg  = Math.round(d.lungeDmg * 2);
       if (d.speed)     d.speed     = Math.round(d.speed * 0.85);
       d.suds = Math.round((d.suds || 0) * 4);
       d.bodyW = Math.round(d.bodyW * 1.6);
