@@ -1070,8 +1070,12 @@
     return !!(img && img.complete && img.naturalWidth);
   };
   Assets.register("windhazard", (p, opt, ctx, x, y, facing) => {
-    const img = _hazardImgs[Math.floor((opt.t || 0) * 2) & 1];
-    if (!img || !img.complete || !img.naturalWidth || !ctx) return;
+    const picked = _hazardImgs[Math.floor((opt.t || 0) * 2) & 1];
+    const usable = (im) => im && im.complete && im.naturalWidth;
+    // Fall back to idle0 when the alternating frame isn't loaded yet (e.g.
+    // one-at-a-time sprite generation) — avoids a 1Hz blink to nothing.
+    const img = usable(picked) ? picked : _hazardImgs[0];
+    if (!usable(img) || !ctx) return;
     ctx.save();
     ctx.translate(x, y);
     ctx.imageSmoothingEnabled = false;

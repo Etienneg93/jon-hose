@@ -2677,9 +2677,12 @@
         ? { yMin: spec.y, yMax: spec.y, dirs: [spec.dir >= 0 ? 1 : -1],
             bandMin: G.band, bandMax: G.band }
         : {
-            yMin: spec.yMin != null ? spec.yMin : spec.y,
-            yMax: spec.yMax != null ? spec.yMax : spec.y,
-            dirs: spec.dirs || [spec.dir >= 0 ? 1 : -1],
+            // Half-specified ranges (only yMin or only yMax given) collapse
+            // to a fixed value from the other bound instead of NaN.
+            yMin: spec.yMin != null ? spec.yMin : (spec.yMax != null ? spec.yMax : spec.y),
+            yMax: spec.yMax != null ? spec.yMax : (spec.yMin != null ? spec.yMin : spec.y),
+            // `dirs: []` is truthy but empty — falls through to dir/default too.
+            dirs: (spec.dirs && spec.dirs.length) ? spec.dirs : [spec.dir >= 0 ? 1 : -1],
             bandMin: spec.bandMin != null ? spec.bandMin : G.bandMin,
             bandMax: spec.bandMax != null ? spec.bandMax : G.bandMax,
           };

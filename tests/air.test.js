@@ -22,6 +22,29 @@ console.warn = realWarn;
 const JH = global.window.JH;
 const Balance = require("../js/balance.js");
 
+// FIX 1 verification: assets.js's "windhazard" painter must fall back to
+// idle0 when the alternating frame (idle1) isn't loaded yet — otherwise
+// one-at-a-time sprite generation blinks the vent to nothing at 1Hz.
+// assets.js builds an offscreen canvas at eval time, so it needs a real
+// document.createElement stub (see tests/juice.test.js for the same
+// pattern) plus path-aware Loader.img stubs to control per-frame load
+// state; other paths keep returning the file's default `{}` stub.
+const _windIdle0 = { complete: true, naturalWidth: 10, naturalHeight: 10 };
+const _windIdle1 = { complete: false, naturalWidth: 0, naturalHeight: 0 };
+const _origLoaderImg = JH.Loader.img;
+JH.Loader.img = (p) => {
+  if (p === "sprites/windhazard/idle0.png") return _windIdle0;
+  if (p === "sprites/windhazard/idle1.png") return _windIdle1;
+  return _origLoaderImg(p);
+};
+global.document = global.document || {
+  createElement: () => ({
+    width: 0, height: 0,
+    getContext: () => ({ save() {}, restore() {}, clearRect() {}, fillRect() {}, drawImage() {} }),
+  }),
+};
+require("../js/assets.js");
+
 test("air act: ACT_STARTS gains the 6th act at wave 29", () => {
   assert.deepStrictEqual(JH.ACT_STARTS, [0, 5, 10, 16, 23, 29]);
   assert.strictEqual(Balance.actLevelForWave(29, JH.ACT_STARTS), 4);
@@ -630,6 +653,16 @@ test("gust lanes: phase offset delays the first telegraph; rolls clamp to the de
   assert.ok(low.y - low.band >= JH.DEPTH_MIN, "band top clamped inside the depth band");
 });
 
+test("gust lanes: half-specified range spec and empty dirs array normalize instead of NaN", () => {
+  // Authoring foot-guns: `dirs: []` is truthy-but-empty, and a spec with
+  // only yMin given leaves yMax undefined. Both must collapse to sane
+  // fixed values, not poison the roll with NaN/undefined.
+  const lane = new JH.GustLane({ yMin: 30, dirs: [] });
+  assert.ok(Number.isFinite(lane.y), "y is finite");
+  assert.ok(Number.isFinite(lane.band), "band is finite");
+  assert.ok([1, -1].includes(lane.dir), "dir falls back to 1 or -1");
+});
+
 test("cloudline edge rim: front rim one epsilon inside does not cross; touching crosses", () => {
   const edge = new JH.CloudlineEdge(400);
   const p = stubPlayer(0, 40);
@@ -762,6 +795,19 @@ test("wind hazards: wave data places them; they are terrain, not wave members", 
       assert.ok(h.x >= 0 && h.x <= JH.VIEW_W - 40, "inside the arena band");
       assert.ok(h.y >= JH.DEPTH_MIN && h.y <= JH.DEPTH_MAX, "inside the depth band");
     }
+});
+
+test("windhazard painter: falls back to idle0 when the alternating frame isn't loaded", () => {
+  assert.strictEqual(JH.Assets.windhazardReady(), true, "idle0 loaded => ready");
+  const calls = [];
+  const fakeCtx = {
+    save() {}, restore() {}, translate() {},
+    drawImage(...a) { calls.push(a); },
+  };
+  // t=0.5 -> Math.floor(0.5*2)&1 === 1 -> picks idle1, which isn't loaded.
+  assert.doesNotThrow(() => JH.Assets.draw(fakeCtx, "windhazard", 0, 0, 1, { t: 0.5 }));
+  assert.strictEqual(calls.length, 1, "still draws exactly one frame (no blink-to-nothing)");
+  assert.strictEqual(calls[0][0], _windIdle0, "falls back to idle0, not a blank/half-loaded frame");
 });
 
 test("plunger: lunge contact latches and drains WATER, not HP", () => {
