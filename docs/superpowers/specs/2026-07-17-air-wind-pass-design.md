@@ -28,8 +28,7 @@ lose their procedural placeholder art.
    deferred as the Plan 3 option if the Ass Man boss wants choreographed
    wind phases.
 6. **Art route: codex/gpt-image-2 primary** (ChatGPT subscription quota).
-   PixelLab reserved for walk-cycle-grade animation (~5–6 generations/month
-   quota). One generation presented for user verification at a time.
+  One generation presented for user verification at a time.
 
 ## 1. Dynamic gust lanes (range-spec re-roll)
 
