@@ -929,8 +929,8 @@
   });
 
   // TP Mummy: generated frames on a 112x116 canvas (4x logical, feet row
-  // 111 -> feet 28). Source art faces LEFT (art.flip). hurt.png is unwired
-  // by design — soak tint is the enemy hurt read. Procedural fallback below.
+  // 111 -> feet 28). Source art faces RIGHT (default mirroring). hurt.png is
+  // unwired by design — soak tint is the enemy hurt read. Fallback below.
   const tpmummyFallback = (p, opt) => {
     const P = JH.PAL;
     const step = opt.state === "walk" ? Math.floor((opt.t || 0) * 7) % 2 : 0;
@@ -946,7 +946,7 @@
     p(-9, 10 - fl, 2, 6, P.tpmummy);             // loose streamer
   };
   registerBaked("tpmummy",
-    { w: 28, h: 29, feet: 28, flip: true,
+    { w: 28, h: 29, feet: 28,
       poses: ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3",
               "wind", "release", "drop0", "unravel0", "unravel1"] },
     (opt) => opt.state === "unravel" ? ((opt.t || 0) < 0.22 ? "unravel0" : "unravel1")
@@ -958,7 +958,7 @@
 
   // TP Mummy FX frames on their own canvases: death puff 112x64 (28x16
   // logical, feet row 59 -> feet 15), wrap projectile 64x32 (16x8 logical,
-  // drawn centered). Both face LEFT like the body set.
+  // drawn centered). Both face RIGHT like the body set.
   const _tpmFx = {};
   for (const n of ["puff0", "puff1", "wrap0", "wrap1"])
     _tpmFx[n] = JH.Loader.img("sprites/tpmummy/" + n + ".png");
@@ -967,7 +967,7 @@
     if (!img || !img.complete || !img.naturalWidth || !ctx) return;
     ctx.save();
     ctx.translate(x, y);
-    if (facing > 0) ctx.scale(-1, 1);
+    if (facing < 0) ctx.scale(-1, 1);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, -14, -15, 28, 16);
     ctx.restore();
@@ -977,7 +977,7 @@
     if (img && img.complete && img.naturalWidth && ctx) {
       ctx.save();
       ctx.translate(x, y);
-      if (facing > 0) ctx.scale(-1, 1);
+      if (facing < 0) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, -8, -4, 16, 8);
       ctx.restore();
