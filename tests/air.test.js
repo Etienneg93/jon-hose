@@ -727,6 +727,21 @@ test("wind hazard: staggered enemies skip think until the timer runs out", () =>
   assert.strictEqual(e.state, "walk", "think resumes after the stagger (player far -> approach)");
 });
 
+test("wind hazard: multiple hazards on field decay a shared enemy's contact cooldown only once per frame", () => {
+  const g = stubHazardGame(400, 40);
+  const hz1 = new JH.WindHazard(0, 40);
+  const hz2 = new JH.WindHazard(600, 40);   // both far from the enemy below: neither retriggers it
+  const e = JH.makeEnemy("tpmummy", 300, 40);
+  e.spawnGrace = 0;
+  e._hazardCd = JH.WIND_HAZARD.contactCd;
+  g.enemies = [e];
+  hz1.update(1 / 60, g);
+  hz2.update(1 / 60, g);
+  e.update(1 / 60, g);
+  assert.ok(Math.abs(e._hazardCd - (JH.WIND_HAZARD.contactCd - 1 / 60)) < 1e-9,
+    "cooldown decays by exactly one frame's dt no matter how many hazards are on field");
+});
+
 test("wind hazards: wave data places them; they are terrain, not wave members", () => {
   const w = JH.LEVEL1.waves;
   assert.ok(!w[32].hazards, "wave 33 has no mid-field hazards (the edge is its hazard)");

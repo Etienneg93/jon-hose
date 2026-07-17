@@ -1584,6 +1584,7 @@
       const prePx = this.x, prePy = this.y;
       if (this.staggerT > 0) this.staggerT -= dt;   // hazard shove: skip think
       else this.think(dt, game);
+      if (this._hazardCd > 0) this._hazardCd -= dt;   // sole owner of the decay (WindHazard only reads/sets it)
       if (this._puddleSlow) {
         this.x = prePx + (this.x - prePx) * this._puddleSlow;
         this.y = prePy + (this.y - prePy) * this._puddleSlow;
@@ -2831,7 +2832,7 @@
       for (const e of game.enemies) {
         if (e.dead || e.dropping || e.isBoss) continue;
         if (e.def && e.def.speed === 0) continue;   // emplacements hold fast
-        if (e._hazardCd > 0) { e._hazardCd -= dt; continue; }
+        if (e._hazardCd > 0) continue;
         if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry)) {
           e.applyKnockback(e.x >= this.x ? 1 : -1, H.enemyKnock);
           e.staggerT = Math.max(e.staggerT || 0, H.staggerT);
