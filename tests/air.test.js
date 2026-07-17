@@ -48,7 +48,7 @@ test("air act: every act-indexed array has an entry for actLevel 4 (index 5)", (
 test("air act: WAVE_TRIGGERS matches the wave list (no length warning)", () => {
   assert.strictEqual(warnings.filter((w) => w.includes("WAVE_TRIGGERS")).length, 0,
     "game.js warned: " + warnings.join(" | "));
-  assert.strictEqual(JH.LEVEL1.waves.length, 32);  // 29 + the 3 air waves
+  assert.strictEqual(JH.LEVEL1.waves.length, 35);  // 29 + the 6 air waves (30-35)
 });
 
 test("air act: waves 30-32 are authored per spec (pair, +gusts, +gasbags/tough)", () => {
@@ -61,6 +61,92 @@ test("air act: waves 30-32 are authored per spec (pair, +gusts, +gasbags/tough)"
   // All four defs exist and are honest (waterMult 1).
   for (const t of ["plunger", "tpmummy", "gasbag", "bidet"])
     assert.strictEqual(JH.ENEMIES[t].waterMult, 1, t + " must not hide a soak");
+});
+
+test("air act: waves 33-35 extend progression per the Plan 2 authoring table", () => {
+  const w = JH.LEVEL1.waves;
+  const countsOf = (i) => {
+    const c = {};
+    w[i].spawns.forEach((g) => { c[g.type] = (c[g.type] || 0) + g.count; });
+    return c;
+  };
+  // Wave 33: CLOUDLINE HOLDOUT — timed pool, terrain owns the read (no elite
+  // seasoning, no placements/super — cloudlineEdge is inert until Task 2/3).
+  assert.strictEqual(w[32].name, "CLOUDLINE HOLDOUT");
+  assert.ok(w[32].holdout, "wave 33 is a holdout set-piece");
+  assert.ok(w[32].cloudlineEdge, "wave 33 carries the cloud-edge flag");
+  assert.strictEqual(w[32].holdDur, 24);
+  assert.ok(w[32].gusts && w[32].gusts.length === 2 && w[32].gusts.every((g) => g.dir === 1),
+    "two rightward gust lanes");
+  assert.deepStrictEqual(countsOf(32), { plunger: 3, tpmummy: 3, gasbag: 2 });
+  assert.ok(!w[32].placements && !w[32].superElite, "wave 33 has no Bidet/super");
+  // Wave 34: PORCELAIN PATROL — one pre-placed Bidet + Super Plunger.
+  assert.strictEqual(w[33].name, "PORCELAIN PATROL");
+  assert.ok(w[33].tough);
+  assert.strictEqual(w[33].superElite, "plunger");
+  assert.strictEqual(w[33].placements.length, 1);
+  assert.deepStrictEqual(countsOf(33), { plunger: 2, tpmummy: 2, gasbag: 2 });
+  // Wave 35: FOUL WEATHER — two pre-placed Bidets + Super Gasbag.
+  assert.strictEqual(w[34].name, "FOUL WEATHER");
+  assert.ok(w[34].tough);
+  assert.strictEqual(w[34].superElite, "gasbag");
+  assert.strictEqual(w[34].placements.length, 2);
+  assert.deepStrictEqual(countsOf(34), { plunger: 3, tpmummy: 3, gasbag: 2 });
+  assert.ok(w[34].gusts && w[34].gusts.length === 2
+    && w[34].gusts.some((g) => g.dir === 1) && w[34].gusts.some((g) => g.dir === -1),
+    "wave 35 carries two opposed gust lanes");
+});
+
+test("air act placements: every pre-placed enemy is a Bidet inside the 440px arena/depth band", () => {
+  const arenaW = JH.VIEW_W - 40;   // matches Game.startWave bounds (left+20 .. right-20)
+  const placed = JH.LEVEL1.waves.filter((w) => w.placements && w.placements.length);
+  assert.ok(placed.length >= 2, "wave 34 and 35 must carry placements");
+  for (const w of placed) {
+    for (const p of w.placements) {
+      assert.strictEqual(p.type, "bidet", w.name + " placement must be a Bidet");
+      assert.ok(p.x >= 0 && p.x <= arenaW, w.name + " placement x sits inside the arena band");
+      assert.ok(p.y >= JH.DEPTH_MIN && p.y <= JH.DEPTH_MAX, w.name + " placement y sits inside the depth band");
+    }
+  }
+});
+
+test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily does", () => {
+  const prevMusic = JH.Music;
+  JH.Music = Object.assign({}, prevMusic, { setTrack() {} });
+  const doc = global.document;
+  global.document = { getElementById: () => ({ textContent: "", classList: { add() {}, remove() {} }, style: {} }) };
+  try {
+    const runClear = (waveIndex) => {
+      const g = Object.create(JH.Game);
+      g.player = stubPlayer(100, 40);
+      g.sigils = []; g.relics = {}; g.checkpointWave = JH.ACT_STARTS[5];
+      g.bounds = { minX: 0, maxX: 480 };
+      g.spawnPickup = () => {}; g.grantXp = () => {}; g.spawnVendor = () => {}; g.banner = () => {};
+      let wonAt = null;
+      g.win = function () { wonAt = this.waveIndex; };
+      g.waveIndex = waveIndex; g.waveActive = true;
+      g.waveCleared_();
+      return wonAt;
+    };
+    assert.strictEqual(runClear(31), null, "clearing wave 32 (index 31) must not win anymore");
+    const lastIdx = JH.LEVEL1.waves.length - 1;
+    assert.strictEqual(lastIdx, 34, "wave 35 is temporarily the last wave");
+    assert.strictEqual(runClear(lastIdx), lastIdx, "clearing wave 35 still calls win() (temporary, Plan 3 moves it)");
+  } finally { global.document = doc; JH.Music = prevMusic; }
+});
+
+test("air act: placements + super + opening regulars never exceed the Air field cap", () => {
+  const cap = JH.WAVEFLOW.fieldCap[5];
+  for (const idx of [33, 34]) {   // wave 34 (Porcelain Patrol), wave 35 (Foul Weather)
+    JH.Camera.reset();
+    const g = Object.create(JH.Game);
+    g.player = stubPlayer(0, 40);
+    g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+    g.sigils = []; g.banner = () => {};
+    g.startWave(idx);
+    assert.ok(g.enemies.length <= cap,
+      JH.LEVEL1.waves[idx].name + " opening field (" + g.enemies.length + ") exceeds field cap " + cap);
+  }
 });
 
 test("dev range catalog exposes every implemented combat enemy and boss", () => {

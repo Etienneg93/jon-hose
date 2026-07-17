@@ -34,7 +34,7 @@
   // domes, telegraphs) draws AND hits an ellipse (rx, rx * GROUND_RY) — the
   // hit test lives in Geo.inGroundEllipse (world.js).
   JH.GROUND_RY = 0.40;
-  JH.LEVEL_LEN = 12800;     // world length of level 1 (logical px)
+  JH.LEVEL_LEN = 14300;     // world length of level 1 (logical px)
   // Zone boundaries sit in the free-walk corridor after each act's boss so the
   // 500px tint ramp (world.js) never bleeds into the locked boss arena behind it.
   JH.ZONE2_START = 4250;    // ruined district (Act 3) — Switch at 3780, Rubble Row at 4160
@@ -448,6 +448,8 @@
   JH.SUPER_TUNE = {
     smelt: { hp: 2 },       // 450 base: x7 was a chore, x3 still lost MELTDOWN playtests
     bulwark: { hp: 2.5 },   // big base + tough-wave elite ramp made 7x unhoseable
+    plunger: { hp: 2 },     // 60 base -> ~475 HP at the Air ceiling (Porcelain Patrol)
+    gasbag: { hp: 2.5 },    // 55 base -> ~544 HP at the Air ceiling (Foul Weather)
     // Per-act hp damp applied on top of the type multiplier, indexed
     // actLevel+1 (like SPRINKLE.counts) — early giants shouldn't outlast
     // their whole wave.
@@ -1124,6 +1126,29 @@
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 4 }] },
       { name: "GAS LEAK", tough: true, gusts: [{ y: 24, dir: 1 }, { y: 62, dir: -1 }],
         spawns: [{ type: "gasbag", count: 2 }, { type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }] },
+      // Cloudline Holdout: a timed survival set-piece — the drawn walkway
+      // edge (Plan 2 Task 2/3) is the objective pressure, not enemy HP, so
+      // this pool stays untough/un-elite ("regular enemies so the terrain
+      // owns the read"). cloudlineEdge is inert data until Task 2 wires
+      // JH.CloudlineEdge; the existing holdout/wallPool machinery reads
+      // holdout/holdDur/spawns today.
+      { name: "CLOUDLINE HOLDOUT", holdout: true, cloudlineEdge: true, holdDur: 24,
+        gusts: [{ y: 18, dir: 1 }, { y: 68, dir: 1 }],
+        spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
+      // Porcelain Patrol: one pre-placed Bidet + Super Plunger reserve two of
+      // the eight field-cap slots, leaving six regulars for the opening batch
+      // (+4 Air sprinkles queue behind them). superElite already spawns a
+      // (generically-buffed) Plunger super; Task 4 gives it Triple Latch.
+      { name: "PORCELAIN PATROL", tough: true, superElite: "plunger",
+        placements: [{ type: "bidet", x: 344, y: 18 }],
+        spawns: [{ type: "plunger", count: 2 }, { type: "tpmummy", count: 2 }, { type: "gasbag", count: 2 }] },
+      // Foul Weather: two pre-placed Bidets + Super Gasbag reserve three of
+      // eight, leaving five regulars for the opening batch. Temporary final
+      // wave — clearing it calls win() until Plan 3 appends Ass Man.
+      { name: "FOUL WEATHER", tough: true, superElite: "gasbag",
+        gusts: [{ y: 24, dir: 1 }, { y: 62, dir: -1 }],
+        placements: [{ type: "bidet", x: 112, y: 18 }, { type: "bidet", x: 344, y: 68 }],
+        spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
     ],
   };
 

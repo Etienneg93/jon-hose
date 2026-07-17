@@ -40,7 +40,7 @@
 
   // Where each wave triggers as the player advances rightward (one per wave,
   // bosses included). Spaced ~a screen apart across the longer level.
-  const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000, 11840, 12220, 12600];
+  const WAVE_TRIGGERS = [360, 740, 1120, 1500, 1880, 2260, 2640, 3020, 3400, 3780, 4160, 4540, 4920, 5300, 5680, 6060, 6440, 6820, 7200, 7580, 7960, 8340, 8720, 9100, 9480, 9860, 10240, 10620, 11000, 11840, 12220, 12600, 12980, 13360, 13740];
   if (WAVE_TRIGGERS.length !== JH.LEVEL1.waves.length)
     console.warn("WAVE_TRIGGERS length (" + WAVE_TRIGGERS.length + ") !== waves length (" + JH.LEVEL1.waves.length + ") — progression will break");
 
@@ -783,12 +783,17 @@
         // big waves ramp instead of dumping everything at frame one.
         // (ticketBudget = generic act-indexed clamped lookup.)
         const cap = JH.Balance.ticketBudget(actLevel, JH.WAVEFLOW.fieldCap);
+        // Pre-placed enemies (e.g. Bidets) and the authored super each
+        // reserve a live field-cap slot ahead of the opening regular batch,
+        // so peak field count never exceeds cap even on placement waves.
+        const placementCount = this.spawnWavePlacements(wave);
+        const openCount = Math.max(0, cap - placementCount - (wave.superElite ? 1 : 0));
         let slot = 0;
-        types.slice(0, cap).forEach((type) => {
+        types.slice(0, openCount).forEach((type) => {
           this.spawnWaveEnemy(type, this.nextEliteScale(), slot);
           slot++;
         });
-        this.wavePool = types.slice(cap);
+        this.wavePool = types.slice(openCount);
         this.waveTrickleT = JH.WAVEFLOW.trickle;
         // Rare apex: at most ONE super-elite, spawned by wave data — always
         // gets the full elite scale on top of its super tune, not fraction-gated.
@@ -803,6 +808,23 @@
           this.procSuperEliteArrival();
         }
       }
+    },
+
+    // Wave-data placements: enemies pre-spawned at a fixed spot instead of
+    // entering from the arena edge — e.g. a Bidet Turret holding a post for
+    // the whole wave. `p.x` is an offset from the locked arena's left bound,
+    // `p.y` is world depth (JH.DEPTH_MIN..DEPTH_MAX). Placements never enter
+    // wavePool/reinforcement — they live for the wave's duration. Returns the
+    // number of placements spawned (the caller reserves that many field-cap
+    // slots before slicing the regular opening batch).
+    spawnWavePlacements(wave) {
+      if (!wave.placements || !wave.placements.length) return 0;
+      const left = this.bounds.minX;
+      wave.placements.forEach((p) => {
+        const e = this.spawnEnemy(p.type, left + p.x, p.y, { elite: this.nextEliteScale() });
+        e.spawnGrace = 0.8;
+      });
+      return wave.placements.length;
     },
 
     // One wave enemy at the arena edge (or dropped in, for fuses). Used by
