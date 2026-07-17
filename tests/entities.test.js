@@ -1063,6 +1063,121 @@ test("elite fuse spawns 1 child on death; super spawns 3", () => {
   assert.strictEqual(spawned.length, 4);
 });
 
+// ---- super gasbag: Fog of War death burst ----
+
+test("super gasbag pre-vent death: exactly one friendly mega-cloud + two minis", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.makeSuper();
+  assert.strictEqual(e._vented, false, "premise: never vented");
+  e.die(g);
+  assert.strictEqual(g.stinkClouds.length, 1, "exactly one mega-cloud");
+  assert.strictEqual(g.stinkClouds[0].friendly, true, "pre-vent super death = friendly mega-cloud");
+  assert.strictEqual(g.stinkClouds[0].radius, G.megaRadius);
+  assert.strictEqual(g.stinkClouds[0].friendlyLife, G.megaFriendlyLife);
+  assert.strictEqual(g.stinkClouds[0].friendlyDps, G.megaFriendlyDps);
+  assert.strictEqual(spawned.length, G.childCount, "exactly two minis");
+});
+
+test("super gasbag post-vent death: exactly one hostile mega-cloud + two minis", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.makeSuper();
+  e._vented = true;   // already vented once before dying
+  e.die(g);
+  assert.strictEqual(g.stinkClouds.length, 1, "exactly one mega-cloud, even though a vent already fired");
+  assert.strictEqual(g.stinkClouds[0].friendly, false, "post-vent super death = hostile mega-cloud");
+  assert.strictEqual(g.stinkClouds[0].radius, G.megaRadius);
+  assert.strictEqual(g.stinkClouds[0].life, G.megaLife);
+  assert.strictEqual(spawned.length, G.childCount, "exactly two minis");
+});
+
+test("super gasbag minis: half base hp, 0.72 body+sprite scale, first-vent delay, never super/elite", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.makeSuper();
+  e.die(g);
+  assert.strictEqual(spawned.length, G.childCount);
+  const baseDef = JH.ENEMIES.gasbag;
+  for (const child of spawned) {
+    assert.strictEqual(child.maxHp, Math.round(baseDef.hp * G.childHpMult));
+    assert.strictEqual(child.hp, child.maxHp);
+    assert.strictEqual(child.bodyW, Math.round(baseDef.bodyW * G.childScale));
+    assert.strictEqual(child.bodyH, Math.round(baseDef.bodyH * G.childScale));
+    assert.strictEqual(child.spriteScale, G.childScale);
+    assert.ok(child.ventT >= G.childFirstVent, "first vent respects the configured delay");
+    assert.strictEqual(child.superElite, undefined, "minis never inherit superElite");
+    assert.strictEqual(child.elite, undefined, "minis never inherit elite");
+    assert.strictEqual(child.infinite, true, "minis are infinite for drop-budget purposes");
+    assert.ok(Math.abs(child.spawnGrace - 0.5) < 1e-9, "0.5s spawn grace");
+  }
+  // Original def object is untouched (elite/super def-mutation idiom).
+  assert.strictEqual(JH.ENEMIES.gasbag.hp, baseDef.hp);
+});
+
+test("super gasbag minis: spawn positions clamp to arena/depth bounds", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  g.bounds = { minX: 90, maxX: 110 };   // tight band around the death point
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.makeSuper();
+  e.die(g);
+  for (const child of spawned) {
+    assert.ok(child.x >= 90 && child.x <= 110, "mini x clamps to bounds");
+    assert.ok(child.y >= JH.DEPTH_MIN && child.y <= JH.DEPTH_MAX, "mini y clamps to depth band");
+  }
+});
+
+test("super gasbag mini death follows regular Gasbag behavior and never splits again", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.makeSuper();
+  e.die(g);
+  g.stinkClouds.length = 0;   // clear the mega-cloud so only the mini's own burst counts
+  const child = spawned[0];
+  assert.strictEqual(child._vented, false, "premise: mini never vented");
+  child.die(g);
+  assert.strictEqual(g.stinkClouds.length, 1, "mini pop-fast still bursts exactly one regular cloud");
+  assert.strictEqual(g.stinkClouds[0].friendly, true);
+  assert.strictEqual(g.stinkClouds[0].radius, JH.STINK.radius, "mini's own death payload is regular-sized, not another mega");
+  assert.strictEqual(spawned.length, G.childCount, "no further minis spawned — recursion never happens");
+});
+
+test("regular (non-super) gasbag pop-fast behavior is unchanged by the super-death branch", () => {
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.die(g);
+  assert.strictEqual(g.stinkClouds.length, 1);
+  assert.strictEqual(g.stinkClouds[0].friendly, true, "pre-vent regular death = friendly burst");
+  assert.strictEqual(g.stinkClouds[0].radius, JH.STINK.radius);
+  const g2 = makeThinkGame(400, 40);
+  g2.stinkClouds = [];
+  const e2 = JH.makeEnemy("gasbag", 100, 40);
+  e2._vented = true;
+  e2.die(g2);
+  assert.strictEqual(g2.stinkClouds.length, 0, "post-vent regular death carries no payload, unchanged");
+});
+
 // ---- super bulwark: shield lob + slow zone ----
 
 test("SlowZone slows the player inside, expires after dur", () => {

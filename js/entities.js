@@ -1691,7 +1691,10 @@
         // 0→1 windup progress for multi-frame windup anims (0 when windDur unset)
         windFrac: this.windDur > 0 ? Math.min(1, Math.max(0, 1 - this.windTimer / this.windDur)) : 0,
         hasShield: this.hasShield,   // bulwark: carried-shield sprite variant
-        scale: this.superElite ? 1.8 : this.elite ? 1.08 : 1,
+        // Per-instance override (Super Gasbag minis) wins over the elite/
+        // super defaults so the procedural sprite and hit body always agree.
+        scale: this.spriteScale != null ? this.spriteScale
+          : this.superElite ? 1.8 : this.elite ? 1.08 : 1,
       });
       // tiny hp pip when damaged
       if (this.hp < this.maxHp) {
@@ -2563,6 +2566,13 @@
     constructor(x, y, opts) {
       this.x = x; this.y = y;
       this.friendly = !!(opts && opts.friendly);
+      // Per-instance overrides (Super Gasbag's mega-cloud); default to
+      // JH.STINK so every existing caller (regular Gasbag vent/pop-fast) is
+      // untouched.
+      this.radius = (opts && opts.radius) || JH.STINK.radius;
+      this.life = (opts && opts.life) || JH.STINK.life;
+      this.friendlyLife = (opts && opts.friendlyLife) || JH.STINK.friendlyLife;
+      this.friendlyDps = (opts && opts.friendlyDps) || JH.STINK.friendlyDps;
       this.t = 0;
       this.sprayProgress = 0;   // dispersal seconds accumulated (damage-scaled)
       this.dead = false;
@@ -2579,7 +2589,7 @@
     fadeFrac() {
       const S = JH.STINK;
       const sprayed = this.sprayProgress / S.disperseDur;
-      const life = this.friendly ? S.friendlyLife : S.life;
+      const life = this.friendly ? this.friendlyLife : this.life;
       const fade = (this.t - (life - S.fizzle)) / S.fizzle;
       return Math.min(1, Math.max(sprayed, fade, 0));
     }
@@ -2588,7 +2598,7 @@
     footprint() {
       const S = JH.STINK;
       const grow = Math.min(1, this.t / S.growT);
-      const rx = Math.max(2, S.radius * grow * (1 - this.fadeFrac() * 0.6));
+      const rx = Math.max(2, this.radius * grow * (1 - this.fadeFrac() * 0.6));
       return { rx, ry: rx * JH.GROUND_RY };
     }
     update(dt, game) {
@@ -2598,9 +2608,9 @@
         for (const e of game.enemies) {
           if (e.dead || e.dropping) continue;
           if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, f.rx, f.ry))
-            e.takeDamage(JH.STINK.friendlyDps * dt, game, 0, 0);
+            e.takeDamage(this.friendlyDps * dt, game, 0, 0);
         }
-        if (this.t >= JH.STINK.friendlyLife) this.dead = true;
+        if (this.t >= this.friendlyLife) this.dead = true;
         return;
       }
       const pl = game.player;
@@ -6069,7 +6079,45 @@
         this.state = "walk";
       } else this.state = "idle";
     }
+    // Super Gasbag death children: a scaled clone of the regular def (same
+    // Object.assign-clone idiom as makeElite/makeSuper — JH.ENEMIES.gasbag
+    // itself is never mutated). Never sets superElite/elite, so a mini's own
+    // die() always takes the regular branch below (no recursive splitting).
+    makeMini() {
+      const G = JH.SUPER_GASBAG;
+      const d = Object.assign({}, JH.ENEMIES[this.type]);
+      d.hp = Math.round(d.hp * G.childHpMult);
+      d.bodyW = Math.round(d.bodyW * G.childScale);
+      d.bodyH = Math.round(d.bodyH * G.childScale);
+      d.firstVent = G.childFirstVent;
+      this.def = d;
+      this.hp = this.maxHp = d.hp;
+      this.bodyW = d.bodyW; this.bodyH = d.bodyH;
+      this.spriteScale = G.childScale;   // Enemy.draw prefers this over the elite/super defaults
+      this.ventT = d.firstVent + Math.random();
+    }
     die(game) {
+      if (this.superElite) {
+        // Fog of War: ALWAYS one mega-cloud (bypassing spawnStinkCloud's
+        // hostile-stack dedupe — the signature death burst must never be
+        // suppressed by an already-live vented cloud) + two minis. Same
+        // allegiance rule as the regular pop-fast reward: friendly iff this
+        // Gasbag never landed a vent.
+        const G = JH.SUPER_GASBAG;
+        const friendly = !this._vented;
+        game.stinkClouds.push(new StinkCloud(this.x, this.y, friendly
+          ? { friendly: true, radius: G.megaRadius, friendlyLife: G.megaFriendlyLife, friendlyDps: G.megaFriendlyDps }
+          : { radius: G.megaRadius, life: G.megaLife }));
+        for (let i = 0; i < G.childCount; i++) {
+          const ang = (i / G.childCount) * Math.PI * 2 + Math.random();
+          const cx = clamp(this.x + Math.cos(ang) * G.childSpawnRadius, game.bounds.minX, game.bounds.maxX);
+          const cy = clamp(this.y + Math.sin(ang) * G.childSpawnRadius * JH.GROUND_RY, JH.DEPTH_MIN, JH.DEPTH_MAX);
+          const child = game.spawnEnemy("gasbag", cx, cy, { infinite: true });
+          if (child) { child.makeMini(); child.spawnGrace = 0.5; }
+        }
+        super.die(game);
+        return;
+      }
       if (!this._vented)
         JH.spawnStinkCloud(game, this.x, this.y, { friendly: true });
       super.die(game);

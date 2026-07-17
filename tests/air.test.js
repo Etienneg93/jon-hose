@@ -696,6 +696,63 @@ test("gasbag pop-fast: killed before its first vent, the payload bursts on ENEMI
   assert.strictEqual(g2.stinkClouds.length, 0);
 });
 
+test("stink cloud: per-instance radius/life override JH.STINK defaults; hit/draw rim still agrees", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = stubHazardGame(400, 40);
+  const c = new JH.StinkCloud(100, 40, { radius: G.megaRadius, life: G.megaLife });
+  c.t = JH.STINK.growT;   // full grown
+  assert.ok(Math.abs(c.footprint().rx - G.megaRadius) < 0.001,
+    "full size at growT is the configured radius, not JH.STINK.radius");
+  assert.notStrictEqual(G.megaRadius, JH.STINK.radius, "premise: the two radii differ");
+  // rim agreement: draw's ellipse (footprint()) IS the hit test — sample the
+  // gas-tag check the same way the existing rim test does, at the custom radius.
+  g.stinkClouds.push(c);
+  const f = c.footprint(), pad = g.player.bodyW * 0.25;
+  g.player.x = 100 + f.rx + pad - 2; g.player.gasT = 0;
+  c.update(1 / 60, g);
+  assert.ok(g.player.gasT > 0, "inside the custom-radius rim tags gasT");
+  g.player.x = 100 + f.rx + pad + 3; g.player.gasT = 0;
+  c.update(1 / 60, g);
+  assert.strictEqual(g.player.gasT, 0, "outside the custom-radius rim does not");
+  // custom life expires the cloud instead of JH.STINK.life.
+  const c2 = new JH.StinkCloud(200, 40, { life: 1.5 });
+  c2.t = 1.5 - JH.STINK.fizzle - 0.001;
+  assert.ok(c2.fadeFrac() < 1, "not yet expired just before custom life - fizzle");
+  c2.t = 1.5 + 0.001;
+  assert.ok(c2.fadeFrac() >= 1, "expired at the custom life, not JH.STINK.life");
+  assert.notStrictEqual(1.5, JH.STINK.life, "premise: the two lives differ");
+});
+
+test("stink cloud: friendly custom friendlyLife/friendlyDps override JH.STINK defaults", () => {
+  const G = JH.SUPER_GASBAG;
+  const g = stubHazardGame(400, 40);
+  const e = JH.makeEnemy("mook", 100, 40);
+  g.enemies.push(e);
+  const c = new JH.StinkCloud(100, 40, { friendly: true, radius: G.megaRadius,
+    friendlyLife: G.megaFriendlyLife, friendlyDps: G.megaFriendlyDps });
+  c.t = JH.STINK.growT;
+  const hp0 = e.hp;
+  c.update(0.5, g);
+  assert.ok(Math.abs((hp0 - e.hp) - G.megaFriendlyDps * 0.5) < 0.01,
+    "damage matches the custom friendlyDps exactly");
+  assert.ok(hp0 - e.hp > JH.STINK.friendlyDps * 0.5,
+    "custom friendlyDps (12/s) deals more than the default (8/s) would over the same tick");
+  assert.strictEqual(c.dead, false);
+  c.t = G.megaFriendlyLife + 0.001;
+  c.update(0, g);
+  assert.strictEqual(c.dead, true, "expires at the custom friendlyLife, not JH.STINK.friendlyLife");
+  assert.notStrictEqual(G.megaFriendlyLife, JH.STINK.friendlyLife, "premise: the two friendly lives differ");
+});
+
+test("stink cloud: defaults remain JH.STINK when no per-instance opts are given (regular Gasbag callers unchanged)", () => {
+  const c = new JH.StinkCloud(100, 40);
+  c.t = JH.STINK.growT;
+  assert.ok(Math.abs(c.footprint().rx - JH.STINK.radius) < 0.001);
+  const fc = new JH.StinkCloud(100, 40, { friendly: true });
+  assert.strictEqual(fc.friendlyLife, JH.STINK.friendlyLife);
+  assert.strictEqual(fc.friendlyDps, JH.STINK.friendlyDps);
+});
+
 test("gasbag hovers inside the spray band (nozzle can reach it)", () => {
   const e = JH.makeEnemy("gasbag", 100, 40);
   assert.ok(e.z >= JH.ENEMIES.gasbag.hoverZ - 3);

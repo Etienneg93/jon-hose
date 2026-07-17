@@ -660,6 +660,25 @@
     pullStep: 20,        // px pulled toward the Plunger per landed pulse
   };
 
+  // ---- Super Gasbag: Fog of War — death always bursts into ONE mega
+  // StinkCloud (friendly if it dies before its first vent, hostile after,
+  // same allegiance rule as the regular Gasbag's pop-fast reward) plus TWO
+  // mini Gasbags (half hp, 0.72 body+sprite scale, never super/elite, never
+  // split again). mega* feeds StinkCloud's per-instance radius/life/
+  // friendlyLife/friendlyDps overrides; child* feeds Gasbag.makeMini() and
+  // the death-burst spawn spread.
+  JH.SUPER_GASBAG = {
+    megaRadius: 60,        // mega-cloud footprint rx (world px) — JH.STINK.radius is 34
+    megaLife: 7.5,         // s a hostile mega-cloud lingers untouched
+    megaFriendlyLife: 4,   // s the friendly mega-cloud (pre-vent death) lives
+    megaFriendlyDps: 12,   // enemy hp/s inside the friendly mega-cloud
+    childCount: 2,         // mini Gasbags spawned on super death
+    childHpMult: 0.5,      // fraction of base Gasbag hp
+    childScale: 0.72,      // body + sprite scale (hit body and draw agree)
+    childFirstVent: 1.0,   // s before a mini's first vent telegraph starts
+    childSpawnRadius: 28,  // px from the death point minis are placed at
+  };
+
   // ---- Cloudline Holdout: wave 33's walkway-edge hazard + reinforcement
   // cadence. holdDur/spawnEvery/maxAlive feed Game.startWave/holdoutCadence
   // for the cloudlineEdge holdout (the ONLY source — the wave data carries
