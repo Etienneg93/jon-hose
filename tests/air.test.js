@@ -70,12 +70,15 @@ test("air act: waves 33-35 extend progression per the Plan 2 authoring table", (
     w[i].spawns.forEach((g) => { c[g.type] = (c[g.type] || 0) + g.count; });
     return c;
   };
-  // Wave 33: CLOUDLINE HOLDOUT — timed pool, terrain owns the read (no elite
-  // seasoning, no placements/super — cloudlineEdge is inert until Task 2/3).
+  // Wave 33: CLOUDLINE HOLDOUT — timed pool, terrain owns the read.
   assert.strictEqual(w[32].name, "CLOUDLINE HOLDOUT");
   assert.ok(w[32].holdout, "wave 33 is a holdout set-piece");
   assert.ok(w[32].cloudlineEdge, "wave 33 carries the cloud-edge flag");
-  assert.strictEqual(w[32].holdDur, 24);
+  // holdDur is NOT duplicated on the wave — CLOUDLINE_HOLDOUT.holdDur is the
+  // single source of truth Game.startWave reads for cloudlineEdge holdouts.
+  assert.strictEqual(w[32].holdDur, undefined,
+    "wave 33 must not duplicate CLOUDLINE_HOLDOUT.holdDur inline");
+  assert.strictEqual(JH.CLOUDLINE_HOLDOUT.holdDur, 24, "the 24s duration lives in config only");
   assert.ok(w[32].gusts && w[32].gusts.length === 2 && w[32].gusts.every((g) => g.dir === 1),
     "two rightward gust lanes");
   assert.deepStrictEqual(countsOf(32), { plunger: 3, tpmummy: 3, gasbag: 2 });
@@ -133,6 +136,83 @@ test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily doe
     assert.strictEqual(lastIdx, 34, "wave 35 is temporarily the last wave");
     assert.strictEqual(runClear(lastIdx), lastIdx, "clearing wave 35 still calls win() (temporary, Plan 3 moves it)");
   } finally { global.document = doc; JH.Music = prevMusic; }
+});
+
+test("holdout cadence: Cloudline (wave 33) reads CLOUDLINE_HOLDOUT's cap; the older holdout keeps JH.WALL's", () => {
+  const cloudWave = JH.LEVEL1.waves[32];
+  assert.ok(cloudWave.cloudlineEdge, "premise: wave 33 carries the cloud-edge flag");
+  assert.deepStrictEqual(JH.Game.holdoutCadence(cloudWave),
+    { spawnEvery: JH.CLOUDLINE_HOLDOUT.spawnEvery, maxAlive: JH.CLOUDLINE_HOLDOUT.maxAlive });
+  assert.strictEqual(JH.CLOUDLINE_HOLDOUT.maxAlive, 4, "premise: reinforcement cap is 4");
+  const oldIdx = JH.LEVEL1.waves.findIndex((w) => w.name === "HOLD THE LINE");
+  const oldWave = JH.LEVEL1.waves[oldIdx];
+  assert.ok(oldWave.holdout && !oldWave.cloudlineEdge, "premise: an older holdout with no cloud edge");
+  assert.deepStrictEqual(JH.Game.holdoutCadence(oldWave),
+    { spawnEvery: JH.WALL.spawnEvery, maxAlive: JH.WALL.maxAlive });
+  assert.notStrictEqual(JH.WALL.maxAlive, JH.CLOUDLINE_HOLDOUT.maxAlive,
+    "premise: the two cadences must actually differ for this test to mean anything");
+});
+
+test("cloudline holdout: startWave reads its 24s duration from config and posts the exact edge-warning banner", () => {
+  JH.Camera.reset();
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(0, 40);
+  g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+  g.sigils = [];
+  let bannerText = null;
+  g.banner = (t) => { bannerText = t; };
+  g.startWave(32);
+  assert.strictEqual(g.holdoutTimer, JH.CLOUDLINE_HOLDOUT.holdDur, "holdoutTimer sources from CLOUDLINE_HOLDOUT, not a wave literal");
+  assert.strictEqual(bannerText, "CLOUDLINE HOLDOUT — STAY OFF THE EDGE!");
+});
+
+test("hold the line (older holdout): startWave keeps its own inline holdDur and banner line unchanged", () => {
+  JH.Camera.reset();
+  const oldIdx = JH.LEVEL1.waves.findIndex((w) => w.name === "HOLD THE LINE");
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(0, 40);
+  g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+  g.sigils = [];
+  let bannerText = null;
+  g.banner = (t) => { bannerText = t; };
+  g.startWave(oldIdx);
+  assert.strictEqual(g.holdoutTimer, JH.LEVEL1.waves[oldIdx].holdDur, "unchanged: still its own wave-authored holdDur");
+  assert.strictEqual(bannerText, "HOLD THE LINE!  SURVIVE!");
+});
+
+test("cloudline holdout: timer expiry clears infinite enemies + gusts + edge, and awards the reward set exactly once", () => {
+  const prevDoc = global.document, prevMusic = JH.Music;
+  global.document = { getElementById: () => ({ classList: { add() {}, remove() {} }, textContent: "", style: {} }) };
+  JH.Music = { setTrack() {} };
+  try {
+    const g = Object.create(JH.Game);
+    g.player = stubPlayer(100, 40);
+    g.waveIndex = 32;   // CLOUDLINE HOLDOUT
+    g.waveActive = true;
+    g.beneUsedOnce = {}; g.sigils = []; g.relics = {}; g.checkpointWave = JH.ACT_STARTS[5];
+    g.bounds = { minX: 0, maxX: 480 };
+    g.gustLanes = [new JH.GustLane(18, 1), new JH.GustLane(68, 1)];
+    g.cloudlineEdge = new JH.CloudlineEdge(400);
+    const mook = JH.makeEnemy("mook", 100, 40); mook.infinite = true;
+    const boss = JH.makeEnemy("mook", 120, 40); boss.infinite = true; boss.isBoss = true;
+    g.enemies = [mook, boss];
+    let crossCalls = 0, xpCalls = 0;
+    g.spawnPickup = (kind) => { if (kind === "cross") crossCalls++; };
+    g.grantXp = () => { xpCalls++; };
+    g.spawnVendor = () => {}; g.banner = () => {}; g.win = () => { throw new Error("must not win mid-act"); };
+    // Same idiom the update() holdout branch runs when holdoutTimer <= 0.
+    for (const e of g.enemies) if (!e.dead && !e.isBoss) e.dead = true;
+    g.waveCleared_();
+    assert.strictEqual(mook.dead, true, "infinite non-boss enemy is force-cleared, no mop-up required");
+    assert.strictEqual(boss.dead, false, "the isBoss guard is respected (never force-killed)");
+    assert.deepStrictEqual(g.gustLanes, [], "gust lanes clear with the wave");
+    assert.strictEqual(g.cloudlineEdge, null, "the cloud edge hazard clears with the wave");
+    assert.strictEqual(crossCalls, 1, "cross reward granted exactly once");
+    assert.strictEqual(xpCalls, 1, "set-piece XP granted exactly once");
+    assert.strictEqual(g.waveActive, false, "waveActive flips off so the same expiry can't fire twice");
+  } finally {
+    global.document = prevDoc; JH.Music = prevMusic;
+  }
 });
 
 test("air act: placements + super + opening regulars never exceed the Air field cap", () => {

@@ -751,13 +751,16 @@
         this.dropBudget = { suds: 14, items: 7 };             // anti-farm cap
         this.banner("BARRICADE! SMASH THROUGH", 1.6);
       } else if (wave.holdout) {
-        // Survival hold-out: reuse the barricade's pool-spawn loop, end on a timer.
-        this.holdoutTimer = wave.holdDur || 22;
+        // Survival hold-out: reuse the barricade's pool-spawn loop, end on a
+        // timer. The cloudlineEdge holdout (wave 33) sources its duration
+        // from JH.CLOUDLINE_HOLDOUT (single source of truth, no wave.holdDur
+        // literal); every other holdout keeps its own wave-authored holdDur.
+        this.holdoutTimer = wave.cloudlineEdge ? JH.CLOUDLINE_HOLDOUT.holdDur : (wave.holdDur || 22);
         this.wallSpawnTimer = 0.4;
         this.wallPool = [];
         wave.spawns.forEach((g) => { for (let k = 0; k < g.count; k++) this.wallPool.push(g.type); });
         this.dropBudget = { suds: 14, items: 7 };            // anti-farm cap
-        this.banner("HOLD THE LINE!  SURVIVE!", 1.8);
+        this.banner(wave.cloudlineEdge ? "CLOUDLINE HOLDOUT — STAY OFF THE EDGE!" : "HOLD THE LINE!  SURVIVE!", 1.8);
       } else if (wave.boss) {
         JH.Music.setTrack("boss");
         const bt = wave.bossType || "boss";
@@ -847,6 +850,17 @@
       this._eliteAcc += this.waveEliteFrac;
       if (this._eliteAcc >= 1) { this._eliteAcc -= 1; return this.waveEliteScale; }
       return null;
+    },
+
+    // Holdout reinforcement cadence: the cloudlineEdge holdout (wave 33)
+    // spawns on JH.CLOUDLINE_HOLDOUT's spawnEvery/maxAlive; every other
+    // holdout (e.g. HOLD THE LINE) keeps JH.WALL's cadence unchanged. One
+    // branch in the update loop reads this instead of duplicating the spawn
+    // loop per cadence source.
+    holdoutCadence(wave) {
+      return wave.cloudlineEdge
+        ? { spawnEvery: JH.CLOUDLINE_HOLDOUT.spawnEvery, maxAlive: JH.CLOUDLINE_HOLDOUT.maxAlive }
+        : { spawnEvery: JH.WALL.spawnEvery, maxAlive: JH.WALL.maxAlive };
     },
     spawnWaveEnemy(type, eliteScale, slot) {
       const left = this.bounds.minX, right = this.bounds.maxX;
@@ -2390,8 +2404,9 @@
         } else if (wave && wave.holdout) {
           this.holdoutTimer -= dt;
           this.wallSpawnTimer -= dt;
-          if (this.wallSpawnTimer <= 0 && this.enemies.length < JH.WALL.maxAlive) {
-            this.wallSpawnTimer = JH.WALL.spawnEvery;
+          const cadence = this.holdoutCadence(wave);
+          if (this.wallSpawnTimer <= 0 && this.enemies.length < cadence.maxAlive) {
+            this.wallSpawnTimer = cadence.spawnEvery;
             const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
             // Spawn from either edge so pressure comes from ahead AND behind.

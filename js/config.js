@@ -646,8 +646,9 @@
   };
 
   // ---- Cloudline Holdout: wave 33's walkway-edge hazard + reinforcement
-  // cadence (Task 3 wires holdDur/spawnEvery/maxAlive into the holdout
-  // spawn loop; Task 2 uses edgeInset/resetDist/edgeDmg for JH.CloudlineEdge).
+  // cadence. holdDur/spawnEvery/maxAlive feed Game.startWave/holdoutCadence
+  // for the cloudlineEdge holdout (the ONLY source — the wave data carries
+  // no holdDur of its own); edgeInset/resetDist/edgeDmg drive JH.CloudlineEdge.
   JH.CLOUDLINE_HOLDOUT = {
     holdDur: 24,
     spawnEvery: 1.35,
@@ -1138,9 +1139,9 @@
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 4 }] },
       { name: "GAS LEAK", tough: true, gusts: [{ y: 24, dir: 1 }, { y: 62, dir: -1 }],
         spawns: [{ type: "gasbag", count: 2 }, { type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }] },
-      // cloudlineEdge is inert until Task 2 wires JH.CloudlineEdge; the
-      // existing holdout/wallPool machinery already reads holdout/holdDur/spawns.
-      { name: "CLOUDLINE HOLDOUT", holdout: true, cloudlineEdge: true, holdDur: 24,
+      // No holdDur here: Game.startWave sources the cloudlineEdge holdout's
+      // duration (and its reinforcement cadence) from JH.CLOUDLINE_HOLDOUT.
+      { name: "CLOUDLINE HOLDOUT", holdout: true, cloudlineEdge: true,
         gusts: [{ y: 18, dir: 1 }, { y: 68, dir: 1 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
       // One pre-placed Bidet + superElite reserve two of the eight field-cap
