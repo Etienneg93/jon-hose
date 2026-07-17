@@ -643,6 +643,8 @@
     gapDur: 2.5,       // s of calm between blows
     push: 120,         // px/s applied to Jon along the lane direction
     pushEnemy: 100,    // px/s applied to light enemies (bosses/emplacements immune)
+    bandMin: 10,       // default half-band roll range for RANGE specs
+    bandMax: 22,       //   (legacy {y,dir} entries stay pinned to `band`)
   };
 
   // ---- Super Plunger: Triple Latch — a locked ground wedge (Geo.
@@ -1171,22 +1173,29 @@
       { name: "SANITATION 101", spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 2 }] },
       { name: "TANGLED UP", gusts: [{ y: 43, dir: 1 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 4 }] },
-      { name: "GAS LEAK", tough: true, gusts: [{ y: 24, dir: 1 }, { y: 62, dir: -1 }],
+      { name: "GAS LEAK", tough: true,
+        gusts: [{ yMin: 12, yMax: 36, dirs: [1], bandMin: 14, bandMax: 14 },
+                { yMin: 50, yMax: 74, dirs: [-1], bandMin: 14, bandMax: 14 }],
         spawns: [{ type: "gasbag", count: 2 }, { type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }] },
       // No holdDur here: Game.startWave sources the cloudlineEdge holdout's
       // duration (and its reinforcement cadence) from JH.CLOUDLINE_HOLDOUT.
       { name: "CLOUDLINE HOLDOUT", holdout: true, cloudlineEdge: true,
-        gusts: [{ y: 18, dir: 1 }, { y: 68, dir: 1 }],
+        // Direction stays rightward — the edge is the encounter.
+        gusts: [{ yMin: 8, yMax: 28, dirs: [1] },
+                { yMin: 58, yMax: 78, dirs: [1], phase: 3.6 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
       // One pre-placed Bidet + superElite reserve two of the eight field-cap
       // slots: six regulars open, four sprinkle-pool extras queue behind them.
       { name: "PORCELAIN PATROL", tough: true, superElite: "plunger",
         placements: [{ type: "bidet", x: 344, y: 18 }],
+        gusts: [{ yMin: 24, yMax: 62, dirs: [1, -1] }],
         spawns: [{ type: "plunger", count: 2 }, { type: "tpmummy", count: 2 }, { type: "gasbag", count: 2 }] },
       // Two pre-placed Bidets + superElite reserve three of eight: five
       // regulars open. Currently the last wave — clearing it calls win().
       { name: "FOUL WEATHER", tough: true, superElite: "gasbag",
-        gusts: [{ y: 24, dir: 1 }, { y: 62, dir: -1 }],
+        // The squeeze: opposed lanes, offset phases, rolled depth + band.
+        gusts: [{ yMin: 14, yMax: 40, dirs: [1] },
+                { yMin: 46, yMax: 72, dirs: [-1], phase: 3.6 }],
         placements: [{ type: "bidet", x: 112, y: 18 }, { type: "bidet", x: 344, y: 68 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
     ],

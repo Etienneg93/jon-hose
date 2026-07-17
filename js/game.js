@@ -696,8 +696,9 @@
       // Confine the player to the current screen ("arena").
       const left = JH.Camera.x + 20, right = JH.Camera.x + JH.VIEW_W - 20;
       this.bounds = { minX: left, maxX: right };
-      // Terrain wind: waves 31+ author gust lanes ({y, dir} rows in wave data).
-      this.gustLanes = (wave.gusts || []).map((gd) => new JH.GustLane(gd.y, gd.dir));
+      // Terrain wind: waves 31+ author gust lanes (legacy {y,dir} or range
+      // {yMin,yMax,dirs,bandMin,bandMax,phase} rows in wave data).
+      this.gustLanes = (wave.gusts || []).map((gd) => new JH.GustLane(gd));
       // Wave 33's walkway boundary: inset from the locked arena's far bound.
       this.cloudlineEdge = wave.cloudlineEdge
         ? new JH.CloudlineEdge(this.bounds.maxX - JH.CLOUDLINE_HOLDOUT.edgeInset)

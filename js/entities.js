@@ -2665,12 +2665,36 @@
   // clears. Push can't be outrun along X (120 vs moveSpeed 92) — the counter
   // is depth. Dash (240) also escapes; dashing bodies still get pushed.
   class GustLane {
-    constructor(y, dir) {
-      this.y = y; this.dir = dir >= 0 ? 1 : -1;
-      this.t = 0; this.phase = "telegraph"; this.phaseT = JH.GUST.telegraph;
+    // spec: legacy { y, dir } (fixed geometry, band = JH.GUST.band) or a
+    // range spec { yMin, yMax, dirs, bandMin, bandMax, phase } — every
+    // field optional; omitted band fields roll [GUST.bandMin, GUST.bandMax].
+    constructor(spec) {
+      const G = JH.GUST;
+      const legacy = spec.y != null && spec.yMin == null && spec.yMax == null;
+      this.spec = legacy
+        ? { yMin: spec.y, yMax: spec.y, dirs: [spec.dir >= 0 ? 1 : -1],
+            bandMin: G.band, bandMax: G.band }
+        : {
+            yMin: spec.yMin != null ? spec.yMin : spec.y,
+            yMax: spec.yMax != null ? spec.yMax : spec.y,
+            dirs: spec.dirs || [spec.dir >= 0 ? 1 : -1],
+            bandMin: spec.bandMin != null ? spec.bandMin : G.bandMin,
+            bandMax: spec.bandMax != null ? spec.bandMax : G.bandMax,
+          };
+      this.t = 0; this.phase = "telegraph";
+      this.phaseT = G.telegraph + (spec.phase || 0);   // offset staggers lanes
       this.dead = false;
+      this.reroll();
     }
-    inBand(y) { return Math.abs(y - this.y) <= JH.GUST.band; }
+    // Rolls happen ONLY here, and this is called ONLY at telegraph start.
+    reroll() {
+      const s = this.spec;
+      this.dir = s.dirs[(Math.random() * s.dirs.length) | 0];
+      this.band = s.bandMin + Math.random() * (s.bandMax - s.bandMin);
+      const y = s.yMin + Math.random() * (s.yMax - s.yMin);
+      this.y = clamp(y, JH.DEPTH_MIN + this.band, JH.DEPTH_MAX - this.band);
+    }
+    inBand(y) { return Math.abs(y - this.y) <= this.band; }
     update(dt, game) {
       const G = JH.GUST;
       this.t += dt;
@@ -2678,7 +2702,7 @@
       if (this.phaseT <= 0) {
         if (this.phase === "telegraph") { this.phase = "blow"; this.phaseT = G.blowDur; }
         else if (this.phase === "blow") { this.phase = "gap"; this.phaseT = G.gapDur; }
-        else { this.phase = "telegraph"; this.phaseT = G.telegraph; }
+        else { this.phase = "telegraph"; this.phaseT = G.telegraph; this.reroll(); }
       }
       if (this.phase !== "blow") return;
       const pl = game.player;
@@ -2693,8 +2717,7 @@
     }
     draw(ctx, cam) {
       // Edge lines at laneY ± band = exactly the tested band (rim is hitbox).
-      const G = JH.GUST;
-      const yT = Geo.feetScreenY(this.y - G.band, 0), yB = Geo.feetScreenY(this.y + G.band, 0);
+      const yT = Geo.feetScreenY(this.y - this.band, 0), yB = Geo.feetScreenY(this.y + this.band, 0);
       const blowing = this.phase === "blow";
       const flash = this.phase === "telegraph" && (Math.floor(this.t * 8) & 1);
       ctx.save();

@@ -79,8 +79,9 @@ test("air act: waves 33-35 extend progression per the Plan 2 authoring table", (
   assert.strictEqual(w[32].holdDur, undefined,
     "wave 33 must not duplicate CLOUDLINE_HOLDOUT.holdDur inline");
   assert.strictEqual(JH.CLOUDLINE_HOLDOUT.holdDur, 24, "the 24s duration lives in config only");
-  assert.ok(w[32].gusts && w[32].gusts.length === 2 && w[32].gusts.every((g) => g.dir === 1),
-    "two rightward gust lanes");
+  assert.ok(w[32].gusts && w[32].gusts.length === 2
+    && w[32].gusts.every((g) => g.dirs.length === 1 && g.dirs[0] === 1),
+    "two rightward-only gust lanes");
   assert.deepStrictEqual(countsOf(32), { plunger: 3, tpmummy: 3, gasbag: 2 });
   assert.ok(!w[32].placements && !w[32].superElite, "wave 33 has no Bidet/super");
   // Wave 34: PORCELAIN PATROL — one pre-placed Bidet + Super Plunger.
@@ -96,7 +97,7 @@ test("air act: waves 33-35 extend progression per the Plan 2 authoring table", (
   assert.strictEqual(w[34].placements.length, 2);
   assert.deepStrictEqual(countsOf(34), { plunger: 3, tpmummy: 3, gasbag: 2 });
   assert.ok(w[34].gusts && w[34].gusts.length === 2
-    && w[34].gusts.some((g) => g.dir === 1) && w[34].gusts.some((g) => g.dir === -1),
+    && w[34].gusts.some((g) => g.dirs.includes(1)) && w[34].gusts.some((g) => g.dirs.includes(-1)),
     "wave 35 carries two opposed gust lanes");
 });
 
@@ -191,7 +192,7 @@ test("cloudline holdout: timer expiry clears infinite enemies + gusts + edge, an
     g.waveActive = true;
     g.beneUsedOnce = {}; g.sigils = []; g.relics = {}; g.checkpointWave = JH.ACT_STARTS[5];
     g.bounds = { minX: 0, maxX: 480 };
-    g.gustLanes = [new JH.GustLane(18, 1), new JH.GustLane(68, 1)];
+    g.gustLanes = [new JH.GustLane({ y: 18, dir: 1 }), new JH.GustLane({ y: 68, dir: 1 })];
     g.cloudlineEdge = new JH.CloudlineEdge(400);
     const mook = JH.makeEnemy("mook", 100, 40); mook.infinite = true;
     const boss = JH.makeEnemy("mook", 120, 40); boss.infinite = true; boss.isBoss = true;
@@ -520,7 +521,7 @@ test("friendly cloud cooks enemies, ignores the player; hostile stack check", ()
 test("gust lane rim: the drawn band edge is the push edge; telegraph never pushes", () => {
   const G = JH.GUST;
   const g = stubHazardGame(200, 40);
-  const lane = new JH.GustLane(40, 1);
+  const lane = new JH.GustLane({ y: 40, dir: 1 });
   g.gustLanes.push(lane);
   lane.phase = "blow"; lane.phaseT = G.blowDur;
   // inside the band
@@ -540,7 +541,7 @@ test("gust lane rim: the drawn band edge is the push edge; telegraph never pushe
 
 test("gust lane: displaces light enemies; emplacements and bosses hold fast", () => {
   const g = stubHazardGame(200, 0);
-  const lane = new JH.GustLane(40, 1);
+  const lane = new JH.GustLane({ y: 40, dir: 1 });
   lane.phase = "blow"; lane.phaseT = JH.GUST.blowDur;
   const mook = JH.makeEnemy("mook", 100, 40);
   const turret = JH.makeEnemy("bidet", 140, 40);
@@ -555,7 +556,7 @@ test("gust lane: displaces light enemies; emplacements and bosses hold fast", ()
 test("gust lane cycle: telegraph -> blow -> gap -> telegraph", () => {
   const G = JH.GUST;
   const g = stubHazardGame(0, 0);
-  const lane = new JH.GustLane(40, 1);
+  const lane = new JH.GustLane({ y: 40, dir: 1 });
   assert.strictEqual(lane.phase, "telegraph");
   lane.update(G.telegraph + 0.01, g);
   assert.strictEqual(lane.phase, "blow");
@@ -563,6 +564,68 @@ test("gust lane cycle: telegraph -> blow -> gap -> telegraph", () => {
   assert.strictEqual(lane.phase, "gap");
   lane.update(G.gapDur + 0.01, g);
   assert.strictEqual(lane.phase, "telegraph");
+});
+
+test("gust lanes: legacy {y, dir} specs are regression-pinned to fixed geometry", () => {
+  const lane = new JH.GustLane({ y: 43, dir: 1 });
+  const G = JH.GUST;
+  // Drive through 6 full cycles; geometry must never change.
+  const cycle = G.telegraph + G.blowDur + G.gapDur;
+  const g = stubHazardGame(0, 0);
+  g.player.alive = false;   // no push side effects
+  for (let i = 0; i < Math.ceil(6 * cycle * 60); i++) {
+    lane.update(1 / 60, g);
+    assert.strictEqual(lane.y, 43, "legacy lane depth is fixed");
+    assert.strictEqual(lane.dir, 1, "legacy lane direction is fixed");
+    assert.strictEqual(lane.band, G.band, "legacy lane band is JH.GUST.band");
+  }
+});
+
+test("gust lanes: range specs re-roll inside their ranges, only at telegraph start", () => {
+  const spec = { yMin: 20, yMax: 60, dirs: [1, -1], bandMin: 10, bandMax: 22 };
+  const lane = new JH.GustLane(spec);
+  const G = JH.GUST;
+  const g = stubHazardGame(0, 0);
+  g.player.alive = false;
+  const seen = { y: new Set(), dir: new Set(), band: new Set() };
+  for (let c = 0; c < 40; c++) {
+    // At telegraph start the roll must be inside the spec.
+    assert.strictEqual(lane.phase, "telegraph");
+    assert.ok(lane.y >= 20 && lane.y <= 60, "depth inside [yMin,yMax]");
+    assert.ok([1, -1].includes(lane.dir), "direction from dirs");
+    assert.ok(lane.band >= 10 && lane.band <= 22, "band inside [bandMin,bandMax]");
+    const frozen = { y: lane.y, dir: lane.dir, band: lane.band };
+    seen.y.add(lane.y); seen.dir.add(lane.dir); seen.band.add(lane.band);
+    // Geometry is frozen through telegraph + blow + gap.
+    const steps = Math.ceil((G.telegraph + G.blowDur + G.gapDur) * 60) + 1;
+    for (let i = 0; i < steps && !(lane.phase === "telegraph" && i > 10); i++) {
+      lane.update(1 / 60, g);
+      if (lane.phase !== "telegraph")
+        assert.deepStrictEqual({ y: lane.y, dir: lane.dir, band: lane.band },
+          frozen, "geometry never changes mid-cycle");
+    }
+    // Land exactly on the next telegraph for the next iteration.
+    while (lane.phase !== "telegraph") lane.update(1 / 60, g);
+  }
+  // 40 cycles of a 40px range: rolls must actually vary.
+  assert.ok(seen.y.size > 5, "depth genuinely re-rolls");
+  assert.strictEqual(seen.dir.size, 2, "both directions occur across 40 cycles");
+  assert.ok(seen.band.size > 5, "band genuinely re-rolls");
+});
+
+test("gust lanes: phase offset delays the first telegraph; rolls clamp to the depth band", () => {
+  const offset = new JH.GustLane({ y: 43, dir: 1, phase: 1.0 });
+  const plain = new JH.GustLane({ y: 43, dir: 1 });
+  const g = stubHazardGame(0, 0);
+  g.player.alive = false;
+  for (let i = 0; i < Math.ceil(JH.GUST.telegraph * 60) + 2; i++) {
+    plain.update(1 / 60, g); offset.update(1 / 60, g);
+  }
+  assert.strictEqual(plain.phase, "blow", "un-offset lane has started blowing");
+  assert.strictEqual(offset.phase, "telegraph", "offset lane is still telegraphing");
+  // A spec hugging the depth floor clamps so band edges stay inside.
+  const low = new JH.GustLane({ yMin: 0, yMax: 0, dirs: [1], bandMin: 22, bandMax: 22 });
+  assert.ok(low.y - low.band >= JH.DEPTH_MIN, "band top clamped inside the depth band");
 });
 
 test("cloudline edge rim: front rim one epsilon inside does not cross; touching crosses", () => {
