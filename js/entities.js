@@ -6113,7 +6113,11 @@
           const cx = clamp(this.x + Math.cos(ang) * G.childSpawnRadius, game.bounds.minX, game.bounds.maxX);
           const cy = clamp(this.y + Math.sin(ang) * G.childSpawnRadius * JH.GROUND_RY, JH.DEPTH_MIN, JH.DEPTH_MAX);
           const child = game.spawnEnemy("gasbag", cx, cy, { infinite: true });
-          if (child) { child.makeMini(); child.spawnGrace = 0.5; }
+          // spawnGrace alone only gates the vent windup (Gasbag.think) — the
+          // shared contact-damage block in Enemy.update reads contactTimer,
+          // not spawnGrace. Set both to the same 0.5s so a mini landing on
+          // Jon can't touch-damage him the instant it appears.
+          if (child) { child.makeMini(); child.spawnGrace = 0.5; child.contactTimer = 0.5; }
         }
         super.die(game);
         return;

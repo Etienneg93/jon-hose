@@ -1143,6 +1143,30 @@ test("super gasbag minis: spawn positions clamp to arena/depth bounds", () => {
   }
 });
 
+test("super gasbag minis: spawn with a real contact-timer grace, not just spawnGrace", () => {
+  const g = makeThinkGame(400, 40);
+  g.stinkClouds = [];
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("gasbag", 100, 40);
+  e.makeSuper();
+  e.die(g);
+  const child = spawned[0];
+  g.enemies.push(child);
+  // Overlap the player exactly on the mini's spawn point — the worst case
+  // the brief calls out (a mini landing ON Jon).
+  g.player.x = child.x; g.player.y = child.y;
+  const hp0 = g.player.hp;
+  child.update(1 / 60, g);
+  child.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0,
+    "contact-damage grace blocks the touch on the frames immediately after the death burst");
+  // Advance past the 0.5s grace with the overlap held — the gate must not
+  // be accidentally permanent; damage lands once contactTimer expires.
+  for (let i = 0; i < 40 && g.player.hp === hp0; i++) child.update(1 / 60, g);
+  assert.ok(g.player.hp < hp0, "damage lands once the 0.5s grace expires");
+});
+
 test("super gasbag mini death follows regular Gasbag behavior and never splits again", () => {
   const G = JH.SUPER_GASBAG;
   const g = makeThinkGame(400, 40);
