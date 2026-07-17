@@ -364,6 +364,29 @@ test("plunger art: every runtime pose is a normalized transparent PNG frame", ()
   assert.ok(differingPixels(decoded.walk2, decoded.walk3) > 2500, "walk3 must be a distinct pass pose");
 });
 
+test("tpmummy art: every runtime pose is a normalized transparent PNG frame", () => {
+  const dims = (name, w, h) => {
+    const png = fs.readFileSync(path.join(__dirname, "..", "sprites", "tpmummy", name + ".png"));
+    assert.strictEqual(png.toString("ascii", 1, 4), "PNG", name + " must be a PNG");
+    assert.strictEqual(png.readUInt32BE(16), w, name + " width");
+    assert.strictEqual(png.readUInt32BE(20), h, name + " height");
+    return PNG.sync.read(png);
+  };
+  const feetRow = (png) => {
+    for (let y = png.height - 1; y >= 0; y--)
+      for (let x = 0; x < png.width; x++)
+        if (png.data[(y * png.width + x) * 4 + 3]) return y;
+    return -1;
+  };
+  // Body poses: 112x116 canvas (4x logical), shared feet baseline row 111.
+  for (const pose of ["idle0", "idle1", "walk0", "walk1", "walk2", "walk3",
+    "wind", "release", "hurt", "drop0", "unravel0", "unravel1"])
+    assert.strictEqual(feetRow(dims(pose, 112, 116)), 111, pose + " feet baseline");
+  // FX canvases: death puff 112x64, wrap projectile 64x32.
+  dims("puff0", 112, 64); dims("puff1", 112, 64);
+  dims("wrap0", 64, 32); dims("wrap1", 64, 32);
+});
+
 test("air act: sprinkle pool floor keeps fire enemies out of the air roster", () => {
   const pool = Balance.unlockedPool(JH.LEVEL1.waves, 30, JH.ACT_STARTS[5]);
   assert.ok(pool.includes("plunger") && pool.includes("tpmummy"));

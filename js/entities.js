@@ -5741,13 +5741,10 @@
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
       const spin = Math.floor(this.t * 14) % 2;
-      ctx.save();
-      ctx.fillStyle = JH.PAL.tpmummy;
-      ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 3, 6, 6);
-      ctx.fillStyle = JH.PAL.tpmummyDk;
-      if (spin) ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 1, 6, 2);
-      else ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 3, 2, 6);
+      Assets.draw(ctx, "tpwrap", sx, sy, this.vx >= 0 ? 1 : -1,
+        { frame: spin, t: this.t });
       // trailing streamer
+      ctx.save();
       ctx.globalAlpha = 0.7;
       ctx.fillStyle = JH.PAL.tpmummy;
       ctx.fillRect(Math.round(sx - this.vx * 0.06), Math.round(sy) - 1, 8, 1);
@@ -5755,6 +5752,27 @@
     }
   }
   JH.TPWrap = TPWrap;
+
+  // Visual-only unravel corpse (plunger death-beat idiom): rides the
+  // cosmetic particle list so wave truth never waits on it. Draws the
+  // unravel frames plus the dissipating gust puff.
+  class TPMummyUnravelSprite {
+    constructor(x, y, facing) {
+      this.x = x; this.y = y; this.facing = facing;
+      this.t = 0; this.life = 0.8;
+    }
+    update(dt) { this.t += dt; return this.t < this.life; }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const fade = this.t > 0.5 ? 1 - (this.t - 0.5) / (this.life - 0.5) : 1;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+      Assets.shadow(ctx, sx, sy, 9);
+      Assets.draw(ctx, "tpmummy", sx, sy, this.facing, { state: "unravel", t: this.t });
+      if (this.t < 0.4) Assets.draw(ctx, "tpmummy-puff", sx, sy, this.facing, { t: this.t });
+      ctx.restore();
+    }
+  }
 
   class TPMummy extends Enemy {
     // Streamer entry: constant drift + sway — no gravity slam (harasser).
@@ -5792,9 +5810,11 @@
         if (this.windTimer <= 0) {
           game.embers.push(new TPWrap(this.x + this.facing * 8, this.y, pl.x, pl.y, d));
           this.cdTimer = d.wrapCd;
+          this.releaseT = 0.22;   // visual-only throw follow-through pose
         }
         return;
       }
+      if (this.releaseT > 0) this.releaseT -= dt;
       if (this.cdTimer > 0) this.cdTimer -= dt;
       // Ranged harasser: no attack ticket (tickets meter melee attackers).
       if (this.cdTimer <= 0 && dist < d.wrapRange && this.spawnGrace <= 0) {
@@ -5807,6 +5827,7 @@
         this.y += (dy / (dist || 1)) * d.speed * want * dt * 0.8;
         this.state = "walk";
       } else this.state = "idle";
+      if (this.releaseT > 0) this.state = "release";   // pose only; movement above still applies
     }
     die(game) {
       // Unravel: one-shot gust puff — shove only, no damage. The shove test
@@ -5823,6 +5844,7 @@
           o.applyKnockback(o.x >= this.x ? 1 : -1, d.puffKnock);
       }
       burst(game, this.x, this.y, 8, JH.PAL.tpmummy, 14, { speed: 110, life: 0.5, up: 60, size: 2 });
+      if (game.particles) game.particles.push(new TPMummyUnravelSprite(this.x, this.y, this.facing));
       super.die(game);
     }
   }
@@ -5842,7 +5864,7 @@
       }
       ctx.restore();
       Assets.shadow(ctx, sx, Geo.feetScreenY(this.y, 0), this.bodyW * 0.4);
-      Assets.draw(ctx, this.type, sx, sy, this.facing, { state: "walk", frame: this.frame, t: this.t });
+      Assets.draw(ctx, this.type, sx, sy, this.facing, { state: "drop", frame: this.frame, t: this.t });
       return;
     }
     JH.Enemy.prototype.draw.call(this, ctx, cam);
