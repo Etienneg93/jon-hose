@@ -250,6 +250,70 @@ test("air act: pre-existing superElite waves without placements keep the old cap
     "a superElite wave without placements must open fieldCap (" + cap + ") regulars plus the super, not fewer");
 });
 
+test("air act: wave 34 spawns exactly one Super Plunger, wave 35 exactly one Super Gasbag — never swapped, never doubled", () => {
+  const cases = [[33, "plunger"], [34, "gasbag"]];
+  for (const [idx, expectType] of cases) {
+    JH.Camera.reset();
+    const g = Object.create(JH.Game);
+    g.player = stubPlayer(0, 40);
+    g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+    g.sigils = []; g.banner = () => {};
+    g.startWave(idx);
+    const supers = g.enemies.filter((e) => e.superElite);
+    assert.strictEqual(supers.length, 1,
+      JH.LEVEL1.waves[idx].name + " must spawn exactly one super-elite, got " + supers.length);
+    assert.strictEqual(supers[0].type, expectType,
+      JH.LEVEL1.waves[idx].name + " super must be " + expectType + ", not " + supers[0].type);
+  }
+});
+
+test("air act: pre-placed Bidets are live wave members — block clear until killed, never sprinkled, die through the normal lifecycle", () => {
+  JH.Camera.reset();
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(0, 40);
+  g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+  g.sigils = []; g.banner = () => {};
+  g.startWave(33);   // PORCELAIN PATROL: one pre-placed Bidet
+  const bidets = g.enemies.filter((e) => e.type === "bidet");
+  assert.strictEqual(bidets.length, 1, "wave 34 opens with its one placed Bidet live on the field");
+  assert.ok(!g.wavePool.includes("bidet"), "Bidet must never queue into the reinforcement pool");
+  // Kill everything else. The wave's actual clear gate (js/game.js update(),
+  // the non-holdout/wall/garden branch) is enemies.length===0 && wavePool
+  // empty, with no placement special-case — reproduce that gate directly.
+  for (const e of g.enemies) if (e !== bidets[0]) e.dead = true;
+  g.enemies = g.enemies.filter((e) => !e.dead);
+  assert.deepStrictEqual(g.enemies, bidets, "the Bidet is the only thing left standing between the wave and clear");
+  assert.ok(g.enemies.length > 0, "wave must not be clearable while its placement is still alive");
+  // Kill the Bidet through the same takeDamage/die path every other enemy
+  // uses — no special despawn function exists for placements (verified: no
+  // "placement" reference anywhere outside spawnWavePlacements itself).
+  const hg = stubHazardGame(0, 40);
+  bidets[0].takeDamage(9999, hg, 0, 0);
+  assert.strictEqual(bidets[0].dead, true, "Bidet dies through the standard Enemy.die path");
+  g.enemies = g.enemies.filter((e) => !e.dead);
+  assert.strictEqual(g.enemies.length, 0, "with the Bidet dead, the generic enemies.length===0 gate now clears the wave");
+});
+
+test("air act: wave 35's two placements + super reserve 3 of 8 opening slots; 5 regulars open, 7 queue for later surges", () => {
+  const cap = JH.WAVEFLOW.fieldCap[5];
+  assert.strictEqual(cap, 8, "premise: Air field cap is 8");
+  JH.Camera.reset();
+  const g = Object.create(JH.Game);
+  g.player = stubPlayer(0, 40);
+  g.enemies = []; g.dropBudget = { suds: 0, items: 0 };
+  g.sigils = []; g.banner = () => {};
+  g.startWave(34);   // FOUL WEATHER
+  const wave = JH.LEVEL1.waves[34];
+  assert.strictEqual(wave.placements.length, 2, "premise: two pre-placed Bidets");
+  const regulars = g.enemies.filter((e) => e.type !== "bidet" && !e.superElite);
+  assert.strictEqual(regulars.length, 5, "8 cap - 2 placements - 1 super = 5 regulars open");
+  const authoredTotal = 3 + 3 + 2 + (JH.SPRINKLE.counts[5] || 0);   // plunger+tpmummy+gasbag + Air sprinkles
+  assert.strictEqual(authoredTotal, 12, "premise: 12 authored regulars (3 plunger + 3 tpmummy + 2 gasbag + 4 sprinkles)");
+  assert.strictEqual(g.wavePool.length, authoredTotal - regulars.length,
+    "the remaining 7 regulars stay queued in wavePool for reinforcement surges");
+  assert.strictEqual(g.wavePool.length, 7);
+});
+
 test("dev range catalog exposes every implemented combat enemy and boss", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "js", "entities.js"), "utf8");
   const factory = source.slice(source.indexOf("JH.makeEnemy = function"));
@@ -295,6 +359,12 @@ test("air act: sprinkle pool floor keeps fire enemies out of the air roster", ()
     assert.ok(!pool.includes(t), t + " must not sprinkle into the air act");
   // Default arg unchanged: full pool from wave 0.
   assert.ok(Balance.unlockedPool(JH.LEVEL1.waves, 30).includes("mook"));
+  // Bidet is a placement-only enemy: it never appears in any wave's `spawns`
+  // list, so it can never enter the unlocked pool that sprinkles draw from —
+  // double-enforced by SPRINKLE.weights.bidet === 0.
+  const poolAtWave35 = Balance.unlockedPool(JH.LEVEL1.waves, 34, JH.SPRINKLE.poolFloor[5]);
+  assert.ok(!poolAtWave35.includes("bidet"), "Bidet must never enter the sprinkle pool, even by wave 35");
+  assert.strictEqual(JH.SPRINKLE.weights.bidet, 0, "belt-and-suspenders: Bidet's sprinkle weight is 0");
 });
 
 function stubPlayer(x, y) {
