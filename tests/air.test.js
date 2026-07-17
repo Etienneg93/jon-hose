@@ -680,6 +680,16 @@ test("cloudline edge: repeated update after reset cannot multi-hit on adjacent f
   assert.strictEqual(g.player.x, xAfterFirst, "no second reset displaces Jon further on the adjacent frame");
 });
 
+test("cloudline edge: crossing arms the visual poof at the crossing depth", () => {
+  const g = stubHazardGame(100, 40);
+  const edge = new JH.CloudlineEdge(200);
+  g.player.x = 200 + g.player.bodyW; g.player.y = 52;
+  edge.update(1 / 60, g);
+  assert.ok(edge.poofT > 0, "crossing arms the poof timer");
+  assert.strictEqual(edge.poofY, 52, "poof remembers the crossing depth");
+  assert.ok(g.player.x < 200, "reset still happens (mechanic untouched)");
+});
+
 test("wind hazard rim: drawn ellipse IS the hit ellipse; chip + cooldown; enemies shoved not hurt", () => {
   const H = JH.WIND_HAZARD;
   const g = stubHazardGame(100, 40);

@@ -2757,6 +2757,7 @@
       this.x = x;
       this.t = 0;
       this.flashT = 0;   // post-crossing rim flash / gust-burst window (cosmetic)
+      this.poofT = 0; this.poofY = 0;   // crossing poof: visual-only, arms on every crossing
     }
     // Forward rim = the entity's rightward body edge — the edge always
     // sits at the far/right side of the locked arena (Game.startWave).
@@ -2767,6 +2768,7 @@
     update(dt, game) {
       this.t += dt;
       if (this.flashT > 0) this.flashT -= dt;
+      if (this.poofT > 0) this.poofT -= dt;
       const pl = game.player;
       if (!pl || !pl.alive || !this.crossed(pl)) return;
       const C = JH.CLOUDLINE_HOLDOUT;
@@ -2775,6 +2777,7 @@
       pl.x = clamp(this.x - C.resetDist, game.bounds.minX, game.bounds.maxX);
       pl.takeHit(C.edgeDmg, game, this.x);
       this.flashT = 0.35;
+      this.poofT = 0.5; this.poofY = pl.y;   // visual-only crossing poof
       game.shake(5, -1);
       burst(game, this.x, pl.y, 14, "#dff2ff", 10, { speed: 140, life: 0.4, up: 60 });
     }
@@ -2782,13 +2785,36 @@
       const sx = this.x - cam;
       const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 10;
       const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 6;
+      // 1. walkway lip (baked strip or two-tone fallback) at the hit line
+      Assets.drawCloudlineLip(ctx, sx);
+      // 2. cloud churn, sky side only (scald-pass wisp idiom)
       ctx.save();
-      const flashing = this.flashT > 0 && (Math.floor(this.t * 16) & 1);
-      ctx.strokeStyle = flashing ? "#ffffff" : "#bfe6ff";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 4]);
-      ctx.beginPath(); ctx.moveTo(Math.round(sx), yT); ctx.lineTo(Math.round(sx), yB); ctx.stroke();
-      ctx.setLineDash([]);
+      for (let i = 0; i < 6; i++) {
+        const cyc = (this.t * 0.25 + i / 6) % 1;
+        const cy = Geo.feetScreenY(JH.DEPTH_MIN + (i / 6) * (JH.DEPTH_MAX - JH.DEPTH_MIN), 0);
+        const cx = sx + 6 + cyc * 16 + Math.sin(this.t * 0.8 + i * 2.1) * 3;
+        ctx.globalAlpha = 0.28 * (1 - cyc) + 0.06;
+        ctx.fillStyle = i % 2 ? "#d6e4f2" : "#b9c9dd";
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - 3, 7 + cyc * 8, 4 + cyc * 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      // 3. crossing poof
+      if (this.poofT > 0) {
+        const k = 1 - this.poofT / 0.5;
+        const py = Geo.feetScreenY(this.poofY, 0);
+        ctx.save();
+        ctx.globalAlpha = 0.7 * (1 - k);
+        ctx.fillStyle = "#e8f2fb";
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.ellipse(sx - 8 + i * 7, py - 4 - k * 8, 5 + k * 4, 3 + k * 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      ctx.save();
       // Wind streaks falling away on the unsafe (far) side only.
       const burstOn = this.flashT > 0;
       const n = burstOn ? 10 : 5;

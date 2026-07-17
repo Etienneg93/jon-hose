@@ -782,6 +782,31 @@
     ctx.restore();
   });
 
+  // Cloudline lip strip: pavement visibly ends at edge.x. Baked segments
+  // (sprites/cloudline/lip0.png tileable, lip1.png broken-guardrail
+  // variant, 128x128 = 32x32 logical at 4x) take over when present;
+  // fallback is a two-tone band. Drawn at the EXACT edge x — the hit line.
+  const _lipImgs = [JH.Loader.img("sprites/cloudline/lip0.png"),
+                    JH.Loader.img("sprites/cloudline/lip1.png")];
+  Assets.drawCloudlineLip = function (ctx, sx) {
+    const top = JH.Geo.feetScreenY(JH.DEPTH_MIN, 0) - 14;
+    const bottom = JH.Geo.feetScreenY(JH.DEPTH_MAX, 0) + 6;
+    const ok = _lipImgs[0] && _lipImgs[0].complete && _lipImgs[0].naturalWidth;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (ok) {
+      for (let y = top, i = 0; y < bottom; y += 32, i++) {
+        const img = (i % 3 === 2 && _lipImgs[1].naturalWidth) ? _lipImgs[1] : _lipImgs[0];
+        ctx.drawImage(img, Math.round(sx) - 16, Math.round(y), 32, 32);
+      }
+    } else {
+      // two-tone fallback band (replaces the old dashed line)
+      ctx.fillStyle = "#3a4152"; ctx.fillRect(Math.round(sx) - 3, top, 3, bottom - top);
+      ctx.fillStyle = "#8d97ad"; ctx.fillRect(Math.round(sx) - 1, top, 1, bottom - top);
+    }
+    ctx.restore();
+  };
+
   // ---- baked-sprite registration -------------------------------------
   // Baked pixel-art frames (tools/*-sprite*.mjs, 4x logical) drawn 1 art px
   // = 1 logical px, feet-anchored at art.feet, mirrored for facing < 0.
