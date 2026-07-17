@@ -277,13 +277,19 @@ test("air act: pre-placed Bidets are live wave members — block clear until kil
   const bidets = g.enemies.filter((e) => e.type === "bidet");
   assert.strictEqual(bidets.length, 1, "wave 34 opens with its one placed Bidet live on the field");
   assert.ok(!g.wavePool.includes("bidet"), "Bidet must never queue into the reinforcement pool");
-  // Kill everything else. The wave's actual clear gate (js/game.js update(),
-  // the non-holdout/wall/garden branch) is enemies.length===0 && wavePool
-  // empty, with no placement special-case — reproduce that gate directly.
+  assert.ok(g.wavePool.length > 0, "premise: wave 34 still has queued regulars at open (10 authored - 6 open = 4)");
+  // The wave's actual clear gate — js/game.js:2464, quoted verbatim — is a
+  // CONJUNCTION: enemies.length===0 AND wavePool is empty. Evaluate exactly
+  // that expression rather than approximating it.
+  const clearGate = (game) => game.enemies.length === 0 && (!game.wavePool || game.wavePool.length === 0);
+  // Kill everything except the Bidet; queued regulars (wavePool) are still
+  // untouched, so the real gate must stay false even with the field empty
+  // of everything but the Bidet — queued regulars block clear too.
   for (const e of g.enemies) if (e !== bidets[0]) e.dead = true;
   g.enemies = g.enemies.filter((e) => !e.dead);
-  assert.deepStrictEqual(g.enemies, bidets, "the Bidet is the only thing left standing between the wave and clear");
-  assert.ok(g.enemies.length > 0, "wave must not be clearable while its placement is still alive");
+  assert.deepStrictEqual(g.enemies, bidets, "the Bidet is the only live enemy left on the field");
+  assert.strictEqual(clearGate(g), false,
+    "wave must not be clearable while its placement is alive, even before checking wavePool");
   // Kill the Bidet through the same takeDamage/die path every other enemy
   // uses — no special despawn function exists for placements (verified: no
   // "placement" reference anywhere outside spawnWavePlacements itself).
@@ -291,7 +297,13 @@ test("air act: pre-placed Bidets are live wave members — block clear until kil
   bidets[0].takeDamage(9999, hg, 0, 0);
   assert.strictEqual(bidets[0].dead, true, "Bidet dies through the standard Enemy.die path");
   g.enemies = g.enemies.filter((e) => !e.dead);
-  assert.strictEqual(g.enemies.length, 0, "with the Bidet dead, the generic enemies.length===0 gate now clears the wave");
+  assert.strictEqual(clearGate(g), false,
+    "Bidet dead but wavePool still holds queued regulars — the real conjunction still blocks clear");
+  // Drain the queue (as reinforcement trickle would over time) — only now
+  // does the real two-part gate flip true.
+  g.wavePool = [];
+  assert.strictEqual(clearGate(g), true,
+    "with the Bidet dead AND wavePool empty, the real conjunction now clears the wave");
 });
 
 test("air act: wave 35's two placements + super reserve 3 of 8 opening slots; 5 regulars open, 7 queue for later surges", () => {
