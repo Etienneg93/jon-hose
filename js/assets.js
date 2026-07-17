@@ -1015,7 +1015,7 @@
   });
 
   // Gasbag: sagging hover sack; inflates through the vent windup (windFrac).
-  Assets.register("gasbag", (p, opt) => {
+  const gasbagFallback = (p, opt) => {
     const P = JH.PAL;
     const inf = opt.wind ? Math.round(2 + 2 * (opt.windFrac || 0)) : 0;
     const wob = Math.floor((opt.t || 0) * 5) % 2;
@@ -1026,10 +1026,17 @@
     p(-4, 9, 2, 2, "#2a2a1a");                             // dopey face
     p(3, 9, 2, 2, "#2a2a1a");
     p(-1, 6, 3, 1, "#2a2a1a");
-  });
+  };
+  registerBaked("gasbag",
+    { w: 28, h: 29, feet: 28,
+      poses: ["idle0", "idle1", "wind0", "wind1", "vent"] },
+    (opt) => opt.state === "vent" ? "vent"
+           : (opt.state === "wind" || opt.wind) ? ((opt.windFrac || 0) < 0.5 ? "wind0" : "wind1")
+           : idlePose(opt),
+    gasbagFallback);
 
   // Bidet Turret: porcelain pedestal + basin; nozzle rises and spurts on windup.
-  Assets.register("bidet", (p, opt) => {
+  const bidetFallback = (p, opt) => {
     const P = JH.PAL;
     p(-9, 0, 18, 4, P.bidetDk);                  // pedestal base
     p(-6, 4, 12, 8, P.bidet);                    // column
@@ -1040,6 +1047,36 @@
     p(-1, 19 + nz, 3, 3, P.bidetDk);             // nozzle
     if (opt.wind && Math.floor((opt.t || 0) * 12) % 2)
       p(-1, 22 + nz, 3, 2, P.water);             // pressurizing spurt
+  };
+  registerBaked("bidet",
+    { w: 28, h: 29, feet: 28,
+      poses: ["idle0", "idle1", "wind", "fire"] },
+    (opt) => opt.state === "fire" ? "fire"
+           : (opt.state === "wind" || opt.wind) ? "wind"
+           : idlePose(opt),
+    bidetFallback);
+
+  // Wind hazard ("sky vent") image slot: two alternating frames (lazy
+  // broken-spin), 28x16 logical (112x64 @4x, matches WIND_HAZARD.rx*2 wide),
+  // feet-anchored — same fixed-rect blit shape as the tpmummy-puff FX
+  // painter. Plain Assets.register (not registerBaked — no elite variant,
+  // no pose function; WindHazard isn't an Enemy). windhazardReady() lets
+  // WindHazard.draw know whether to skip its procedural body; the rim
+  // ellipse (the hitbox) always renders regardless, in both paths.
+  const _hazardImgs = [JH.Loader.img("sprites/windhazard/idle0.png"),
+                        JH.Loader.img("sprites/windhazard/idle1.png")];
+  Assets.windhazardReady = () => {
+    const img = _hazardImgs[0];
+    return !!(img && img.complete && img.naturalWidth);
+  };
+  Assets.register("windhazard", (p, opt, ctx, x, y, facing) => {
+    const img = _hazardImgs[Math.floor((opt.t || 0) * 2) & 1];
+    if (!img || !img.complete || !img.naturalWidth || !ctx) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -14, -16, 28, 16);
+    ctx.restore();
   });
 
   // ========================== CHARGER ================================

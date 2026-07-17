@@ -1111,6 +1111,23 @@ test("bidet landing shoves at landKnock, not the default takeHit impulse", () =>
     "pressurized-water shove derives from config landKnock");
 });
 
+test("gasbag vent beat + bidet fire beat: visual-only state pulses on the signature moments", () => {
+  const g = stubHazardGame(400, 40);
+  const gb = JH.makeEnemy("gasbag", 100, 40);
+  gb.spawnGrace = 0; gb.ventT = 0; gb.cdTimer = 0;
+  for (let i = 0; i < 600 && g.stinkClouds.length === 0; i++) gb.think(1 / 60, g);
+  assert.strictEqual(g.stinkClouds.length, 1, "premise: a vent completed");
+  assert.ok(gb.ventBeatT > 0, "vent beat armed when the cloud spawns");
+  assert.strictEqual(gb.state, "vent", "vent pose while the beat runs");
+  const bd = JH.makeEnemy("bidet", 100, 40);
+  bd.spawnGrace = 0; bd.cdTimer = 0;
+  g.player.x = 220; g.player.y = 40;   // inside artillery range
+  for (let i = 0; i < 900 && g.embers.length === 0; i++) bd.think(1 / 60, g);
+  assert.ok(g.embers.length > 0, "premise: an arc launched");
+  assert.ok(bd.fireBeatT > 0, "fire beat armed on launch");
+  assert.strictEqual(bd.state, "fire", "fire pose while the beat runs");
+});
+
 test("enterAirAct: arrival state — position, checkpoint, vendor, free-walk trigger", () => {
   // Game.init touches the DOM; drive enterAirAct on a shallow clone instead.
   const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];

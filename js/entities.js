@@ -2867,13 +2867,23 @@
       }
     }
     draw(ctx, cam) {
-      // Procedural fallback: broken fan disc + spark flicker + exact rim.
       const f = this.footprint();
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      const rim = () => {
+        // rim = hitbox — must render in both the image and procedural paths
+        ctx.strokeStyle = "#8d97ad"; ctx.globalAlpha = 0.7; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2); ctx.stroke();
+      };
+      if (Assets.windhazardReady()) {
+        ctx.save();
+        Assets.draw(ctx, "windhazard", sx, sy, 1, { t: this.t });
+        rim();
+        ctx.restore();
+        return;
+      }
+      // Procedural fallback: broken fan disc + spark flicker + exact rim.
       ctx.save();
-      // rim = hitbox
-      ctx.strokeStyle = "#8d97ad"; ctx.globalAlpha = 0.7; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.ellipse(sx, sy, f.rx, f.ry, 0, 0, Math.PI * 2); ctx.stroke();
+      rim();
       // squat vent body + lazily spinning broken blade
       ctx.globalAlpha = 1;
       ctx.fillStyle = "#454f63"; ctx.fillRect(Math.round(sx) - 8, Math.round(sy) - 10, 16, 9);
@@ -6202,11 +6212,14 @@
           if (JH.spawnStinkCloud(game, this.x, this.y)) {
             this._vented = true;
             game.audio.play("sizzle");
+            this.ventBeatT = 0.25;   // visual-only deflate-spurt pose
+            this.state = "vent";     // same-tick flip; the timer carries it through the frames below
           }
           this.cdTimer = d.ventCd;   // unconditional — no re-vent spam either way
         }
         return;
       }
+      if (this.ventBeatT > 0) this.ventBeatT -= dt;
       if (this.cdTimer > 0) this.cdTimer -= dt;
       else if (this.spawnGrace <= 0 && this.ventT <= 0) {
         this.windTimer = d.ventWind; this.windDur = d.ventWind; this.state = "wind";
@@ -6220,6 +6233,7 @@
         this.y += (dy / (dist || 1)) * d.speed * dir * dt * 0.8;
         this.state = "walk";
       } else this.state = "idle";
+      if (this.ventBeatT > 0) this.state = "vent";   // pose only; movement above still applies
     }
     // Super Gasbag death children: a scaled clone of the regular def (same
     // Object.assign-clone idiom as makeElite/makeSuper — JH.ENEMIES.gasbag
@@ -6339,15 +6353,23 @@
         if (this.windTimer <= 0) {
           game.embers.push(new BidetShot(this.x, this.y, this.aimX, this.aimY, d));
           this.cdTimer = d.lobCd;
+          this.fireBeatT = 0.2;   // visual-only recoil pose
+          this.state = "fire";    // same-tick flip; the timer carries it through the frames below
         }
         return;
       }
-      if (this.cdTimer > 0) { this.cdTimer -= dt; this.state = "idle"; return; }
+      if (this.fireBeatT > 0) this.fireBeatT -= dt;
+      if (this.cdTimer > 0) {
+        this.cdTimer -= dt;
+        this.state = this.fireBeatT > 0 ? "fire" : "idle";
+        return;
+      }
       if (this.spawnGrace <= 0) {
         // Lock the landing spot NOW — the telegraph never chases.
         this.aimX = pl.x; this.aimY = pl.y;
         this.windTimer = d.aimWind; this.windDur = d.aimWind; this.state = "wind";
       }
+      if (this.fireBeatT > 0) this.state = "fire";   // pose only; movement above still applies
     }
   }
   JH.BidetTurret = BidetTurret;
