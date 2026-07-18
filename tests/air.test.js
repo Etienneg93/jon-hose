@@ -177,6 +177,39 @@ test("holdout cadence: Cloudline (wave 33) reads CLOUDLINE_HOLDOUT's cap; the ol
     "premise: the two cadences must actually differ for this test to mean anything");
 });
 
+test("holdout spawn X: right-side band clamps to the cloud edge, not the raw bounds", () => {
+  const origRandom = Math.random;
+  const g = Object.create(JH.Game);
+  g.bounds = { minX: 0, maxX: 480 };
+  g.cloudlineEdge = new JH.CloudlineEdge(g.bounds.maxX - JH.CLOUDLINE_HOLDOUT.edgeInset);   // 452
+  try {
+    // Force the right-side branch (Math.random() >= 0.5), then force the
+    // widest roll (Math.random() = 0 -> rightCap - 0) so the result is
+    // exactly the clamp boundary, not merely "somewhere under maxX".
+    let calls = 0;
+    Math.random = () => (calls++ === 0 ? 0.9 : 0);
+    const ex = g.holdoutSpawnX();
+    const uncampedRightEdge = g.bounds.maxX - 10;   // 470: the old, edge-unaware boundary
+    assert.ok(ex <= g.cloudlineEdge.x - 10,
+      "spawn never lands past cloudlineEdge.x - 10, even at the widest roll");
+    assert.strictEqual(ex, g.cloudlineEdge.x - 10, "widest roll lands exactly at the clamp boundary");
+    assert.ok(ex < uncampedRightEdge, "the clamp is strictly tighter than the raw bounds-derived edge");
+  } finally { Math.random = origRandom; }
+});
+
+test("holdout spawn X: right-side band falls back to bounds.maxX - 10 with no cloud edge", () => {
+  const origRandom = Math.random;
+  const g = Object.create(JH.Game);
+  g.bounds = { minX: 0, maxX: 480 };
+  g.cloudlineEdge = null;
+  try {
+    let calls = 0;
+    Math.random = () => (calls++ === 0 ? 0.9 : 0);
+    const ex = g.holdoutSpawnX();
+    assert.strictEqual(ex, g.bounds.maxX - 10, "unchanged behavior when no cloud edge is live");
+  } finally { Math.random = origRandom; }
+});
+
 test("cloudline holdout: startWave reads its 24s duration from config and posts the exact edge-warning banner", () => {
   JH.Camera.reset();
   const g = Object.create(JH.Game);
@@ -304,9 +337,11 @@ test("air act: pre-placed Bidets are live wave members — block clear until kil
   assert.strictEqual(bidets.length, 1, "wave 34 opens with its one placed Bidet live on the field");
   assert.ok(!g.wavePool.includes("bidet"), "Bidet must never queue into the reinforcement pool");
   assert.ok(g.wavePool.length > 0, "premise: wave 34 still has queued regulars at open (10 authored - 6 open = 4)");
-  // The wave's actual clear gate — js/game.js:2464, quoted verbatim — is a
-  // CONJUNCTION: enemies.length===0 AND wavePool is empty. Evaluate exactly
-  // that expression rather than approximating it.
+  // The wave's actual clear gate — js/game.js's reinforcementWaveCleared(),
+  // factored out of the update() "else" branch (was inlined at ~2482) so it
+  // can be driven directly instead of approximated — is a CONJUNCTION:
+  // enemies.length===0 AND wavePool is empty. Evaluate exactly that
+  // expression AND the real method on the same code object.
   const clearGate = (game) => game.enemies.length === 0 && (!game.wavePool || game.wavePool.length === 0);
   // Kill everything except the Bidet; queued regulars (wavePool) are still
   // untouched, so the real gate must stay false even with the field empty
@@ -316,6 +351,8 @@ test("air act: pre-placed Bidets are live wave members — block clear until kil
   assert.deepStrictEqual(g.enemies, bidets, "the Bidet is the only live enemy left on the field");
   assert.strictEqual(clearGate(g), false,
     "wave must not be clearable while its placement is alive, even before checking wavePool");
+  assert.strictEqual(g.reinforcementWaveCleared(), false,
+    "the real reinforcementWaveCleared() agrees: placement alive blocks clear");
   // Kill the Bidet through the same takeDamage/die path every other enemy
   // uses — no special despawn function exists for placements (verified: no
   // "placement" reference anywhere outside spawnWavePlacements itself).
@@ -325,11 +362,24 @@ test("air act: pre-placed Bidets are live wave members — block clear until kil
   g.enemies = g.enemies.filter((e) => !e.dead);
   assert.strictEqual(clearGate(g), false,
     "Bidet dead but wavePool still holds queued regulars — the real conjunction still blocks clear");
+  assert.strictEqual(g.reinforcementWaveCleared(), false,
+    "the real reinforcementWaveCleared() agrees: queued wavePool still blocks clear");
   // Drain the queue (as reinforcement trickle would over time) — only now
   // does the real two-part gate flip true.
   g.wavePool = [];
   assert.strictEqual(clearGate(g), true,
     "with the Bidet dead AND wavePool empty, the real conjunction now clears the wave");
+  assert.strictEqual(g.reinforcementWaveCleared(), true,
+    "the real reinforcementWaveCleared() agrees: Bidet dead + empty wavePool clears the wave");
+  // Drive the actual call site too: waveCleared_ is a heavy method (drops
+  // rewards, spawns vendor, may call win()) so stub just enough of it to
+  // observe the call without exercising its body, then replicate the exact
+  // "if (this.reinforcementWaveCleared()) this.waveCleared_();" call site.
+  let clearedCalls = 0;
+  g.waveCleared_ = () => { clearedCalls++; };
+  if (g.reinforcementWaveCleared()) g.waveCleared_();
+  assert.strictEqual(clearedCalls, 1,
+    "the real call-site conditional invokes waveCleared_ exactly once once the gate is true");
 });
 
 test("air act: wave 35's two placements + super reserve 3 of 8 opening slots; 5 regulars open, 7 queue for later surges", () => {

@@ -947,6 +947,28 @@ test("super plunger: windup locks aim then fires exactly 3 pulses over pullWind 
     "each of the 3 pulses pulled Jon pullStep toward the Plunger");
 });
 
+test("super plunger: 72 consecutive real 1/60 dt steps (float accumulation) still fire exactly 3 pulses and reach lunge", () => {
+  // The exact-boundary test above drives dt = pullWind/pullPulses per step,
+  // which never touches the float-accumulation path the epsilon guard
+  // (entities.js ~6114) exists for. Real gameplay steps at a fixed 1/60,
+  // and summing 72 of those via repeated subtraction lands pullT a hair
+  // off zero (not exactly 0) — this drives that real path instead.
+  const SP = JH.SUPER_PLUNGER;
+  const g = makeThinkGame(60, 40);
+  const e = JH.makeEnemy("plunger", 200, 40);
+  e.makeSuper(); e.spawnGrace = 0;
+  e.aimAng = Math.PI; e.state = "pull"; e.pullT = SP.pullWind; e.pulseIdx = 0;
+  const x0 = g.player.x;
+  for (let i = 0; i < 72; i++) {
+    e.think(1 / 60, g);
+    assert.ok(e.pulseIdx <= SP.pullPulses, "pulseIdx never overshoots pullPulses off-boundary");
+  }
+  assert.strictEqual(e.pulseIdx, SP.pullPulses, "exactly 3 pulses fired after 72 real 1/60 steps");
+  assert.strictEqual(e.state, "lunge", "the pull-to-lunge transition still lands on the accumulated-float path");
+  assert.strictEqual(g.player.x - x0, SP.pullPulses * SP.pullStep,
+    "all 3 pulses still pulled Jon pullStep each, off-boundary dt included");
+});
+
 test("super plunger pull: a target inside the locked wedge is pulled; behind it is not", () => {
   const SP = JH.SUPER_PLUNGER;
   const gIn = makeThinkGame(140, 40);

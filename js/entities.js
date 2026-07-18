@@ -2571,10 +2571,10 @@
       // Per-instance overrides (Super Gasbag's mega-cloud); default to
       // JH.STINK so every existing caller (regular Gasbag vent/pop-fast) is
       // untouched.
-      this.radius = (opts && opts.radius) || JH.STINK.radius;
-      this.life = (opts && opts.life) || JH.STINK.life;
-      this.friendlyLife = (opts && opts.friendlyLife) || JH.STINK.friendlyLife;
-      this.friendlyDps = (opts && opts.friendlyDps) || JH.STINK.friendlyDps;
+      this.radius = (opts && opts.radius) ?? JH.STINK.radius;
+      this.life = (opts && opts.life) ?? JH.STINK.life;
+      this.friendlyLife = (opts && opts.friendlyLife) ?? JH.STINK.friendlyLife;
+      this.friendlyDps = (opts && opts.friendlyDps) ?? JH.STINK.friendlyDps;
       this.t = 0;
       this.sprayProgress = 0;   // dispersal seconds accumulated (damage-scaled)
       this.dead = false;
@@ -2778,10 +2778,11 @@
       // Positional truth first: reset happens regardless of whether the
       // HP hit below actually lands.
       pl.x = clamp(this.x - C.resetDist, game.bounds.minX, game.bounds.maxX);
-      pl.takeHit(C.edgeDmg, game, this.x);
+      // takeHit already shakes when the hit lands; only add the edge's own
+      // shake when i-frames negate it, so a crossing is never double-shaken.
+      if (!pl.takeHit(C.edgeDmg, game, this.x)) game.shake(5, -1);
       this.flashT = 0.35;
       this.poofT = 0.5; this.poofY = pl.y;   // visual-only crossing poof
-      game.shake(5, -1);
       burst(game, this.x, pl.y, 14, "#dff2ff", 10, { speed: 140, life: 0.4, up: 60 });
     }
     draw(ctx, cam) {

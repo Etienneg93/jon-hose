@@ -24,9 +24,6 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 
 // ---- load the real game stack, exactly like tests/air.test.js ------------
-const warnings = [];
-const realWarn = console.warn;
-console.warn = (...a) => { warnings.push(a.join(" ")); realWarn(...a); };
 global.window = global.window || {};
 require("../js/config.js");
 global.window.JH.Loader = { img: () => ({}) };
@@ -35,7 +32,6 @@ require("../js/upgrades.js");
 require("../js/benedictions.js");
 require("../js/entities.js");
 require("../js/game.js");
-console.warn = realWarn;
 const JH = global.window.JH;
 const Balance = require("../js/balance.js");
 
@@ -160,17 +156,32 @@ function waveStats(idx) {
     return { authoredCount, placementCount: 0, hazards, queued: authoredCount, peak: maxAlive, cap, toughFrac, superName, kind: "holdout" };
   }
 
-  // Regular branch (game.js ~771-822): placements + superElite reserve
-  // slots before the authored+sprinkle opening slice.
+  // Regular branch (game.js ~776-813): placements + superElite reserve slots
+  // before the authored+sprinkle opening slice; wavePool = the leftover
+  // after openCount, exactly like `this.wavePool = types.slice(openCount)`.
   const authoredCount = (wave.spawns || []).reduce((s, g) => s + g.count, 0);
   const placementCount = (wave.placements || []).length;
   const openCount = placementCount > 0
     ? Math.max(0, cap - placementCount - (wave.superElite ? 1 : 0))
     : cap;
-  const sprinkleCount = JH.SPRINKLE.counts[actLevel + 1] || 0;
-  const availableToOpen = authoredCount + sprinkleCount;   // upper bound; pickSprinkles may return fewer
-  const opened = Math.min(openCount, availableToOpen);
-  const queued = Math.max(0, authoredCount - openCount);   // authored-only leftover (sprinkles are opportunistic extras)
+  const spawnList = Balance.capEnemyType(wave.spawns, "charger", JH.WAVECAP.charger, "mook");
+  const types = [];
+  spawnList.forEach((g) => { for (let k = 0; k < g.count; k++) types.push(g.type); });
+  const SPR = JH.SPRINKLE;
+  const sprinkleCount = SPR.counts[actLevel + 1] || 0;
+  const poolFrom = Balance.ticketBudget(actLevel, JH.SPRINKLE.poolFloor || [0]);
+  const pool = Balance.unlockedPool(JH.LEVEL1.waves, idx, poolFrom);
+  const chargerRoom = Math.max(0, JH.WAVECAP.charger - types.filter((t) => t === "charger").length);
+  // rng is fixed (not Math.random): pickSprinkles's returned COUNT never
+  // depends on which value rng draws (only WHICH type is picked does) —
+  // eligibility is decided by heavies/typeCaps, so this stays deterministic
+  // while still exercising the exact same shortfall logic startWave uses.
+  types.push(...Balance.pickSprinkles(pool, sprinkleCount, {
+    weights: SPR.weights, heavies: SPR.heavies, heavyCap: SPR.heavyCap,
+    typeCaps: { charger: chargerRoom }, rng: () => 0,
+  }));
+  const opened = Math.min(openCount, types.length);
+  const queued = Math.max(0, types.length - openCount);   // this.wavePool.length, sprinkle overflow included
   const peak = placementCount + (wave.superElite ? 1 : 0) + opened;
   return { authoredCount, placementCount, hazards, queued, peak, cap, toughFrac, superName, kind: "regular" };
 }

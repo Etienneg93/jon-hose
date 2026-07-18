@@ -461,6 +461,7 @@
       this.stinkClouds = [];
       this.gustLanes = [];
       this.firePatches = [];
+      this.windHazards = [];
       this.shields = this.shields.filter((s) => s.rangeFixture);
       this.slowZones = this.slowZones.filter((z) => z.rangeFixture);
       const e = this.spawnEnemy(entry.id, this.rangeSpawnX, this.rangeSpawnY);
@@ -865,6 +866,26 @@
       return wave.cloudlineEdge
         ? { spawnEvery: JH.CLOUDLINE_HOLDOUT.spawnEvery, maxAlive: JH.CLOUDLINE_HOLDOUT.maxAlive }
         : { spawnEvery: JH.WALL.spawnEvery, maxAlive: JH.WALL.maxAlive };
+    },
+    // Holdout reinforcement spawn X: alternates edges so pressure comes from
+    // ahead AND behind. The right/far-side band is capped at
+    // cloudlineEdge.x - 10 when a cloud edge is live, so a spawn never lands
+    // past the walkway edge (enemies are edge-immune — an unclamped spawn
+    // would visually stand over the void).
+    holdoutSpawnX() {
+      const left = this.bounds.minX, right = this.bounds.maxX;
+      if (Math.random() < 0.5) return left + 10 + Math.random() * 40;
+      const rightCap = this.cloudlineEdge
+        ? Math.min(right - 10, this.cloudlineEdge.x - 10) : right - 10;
+      return rightCap - Math.random() * 40;
+    },
+    // The plain-reinforcement wave's clear gate (game.js update, "else"
+    // branch): true once the field's empty AND no queued reinforcements
+    // remain in wavePool. Wall/holdout/garden/douse waves clear on their
+    // own trigger instead — this predicate only governs the fallthrough
+    // (trickle/batch reinforcement) branch.
+    reinforcementWaveCleared() {
+      return this.enemies.length === 0 && (!this.wavePool || this.wavePool.length === 0);
     },
     spawnWaveEnemy(type, eliteScale, slot) {
       const left = this.bounds.minX, right = this.bounds.maxX;
@@ -2414,10 +2435,10 @@
             this.wallSpawnTimer = cadence.spawnEvery;
             const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
             const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
-            // Spawn from either edge so pressure comes from ahead AND behind.
-            const ex = (Math.random() < 0.5)
-              ? this.bounds.minX + 10 + Math.random() * 40
-              : this.bounds.maxX - 10 - Math.random() * 40;
+            // Spawn from either edge so pressure comes from ahead AND behind
+            // (right band clamped to stay off the cloudline edge — see
+            // holdoutSpawnX).
+            const ex = this.holdoutSpawnX();
             const e = this.spawnEnemy(type, ex, ey, { infinite: true, elite: this.nextEliteScale() });
             e.spawnGrace = 0.2;
           }
@@ -2466,8 +2487,7 @@
             }
           }
           // The wave only clears once the queue has fully emptied onto the field.
-          if (this.enemies.length === 0 && (!this.wavePool || this.wavePool.length === 0))
-            this.waveCleared_();
+          if (this.reinforcementWaveCleared()) this.waveCleared_();
         }
       }
 

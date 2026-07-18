@@ -1188,6 +1188,7 @@
       { name: "CLOUDLINE HOLDOUT", holdout: true, cloudlineEdge: true,
         // Direction stays rightward — the edge is the encounter.
         gusts: [{ yMin: 8, yMax: 28, dirs: [1] },
+                // phase 3.6 > blowDur 3.5 keeps the two lanes' blows from overlapping
                 { yMin: 58, yMax: 78, dirs: [1], phase: 3.6 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
       // One pre-placed Bidet + superElite reserve two of the eight field-cap
@@ -1202,6 +1203,7 @@
       { name: "FOUL WEATHER", tough: true, superElite: "gasbag",
         // The squeeze: opposed lanes, offset phases, rolled depth + band.
         gusts: [{ yMin: 14, yMax: 40, dirs: [1] },
+                // phase 3.6 > blowDur 3.5 keeps the two lanes' blows from overlapping
                 { yMin: 46, yMax: 72, dirs: [-1], phase: 3.6 }],
         placements: [{ type: "bidet", x: 112, y: 18 }, { type: "bidet", x: 344, y: 68 }],
         hazards: [{ x: 150, y: 30 }, { x: 290, y: 56 }],
