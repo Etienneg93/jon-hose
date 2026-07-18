@@ -1085,6 +1085,32 @@ test("elite fuse spawns 1 child on death; super spawns 3", () => {
   assert.strictEqual(spawned.length, 4);
 });
 
+test("fuse children spawn with a real contact-timer grace, not just spawnGrace", () => {
+  const g = makeThinkGame(400, 40);
+  const spawned = [];
+  g.spawnEnemy = (type, x, y, opts) => { const c = JH.makeEnemy(type, x, y); if (opts && opts.infinite) c.infinite = true; spawned.push(c); return c; };
+  const e = JH.makeEnemy("fuse", 100, 40);
+  e.makeElite();
+  e.die(g);
+  const child = spawned[0];
+  g.enemies.push(child);
+  // The death-burst hop (z=24,vz=90) already keeps contact out of reach for
+  // its first ~0.33s via the z-gap check alone, which would mask a missing
+  // contactTimer grace. Force the worst case the brief calls out directly:
+  // a child already landed and overlapping Jon.
+  child.dropping = false; child.z = 0; child.vz = 0;
+  g.player.x = child.x; g.player.y = child.y;
+  const hp0 = g.player.hp;
+  child.update(1 / 60, g);
+  child.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0,
+    "contact-damage grace blocks the touch on the frames immediately after the death burst");
+  // Advance past the 0.5s grace with the overlap held — the gate must not
+  // be accidentally permanent; damage lands once contactTimer expires.
+  for (let i = 0; i < 40 && g.player.hp === hp0; i++) child.update(1 / 60, g);
+  assert.ok(g.player.hp < hp0, "damage lands once the 0.5s grace expires");
+});
+
 // ---- super gasbag: Fog of War death burst ----
 
 test("super gasbag pre-vent death: exactly one friendly mega-cloud + two minis", () => {

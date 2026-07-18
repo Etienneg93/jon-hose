@@ -5801,7 +5801,12 @@
         const cx = clamp(this.x + Math.cos(ang) * 26, game.bounds.minX, game.bounds.maxX);
         const cy = clamp(this.y + Math.sin(ang) * 14, JH.DEPTH_MIN, JH.DEPTH_MAX);
         const child = game.spawnEnemy("fuse", cx, cy, { infinite: true });
-        if (child) { child.z = 24; child.vz = 90; child.spawnGrace = 0.5; }
+        // spawnGrace alone only gates lit-fuse behavior — the shared
+        // contact-damage block in Enemy.update reads contactTimer, not
+        // spawnGrace (mirrors the Super Gasbag mini fix). Set both to the
+        // same 0.5s so a child landing on Jon can't touch-damage him the
+        // instant it appears.
+        if (child) { child.z = 24; child.vz = 90; child.spawnGrace = 0.5; child.contactTimer = 0.5; }
       }
       super.die(game);
     }
