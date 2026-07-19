@@ -2626,3 +2626,39 @@ test("procSuperEliteArrival: grants pressure buff + floater only with prayer_bea
   assert.strictEqual(g2.player.pressureBuffT, 0);
   assert.strictEqual(floats.length, 1);
 });
+
+test("wake puddles pull enemies toward their center", () => {
+  const g = makeThinkGame(400, 40);
+  const z = new JH.SlowZone(100, 40, 16, 3, { vsEnemies: true, pull: JH.BENE_TUNE.wakePull });
+  const e = JH.makeEnemy("mook", 110, 40);
+  e.spawnGrace = 0;
+  g.enemies.push(e);
+  z.update(0.25, g);
+  assert.ok(e.x < 110, "inside the rim the enemy is pulled toward center");
+  const far = JH.makeEnemy("mook", 200, 40);
+  g.enemies.push(far);
+  z.update(0.25, g);
+  assert.strictEqual(far.x, 200, "outside the rim no pull");
+});
+
+test("split stream arc share derives from BENE_TUNE", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("split_stream");   // rank 1
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;   // full pressure tier
+  p.facing = 1;
+  const primary = new JH.Enemy("mook", p.x + 30, p.y);       // in spray path, sole blocker
+  const secondary = new JH.Enemy("mook", p.x - 30, p.y);     // behind the nozzle, never hit directly
+  g.enemies = [primary, secondary];
+  assert.ok(Math.hypot(secondary.x - primary.x, secondary.y - primary.y) <= 80,
+    "secondary is within Split Stream's arc range of the primary");
+  p.doSpray(0.05, g);
+  const primaryDmg = primary.maxHp - primary.hp;
+  const secondaryDmg = secondary.maxHp - secondary.hp;
+  assert.ok(primaryDmg > 0, "primary took direct spray damage");
+  assert.ok(secondaryDmg > 0, "secondary took arc damage");
+  assert.ok(Math.abs(secondaryDmg / primaryDmg - JH.BENE_TUNE.splitArcFrac) < 1e-6,
+    "arc share matches BENE_TUNE.splitArcFrac at rank 1");
+  B.reset();
+});

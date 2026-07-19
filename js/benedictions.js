@@ -28,11 +28,11 @@
   const DEFS = [
     // Water — control & sustain
     { id: "split_stream", verb: "stream", element: "water", kind: "boon", name: "Split Stream",
-      desc: "50% of spray damage arcs to one nearby enemy with a visible chain-stream",
-      descII: "two extra targets" },
+      desc: "{g:35%} of spray damage arcs to a nearby enemy",
+      descII: "{g:50%} to {g:2} enemies" },
     { id: "baptismal_wake", verb: "dash", element: "water", kind: "boon", name: "Baptismal Wake",
-      desc: "Dash leaves a puddle (enemy-slowing, 0.7x, 3s)",
-      descII: "larger + enemies inside take +10% dmg" },
+      desc: "Dash lays a puddle that {g:pulls} enemies in and slows 0.7× (3s)",
+      descII: "stronger pull + {g:40%} larger" },
     { id: "overflow", verb: "stream", element: "water", kind: "boon", name: "Overflow",
       desc: "Tank ≥80%: {g:+20%} {i:dmg} · tank <20%: {g:2×} {i:water} regen",
       descII: "70% / {g:+30%} · 30% / {g:3×}" },

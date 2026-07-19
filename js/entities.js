@@ -489,12 +489,16 @@
         this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
-        // Baptismal Wake: dash leaves an enemy-slowing puddle; rank II also
-        // soaks enemies standing in it (see SlowZone's vsEnemies comment).
+        // Baptismal Wake: dash leaves an enemy-slowing, enemy-pulling puddle;
+        // rank II is a bigger radius and a stronger pull (see SlowZone.pull).
         const wakeRank = this.beneRank("baptismal_wake");
-        if (wakeRank && game.slowZones)
-          game.slowZones.push(new JH.SlowZone(this.x, this.y, 16, 3,
-            { vsEnemies: true, slowMult: 0.7, dmgAmp: wakeRank >= 2 ? 1.1 : 1 }));
+        if (wakeRank && game.slowZones) {
+          const T = JH.BENE_TUNE;
+          game.slowZones.push(new JH.SlowZone(
+            this.x, this.y, wakeRank >= 2 ? Math.round(16 * T.wakeRadiusIIMult) : 16, 3,
+            { vsEnemies: true, slowMult: 0.7,
+              pull: wakeRank >= 2 ? T.wakePullII : T.wakePull }));
+        }
       }
       let speed = S.moveSpeed * this.zoneSlow;   // ground-zone slow; dash below overrides this entirely
       // TP-wrap snare: a soft timed slow (never a root). Dash overrides speed
@@ -973,10 +977,13 @@
       }
       // Vampiric Hose: convert a fraction of spray damage into HP.
       if (healAmt > 0) this.hp = Math.min(S.maxHp, this.hp + healAmt);
-      // Split Stream: 50% damage arc from each hit enemy to its closest
-      // nearby enemies — rank I picks 1 secondary, rank II picks 3.
+      // Split Stream: BENE_TUNE.splitArcFrac(II) damage arcs from each hit
+      // enemy to its closest nearby enemies — rank I picks 1 secondary,
+      // rank II picks BENE_TUNE.splitTargetsII.
       if (ssRank && hitEnemies.length > 0) {
-        const maxSecondaries = ssRank >= 2 ? 3 : 1;
+        const T = JH.BENE_TUNE;
+        const arcFrac = ssRank >= 2 ? T.splitArcFracII : T.splitArcFrac;
+        const maxSecondaries = ssRank >= 2 ? T.splitTargetsII : 1;
         for (const primary of hitEnemies) {
           const nearby = game.enemies.filter((e) =>
             !e.dead && !e.dropping && e !== primary && !hitEnemies.includes(e)
@@ -985,7 +992,7 @@
             Math.hypot(a.x - primary.x, a.y - primary.y) - Math.hypot(b.x - primary.x, b.y - primary.y));
           for (const e of nearby.slice(0, maxSecondaries)) {
             const m2 = e.def ? (e.def.waterMult || 1) : 1;
-            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * 0.50, game, this.facing, 0);
+            e.takeDamage(S.sprayDamage * dmgScale * m2 * dt * arcFrac, game, this.facing, 0);
             // Chain visual: thin stream of particles from primary to secondary.
             const cx = e.x - primary.x, cy = e.y - primary.y;
             const chainLen = Math.hypot(cx, cy) || 1;
@@ -2933,10 +2940,13 @@
   // the super-Bulwark's thrown-shield puddle, which slows Jon. `vsEnemies`
   // mode (Baptismal Wake's dash puddle) inverts that — it tags non-boss
   // enemies inside with `_puddleSlow` (consumed by Enemy.update, see there)
-  // instead of touching the player. `dmgAmp` > 1 (rank II Wake) doesn't
-  // multiply damage directly here — it soaks tagged enemies' wetness to
-  // >=0.35 instead, which feeds Baptize's wet-damage bonus naturally rather
-  // than stacking a second damage-multiplier path.
+  // instead of touching the player. `pull` (Baptismal Wake) drags tagged
+  // enemies toward the zone center each tick (full speed in x, half in y —
+  // depth pulls gentler). `dmgAmp` > 1 doesn't multiply damage directly
+  // here — it soaks tagged enemies' wetness to >=0.35 instead, which feeds
+  // Baptize's wet-damage bonus naturally rather than stacking a second
+  // damage-multiplier path; no current caller passes it (Wake uses `pull`
+  // for its rank II payoff instead).
   class SlowZone {
     constructor(x, y, r, dur, opts) {
       this.x = x; this.y = y; this.r = r; this.dur = dur;
@@ -2944,6 +2954,7 @@
       this.vsEnemies = !!(opts && opts.vsEnemies);
       this.slowMult = (opts && opts.slowMult) || 0.55;
       this.dmgAmp = (opts && opts.dmgAmp) || 1;
+      this.pull = (opts && opts.pull) || 0;   // px/s toward center, vsEnemies only (Baptismal Wake)
     }
     update(dt, game) {
       this.t += dt;
@@ -2954,6 +2965,13 @@
           if (e.dead || e.isBoss) continue;
           if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, this.r)) continue;
           e._puddleSlow = this.slowMult;
+          if (this.pull) {
+            const dx = this.x - e.x, dy = this.y - e.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const step = Math.min(dist, this.pull * dt);
+            e.x += (dx / dist) * step;
+            e.y += (dy / dist) * step * 0.5;   // depth pulls gentler
+          }
           if (this.dmgAmp > 1) e.wetness = Math.max(e.wetness, 0.35);
           // Mudslide: a knocked-back enemy crossing the puddle gets dragged
           // harder (knockback amplified while inside), then keeps a lingering
