@@ -1778,6 +1778,37 @@ test("Eye of the Storm: takeHit no-ops while stormT is active, and consumes no H
   assert.ok(p.invulnTimer > 0, "a brief invuln follows the storm dodge, like a normal dodge");
 });
 
+test("eye of the storm: emergency bubble under the HP threshold, 30s cd", () => {
+  const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("eye_of_storm");
+  const p = makePlayer();
+  const g = { particles: [], audio: { play() {} }, shake() {}, hitStop() {} };
+  p.hp = p.stats.maxHp * (T.eyeHpFrac - 0.01);
+  p.eyeCdT = 0;
+  const landed = p.takeHit(20, g, p.x - 10);
+  assert.strictEqual(landed, false, "hit under the HP threshold is blocked by the emergency bubble");
+  assert.strictEqual(p.stormT, T.eyeShieldS, "bubble grants the rank-1 shield window");
+  assert.strictEqual(p.eyeCdT, T.eyeCd, "trigger starts the 30s cooldown");
+
+  // Shield expires but the cooldown is still running — the next hit lands.
+  p.stormT = 0; p.invulnTimer = 0; p.dashTimer = 0; p.dashGraceT = 0;
+  const hp1 = p.hp;
+  const landed2 = p.takeHit(20, g, p.x - 10);
+  assert.strictEqual(landed2, true, "cooldown blocks a second trigger, hit lands");
+  assert.strictEqual(p.hp, hp1 - 20);
+
+  // Above the HP threshold, even off cooldown: no trigger.
+  B.reset(); B.take("eye_of_storm");
+  const p2 = makePlayer();
+  p2.hp = p2.stats.maxHp;
+  p2.eyeCdT = 0;
+  const landed3 = p2.takeHit(20, g, p2.x - 10);
+  assert.strictEqual(landed3, true, "hp above threshold — hit lands, no shield granted");
+  assert.strictEqual(p2.stormT, 0, "no bubble granted above the threshold");
+  B.reset();
+});
+
 test("Slipstream: freeSprayT skips the water drain in doSpray", () => {
   const g = makeThinkGame(60, 40);
   const p = makePlayer();

@@ -73,17 +73,17 @@
 
     // Air — tempo
     { id: "gale_stride", verb: "dash", element: "air", kind: "boon", name: "Gale Stride",
-      desc: "Dash travels 40% farther in the same time",
-      descII: "60%" },
+      desc: "Dash travels {g:+25%} farther",
+      descII: "{g:+40%}" },
     { id: "slipstream", verb: "dash", element: "air", kind: "boon", name: "Slipstream Draft",
       desc: "0.5s of free-water spray after each dash",
       descII: "0.8s" },
     { id: "tailwind", verb: "body", element: "air", kind: "boon", name: "Tailwind Tithe",
-      desc: "+2% move speed per GUSH combo, cap +20%",
-      descII: "cap +30%" },
+      desc: "The wind carries your water: {g:+20%} {i:range} and {g:+20%} {i:knockback}",
+      descII: "{g:+30%} / {g:+30%}" },
     { id: "eye_of_storm", verb: "body", element: "air", kind: "boon", name: "Eye of the Storm",
-      desc: "1s guaranteed dodge at wave start & after sigil pickup",
-      descII: "1.5s + 15% move during" },
+      desc: "Under {g:30%} {i:hp}, the next hit is blocked by a {g:1.5s} immunity shield (30s cd)",
+      descII: "{g:40%} {i:hp} / {g:2s} shield" },
 
     // Duos — dual-glyph, needs >=1 owned boon from each listed element
     { id: "steam_sermon", kind: "duo", needs: ["water", "fire"], name: "Steam Sermon",
@@ -201,7 +201,11 @@
       // correctly regardless of module require order in tests.
       const T = (typeof window !== "undefined" ? window : globalThis).JH.BENE_TUNE;
       if (r("bedrock")) s.maxHp += r("bedrock") >= 2 ? T.bedrockHpII : T.bedrockHp;
-      if (r("gale_stride")) s.dashSpeed *= r("gale_stride") >= 2 ? 1.6 : 1.4;
+      if (r("gale_stride")) s.dashSpeed *= 1 + (r("gale_stride") >= 2 ? T.galeStrideII : T.galeStride);
+      if (r("tailwind")) {
+        s.sprayRange *= 1 + (r("tailwind") >= 2 ? T.tailwindRangeII : T.tailwindRange);
+        s.knockback *= 1 + (r("tailwind") >= 2 ? T.tailwindKnockII : T.tailwindKnock);
+      }
       if (r("sure_grip") >= 2) s.knockback *= 1.1;   // rank 1's spray-slow removal is computed live off beneRank (entities.js)
       return s;
     },

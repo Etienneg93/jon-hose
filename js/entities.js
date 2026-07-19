@@ -197,7 +197,8 @@
       this.nearShop = false;
       this.shopWheelFocus = false;   // set by game.js: shop cursor is on the relic wheel row (left/right = card nav)
       this.zoneSlow = 1;      // ground-zone walk-speed multiplier (SlowZone); reset every frame in game.js
-      this.stormT = 0;        // Eye of the Storm: guaranteed-dodge window remaining (consumed elsewhere)
+      this.stormT = 0;        // Eye of the Storm: active immunity-bubble window remaining
+      this.eyeCdT = 0;        // Eye of the Storm: cooldown before the emergency bubble can trigger again
       this.upgradeQ = [];     // pending stat-gain sequence entries {icon, text}
       this.upgradeT = 0;      // time left on the entry currently showing
       this.upgradeIdx = 0;    // entries played this burst — drives the pitch ladder
@@ -272,7 +273,7 @@
       this.concertaTimer = 0; this.pressureBuffT = 0;
       this.gushRegenT = 0; this.gushRegenRate = 0;
       this.freeSprayT = 0;
-      this.stormT = 0; this.vigorT = 0;
+      this.stormT = 0; this.vigorT = 0; this.eyeCdT = 0;
       this.bootsCdT = 0; this.dashGraceT = 0;
       this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
       this.overshield = 0;   // dive shield doesn't survive death
@@ -368,6 +369,7 @@
       if (this.freeSprayT > 0) this.freeSprayT -= dt;
       if (this.xpFlashT > 0) this.xpFlashT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
+      if (this.eyeCdT > 0) this.eyeCdT -= dt;
       if (this.vigorT > 0) this.vigorT -= dt;
       if (this.gasT > 0) this.gasT -= dt;
       if (this.snareT > 0) this.snareT -= dt;
@@ -548,8 +550,6 @@
       // TP-wrap snare: a soft timed slow (never a root). Dash overrides speed
       // entirely below, so dashing out remains full strength.
       if (this.snareT > 0) speed *= this.snareMult;
-      if (this.beneRank("tailwind"))
-        speed *= 1 + Math.min(this.beneRank("tailwind") >= 2 ? 0.30 : 0.20, 0.02 * (game.combo || 0));
       if (this.stormT > 0 && this.beneRank("eye_of_storm") >= 2) speed *= 1.15;
       if (this.dashTimer > 0) {
         this.dashTimer -= dt;
@@ -833,6 +833,9 @@
       // effect reads at the nozzle (the aura only says "gassed"; this says
       // "your hose is clogged"). Range already shortened via rangeMult.
       const gassed = this.gasT > 0 && !dry;
+      // Slipstream: the post-dash free-water window tints the stream a pale
+      // cyan so the free spray reads distinctly from a normal (paid) burst.
+      const slipstream = this.freeSprayT > 0 && !gassed;
       while (this.sprayEmitAcc >= 1) {
         this.sprayEmitAcc -= 1;
         if (gassed && Math.random() < 0.3) continue;   // dropped droplet = visible stutter
@@ -847,6 +850,7 @@
           vz: perpZ * 0.4 - 4,
           life: blockDist / 210 + Math.random() * (pierce ? 0.12 : 0.04),
           color: gassed ? (Math.random() > 0.5 ? JH.PAL.stink : JH.PAL.gasbagDk)
+                        : slipstream ? "#d6f6ff"
                         : (Math.random() > 0.45 ? JH.PAL.waterHi : JH.PAL.water),
           size: dry ? 1 : (gassed ? 1 : (beam >= 2 ? 3 : 2)),   // chunkier droplets at high Pressure
           grav: dry ? 220 : (gassed ? 120 : 70),                 // gassed droplets droop = spitty
@@ -1184,7 +1188,27 @@
     takeHit(dmg, game, fromX, knock) {
       if (this.invulnTimer > 0 || this.dashTimer > 0 || this.dashGraceT > 0) return false;
       if (this.stormT > 0) {
-        burst(game, this.x, this.y, this.z + 10, "#aaddff", 8, { speed: 80, life: 0.35, up: 20 });
+        // Eye of the Storm reads as an immunity SHIELD: the bubble (drawn in
+        // draw() while stormT > 0) takes the hit — ring flash + BLOCKED.
+        burst(game, this.x, this.y, this.z + 14, "#9be8ff", 12, { speed: 120, life: 0.3, up: 10, size: 2 });
+        if (game.float) game.float(this.x, this.y - 34, "BLOCKED", "#9be8ff");
+        game.audio.play("whack", { pitch: 1.6 });
+        this.invulnTimer = 0.3;
+        return false;
+      }
+      // Eye of the Storm: emergency bubble — triggers itself (no external
+      // grant) the instant a hit would land below the HP threshold, off a
+      // 30s cooldown. Blocks THIS hit through the same bubble presentation
+      // as the stormT>0 branch above, then leaves stormT running so the
+      // bubble visual (Player.draw) persists for eyeShieldS after.
+      const eyeRank = this.beneRank("eye_of_storm");
+      if (eyeRank && this.eyeCdT <= 0 &&
+          this.hp < this.stats.maxHp * (eyeRank >= 2 ? JH.BENE_TUNE.eyeHpFracII : JH.BENE_TUNE.eyeHpFrac)) {
+        this.eyeCdT = JH.BENE_TUNE.eyeCd;
+        this.stormT = eyeRank >= 2 ? JH.BENE_TUNE.eyeShieldSII : JH.BENE_TUNE.eyeShieldS;
+        burst(game, this.x, this.y, this.z + 14, "#9be8ff", 12, { speed: 120, life: 0.3, up: 10, size: 2 });
+        if (game.float) game.float(this.x, this.y - 34, "BLOCKED", "#9be8ff");
+        game.audio.play("whack", { pitch: 1.6 });
         this.invulnTimer = 0.3;
         return false;
       }
@@ -1220,6 +1244,37 @@
     draw(ctx, cam) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
       Assets.shadow(ctx, sx, sy, this.stats.bodyW * 0.7);
+      // Eye of the Storm: the immunity window IS a visible shield bubble —
+      // blocked hits flash it (takeHit), so protection reads as "blocked",
+      // never as "the hit didn't land".
+      if (this.stormT > 0) {
+        const pulse = 0.35 + 0.15 * Math.sin(this.t * 8);
+        const fade = Math.min(1, this.stormT / 0.3);   // pop-out as it expires
+        ctx.save();
+        ctx.globalAlpha = 0.08 * fade;
+        ctx.fillStyle = "#9be8ff";
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(Geo.feetScreenY(this.y, this.z) - 26), 19, 31, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = pulse * fade;
+        ctx.strokeStyle = "#9be8ff";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Whirlwind Walk: the dash's projectile-destroy radius drawn as a
+      // ground gust ring — the drawn rim IS the sweep radius (BENE_AOE).
+      if (this.dashTimer > 0 && this.beneRank("whirlwind_walk")) {
+        const wr = JH.BENE_AOE.whirlwindSweep;
+        ctx.save();
+        ctx.globalAlpha = 0.4 + 0.2 * Math.sin(this.t * 20);
+        ctx.strokeStyle = "#d6f6ff";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(sy), wr, wr * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       const spriteSy = Geo.feetScreenY(this.y, this.z);
       // Buff auras as layered silhouette outlines (inner → outer): GUSH blue
       // hugs the body, kibble green rings around it, concerta purple outside
@@ -1304,6 +1359,20 @@
           const fl = Math.sin(this.t * 8 + i * 1.3) * 2.5;
           ctx.fillRect(Math.round(sx + i * 5 - this.facing * 3 + fl), Math.round(spriteSy - 9), 2, 8);
         }
+        ctx.restore();
+      }
+      // Slipstream: a small swirl arc at the nozzle while the post-dash
+      // free-water window is active — pairs with the stream's cyan tint
+      // (doSpray) so the free spray reads distinctly at the source.
+      if (this.spraying && this.freeSprayT > 0) {
+        const nx = sx + this.facing * 12, ny = Geo.feetScreenY(this.y, this.z + JH.PLAYER.nozzleZ);
+        ctx.save();
+        ctx.globalAlpha = 0.7 + 0.3 * Math.sin(this.t * 14);
+        ctx.strokeStyle = "#d6f6ff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(nx, ny, 3, this.t * -10, this.t * -10 + Math.PI * 1.4);
+        ctx.stroke();
         ctx.restore();
       }
       // Pressure Sermon pip: pulsing water diamond at the nozzle side while
@@ -3444,7 +3513,6 @@
       if (d.kind === "duo" || d.kind === "legendary") game.beneUsedOnce[this.offer.id] = true;
       const p = game.player;
       p.applyStats(JH.Upgrades.computeStats(JH.Upgrades.owned));
-      if (p.beneRank("eye_of_storm")) p.stormT = p.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
       game.audio.play("upgrade", { pitch: 0.9 });
       burst(game, this.x, this.y, 14, SIGIL_COLORS[this.element], 18, { speed: 100, life: 0.6, up: 80, size: 2 });
       game.banner(d.name.toUpperCase() + (this.offer.deepen ? " II" : ""), 1.4);

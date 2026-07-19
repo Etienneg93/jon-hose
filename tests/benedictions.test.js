@@ -116,11 +116,39 @@ test("applyStats folds stat boons only", () => {
   const s = { maxHp: 100, dashSpeed: 240 };
   B.applyStats(s);
   assert.strictEqual(s.maxHp, 100 + JH.BENE_TUNE.bedrockHp);
-  assert.ok(Math.abs(s.dashSpeed - 336) < 1e-9);
+  assert.ok(Math.abs(s.dashSpeed - 240 * (1 + JH.BENE_TUNE.galeStride)) < 1e-9);
   B.take("bedrock");                                  // deepen to rank 2
   const s2 = { maxHp: 100, dashSpeed: 240 };
   B.applyStats(s2);
   assert.strictEqual(s2.maxHp, 100 + JH.BENE_TUNE.bedrockHpII);
+  B.reset();
+});
+
+test("gale stride derives from BENE_TUNE", () => {
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("gale_stride");
+  const s = { dashSpeed: 240 };
+  B.applyStats(s);
+  assert.ok(Math.abs(s.dashSpeed - 240 * (1 + T.galeStride)) < 1e-9, "rank 1 dash distance multiplier");
+  B.take("gale_stride");   // deepen to rank 2
+  const s2 = { dashSpeed: 240 };
+  B.applyStats(s2);
+  assert.ok(Math.abs(s2.dashSpeed - 240 * (1 + T.galeStrideII)) < 1e-9, "rank 2 dash distance multiplier");
+  B.reset();
+});
+
+test("tailwind folds range and knockback", () => {
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("tailwind");
+  const s = { sprayRange: 78, knockback: 115 };
+  B.applyStats(s);
+  assert.ok(Math.abs(s.sprayRange - 78 * (1 + T.tailwindRange)) < 1e-9, "rank 1 range fold");
+  assert.ok(Math.abs(s.knockback - 115 * (1 + T.tailwindKnock)) < 1e-9, "rank 1 knockback fold");
+  B.take("tailwind");   // deepen to rank 2
+  const s2 = { sprayRange: 78, knockback: 115 };
+  B.applyStats(s2);
+  assert.ok(Math.abs(s2.sprayRange - 78 * (1 + T.tailwindRangeII)) < 1e-9, "rank 2 range fold");
+  assert.ok(Math.abs(s2.knockback - 115 * (1 + T.tailwindKnockII)) < 1e-9, "rank 2 knockback fold");
   B.reset();
 });
 

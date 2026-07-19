@@ -443,8 +443,6 @@
         if (rank >= 2) delete JH.Benedictions.active[entry.id];
         else JH.Benedictions.take(entry.id);
         this.refreshPlayerStats();
-        if (entry.id === "eye_of_storm" && JH.Benedictions.rank(entry.id))
-          this.player.stormT = JH.Benedictions.rank(entry.id) >= 2 ? 1.5 : 1;
         this.audio.play(rank >= 2 ? "hurt" : "upgrade", { pitch: rank >= 2 ? 0.8 : 0.95 });
         return;
       }
@@ -691,8 +689,6 @@
       this.shopNpc = null;          // vendor gets left behind once the fight starts
       this.deepdiveTV = null; this.deepdiving = false;   // belt-and-suspenders — the TV is gone
       this.nearShop = false; this.nearVendor = false; this.shopOpen = false;
-      if (this.player.beneRank("eye_of_storm"))
-        this.player.stormT = this.player.beneRank("eye_of_storm") >= 2 ? 1.5 : 1;
       const wave = JH.LEVEL1.waves[i];
       JH.Camera.lock();
       // Confine the player to the current screen ("arena").
@@ -4105,6 +4101,13 @@
         if (rank >= 2) {
           ctx.strokeStyle = col;
           ctx.strokeRect(x - 2.5, y - 2.5, 13, 13);
+        }
+        // Eye of the Storm: cooldown pip right of the icon — grey while the
+        // emergency bubble is on cooldown, cyan once it can trigger again.
+        if (id === "eye_of_storm") {
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = this.player.eyeCdT > 0 ? "#555a66" : "#9be8ff";
+          ctx.fillRect(x + 9, y + 2.5, 3, 3);
         }
       });
       ctx.globalAlpha = 1;
