@@ -80,7 +80,6 @@
   // Benediction AoE radii (world px): ONE constant per effect, shared by the
   // hit test and its drawn ring/telegraph (rim is hitbox).
   JH.BENE_AOE = {
-    aftershockSplash: 30,   // removed in Focus Quake task — rank-2 wall-slam splash radius
     bushfireSpread: 40,     // scald contagion jump radius
     whirlwindSweep: 20,     // dash projectile-destroy radius around Jon
     focusQuake: 30,          // aftershock rework: quake pulse radius

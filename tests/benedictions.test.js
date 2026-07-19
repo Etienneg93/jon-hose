@@ -115,12 +115,12 @@ test("applyStats folds stat boons only", () => {
   B.reset(); B.take("bedrock"); B.take("gale_stride");
   const s = { maxHp: 100, dashSpeed: 240 };
   B.applyStats(s);
-  assert.strictEqual(s.maxHp, 140);
+  assert.strictEqual(s.maxHp, 100 + JH.BENE_TUNE.bedrockHp);
   assert.ok(Math.abs(s.dashSpeed - 336) < 1e-9);
   B.take("bedrock");                                  // deepen to rank 2
   const s2 = { maxHp: 100, dashSpeed: 240 };
   B.applyStats(s2);
-  assert.strictEqual(s2.maxHp, 160);
+  assert.strictEqual(s2.maxHp, 100 + JH.BENE_TUNE.bedrockHpII);
   B.reset();
 });
 

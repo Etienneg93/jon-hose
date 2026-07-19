@@ -59,17 +59,17 @@
 
     // Earth — force & interrupts
     { id: "aftershock", verb: "stream", element: "earth", kind: "boon", name: "Aftershock",
-      desc: "Enemies knocked into arena walls/debris take 15 slam dmg",
-      descII: "25 + a small shockwave at the impact" },
+      desc: "Spray one target {g:2s} to crack a quake under it: {g:40%} {i:dmg} nearby",
+      descII: "every {g:1.5s}, {g:60%} + stagger" },
     { id: "sure_grip", verb: "body", element: "earth", kind: "boon", name: "Sure Grip",
-      desc: "Spray no longer slows your movement",
-      descII: "+10% knockback" },
+      desc: "Spray slows your movement {g:half} as much",
+      descII: "no slow at all + {g:+10%} {i:knockback}" },
     { id: "bedrock", verb: "body", element: "earth", kind: "boon", name: "Bedrock Vigor",
-      desc: "+40 max HP; taking a hit grants +20% knockback for 3s",
-      descII: "+60 HP" },
-    { id: "landslide", verb: "stream", element: "earth", kind: "boon", name: "Landslide",
-      desc: "Knocked-back enemies damage enemies they pass through (8)",
-      descII: "14 + staggers them" },
+      desc: "{g:+25} {i:hp}; taking a hit grants {g:+20%} {i:knockback} for 3s",
+      descII: "{g:+45} {i:hp}" },
+    { id: "landslide", verb: "stream", element: "earth", kind: "boon", name: "Gravel Spray",
+      desc: "Every {g:3s} of spraying, the stream hurls a rock: {g:60%} {i:dmg} + heavy {i:knockback}",
+      descII: "every {g:2s}" },
 
     // Air — tempo
     { id: "gale_stride", verb: "dash", element: "air", kind: "boon", name: "Gale Stride",
@@ -197,12 +197,12 @@
     // Baptize, Overflow, duos, legendaries, etc.) hook at runtime instead.
     applyStats(s) {
       const r = (id) => this.active[id] | 0;
-      if (r("bedrock")) s.maxHp += r("bedrock") >= 2 ? 60 : 40;
+      // Looked up live (not via the closed-over `root`) so it resolves
+      // correctly regardless of module require order in tests.
+      const T = (typeof window !== "undefined" ? window : globalThis).JH.BENE_TUNE;
+      if (r("bedrock")) s.maxHp += r("bedrock") >= 2 ? T.bedrockHpII : T.bedrockHp;
       if (r("gale_stride")) s.dashSpeed *= r("gale_stride") >= 2 ? 1.6 : 1.4;
-      if (r("sure_grip")) {
-        s.noSpraySlow = true;
-        if (r("sure_grip") >= 2) s.knockback *= 1.1;
-      }
+      if (r("sure_grip") >= 2) s.knockback *= 1.1;   // rank 1's spray-slow removal is computed live off beneRank (entities.js)
       return s;
     },
 

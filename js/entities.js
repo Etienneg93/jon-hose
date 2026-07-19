@@ -210,6 +210,10 @@
       this.gasT = 0;          // poison debuff window (s): chokes spray dmg/range + regen while > 0; lingers after leaving the cloud
       this.snareT = 0;        // air-hazard snare window remaining, seconds (consumer wires later)
       this.snareMult = 1;     // move-speed multiplier while snared
+      this.quakeT = 0;        // Focus Quake: sustained-spray charge on the current focus target, sec
+      this.gravelT = 0;       // Gravel Spray: sustained-spray charge toward the next rock chunk, sec
+      this.focusTarget = null; // Focus Quake/Gravel Spray: primary enemy the stream is currently locked on
+      this.sprayGapT = 99;    // sec since spray last landed on a target; > gravelTapGraceS clears the charge/target
     }
     applyStats(s) {
       // Track which displayed stats changed so the shop panel can flash them,
@@ -273,6 +277,7 @@
       this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
       this.overshield = 0;   // dive shield doesn't survive death
       this.gasT = 0; this.snareT = 0;
+      this.quakeT = 0; this.gravelT = 0; this.focusTarget = null; this.sprayGapT = 99;
     }
 
     // Hazard Boots (Ash Walk): the first tick of ANY ground hazard is ignored,
@@ -601,7 +606,14 @@
           }
         }
       } else if (this.spraying) {
-        if (!S.noSpraySlow) speed *= 0.55; // slow while hosing (Sure Grip removes this)
+        // Sure Grip: rank 1 halves the slow-down from BASE_SPRAY_SLOW toward
+        // no slow at all (BENE_TUNE.sureGripSlowMult); rank 2 removes it entirely.
+        const BASE_SPRAY_SLOW = 0.55;
+        const sg = this.beneRank("sure_grip");
+        const spraySlowMult = sg >= 2 ? 1
+          : sg ? 1 - (1 - BASE_SPRAY_SLOW) * JH.BENE_TUNE.sureGripSlowMult
+          : BASE_SPRAY_SLOW;
+        speed *= spraySlowMult;
       } else if (this.dashBoostTimer > 0 && S.dashBoost > 0) {
         speed += S.dashBoost;
       }
@@ -629,6 +641,13 @@
         }
         this.sprayHeldT = 0;   // reset the stream-front timer on release
         this.sermonReady = false;
+        // Focus Quake / Gravel Spray: a gap in spraying longer than the tap
+        // grace clears the sustained-spray charge and drops the focus target
+        // (a brief re-aim tap doesn't cost the whole charge).
+        this.sprayGapT += dt;
+        if (this.sprayGapT > JH.BENE_TUNE.gravelTapGraceS) {
+          this.gravelT = 0; this.quakeT = 0; this.focusTarget = null;
+        }
       }
 
       // ---- water regen (after a short delay since last spray)
@@ -990,6 +1009,42 @@
         if (S.vampiricRate > 0) healAmt += dmg * S.vampiricRate * ((e.isBoss || e.elite || e.superElite) ? 0.5 : 1);
         if (ssRank) hitEnemies.push(e);
       });
+      // Focus Quake / Gravel Spray: both track the stream's PRIMARY target
+      // (hitList[0] — the blocker in non-pierce mode, nearest hit in pierce
+      // mode). Switching targets resets both charges; a short gap (tap-grace,
+      // handled in update()) doesn't.
+      const focus = hitList.length ? hitList[0].e : null;
+      const T = JH.BENE_TUNE;
+      this.sprayGapT = 0;
+      if (focus !== this.focusTarget) { this.focusTarget = focus; this.quakeT = 0; }
+      if (focus && this.beneRank("aftershock")) {
+        const need = this.beneRank("aftershock") >= 2 ? T.quakeChargeSII : T.quakeChargeS;
+        this.quakeT += dt;
+        if (this.quakeT >= need) {
+          this.quakeT = 0;
+          const r = JH.BENE_AOE.focusQuake;
+          const qdmg = this.stats.sprayDamage * (this.beneRank("aftershock") >= 2 ? T.quakeDmgFracII : T.quakeDmgFrac);
+          for (const o of game.enemies) {
+            if (o.dead) continue;
+            if (Math.hypot(o.x - focus.x, o.y - focus.y) > r) continue;
+            o.takeDamage(qdmg, game, Math.sign(o.x - focus.x) || 1, 0);
+            if (this.beneRank("aftershock") >= 2) { o.windTimer = 0; o.cdTimer = Math.max(o.cdTimer || 0, 0.4); }
+          }
+          game.pulseRings.push({ x: focus.x, y: focus.y, r: 0, targetR: r, dur: 0.2, t: 0,
+            dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#e0902f" });
+          game.shake(3); game.audio.play("whack");
+        }
+      }
+      if (focus && this.beneRank("landslide")) {
+        const every = this.beneRank("landslide") >= 2 ? T.gravelEverySII : T.gravelEveryS;
+        this.gravelT += dt;
+        if (this.gravelT >= every) {
+          this.gravelT = 0;
+          focus.takeDamage(this.stats.sprayDamage * T.gravelDmgFrac, game, this.facing, T.gravelKnock, true);
+          burst(game, focus.x, focus.y, 10, "#c8a050", 10, { speed: 90, life: 0.3, up: 40, size: 2 });
+          game.audio.play("whack", { pitch: 0.8 });
+        }
+      }
       const primary = targets.length ? targets[0].e : null;  // nearest hit enemy (Boiler Coil hooks this)
       // Boiler Coil: heat builds while the stream stays on one target.
       if (!dry && game.relics && game.relics.boiler_coil) {
@@ -1454,8 +1509,7 @@
       this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
       this.scaldDps = 0;
       this._spreadT = 0;    // Boilover: seconds until next contagion recheck while scalded
-      this.slamCdT = 0;     // Aftershock: per-enemy cooldown between wall-slam hits
-      this._lsCdT = 0;      // Landslide: cooldown before this enemy can be hit again as a victim
+      this.slamCdT = 0;     // Earth pillar III: per-enemy cooldown between wall-slam-stagger triggers
     }
 
     // Rank-max, not additive: reapplying Scald refreshes to the stronger of
@@ -1573,21 +1627,6 @@
     update(dt, game) {
       this.basePhysics(dt);
       if (this.slamCdT > 0) this.slamCdT -= dt;
-      if (this._lsCdT > 0) this._lsCdT -= dt;
-      // Landslide: while under strong knockback, this enemy batters other
-      // enemies it overlaps (Earth benediction). Per-victim 0.3s tag so an
-      // overlap doesn't re-hit every frame.
-      const lsRank = game.player.beneRank ? game.player.beneRank("landslide") : 0;
-      if (lsRank && Math.abs(this.knockVX) > 60 && game.enemies) {
-        for (const o of game.enemies) {
-          if (o === this || o.dead || o._lsCdT > 0) continue;
-          if (!Geo.bodiesOverlap(this, o)) continue;
-          o._lsCdT = 0.3;
-          o.takeDamage(lsRank >= 2 ? 14 : 8, game, 0, 0);
-          if (lsRank >= 2)
-            { o.windTimer = 0; o.state = "idle"; o.cdTimer = Math.max(o.cdTimer, 0.6); }
-        }
-      }
       if (this.spawnGrace > 0) this.spawnGrace -= dt;
       if (this.contactTimer > 0) this.contactTimer -= dt;
       this.tickDmgNum(dt);   // damage-number hold/punch/crit timers
@@ -1656,17 +1695,11 @@
       // only clear on kills, so an unreachable enemy would soft-lock the wave.
       const preClamp = this.x;
       this.x = clamp(this.x, game.bounds.minX, game.bounds.maxX);
-      // Wall slam: a knocked enemy stopped by the arena edge takes crunch
-      // damage (Aftershock benediction) and staggers (Earth pillar III).
+      // Wall slam stagger: a knocked enemy stopped by the arena edge
+      // interrupts its windup — Earth pillar III capstone only (Aftershock
+      // no longer deals wall-slam damage; see Focus Quake in doSpray).
       if (this.x !== preClamp && Math.abs(this.knockVX || 0) > 60 && this.slamCdT <= 0) {
         this.slamCdT = 0.5;
-        const asr = game.player.beneRank ? game.player.beneRank("aftershock") : 0;
-        if (asr) {
-          this.takeDamage(asr >= 2 ? 25 : 15, game, 0, 0);
-          game.shake(3); game.audio.play("whack");
-          if (asr >= 2) for (const o of game.enemies || [])
-            if (o !== this && !o.dead && Math.hypot(o.x - this.x, o.y - this.y) < 30) o.takeDamage(8, game, 0, 0);
-        }
         if (game.player.stats.wallSlamStagger) { this.windTimer = 0; this.state = "idle"; this.cdTimer = Math.max(this.cdTimer, 0.6); }
       }
       // contact damage

@@ -587,6 +587,7 @@ function makeThinkGame(px, py) {
   return {
     player: Object.assign(makePlayer(), { x: px, y: py }),
     enemies: [], embers: [], particles: [], firePatches: [], shields: [],
+    pulseRings: [],
     bounds: { minX: 0, maxX: 480 },
     audio: { play() {} }, shake() {}, hitStop() {}, defer() {},
     killJuice() {}, dropLoot() {}, onEnemyKilled() {}, spawnEnemy() {},
@@ -1587,9 +1588,9 @@ test("Hazard Boots: hostile SlowZone tick is eaten but the zone persists (perman
   B.reset();
 });
 
-// ---- Benedictions: Earth (Aftershock, Landslide) ----
+// ---- Benedictions: Earth (Focus Quake, Gravel Spray, Sure Grip, Bedrock) ----
 
-test("Aftershock: an enemy slammed into the arena wall takes wall-slam damage", () => {
+test("wall-slam stagger: Aftershock no longer deals wall-slam damage; Earth pillar III capstone still staggers", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("aftershock");
   const g = makeThinkGame(1000, 40);   // player far off-screen — chase moves toward the wall, not away
@@ -1600,34 +1601,148 @@ test("Aftershock: an enemy slammed into the arena wall takes wall-slam damage", 
   const hp0 = m.hp;
   m.update(0.05, g);
   assert.strictEqual(m.x, g.bounds.maxX, "clamped at the arena edge");
-  assert.ok(m.hp < hp0, "wall slam damage landed");
+  assert.strictEqual(m.hp, hp0, "Aftershock no longer deals wall-slam crunch damage (Focus Quake replaces it)");
+
+  // Earth pillar III capstone (wallSlamStagger) is a separate, independently
+  // wired effect — still interrupts the windup on arena-edge knockback.
+  g.player.stats.wallSlamStagger = true;
+  m.slamCdT = 0; m.knockVX = 200; m.x = g.bounds.maxX - 2;
+  m.windTimer = 0.5; m.state = "wind"; m.cdTimer = 0;
+  m.update(0.05, g);
+  assert.strictEqual(m.windTimer, 0, "windup cancelled by the stagger");
+  assert.strictEqual(m.state, "idle");
+  assert.ok(m.cdTimer >= 0.6, "stagger cooldown applied");
   B.reset();
 });
 
-test("Landslide: an overlapping enemy under knockback batters the enemy next to it", () => {
+test("focus quake: 2s sustained spray on one target quakes around it", () => {
   const B = global.window.JH.Benedictions;
-  B.reset(); B.take("landslide");
-  const g = makeThinkGame(1000, 40);   // player far off — no melee/contact interference
-  const slammed = new JH.Enemy("mook", 100, 40);
-  const victim = new JH.Enemy("mook", 102, 40);   // overlapping the slammed enemy
-  slammed.spawnGrace = 0; victim.spawnGrace = 0;
-  slammed.knockVX = 200;               // strong knockback triggers the landslide check
-  g.enemies = [slammed, victim];
-  const hp0 = victim.hp;
-  slammed.update(0.016, g);
-  assert.ok(victim.hp < hp0, "overlapping enemy takes landslide damage");
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("aftershock");
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const focus = new JH.Enemy("mook", p.x + 20, p.y);
+  const nearby = new JH.Enemy("mook", focus.x + 10, focus.y);   // inside BENE_AOE.focusQuake, but not the blocker
+  // Sustained full-pressure spray would otherwise kill the 40hp mook (and
+  // the blocker) well before the charge threshold — pad HP so nothing dies
+  // mid-test and flips who the stream's blocker is.
+  focus.hp = focus.maxHp = 1e6;
+  nearby.hp = nearby.maxHp = 1e6;
+  g.enemies = [focus, nearby];
 
-  // Rank II: staggers the victim unconditionally — no wall-slam-stagger
-  // capstone required (that pillar perk is a separate, independently-consumed
-  // effect applied elsewhere).
-  B.take("landslide");   // rank 2
-  assert.ok(!g.player.stats.wallSlamStagger, "capstone not owned in this test");
-  victim._lsCdT = 0;   // clear the per-victim tag set by the first update() above
-  victim.windTimer = 0.5; victim.state = "wind"; victim.cdTimer = 0;
-  slammed.update(0.016, g);
-  assert.strictEqual(victim.windTimer, 0, "windup cancelled by the stagger");
-  assert.strictEqual(victim.state, "idle");
-  assert.ok(victim.cdTimer >= 0.6, "stagger cooldown applied");
+  const step = 0.05;
+  const shortSteps = Math.floor(T.quakeChargeS / step) - 1;   // just under the charge threshold
+  for (let i = 0; i < shortSteps; i++) p.doSpray(step, g);
+  assert.strictEqual(nearby.hp, nearby.maxHp, "no quake before the charge threshold (nearby is never the stream's blocker)");
+
+  const hpNearby0 = nearby.hp;
+  p.doSpray(step * 3, g);   // push well past quakeChargeS
+  const dealt = hpNearby0 - nearby.hp;
+  assert.ok(dealt > 0, "nearby enemy inside the quake radius took damage");
+  assert.ok(Math.abs(dealt - p.stats.sprayDamage * T.quakeDmgFrac) < 1e-6,
+    "quake dmg is a flat sprayDamage * quakeDmgFrac hit, not dt-scaled like the stream");
+  assert.strictEqual(p.quakeT, 0, "charge resets once the quake fires");
+
+  // Switching the primary target resets the charge — no partial carry-over.
+  for (let i = 0; i < 10; i++) p.doSpray(step, g);
+  assert.ok(p.quakeT > 0 && p.quakeT < T.quakeChargeS, "charge accruing again on the same target");
+  const closer = new JH.Enemy("mook", p.x + 5, p.y);   // new nearest -> new primary target
+  closer.hp = closer.maxHp = 1e6;
+  g.enemies.push(closer);
+  p.doSpray(step, g);
+  assert.strictEqual(p.focusTarget, closer, "primary target switched to the new nearest enemy");
+  assert.ok(p.quakeT <= step + 1e-9, "charge reset when the focus target changed");
+  B.reset();
+});
+
+test("gravel spray: a rock chunk fires every gravelEveryS of continuous spray", () => {
+  const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
+  const step = 0.05;
+  const crossSteps = Math.ceil(T.gravelEveryS / step) + 1;   // enough ticks to cross the threshold once
+
+  function run(withLandslide) {
+    B.reset();
+    if (withLandslide) B.take("landslide");
+    const g = makeThinkGame(60, 40);
+    const p = g.player;
+    p.water = p.stats.maxWater; p.facing = 1;
+    const focus = new JH.Enemy("mook", p.x + 20, p.y);
+    focus.hp = focus.maxHp = 1e6;   // sustained full-pressure spray would otherwise kill a 40hp mook mid-loop
+    g.enemies = [focus];
+    const hp0 = focus.hp;
+    for (let i = 0; i < crossSteps; i++) p.doSpray(step, g);
+    return { dealt: hp0 - focus.hp, knock: focus.knockVX || 0, p };
+  }
+
+  const base = run(false);       // control: plain stream damage/knockback only
+  const boosted = run(true);     // with Gravel Spray
+  const extra = boosted.dealt - base.dealt;
+  assert.ok(Math.abs(extra - boosted.p.stats.sprayDamage * T.gravelDmgFrac) < 1e-6,
+    "Gravel Spray adds exactly one gravelDmgFrac chunk once the timer crosses gravelEveryS");
+  assert.ok(boosted.knock > base.knock, "the rock chunk applies extra (heavy) knockback on top of the stream's own");
+
+  // Tap-grace: gaps in spraying shorter than gravelTapGraceS don't reset the
+  // charge/target; longer gaps do. Exercised through Player.update's release
+  // branch (doSpray zeroes sprayGapT every frame it lands on a target).
+  function primeThenGap(gapDt) {
+    B.reset(); B.take("landslide");
+    const g = makeThinkGame(60, 40);
+    const p = g.player;
+    p.water = p.stats.maxWater; p.facing = 1;
+    const target = new JH.Enemy("mook", p.x + 20, p.y);
+    target.hp = target.maxHp = 1e6;
+    g.enemies = [target];
+    p.doSpray(0.5, g);   // build up meaningful gravelT + a locked focus target
+    const primed = { gravelT: p.gravelT, focus: p.focusTarget };
+    assert.ok(primed.gravelT > 0 && primed.focus === target, "setup: charge accrued on the target");
+    g.input = { held: () => false, buffered: () => false };   // spray key released
+    p.update(gapDt, g);
+    return { p, primed };
+  }
+
+  const shortGap = primeThenGap(0.2);   // < gravelTapGraceS (0.3)
+  assert.strictEqual(shortGap.p.gravelT, shortGap.primed.gravelT, "0.2s gap: charge preserved");
+  assert.strictEqual(shortGap.p.focusTarget, shortGap.primed.focus, "0.2s gap: focus target preserved");
+
+  const longGap = primeThenGap(0.5);    // > gravelTapGraceS (0.3)
+  assert.strictEqual(longGap.p.gravelT, 0, "0.5s gap: charge reset");
+  assert.strictEqual(longGap.p.focusTarget, null, "0.5s gap: focus target cleared");
+  B.reset();
+});
+
+test("sure grip: rank 1 halves the spray slow, rank 2 removes it", () => {
+  const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
+  B.reset();
+  const g = makeThinkGame(200, 40);
+  const p = g.player;
+  const fullDist = p.stats.moveSpeed * (1 / 60);   // unslowed one-frame travel
+
+  // Prime `spraying` on frame 1 (doSpray sets it AFTER this frame's movement
+  // is computed), then measure frame 2's movement — which reads frame 1's
+  // spraying state for the slow multiplier.
+  function measureSprayMoveDist() {
+    g.input = { held: (k) => k === "spray" || k === "right", buffered: () => false };
+    p.x = 200; p.spraying = false;
+    p.update(1 / 60, g);
+    const before = p.x;
+    p.update(1 / 60, g);
+    return p.x - before;
+  }
+
+  const d0 = measureSprayMoveDist();   // rank 0
+  B.take("sure_grip");
+  const d1 = measureSprayMoveDist();   // rank 1
+  B.take("sure_grip");
+  const d2 = measureSprayMoveDist();   // rank 2
+
+  assert.ok(d0 < d1 && d1 < d2, "each rank moves faster while spraying than the last");
+  assert.ok(Math.abs(d2 - fullDist) < 1e-6, "rank 2: no slow at all");
+  const slow0 = fullDist - d0, slow1 = fullDist - d1;
+  assert.ok(Math.abs(slow1 / slow0 - T.sureGripSlowMult) < 1e-6,
+    "rank 1 removes exactly sureGripSlowMult of the full slow-down");
   B.reset();
 });
 
@@ -2470,7 +2585,7 @@ test("death wash: benedictions clear, levels/relics survive respawn refresh", ()
   const before = JH.Upgrades.computeStats(JH.Upgrades.owned);
   JH.Benedictions.reset();                             // what respawnFromChurch does
   const after = JH.Upgrades.computeStats(JH.Upgrades.owned);
-  assert.strictEqual(before.maxHp - after.maxHp, 40);  // bedrock gone
+  assert.strictEqual(before.maxHp - after.maxHp, JH.BENE_TUNE.bedrockHp);  // bedrock gone
   assert.ok(after.sprayRange > JH.PLAYER.sprayRange);  // relic survived
   JH.Upgrades.reset(); JH.Benedictions.reset();
   JH.Game = prevGame;
