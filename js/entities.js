@@ -188,7 +188,7 @@
       this.gushTickAcc = 0;        // water regenerated since the last floater tick
       this.burnStacks = 0;   // active burn stacks (0–3); cleared when burnTimer expires
       this.burnTimer = 0;    // seconds of burn remaining
-      this.douseCdT = 0;     // Ash Walk: cooldown before the next patch-douse steam pop
+      this.bootsCdT = 0;     // Hazard Boots: global cooldown before the next hazard-tick eat
       this.boilerTarget = null;    // Boiler Coil: enemy the stream has stayed on
       this.boilerHeat = 0;         // s of continuous same-target spray, resets on switch/gap
       this.boilerGapT = 0;         // s since the stream last touched boilerTarget (resets heat past boilerGap)
@@ -269,10 +269,49 @@
       this.gushRegenT = 0; this.gushRegenRate = 0;
       this.freeSprayT = 0;
       this.stormT = 0; this.vigorT = 0;
-      this.douseCdT = 0; this.dashGraceT = 0;
+      this.bootsCdT = 0; this.dashGraceT = 0;
       this.boilerTarget = null; this.boilerHeat = 0; this.boilerGapT = 0;
       this.overshield = 0;   // dive shield doesn't survive death
       this.gasT = 0; this.snareT = 0;
+    }
+
+    // Hazard Boots (Ash Walk): the first tick of ANY ground hazard is ignored,
+    // once per hazard instance (hazard._bootsEaten), gated by one shared
+    // cooldown (bootsCdT) so it can't be chained hazard-to-hazard. Call sites
+    // (FirePatch burn, StinkCloud gas tag, WindHazard contact chip, hostile
+    // SlowZone slow) guard their damage/tag application with this, applying
+    // it only when the guard returns false. Stepping into a fire patch or
+    // stink cloud additionally clears it with a damaging steam pop; wind
+    // hazards and hostile slow zones are permanent terrain, so they only
+    // get the tick-eat.
+    hazardGuard(game, hazard) {
+      const aw = this.beneRank && this.beneRank("ash_walk");
+      if (!aw || hazard._bootsEaten || this.bootsCdT > 0) return false;
+      hazard._bootsEaten = true;
+      const T = JH.BENE_TUNE;
+      this.bootsCdT = aw >= 2 ? T.hazardBootsCdII : T.hazardBootsCd;
+      const isFire = hazard instanceof JH.FirePatch;
+      const isStink = hazard instanceof JH.StinkCloud;
+      if (isFire || isStink) {
+        if (isFire) hazard.sprayProgress = hazard.extinguishDur;
+        else hazard.dead = true;
+        const frac = aw >= 2 ? T.hazardPopFracII : T.hazardPopFrac;
+        const dmg = frac * this.stats.sprayDamage;
+        const r = JH.BENE_AOE.hazardPop;
+        for (const e of game.enemies || []) {
+          if (e.dead) continue;
+          if (Geo.inGroundEllipse(e.x, e.y, hazard.x, hazard.y, r))
+            e.takeDamage(dmg, game, 1, 0);
+        }
+        // Visual-only ring at the pop radius (rim is hitbox; the damage loop
+        // above already did the hitting — mirrors the Boilover spread ring).
+        if (game.pulseRings) game.pulseRings.push({
+          x: hazard.x, y: hazard.y, r: 0, targetR: r, dur: 0.25, t: 0,
+          dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#d6f6ff",
+        });
+        if (game.audio) game.audio.play("sizzle");
+      }
+      return true;
     }
 
     // Deepdive overshield soaks damage first — depletes, never recharges.
@@ -320,7 +359,7 @@
       if (this.dashCdTimer > 0) this.dashCdTimer -= dt;
       if (this.regenLock > 0) this.regenLock -= dt;
       if (this.pressureBuffT > 0) this.pressureBuffT -= dt;
-      if (this.douseCdT > 0) this.douseCdT -= dt;
+      if (this.bootsCdT > 0) this.bootsCdT -= dt;
       if (this.freeSprayT > 0) this.freeSprayT -= dt;
       if (this.xpFlashT > 0) this.xpFlashT -= dt;
       if (this.stormT > 0) this.stormT -= dt;
@@ -2481,37 +2520,19 @@
           this.rimFlashT = 0.2;
           if (game.audio) game.audio.play("sizzle");
         }
-        // Ash Walk: while fully unburned, this patch's first stack is ignored
-        // outright — but only once per patch, and only on actual CONTACT
-        // (without the `inside` gate the token burned remotely every frame).
-        // Staying in the patch after the free stack burns normally on the
-        // next tick. (.beneRank guard: test stubs use plain player objects.)
-        const aw = pl.beneRank && pl.beneRank("ash_walk");
-        if (aw && inside && pl.burnStacks === 0 && !this._awUsed) {
-          this._awUsed = true;   // immune — no burn application this contact
-        } else if (inside && this.patchBurnT <= 0) {
-          // Only consume the tick when the stack actually lands; if the
-          // player's burn i-frames blocked it, retry next frame so the next
-          // stack arrives AT the i-frame boundary, not interval-aligned after.
-          if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
-        }
-        // Ash Walk douse: walking a ready patch snuffs it instantly with a
-        // steam pop that damages enemies caught in the footprint. Rank II:
-        // shorter cooldown AND a bigger pop (more damage, 1.3x reach).
-        if (aw && pl.douseCdT <= 0 && inside) {
-          this.sprayProgress = this.extinguishDur;
-          pl.douseCdT = aw >= 2 ? 6 : 10;
-          const popDmg = aw >= 2 ? 10 : 6;
-          const popRx = aw >= 2 ? f.rx * 1.3 : f.rx;
-          const popRy = aw >= 2 ? f.ry * 1.3 : f.ry;
-          for (const e of game.enemies) {
-            if (e.dead) continue;
-            if (Geo.inGroundEllipse(e.x, e.y, this.x, this.y, popRx, popRy))
-              e.takeDamage(popDmg, game, 1, 0);
+        // Hazard Boots: the first tick of contact is a candidate for the
+        // guard (kills the patch + steam pop, see Player.hazardGuard); only
+        // on actual CONTACT (without the `inside` gate the guard would fire
+        // remotely). If the guard didn't eat it, burn applies normally,
+        // spaced by patchBurnT. (.hazardGuard guard: test stubs use plain
+        // player objects without the method.)
+        if (inside) {
+          if (!(pl.hazardGuard && pl.hazardGuard(game, this)) && this.patchBurnT <= 0) {
+            // Only consume the tick when the stack actually lands; if the
+            // player's burn i-frames blocked it, retry next frame so the next
+            // stack arrives AT the i-frame boundary, not interval-aligned after.
+            if (pl.applyBurn(1)) this.patchBurnT = JH.FIRE.patchBurnInterval;
           }
-          burst(game, this.x, this.y, 10, "#ffffff", aw >= 2 ? 16 : 10,
-            { speed: 60, life: 0.35, up: 30 });
-          if (game.audio) game.audio.play("sizzle");
         }
       }
       // Death by spraying it out OR by end-of-life burnout (douseFrac's
@@ -2639,7 +2660,8 @@
       const pl = game.player;
       if (pl && pl.alive && (pl.z || 0) < 18) {
         const pad = (pl.bodyW || 12) * 0.25;   // feet aren't a point (FirePatch idiom)
-        if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx + pad, f.ry + pad * JH.GROUND_RY))
+        if (Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx + pad, f.ry + pad * JH.GROUND_RY)
+            && !(pl.hazardGuard && pl.hazardGuard(game, this)))
           pl.gasT = Math.max(pl.gasT || 0, JH.STINK.gasDebuffDur);   // refresh the full window (burn idiom)
       }
       if (this.fadeFrac() >= 1) this.dead = true;
@@ -2877,7 +2899,10 @@
       const f = this.footprint(), pl = game.player;
       if (pl && pl.alive && this.contactCd <= 0
           && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx, f.ry)) {
-        pl.takeHit(H.dmg, game, this.x, H.knock);
+        // Wind hazards are permanent terrain: Hazard Boots eats the chip but
+        // the vent stays alive (unlike FirePatch/StinkCloud, no clear-pop).
+        if (!(pl.hazardGuard && pl.hazardGuard(game, this)))
+          pl.takeHit(H.dmg, game, this.x, H.knock);
         this.contactCd = H.contactCd;
       }
       for (const e of game.enemies) {
@@ -2994,7 +3019,8 @@
       }
       const pl = game.player;
       if (pl && pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.r) &&
-          !(game.relics && game.relics.rubber_boots))
+          !(game.relics && game.relics.rubber_boots) &&
+          !(pl.hazardGuard && pl.hazardGuard(game, this)))   // permanent terrain: tick-eat only, no clear-pop
         pl.zoneSlow = this.slowMult;
       return true;
     }

@@ -54,8 +54,8 @@
       desc: "+20% spray dmg to enemies that are burning, Scalded, or standing in a fire patch (needs a Scald source)",
       descII: "+30%" },
     { id: "ash_walk", verb: "body", element: "fire", kind: "boon", name: "Ash Walk",
-      desc: "First burn stack per patch ignored; walking a patch douses it with a steam pop (6 dmg nearby), 10s cooldown",
-      descII: "6s cd + bigger pop" },
+      desc: "First tick of any ground hazard is ignored; stepping into a patch or cloud clears it with a steam pop ({g:30%} {i:dmg}), 10s cd",
+      descII: "{g:6s} cd + {g:50%} pop" },
 
     // Earth — force & interrupts
     { id: "aftershock", verb: "stream", element: "earth", kind: "boon", name: "Aftershock",

@@ -1509,44 +1509,81 @@ test("Backdraft: dashing through an enemy applies Scald", () => {
   B.reset();
 });
 
-test("Ash Walk: walking a ready patch douses it instantly and arms the cooldown", () => {
+test("Hazard Boots: first fire-patch tick is eaten, patch doused, cooldown armed", () => {
   const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
   B.reset(); B.take("ash_walk");
   const g = makeThinkGame(100, 40);   // player standing at the patch center
+  const e = new JH.Enemy("mook", 100, 40);   // standing in the pop footprint
+  g.enemies = [e];
+  const hp0 = e.hp;
   const p = new JH.FirePatch(100, 40, 24, 3);
   p.update(1 / 60, g);
-  assert.strictEqual(p.dead, true, "douse extinguishes the patch immediately");
-  assert.ok(g.player.douseCdT > 0, "cooldown armed after the douse");
-  assert.strictEqual(g.player.burnStacks, 0, "first-burn immunity: no stack landed either");
+  assert.strictEqual(p.sprayProgress, p.extinguishDur, "guard doused the patch outright");
+  assert.strictEqual(g.player.burnStacks, 0, "the eaten tick landed no burn");
+  assert.strictEqual(g.player.bootsCdT, T.hazardBootsCd, "global cooldown armed at rank I");
+  assert.strictEqual(hp0 - e.hp, T.hazardPopFrac * g.player.stats.sprayDamage,
+    "steam pop damages enemies in the footprint");
+  assert.strictEqual(p._bootsEaten, true, "per-hazard flag set so this patch can't be eaten twice");
+  B.reset();
+});
+
+test("Hazard Boots: a second hazard during the cooldown is NOT eaten", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("ash_walk");
+  const g = makeThinkGame(100, 40);
+  const p1 = new JH.FirePatch(100, 40, 24, 3);
+  p1.update(1 / 60, g);   // consumes the guard, arms the cooldown
+  assert.ok(g.player.bootsCdT > 0, "cooldown is live");
 
   const p2 = new JH.FirePatch(100, 40, 24, 3);
   p2.update(1 / 60, g);
-  assert.strictEqual(p2.dead, false, "a second patch within the cooldown is not doused");
-  assert.strictEqual(g.player.burnStacks, 0, "first contact on this fresh patch is still free");
-  p2.update(1 / 60, g);   // still standing in the same patch: the free stack is already spent
-  assert.ok(g.player.burnStacks > 0, "immunity is once per patch — the next tick burns");
+  assert.strictEqual(p2.sprayProgress, 0, "a second patch within the cooldown is not doused");
+  assert.strictEqual(g.player.burnStacks, 1, "burn lands normally once the guard is on cooldown");
+  B.reset();
+});
 
-  // The free token must NOT burn remotely: a patch ticking while the player
-  // is far away keeps its token for the actual first contact.
-  const gFar = makeThinkGame(400, 40);             // player far from the patch
-  const pFar = new JH.FirePatch(100, 40, 24, 3);
-  gFar.player.douseCdT = 99;                       // isolate the immunity path
-  pFar.update(1 / 60, gFar);                       // remote tick — token unspent
-  gFar.player.x = 100;                             // NOW step in
-  pFar.update(1 / 60, gFar);
-  assert.strictEqual(gFar.player.burnStacks, 0, "first real contact is still free after remote ticks");
+test("Hazard Boots: wind-hazard chip is eaten at rank I, cd derived from BENE_TUNE", () => {
+  const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("ash_walk");
+  const g = makeThinkGame(100, 40);   // player standing at the hazard center
+  const hp0 = g.player.hp;
+  const w = new JH.WindHazard(100, 40);
+  g.enemies = [];
+  w.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0, "the chip is eaten — no damage taken");
+  assert.strictEqual(g.player.bootsCdT, T.hazardBootsCd, "cooldown derived from BENE_TUNE.hazardBootsCd");
+  assert.strictEqual(w.dead, false, "wind hazards are permanent terrain — no clear-pop");
+  B.reset();
+});
 
-  // Rank II: shorter cooldown and a bigger pop (10 dmg vs 6).
-  B.take("ash_walk");                              // rank 2
-  const g2 = makeThinkGame(100, 40);
-  const e = new JH.Enemy("mook", 100, 40);         // standing in the patch
-  g2.enemies = [e];
+test("Hazard Boots rank II: shorter cooldown and a bigger pop", () => {
+  const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("ash_walk"); B.take("ash_walk");   // rank 2
+  const g = makeThinkGame(100, 40);
+  const e = new JH.Enemy("mook", 100, 40);
+  g.enemies = [e];
   const hp0 = e.hp;
-  const p3 = new JH.FirePatch(100, 40, 24, 3);
-  p3.update(1 / 60, g2);
-  assert.strictEqual(p3.dead, true, "rank-II douse still extinguishes");
-  assert.strictEqual(hp0 - e.hp, 10, "rank-II pop deals 10 to enemies in the footprint");
-  assert.ok(g2.player.douseCdT <= 6, "rank-II cooldown is the shorter 6s");
+  const p = new JH.FirePatch(100, 40, 24, 3);
+  p.update(1 / 60, g);
+  assert.strictEqual(p.sprayProgress, p.extinguishDur, "rank-II guard still douses outright");
+  assert.strictEqual(hp0 - e.hp, T.hazardPopFracII * g.player.stats.sprayDamage,
+    "rank-II pop scales with hazardPopFracII");
+  assert.strictEqual(g.player.bootsCdT, T.hazardBootsCdII, "rank-II cooldown is the shorter one");
+  B.reset();
+});
+
+test("Hazard Boots: hostile SlowZone tick is eaten but the zone persists (permanent terrain)", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("ash_walk");
+  const g = makeThinkGame(100, 40);
+  const z = new JH.SlowZone(100, 40, 20, 5);   // default (vsEnemies false) hostile puddle
+  z.update(1 / 60, g);
+  assert.strictEqual(g.player.zoneSlow, 1, "the slow tick is eaten — zoneSlow untouched");
+  assert.strictEqual(z.dead, false, "no clear-pop for slow zones");
+  assert.ok(g.player.bootsCdT > 0, "cooldown armed");
   B.reset();
 });
 
