@@ -750,7 +750,9 @@
 
   // ---- Scald: enemy-only DoT applied by Scalding Faith / fire pillar -----
   // (Enemy.applyScald takes the max of dps/duration, so re-triggering never
-  // downgrades an active scald.)
+  // downgrades an active scald.) Player-originated scalds compute dps via
+  // Balance.scaldDps (scales off sprayDamage); dps/dps2 here are unused by
+  // those paths but stay defined for any future enemy-authored scald.
   JH.SCALD = { dps: 4, dur: 2, dps2: 6, dur2: 3 };
 
   // ---- Juice / game-feel tunables --------------------------------------

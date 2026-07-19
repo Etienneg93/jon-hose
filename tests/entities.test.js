@@ -1685,7 +1685,7 @@ test("Standing Stone: braced stance eats knockback but damage still lands", () =
   B.reset();
 });
 
-test("Bushfire: scald spreads once to a nearby enemy", () => {
+test("Boilover: scald spreads to a nearby enemy", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("bushfire");
   const g = makeThinkGame(400, 40);   // player kept well away from the mooks
@@ -1696,6 +1696,29 @@ test("Bushfire: scald spreads once to a nearby enemy", () => {
   m1.update(1 / 60, g);
   assert.ok(m1.scaldT > 0, "source keeps burning");
   assert.ok(m2.scaldT > 0, "nearby enemy catches the spread");
+  B.reset();
+});
+
+test("Boilover contagion re-checks while scalded (not once)", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("bushfire");
+  const T = JH.BENE_TUNE;
+  const g = makeThinkGame(400, 40);   // player kept well away from the mooks
+  const a = new JH.Enemy("mook", 100, 40);
+  const b = new JH.Enemy("mook", 130, 40);   // 30px away — within the 40px spread radius
+  const c = new JH.Enemy("mook", 400, 40);   // starts out of range
+  g.enemies = [a, b, c];
+  a.applyScald(4, 10);   // long duration so A is still scalded across both recheck windows
+  a.update(T.boiloverRecheckS + 0.01, g);
+  assert.ok(b.scaldT > 0, "B catches the spread on the first recheck");
+  assert.strictEqual(c.scaldT, 0, "C is still out of range");
+  // C walks into range while A is still scalded. The old _spreadDone flag
+  // fired contagion once per application and never rechecked; the rolling
+  // recheck must catch C on the next window.
+  c.x = 130;
+  a.update(T.boiloverRecheckS + 0.01, g);
+  assert.ok(a.scaldT > 0, "A is still scalded for the second recheck");
+  assert.ok(c.scaldT > 0, "C catches the spread once in range on the next recheck");
   B.reset();
 });
 

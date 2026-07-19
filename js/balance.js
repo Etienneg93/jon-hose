@@ -362,6 +362,15 @@
       return m;
     },
 
+    // Scald dps as a fraction of the source's spray damage: rank II (Scalding
+    // Faith) uses the bigger fraction; Boilover (bushfire) multiplies on top.
+    // rank 0 (Backdraft/baselineScald with no Scalding Faith) uses the base frac.
+    scaldDps(sprayDamage, scaldRank, boilover) {
+      const T = root.JH.BENE_TUNE;
+      const frac = scaldRank >= 2 ? T.scaldDpsFracII : T.scaldDpsFrac;
+      return sprayDamage * frac * (boilover ? T.boiloverScaldMult : 1);
+    },
+
     // Kibble grant: extend the regen window, reset the rate (same semantics
     // as the health-pickup collect path and the shop's Kibble Pack buy).
     kibbleGrant(pl, pack) {

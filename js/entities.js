@@ -519,8 +519,9 @@
             if (e.dropping) continue;   // airborne drop-ins can't be hit
             if (!Geo.bodiesOverlap(this, e)) continue;
             this._dashTouched.add(e);
-            e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
-            if (bdRank >= 2) e.takeDamage(8, game, this.facing, 60);
+            const bdSd = JH.Balance.scaldDps(this.stats.sprayDamage, this.beneRank("scalding_faith"), !!this.beneRank("bushfire"));
+            e.applyScald(bdSd, JH.SCALD.dur);
+            if (bdRank >= 2) e.takeDamage(this.stats.sprayDamage * JH.BENE_TUNE.backdraftPopFrac, game, this.facing, 60);
           }
         }
         // Whirlwind Walk: the dash body destroys projectiles it touches
@@ -915,9 +916,13 @@
         // Scald: full-pressure hits only. Scalding Faith (rank-scaled) and the
         // fire pillar's baseline capstone are independent sources — both can land.
         if (scaldRank && dmgScale >= 1.2) {
-          e.applyScald(...(scaldRank >= 2 ? [JH.SCALD.dps2, JH.SCALD.dur2] : [JH.SCALD.dps, JH.SCALD.dur]));
+          const sd = JH.Balance.scaldDps(this.stats.sprayDamage, scaldRank, !!this.beneRank("bushfire"));
+          e.applyScald(sd, scaldRank >= 2 ? JH.SCALD.dur2 : JH.SCALD.dur);
         }
-        if (this.stats.baselineScald && dmgScale >= 1.2) e.applyScald(JH.SCALD.dps, JH.SCALD.dur);
+        if (this.stats.baselineScald && dmgScale >= 1.2) {
+          const sd = JH.Balance.scaldDps(this.stats.sprayDamage, 0, !!this.beneRank("bushfire"));
+          e.applyScald(sd, JH.SCALD.dur);
+        }
         if (e.onSprayHit) e.onSprayHit(dt, game);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2 * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
@@ -1409,7 +1414,7 @@
       this._mudT = 0;        // Mudslide: seconds of lingering slow left after leaving a puddle
       this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
       this.scaldDps = 0;
-      this._spreadDone = false;  // Bushfire: contagion fired for the current scald application
+      this._spreadT = 0;    // Boilover: seconds until next contagion recheck while scalded
       this.slamCdT = 0;     // Aftershock: per-enemy cooldown between wall-slam hits
       this._lsCdT = 0;      // Landslide: cooldown before this enemy can be hit again as a victim
     }
@@ -1565,22 +1570,25 @@
         // Steam motes puff up off the enemy (rising, drifting) — the boil read.
         if (Math.random() < 7 * dt) burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.6, this.y,
           this.bodyH * 0.4, JH.PAL.steamHi, 1, { speed: 12, life: 0.5, up: 42, grav: -18, size: 1 });
-        // Bushfire: once per application, contagion jumps to nearby enemies
-        // at this enemy's dps/dur. Spread targets have their own flag
-        // pre-set so the jump can't chain past depth 1.
-        if (!this._spreadDone) {
+        // Boilover: while scalded, contagion re-checks every boiloverRecheckS.
+        this._spreadT = (this._spreadT || 0) - dt;
+        if (this._spreadT <= 0) {
+          this._spreadT = JH.BENE_TUNE.boiloverRecheckS;
           const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
           if (bfRank) {
-            this._spreadDone = true;
+            const sr = JH.BENE_AOE.bushfireSpread;
             for (const o of game.enemies) {
-              if (o === this || o.dead) continue;
-              if (Math.hypot(o.x - this.x, o.y - this.y) > 40) continue;
-              o._spreadDone = true;
+              if (o === this || o.dead || (o.scaldT || 0) > 0) continue;
+              if (Math.hypot(o.x - this.x, o.y - this.y) > sr) continue;
               o.applyScald(this.scaldDps, this.scaldT);
             }
+            // ring at the exact spread radius (rim is hitbox)
+            if (game.pulseRings) game.pulseRings.push({
+              x: this.x, y: this.y, r: 0, targetR: sr, dur: 0.25, t: 0,
+              dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#ff8c2a",
+            });
           }
         }
-        if (this.scaldT <= 0) this._spreadDone = false;
         if (this.hp <= 0) this.die(game);
       }
       // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each

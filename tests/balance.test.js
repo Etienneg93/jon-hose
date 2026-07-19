@@ -447,6 +447,14 @@ test("baptize: bonus scales linearly with wetness", () => {
   assert.ok(Math.abs(m(1, 2) - (1 + T.baptizeMaxII)) < 1e-9);
 });
 
+test("scald dps scales with spray damage and Boilover multiplies it", () => {
+  const T = JH.BENE_TUNE;
+  assert.strictEqual(Balance.scaldDps(50, 1, false), 50 * T.scaldDpsFrac);
+  assert.strictEqual(Balance.scaldDps(120, 2, false), 120 * T.scaldDpsFracII);
+  assert.strictEqual(Balance.scaldDps(50, 1, true), 50 * T.scaldDpsFrac * T.boiloverScaldMult);
+  assert.strictEqual(Balance.scaldDps(50, 0, false), 50 * T.scaldDpsFrac, "rank 0 uses base frac");
+});
+
 test("pickRelics: never returns an owned id, returns at most n", () => {
   const pool = ["a", "b", "c", "d", "e"];
   const owned = { a: true, c: true };

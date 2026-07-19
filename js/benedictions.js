@@ -45,8 +45,8 @@
 
     // Fire — damage & risk
     { id: "scalding_faith", verb: "stream", element: "fire", kind: "boon", name: "Scalding Faith",
-      desc: "Full-pressure spray applies Scald: 4/s for 2s enemy DoT",
-      descII: "6/s, 3s" },
+      desc: "Full-pressure spray Scalds: {g:10%} of {i:dmg} per second for 2s",
+      descII: "{g:18%} for 3s" },
     { id: "backdraft", verb: "dash", element: "fire", kind: "boon", name: "Backdraft",
       desc: "Dashing through enemies Scalds them",
       descII: "+8 burst pop" },
@@ -96,8 +96,8 @@
     // Legendaries — one per element, prereq >=2 owned boons of that element
     { id: "pressure_sermon", kind: "legendary", element: "water", name: "Pressure Sermon",
       desc: "Releasing spray after ≥0.8s of continuous full pressure emits a knockback cone (10 water)" },
-    { id: "bushfire", kind: "legendary", element: "fire", name: "Bushfire",
-      desc: "Scald spreads to enemies within 40px of a Scalded one" },
+    { id: "bushfire", kind: "legendary", element: "fire", name: "Boilover",
+      desc: "Scald burns {g:+50%} hotter and rolls to enemies within 40px while it lasts" },
     { id: "standing_stone", kind: "legendary", element: "earth", name: "Standing Stone",
       desc: "After 0.5s of not moving: no knockback taken, +25% damage, wider spray until you move" },
     { id: "whirlwind_walk", kind: "legendary", element: "air", name: "Whirlwind Walk",
