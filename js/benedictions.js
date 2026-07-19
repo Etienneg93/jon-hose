@@ -87,11 +87,11 @@
 
     // Duos — dual-glyph, needs >=1 owned boon from each listed element
     { id: "steam_sermon", kind: "duo", needs: ["water", "fire"], name: "Steam Sermon",
-      desc: "Spraying a FirePatch vents a damaging steam cloud over it (12/s, 1.5s)" },
-    { id: "mudslide", kind: "duo", needs: ["water", "earth"], name: "Mudslide",
-      desc: "Enemies knocked across a puddle are dragged its full length and slowed" },
-    { id: "firestorm", kind: "duo", needs: ["fire", "air"], name: "Firestorm",
-      desc: "Dash leaves a short friendly flame trail (patches flagged harmless to Jon)" },
+      desc: "Scalded enemies vent steam: {g:15%} {i:dmg}/s to OTHER enemies near them" },
+    { id: "mudslide", kind: "duo", needs: ["water", "earth"], name: "Mud Spray",
+      desc: "Your stream runs muddy: sprayed enemies slow, stacking to {g:50%}" },
+    { id: "firestorm", kind: "duo", needs: ["fire", "air"], name: "Steam Devil",
+      desc: "Dashing spins off a traveling steam vortex that Scalds and shoves what it touches" },
 
     // Legendaries — one per element, prereq >=2 owned boons of that element
     { id: "pressure_sermon", kind: "legendary", element: "water", name: "Pressure Sermon",

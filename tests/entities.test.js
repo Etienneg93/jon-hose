@@ -1818,27 +1818,75 @@ test("Slipstream: freeSprayT skips the water drain in doSpray", () => {
   assert.strictEqual(p.water, water0, "spray drains no water while freeSprayT is active");
 });
 
-// ---- Benedictions: duos (Steam Sermon, Firestorm) ----
+// ---- Benedictions: duos (Steam Sermon, Mud Spray, Steam Devil) ----
 
-test("Steam Sermon: spraying a fire patch also vents steam damage onto an enemy standing in it", () => {
+test("Steam Sermon: scalded enemies vent damage to OTHER nearby enemies", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("steam_sermon");
+  const g = makeThinkGame(400, 40);   // player kept away so think() doesn't interfere
+  const a = new JH.Enemy("mook", 100, 40);
+  const b = new JH.Enemy("mook", 100 + JH.BENE_AOE.steamVent - 4, 40);   // inside vent radius
+  g.enemies = [a, b];
+  a.applyScald(4, 5);   // A is scalded; B is not
+  const aHp0 = a.hp, bHp0 = b.hp;
+  a.update(1, g);
+  const vdps = g.player.stats.sprayDamage * JH.BENE_TUNE.steamVentDpsFrac;
+  assert.ok(Math.abs((bHp0 - b.hp) - vdps) < 0.5,
+    "B lost ~steamVentDpsFrac*sprayDamage over the 1s tick, got " + (bHp0 - b.hp));
+  assert.strictEqual(aHp0 - a.hp, 4, "A only takes its own scald tick, not the vent");
+  B.reset();
+});
+
+test("Mud Spray: sprayed enemies stack slow to the cap, decaying after", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("mudslide");
   const g = makeThinkGame(60, 40);
   const p = g.player;
   p.water = p.stats.maxWater;
   p.facing = 1;
-  const fp = new JH.FirePatch(p.x + 30, p.y, 24, 3);
-  g.firePatches = [fp];
-  const e = new JH.Enemy("mook", fp.x, fp.y);   // standing in the patch
+  const e = new JH.Enemy("mook", p.x + 20, p.y);
+  e.hp = e.maxHp = 1e6;   // survive the full 2s of spray damage — only the slow stack matters
   g.enemies = [e];
-  const hp0 = e.hp;
-  p.doSpray(0.1, g);
-  assert.ok(fp.sprayProgress > 0, "spray still advances the patch's extinguish timer");
-  assert.ok(e.hp < hp0, "steam damage landed on the enemy standing in the sprayed patch");
+  for (let i = 0; i < 20; i++) p.doSpray(0.1, g);   // spray for 2s total
+  const cap = JH.BENE_TUNE.mudSlowCap;
+  assert.ok(Math.abs(e._mudSlow - cap) < 0.02, "slow stacks to ~cap after 2s of spray, got " + e._mudSlow);
+  for (let i = 0; i < 15; i++) e.update(0.1, g);   // stop spraying for 1.5s (> mudDecayS)
+  assert.strictEqual(e._mudSlow, 0, "slow fully decays once spraying stops (> mudDecayS)");
   B.reset();
 });
 
-test("Firestorm: a friendly fire patch damages an enemy inside it but never burns the player", () => {
+test("Steam Devil: dash spawns a traveling vortex that scalds once per enemy", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("firestorm");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  g.player = p;   // SteamDevil.update reads game.player for sprayDamage/beneRank
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  const devil = g.embers.find((em) => em instanceof JH.SteamDevil);
+  assert.ok(devil, "a SteamDevil is pushed to game.embers on dash");
+  assert.strictEqual(devil.dir, p.facing, "travels along the dash/facing direction");
+
+  const e = new JH.Enemy("mook", devil.x, p.y);   // sitting right in its path
+  g.enemies = [e];
+  let scaldCalls = 0;
+  const realApplyScald = e.applyScald.bind(e);
+  e.applyScald = (dps, dur) => { scaldCalls++; realApplyScald(dps, dur); };
+
+  const x0 = devil.x;
+  devil.update(0.1, g);
+  assert.ok(devil.x !== x0, "moves along dir at devilSpeed");
+  assert.ok(e.scaldT > 0, "enemy gains scaldT on contact");
+  assert.strictEqual(scaldCalls, 1, "scalded once on first contact");
+  devil.update(0.1, g);   // still tracked in devil.hit — must not scald again
+  assert.strictEqual(scaldCalls, 1, "not scalded a second time (own hit set)");
+  B.reset();
+});
+
+test("FirePatch friendly option: damages enemies inside it but never burns the player", () => {
   const g = makeThinkGame(100, 40);   // player standing at the patch center
   const fp = new JH.FirePatch(100, 40, 24, 3, { friendly: true });
   const e = new JH.Enemy("mook", 100, 40);

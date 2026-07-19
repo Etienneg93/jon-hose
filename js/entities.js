@@ -532,9 +532,11 @@
         this._dashY = my;
         this._dashTouched = new Set();   // Backdraft: enemies scalded this dash
         this._gustTouched = new Set();   // Whirlwind Walk: enemies gusted this dash
-        this._dashDist = 0;   // Firestorm: distance travelled since the last trail patch
         game.audio.play("dash");
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
+        // Steam Devil (Firestorm): dash spins off a traveling scald vortex
+        // that moves along the dash direction independently of Jon.
+        if (this.beneRank("firestorm")) game.embers.push(new JH.SteamDevil(this.x, this.y, this.facing));
         // Baptismal Wake: dash leaves an enemy-slowing, enemy-pulling puddle;
         // rank II is a bigger radius and a stronger pull (see SlowZone.pull).
         const wakeRank = this.beneRank("baptismal_wake");
@@ -595,15 +597,6 @@
           this.dashGraceT = S.dashIframeBonus || 0;
           const ssRank = this.beneRank("slipstream");
           if (ssRank) this.freeSprayT = ssRank >= 2 ? 0.8 : 0.5;
-        }
-        // Firestorm: dash trail — a friendly (harmless-to-Jon) fire patch
-        // every 24px of dash travel.
-        if (this.beneRank("firestorm")) {
-          this._dashDist = (this._dashDist || 0) + S.dashSpeed * dt;
-          while (this._dashDist >= 24) {
-            this._dashDist -= 24;
-            JH.spawnFirePatch(game, this.x, this.y, 12, 1.0, { friendly: true });
-          }
         }
       } else if (this.spraying) {
         // Sure Grip: rank 1 halves the slow-down from BASE_SPRAY_SLOW toward
@@ -985,6 +978,15 @@
           const sd = JH.Balance.scaldDps(this.stats.sprayDamage, 0, !!this.beneRank("bushfire"));
           e.applyScald(sd, JH.SCALD.dur);
         }
+        // Mud Spray: sprayed enemies build a stacking slow toward the cap
+        // (single-rank duo — no rank-II payoff). Decay + consume live in
+        // Enemy.update, next to the _puddleSlow consume; _mudFresh marks
+        // this enemy as sprayed THIS frame so update() skips decay for it.
+        if (this.beneRank("mudslide")) {
+          const cap = JH.BENE_TUNE.mudSlowCap;
+          e._mudSlow = Math.min(cap, (e._mudSlow || 0) + JH.BENE_TUNE.mudStackPerS * cap * dt);
+          e._mudFresh = true;
+        }
         if (e.onSprayHit) e.onSprayHit(dt, game);
         e.applyKnockback(this.facing, S.knockback * dt * 2.2 * (this.vigorT > 0 ? 1.2 : 1), (e.y - this.y) * 0.02);
         if (Math.random() < 0.5)
@@ -1132,7 +1134,6 @@
           wall.takeDamage(S.sprayDamage * dmgScale * dt, game);
       }
       // Fire patches: spray aimed at a patch's depth advances its extinguish timer.
-      const steamRank = this.beneRank("steam_sermon");
       if (game.firePatches) {
         for (const fp of game.firePatches) {
           if (fp.dead) continue;
@@ -1145,18 +1146,6 @@
             const douseMult = JH.FIRE.douseDmgScale
               ? Math.max(1, (S.sprayDamage * dmgScale) / JH.PLAYER.sprayDamage) : 1;
             fp.sprayProgress += dt * douseMult;
-            // Steam Sermon: spraying a lit patch also vents a damaging steam
-            // cloud over its footprint, cooking any enemy standing in it.
-            if (steamRank) {
-              for (const e of game.enemies) {
-                if (e.dead) continue;
-                if (Geo.inGroundEllipse(e.x, e.y, fp.x, fp.y, fp.footprint().rx + 6))
-                  e.takeDamage(12 * dt, game, 0, 0);
-              }
-              if (Math.random() < 20 * dt)
-                burst(game, fp.x, fp.y, 10, "#ffffff", 1,
-                  { speed: 30, life: 0.4, up: 40, grav: -20, size: 1 });
-            }
           }
         }
       }
@@ -1574,7 +1563,8 @@
       this.spawnGrace = 0.2;
       this.wetness = 0;    // 0..1 soak level from spray hits (blue tint + drips)
       this._puddleSlow = 0;  // vsEnemies SlowZone tag for this frame; see update()
-      this._mudT = 0;        // Mudslide: seconds of lingering slow left after leaving a puddle
+      this._mudSlow = 0;     // Mud Spray: 0..BENE_TUNE.mudSlowCap stacking slow; see update()
+      this._mudFresh = false; // Mud Spray: sprayed THIS frame (doSpray) — skips decay in update()
       this.scaldT = 0;      // seconds of Scald DoT remaining (0 = not scalded)
       this.scaldDps = 0;
       this._spreadT = 0;    // Boilover: seconds until next contagion recheck while scalded
@@ -1736,6 +1726,17 @@
             });
           }
         }
+        // Steam Sermon: while scalded, vent damage to OTHER nearby enemies
+        // (the scalded body cooks its neighbours) — BENE_AOE.steamVent radius.
+        if (game.player.beneRank && game.player.beneRank("steam_sermon")) {
+          const vr = JH.BENE_AOE.steamVent;
+          const vdps = game.player.stats.sprayDamage * JH.BENE_TUNE.steamVentDpsFrac;
+          for (const o of game.enemies) {
+            if (o === this || o.dead) continue;
+            if (Math.hypot(o.x - this.x, o.y - this.y) > vr) continue;
+            o.takeDamage(vdps * dt, game, 0, 0);
+          }
+        }
         if (this.hp <= 0) this.die(game);
       }
       // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each
@@ -1743,12 +1744,18 @@
       // back toward the pre-think position by that fraction. One hook here
       // slows every chaser/charger uniformly without touching per-class
       // movement code.
-      // Mudslide: lingering slow after leaving the puddle (tag set by
-      // SlowZone.update); reuses the _puddleSlow consume below.
-      if (this._mudT > 0) {
-        this._mudT -= dt;
-        if (!this._puddleSlow) this._puddleSlow = 0.7;
+      // Mud Spray: stacks a slow (0..mudSlowCap) consumed alongside
+      // _puddleSlow (multiplicatively — a puddle and mud can both apply) and
+      // decaying toward 0 over mudDecayS once the enemy stops getting
+      // sprayed THIS frame (doSpray sets _mudFresh per-hit; cleared below
+      // every frame so a gap in spraying is caught next tick).
+      if (this._mudSlow > 0) {
+        const mudMult = 1 - this._mudSlow;
+        this._puddleSlow = this._puddleSlow ? this._puddleSlow * mudMult : mudMult;
+        if (!this._mudFresh)
+          this._mudSlow = Math.max(0, this._mudSlow - JH.BENE_TUNE.mudSlowCap / JH.BENE_TUNE.mudDecayS * dt);
       }
+      this._mudFresh = false;
       const prePx = this.x, prePy = this.y;
       if (this.staggerT > 0) this.staggerT -= dt;   // hazard shove: skip think
       else this.think(dt, game);
@@ -1885,9 +1892,23 @@
 
     // Status overlays drawn OVER every enemy by the game render loop (not in
     // draw()), so bosses/Furnace/Smelt with custom draw() get them too: scald
-    // steam and the damage-number running tally.
-    drawStatusFx(ctx, cam) {
+    // steam and the damage-number running tally. `player` is passed in (draw
+    // has no `game`) purely for the Steam Sermon vent-ring gate below.
+    drawStatusFx(ctx, cam, player) {
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      // Steam Sermon: while scalded and owned, a faint ring at the exact vent
+      // radius — same shape as the Math.hypot hit test in Enemy.update (rim
+      // is hitbox). Ground-flattened to match the world-plane hit circle.
+      if (this.scaldT > 0 && player && player.beneRank && player.beneRank("steam_sermon")) {
+        const vr = JH.BENE_AOE.steamVent;
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = "#d6f6ff";
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, vr, vr * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // Scald: steam boils off the enemy (water on heat) — rising wisps that
       // fade warm→pale as they climb. NO drawn oval; the wisps are the read.
       if (this.scaldT > 0) {
@@ -3095,7 +3116,6 @@
       this.t += dt;
       if (this.t >= this.dur) { this.dead = true; return false; }
       if (this.vsEnemies) {
-        const mudRank = game.player.beneRank ? game.player.beneRank("mudslide") : 0;
         for (const e of game.enemies) {
           if (e.dead || e.isBoss) continue;
           if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, this.r)) continue;
@@ -3108,14 +3128,6 @@
             e.y += (dy / dist) * step * 0.5;   // depth pulls gentler
           }
           if (this.dmgAmp > 1) e.wetness = Math.max(e.wetness, 0.35);
-          // Mudslide: a knocked-back enemy crossing the puddle gets dragged
-          // harder (knockback amplified while inside), then keeps a lingering
-          // slow for a beat after leaving (_mudT, consumed in Enemy.update
-          // next to the _puddleSlow consume).
-          if (mudRank && Math.abs(e.knockVX) > 60) {
-            e.knockVX *= 1 + 2.5 * dt;
-            e._mudT = 0.8;
-          }
         }
         return true;
       }
@@ -4254,6 +4266,47 @@
     game.banner("…THE CORE SURVIVES", 1.6);
   }
   JH.ejectBossCore = ejectBossCore;
+
+  // Steam Devil (Firestorm duo): a traveling scald vortex spun off by a
+  // dash. Moves at devilSpeed along the dash direction, independent of Jon,
+  // and Scalds + nudges each enemy it touches once (own `hit` set). Rides
+  // game.embers like BossCore/FxBurst. `isFx = true`, not `isProjectile` —
+  // it must NOT be swept/destroyed by Whirlwind Walk's dash-projectile sweep.
+  class SteamDevil {
+    constructor(x, y, dir) {
+      this.x = x; this.y = y; this.dir = dir;
+      this.t = 0; this.dead = false; this.isFx = true;
+      this.hit = new Set();
+    }
+    update(dt, game) {
+      const T = JH.BENE_TUNE;
+      this.t += dt;
+      this.x += this.dir * T.devilSpeed * dt;
+      if (this.t >= T.devilLife) { this.dead = true; return false; }
+      for (const e of game.enemies) {
+        if (e.dead || e.dropping || this.hit.has(e)) continue;
+        if (Math.hypot(e.x - this.x, e.y - this.y) > 14) continue;
+        this.hit.add(e);
+        e.applyScald(JH.Balance.scaldDps(game.player.stats.sprayDamage,
+          game.player.beneRank("scalding_faith"), !!game.player.beneRank("bushfire")), JH.SCALD.dur);
+        e.applyKnockback(this.dir, T.devilNudge);
+      }
+      return true;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0);
+      ctx.save();
+      ctx.globalAlpha = 0.55 * (1 - this.t / JH.BENE_TUNE.devilLife) + 0.2;
+      ctx.strokeStyle = "#e8f4fa";
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(sy) - 6 - i * 7, 7 - i * 1.5, 3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  JH.SteamDevil = SteamDevil;
 
   // One-shot FX animation at a world point (explosions etc.). Rides the
   // game.embers pipeline like BossCore: update(dt)->keep, draw(ctx,cam).

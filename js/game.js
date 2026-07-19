@@ -2922,7 +2922,7 @@
           }
           // Status overlays (scald steam + damage-number tally) OVER every
           // enemy regardless of its custom draw() — bosses/Furnace included.
-          if (e.drawStatusFx && !e.dying) e.drawStatusFx(ctx, cam);
+          if (e.drawStatusFx && !e.dying) e.drawStatusFx(ctx, cam, this.player);
         }
 
         // projectiles + particles on top
