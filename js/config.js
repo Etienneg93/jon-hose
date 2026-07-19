@@ -77,6 +77,54 @@
   // Pressure Sermon (water legendary): spraying `charge` seconds arms it
   // (pip on Jon); releasing the hose looses a forward-traveling water wave.
   // The wavefront is the hitbox: each enemy is hit once as the front passes.
+  // Benediction AoE radii (world px): ONE constant per effect, shared by the
+  // hit test and its drawn ring/telegraph (rim is hitbox).
+  JH.BENE_AOE = {
+    aftershockSplash: 30,   // removed in Focus Quake task — rank-2 wall-slam splash radius
+    bushfireSpread: 40,     // scald contagion jump radius
+    whirlwindSweep: 20,     // dash projectile-destroy radius around Jon
+    focusQuake: 30,          // aftershock rework: quake pulse radius
+    steamVent: 24,           // steam vent hazard radius
+    dropletPop: 12,          // droplet pop radius
+  };
+
+  // Benediction rework tunables (spec 2026-07-19). Fractions are of the
+  // CURRENT sprayDamage stat, sampled at application time.
+  JH.BENE_TUNE = {
+    splitArcFrac: 0.35, splitArcFracII: 0.50,     // arc dmg share (II: 2 targets)
+    splitTargetsII: 2,
+    wakePull: 40, wakePullII: 70,                 // px/s puddle pull
+    wakeRadiusIIMult: 1.4,
+    overflowHigh: 0.8, overflowHighII: 0.7,       // tank frac for +dmg edge
+    overflowLow: 0.2, overflowLowII: 0.3,         // tank frac for regen edge
+    overflowDmg: 0.2, overflowDmgII: 0.3,
+    overflowRegenMult: 2, overflowRegenMultII: 3,
+    baptizeMax: 0.15, baptizeMaxII: 0.25,         // at wetness 1.0, linear from 0
+    scaldDpsFrac: 0.10, scaldDpsFracII: 0.18,     // of sprayDamage
+    backdraftPopFrac: 0.20,
+    hazardBootsCd: 10, hazardBootsCdII: 6,
+    hazardPopFrac: 0.30, hazardPopFracII: 0.50,
+    quakeChargeS: 2, quakeChargeSII: 1.5,
+    quakeDmgFrac: 0.40, quakeDmgFracII: 0.60,
+    gravelEveryS: 3, gravelEverySII: 2,
+    gravelDmgFrac: 0.60, gravelKnock: 220,
+    gravelTapGraceS: 0.3,                          // spray gaps <= this don't reset the timer
+    galeStride: 0.25, galeStrideII: 0.40,
+    tailwindRange: 0.20, tailwindRangeII: 0.30,
+    tailwindKnock: 0.20, tailwindKnockII: 0.30,
+    eyeHpFrac: 0.30, eyeHpFracII: 0.40,
+    eyeShieldS: 1.5, eyeShieldSII: 2.0, eyeCd: 30,
+    steamVentDpsFrac: 0.15,
+    mudSlowCap: 0.50,
+    mudDecayS: 1.0, mudStackPerS: 0.5,             // slow builds 50%/s of cap while sprayed
+    devilLife: 2, devilSpeed: 80, devilNudge: 60,
+    sermonWaveFrac: 0.40,
+    boiloverScaldMult: 1.5, boiloverRecheckS: 1,
+    whirlGustFrac: 0.25, dropletPopFrac: 0.10,
+    bedrockHp: 25, bedrockHpII: 45,
+    sureGripSlowMult: 0.5,                          // base: half the spray slow (II: none)
+  };
+
   JH.SERMON = {
     charge: 0.8,     // s of continuous (non-dry) spray to arm
     dmg: 15,         // flat damage as the front passes

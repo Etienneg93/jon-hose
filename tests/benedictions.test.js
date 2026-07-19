@@ -140,3 +140,26 @@ test("reset clears both active and washed (new run wipes the reliquary)", () => 
   assert.deepStrictEqual(B.active, {});
   assert.strictEqual(B.washedCount(), 0);
 });
+
+test("BENE_TUNE and BENE_AOE carry the rework constants", () => {
+  const T = JH.BENE_TUNE, A = JH.BENE_AOE;
+  // presence + sane ranges only — values are design-owned
+  for (const k of ["splitArcFrac", "splitArcFracII", "wakePull", "wakePullII",
+    "overflowHigh", "overflowHighII", "overflowLow", "overflowLowII",
+    "overflowRegenMult", "overflowRegenMultII", "baptizeMax", "baptizeMaxII",
+    "scaldDpsFrac", "scaldDpsFracII", "backdraftPopFrac",
+    "hazardBootsCd", "hazardBootsCdII", "hazardPopFrac", "hazardPopFracII",
+    "quakeChargeS", "quakeChargeSII", "quakeDmgFrac", "quakeDmgFracII",
+    "gravelEveryS", "gravelEverySII", "gravelDmgFrac", "gravelKnock",
+    "galeStride", "galeStrideII", "tailwindRange", "tailwindRangeII",
+    "tailwindKnock", "tailwindKnockII",
+    "eyeHpFrac", "eyeHpFracII", "eyeShieldS", "eyeShieldSII", "eyeCd",
+    "steamVentDpsFrac", "mudSlowCap",
+    "devilLife", "devilSpeed", "sermonWaveFrac",
+    "boiloverScaldMult", "boiloverRecheckS",
+    "whirlGustFrac", "dropletPopFrac", "bedrockHp", "bedrockHpII"])
+    assert.ok(typeof T[k] === "number" && T[k] > 0, k + " present");
+  for (const k of ["focusQuake", "steamVent", "dropletPop", "whirlwindSweep", "bushfireSpread"])
+    assert.ok(A[k] > 0, "BENE_AOE." + k);
+  assert.ok(A.whirlwindSweep === 20, "whirlwind sweep widened per spec");
+});
