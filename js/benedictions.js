@@ -51,7 +51,7 @@
       desc: "Dashing through enemies Scalds them",
       descII: "+8 burst pop" },
     { id: "trial_by_fire", verb: "stream", element: "fire", kind: "boon", name: "Trial by Fire",
-      desc: "+20% spray dmg to enemies that are burning, Scalded, or standing in a fire patch",
+      desc: "+20% spray dmg to enemies that are burning, Scalded, or standing in a fire patch (needs a Scald source)",
       descII: "+30%" },
     { id: "ash_walk", verb: "body", element: "fire", kind: "boon", name: "Ash Walk",
       desc: "First burn stack per patch ignored; walking a patch douses it with a steam pop (6 dmg nearby), 10s cooldown",
@@ -106,6 +106,10 @@
 
   const ELEMENTS = ["water", "fire", "earth", "air"];
 
+  // trial_by_fire only offers/ranks up if a Scald source (something that
+  // applies the Scald DoT) is already owned — Steam Devil keeps id "firestorm".
+  const SCALD_SOURCES = ["scalding_faith", "backdraft", "firestorm"];
+
   // Fisher-Yates-ish weighted pick without replacement: consumes rng() calls
   // one at a time so tests with fixed/seeded rng stay deterministic.
   function weightedPickIndex(weights, rng) {
@@ -122,6 +126,7 @@
 
   const Benedictions = {
     DEFS,
+    SCALD_SOURCES,
 
     active: {},
 
@@ -221,6 +226,7 @@
         candidatesByElement[el] = DEFS.filter((d) => d.kind === "boon" && d.element === el).map((d) => {
           const r = active[d.id] | 0;
           if (r >= 2) return null;
+          if (d.id === "trial_by_fire" && !SCALD_SOURCES.some((id) => active[id])) return null;
           return { id: d.id, deepen: r === 1 };
         }).filter(Boolean);
       }

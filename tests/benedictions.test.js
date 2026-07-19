@@ -6,6 +6,17 @@ global.window = global.window || {};
 require("../js/config.js");
 const JH = global.window.JH;
 
+// Seeded PRNG for reproducible offer sweeps (mulberry32).
+function mulberry32(seed) {
+  let a = seed;
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 test("DEFS: 17 boons, 3 duos, 4 legendaries; ids unique", () => {
   const boons = B.DEFS.filter((d) => d.kind === "boon");
   assert.strictEqual(boons.length, 17);
@@ -52,6 +63,26 @@ test("pickOffers: owned rank-1 boons can return as deepen; rank-2 never return",
     assert.ok(!offers.some((o) => o.id === "baptize"));
     for (const o of offers) if (o.id === "overflow") assert.strictEqual(o.deepen, true);
   }
+});
+
+test("SCALD_SOURCES lists the boons/duo that apply Scald", () => {
+  assert.deepStrictEqual(B.SCALD_SOURCES, ["scalding_faith", "backdraft", "firestorm"]);
+});
+
+test("pickOffers: trial_by_fire is offered only with a scald source owned", () => {
+  const rng = () => 0.01; // deterministic: always picks the first remaining candidate
+  const no = B.pickOffers({ active: { gale_stride: 1 }, pillarRanks: { fire: 1 }, usedOnce: {} }, rng);
+  assert.ok(!no.some((o) => o.id === "trial_by_fire"), "no scald source owned: never offered");
+
+  // trial_by_fire must at least be POSSIBLE once a scald source is owned:
+  // assert it appears across a seeded rng sweep.
+  let seen = false;
+  for (let i = 0; i < 200 && !seen; i++) {
+    const r = mulberry32(i);
+    seen = B.pickOffers({ active: { scalding_faith: 1 }, pillarRanks: { fire: 1 }, usedOnce: {} }, r)
+      .some((o) => o.id === "trial_by_fire");
+  }
+  assert.ok(seen, "trial_by_fire offered at least once with a scald source owned");
 });
 
 test("legendary appears only with >= 2 boons of its element and only once", () => {
