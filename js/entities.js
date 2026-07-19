@@ -592,7 +592,13 @@
         const moveBon = ((mx !== 0 || my !== 0) && S.moveRegen > 0) ? S.moveRegen : 0;
         // Gas chokes recovery too: while the poison debuff lingers, regen is cut.
         const gasCut = this.gasT > 0 ? JH.STINK.gasRegenMult : 1;
-        this.water = Math.min(S.maxWater, this.water + (S.waterRegen + moveBon) * gasCut * dt);
+        // Overflow low edge: near-empty tank regenerates faster.
+        const ovRank = this.beneRank("overflow");
+        const T2 = JH.BENE_TUNE;
+        const ovLow = ovRank ? (ovRank >= 2 ? T2.overflowLowII : T2.overflowLow) : 0;
+        const ovMult = (ovRank && this.water / S.maxWater < ovLow)
+          ? (ovRank >= 2 ? T2.overflowRegenMultII : T2.overflowRegenMult) : 1;
+        this.water = Math.min(S.maxWater, this.water + (S.waterRegen + moveBon) * gasCut * ovMult * dt);
       }
 
       // ---- hydrant: stand next to one to refill water only. HP is NOT healed

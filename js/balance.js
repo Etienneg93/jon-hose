@@ -352,9 +352,12 @@
     // ranks: {overflow, baptize, trial} boon ranks (0/1/2). t: {waterFrac,
     // wet, burning} target/attacker state. Stacks multiplicatively. Pure.
     beneDmgMult(ranks, t) {
+      const T = root.JH.BENE_TUNE;
       let m = 1;
-      if (ranks.overflow && t.waterFrac >= (ranks.overflow >= 2 ? 0.7 : 0.8)) m *= ranks.overflow >= 2 ? 1.3 : 1.2;
-      if (ranks.baptize && t.wet > 0.3) m *= ranks.baptize >= 2 ? 1.25 : 1.15;
+      if (ranks.overflow && t.waterFrac >= (ranks.overflow >= 2 ? T.overflowHighII : T.overflowHigh))
+        m *= 1 + (ranks.overflow >= 2 ? T.overflowDmgII : T.overflowDmg);
+      if (ranks.baptize && t.wet > 0)
+        m *= 1 + (ranks.baptize >= 2 ? T.baptizeMaxII : T.baptizeMax) * Math.min(1, t.wet);
       if (ranks.trial && t.burning) m *= ranks.trial >= 2 ? 1.3 : 1.2;
       return m;
     },

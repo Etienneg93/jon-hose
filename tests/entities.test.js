@@ -2143,6 +2143,34 @@ test("Boiler Coil: real per-frame order — heat survives while spraying via upd
   assert.strictEqual(p.boilerHeat, 0, "gap after real dry frames clears the heat");
 });
 
+test("Overflow low edge: near-empty tank regens at overflowRegenMult× the no-boon rate", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset();
+  const T = JH.BENE_TUNE;
+  const dt = 1 / 60;
+  const dryInput = { held: () => false, pressed: () => false, buffered: () => false, consume() {} };
+
+  const base = Object.assign(makeThinkGame(60, 40), { input: dryInput });
+  const pBase = base.player;
+  pBase.water = pBase.stats.maxWater * (T.overflowLow - 0.05);   // below the rank-I low edge
+  const w0 = pBase.water;
+  pBase.update(dt, base);
+  const baseGain = pBase.water - w0;
+  assert.ok(baseGain > 0, "premise: the no-boon player actually regens");
+
+  B.take("overflow");   // rank 1
+  const boosted = Object.assign(makeThinkGame(60, 40), { input: dryInput });
+  const pBoost = boosted.player;
+  pBoost.water = pBoost.stats.maxWater * (T.overflowLow - 0.05);
+  const w1 = pBoost.water;
+  pBoost.update(dt, boosted);
+  const boostGain = pBoost.water - w1;
+
+  assert.ok(Math.abs(boostGain - baseGain * T.overflowRegenMult) < 1e-9,
+    "Overflow rank I regens at overflowRegenMult× the baseline rate below the low edge");
+  B.reset();
+});
+
 test("Dowsing Rod: doubles the pickup magnet radius; water cans give 50% more", () => {
   const pull = new JH.Pickup("water_can", 0, 0, 10);
   const g = { player: { x: 45, y: 0 }, lootVacuumT: 0 };   // 45px away: outside base 30, inside relic 60
