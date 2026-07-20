@@ -256,13 +256,10 @@
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, top);
 
-      // Air World (cloudline street) — fades in past ZONE4_START and damps
-      // the older acts' tints out so the sky reads as a clean handoff. Gated
-      // on airOn, not just camera position, so the fire-truck run's
-      // synthetic scroll (which crosses this X) can't bleach into cloudline.
-      const airT = this.airOn
-        ? Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500))
-        : 0;
+      // Air World (cloudline street): binary on airOn — entry is the fire
+      // truck's hard cut (enterAirAct), so there is no walkable seam to
+      // fade across; a ramp here only ever showed a muddy half-blend.
+      const airT = this.airOn ? 1 : 0;
       // Ruined-district smog haze — fades in as you approach Act 3.
       const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
       const fireTEarly = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airT);
@@ -437,9 +434,7 @@
       // Baked per-act ground strips: street base always, act strips faded in
       // on the same zone ramps as the tints below. 480-logical-px tiles,
       // full parallax. Falls through to the flat fills + dashes when absent.
-      const airTg = this.airOn
-        ? Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500))
-        : 0;
+      const airTg = this.airOn ? 1 : 0;   // hard cut — see draw()
       const zoneTg = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airTg);
       const fireTg = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airTg);
       const bandH = H - top;
@@ -469,11 +464,8 @@
       ctx.fillStyle = "#39405440";
       ctx.fillRect(0, top + 2, W, 6);
 
-      // Air World floor: fades in past ZONE4_START and damps the older acts'
-      // tints out, same pattern as draw(). Gated on airOn — see draw().
-      const airT = this.airOn
-        ? Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500))
-        : 0;
+      // Air World floor: binary on airOn (hard cut) — see draw().
+      const airT = this.airOn ? 1 : 0;
       // Ruined-district floor: dust tint.
       const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
       if (zoneT > 0) {
