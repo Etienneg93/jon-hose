@@ -426,11 +426,15 @@
   };
 
   JH.BOSS = {
-    name: "The Big Drip", hp: 620, speed: 34, bodyW: 40, bodyH: 56,
+    name: "The Big Drip", hp: 496, speed: 34, bodyW: 40, bodyH: 56,
     touchDmg: 14, contactCd: 0.9, suds: 120, color: "boss",
     slamDmg: 20, slamRange: 40, slamWind: 0.85,
     sweepDmg: 16, sweepRange: 56, sweepWind: 1.0,
-    summonCd: 9, enrageAt: 0.4, summonType: "mook",   // hp fraction → faster attacks; summons also stop once dropBudget is dry
+    enrageAt: 0.4,            // hp fraction → faster attacks
+    // Heavy rain (replaces add-summons): rooted windup telegraphs ONE dry
+    // safe ellipse, then the whole arena pours. Drawn safe rim IS the
+    // no-hit zone; ticks route through takeHit (i-frames apply).
+    rain: { wind: 2.2, dur: 3.0, tickDmg: 8, tickEvery: 0.5, safeR: 42, cd: 12 },
   };
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable
@@ -445,7 +449,11 @@
 
   // Destructible barricade encounter: smash the wall while enemies keep coming,
   // then walk through to the next zone.
-  JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3 };
+  // Barricade reinforcements arrive in pairs with a breather after kills:
+  // the respawn countdown only starts once the field thins below
+  // maxAlive - groupSize (Balance.wallReinforce holds it until then).
+  // spawnEvery remains the holdout-cadence default (holdoutCadence).
+  JH.WALL = { hp: 360, spawnEvery: 1.5, maxAlive: 3, groupSize: 2, respawnDelay: 3.0 };
 
   // Per-wave spawn caps to defang luck-driven swings (e.g. all-charger waves).
   JH.WAVECAP = { charger: 3 };

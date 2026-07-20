@@ -3324,8 +3324,10 @@
       this.type = type || "boss";
       this.hp = this.maxHp = def.hp;
       this.bodyW = def.bodyW; this.bodyH = def.bodyH;
-      this.summonTimer = def.summonCd;
+      this.summonTimer = def.summonCd || 0;
       this.summonType = def.summonType || "mook";
+      this.rainTimer = def.rain ? def.rain.cd * 0.6 : 0;  // first rain arrives early-ish
+      this.rainState = null;   // { phase: "wind"|"pour", t, tick, safeX, safeY }
       this.phase = 1;
       this.isBoss = true;
       this.atk = null;        // current telegraphed attack {kind,range,band,dmg,dur,t}
@@ -3344,15 +3346,59 @@
       const spd = enraged ? d.speed * 1.6 : d.speed;
       if (this.strikeFx > 0) this.strikeFx -= dt;
 
-      // Summon reinforcements occasionally — but only while the encounter's
-      // drop budget has anything left: once adds stop paying, more of them
-      // is mop-up noise, so the boss stops calling them.
-      this.summonTimer -= dt;
-      const budgetLeft = !game.dropBudget || game.dropBudget.suds > 0 || game.dropBudget.items > 0;
-      if (this.summonTimer <= 0 && budgetLeft &&
-          game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
-        this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
-        game.spawnEnemy(this.summonType, this.x - this.facing * 40, this.y + 10, { infinite: true });
+      // Heavy rain (def.rain — the Big Drip): a rooted windup telegraphs the
+      // ONE dry safe ellipse, then the whole arena pours for rain.dur; ticks
+      // hit through takeHit unless the player stands inside the safe rim.
+      // Bosses without def.rain keep the legacy add-summon loop below.
+      if (d.rain) {
+        const R = d.rain;
+        if (this.rainState) {
+          const rs = this.rainState;
+          rs.t -= dt;
+          if (rs.phase === "wind") {
+            if (rs.t <= 0) {
+              rs.phase = "pour"; rs.t = R.dur; rs.tick = 0;
+              game.shake(4); game.audio.play("blast");
+            } else {
+              this.state = "rainwind";   // rooted channel — free damage window
+              return;
+            }
+          }
+          if (rs.phase === "pour") {
+            rs.tick -= dt;
+            if (rs.tick <= 0) {
+              rs.tick = R.tickEvery;
+              if (pl.alive && !Geo.inGroundEllipse(pl.x, pl.y, rs.safeX, rs.safeY, R.safeR))
+                pl.takeHit(R.tickDmg, game, pl.x + 20, 40);
+            }
+            if (rs.t <= 0) { this.rainState = null; this.rainTimer = R.cd; }
+          }
+        } else {
+          this.rainTimer -= dt;
+          if (this.rainTimer <= 0 && this.state !== "tele") {
+            const b = game.bounds || { minX: 0, maxX: JH.LEVEL_LEN };
+            this.rainState = {
+              phase: "wind", t: R.wind, tick: 0,
+              safeX: clamp(pl.x + (Math.random() * 160 - 80), b.minX + 30, b.maxX - 30),
+              safeY: clamp(JH.DEPTH_MIN + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN),
+                JH.DEPTH_MIN + 6, JH.DEPTH_MAX - 6),
+            };
+            game.audio.play("jump");
+            this.state = "rainwind";   // root from the very first windup tick
+            return;
+          }
+        }
+      } else if (d.summonCd) {
+        // Summon reinforcements occasionally — but only while the encounter's
+        // drop budget has anything left: once adds stop paying, more of them
+        // is mop-up noise, so the boss stops calling them.
+        this.summonTimer -= dt;
+        const budgetLeft = !game.dropBudget || game.dropBudget.suds > 0 || game.dropBudget.items > 0;
+        if (this.summonTimer <= 0 && budgetLeft &&
+            game.enemies.filter((e) => !e.isBoss && !e.dead).length < 3) {
+          this.summonTimer = enraged ? d.summonCd * 0.6 : d.summonCd;
+          game.spawnEnemy(this.summonType, this.x - this.facing * 40, this.y + 10, { infinite: true });
+        }
       }
 
       // --- WIND-UP: hold the raised-arm pose + show the danger zone, then hit.
@@ -3397,6 +3443,7 @@
 
     draw(ctx, cam) {
       if (this.state === "tele" || this.strikeFx > 0) this.drawTelegraph(ctx, cam);
+      if (this.rainState) this.drawRain(ctx, cam);
       JH.Enemy.prototype.draw.call(this, ctx, cam);   // boss sprite + hp pip
       if (this.state === "tele") {                    // flashing "!" over the boss
         const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z) - this.bodyH - 8;
@@ -3404,6 +3451,35 @@
         ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
         ctx.fillText("!", sx, sy); ctx.textAlign = "left";
       }
+    }
+
+    // Heavy rain read: the safe ellipse is drawn at EXACTLY the radius the
+    // pour's no-hit test uses (rim is hitbox, inverted); windup pulses it,
+    // pour fills it faintly and streaks rain everywhere else.
+    drawRain(ctx, cam) {
+      const rs = this.rainState, R = this.def.rain;
+      const sx = rs.safeX - cam, sy = Geo.feetScreenY(rs.safeY, 0);
+      ctx.save();
+      const flash = Math.floor(this.t * 8) & 1;
+      ctx.globalAlpha = rs.phase === "wind" ? (0.45 + (flash ? 0.25 : 0)) : 0.85;
+      ctx.strokeStyle = "#9be8ff"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(Math.round(sx), Math.round(sy), R.safeR, R.safeR * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = rs.phase === "pour" ? 0.14 : 0.07;
+      ctx.fillStyle = "#9be8ff";
+      ctx.fill();
+      if (rs.phase === "pour") {
+        // Deterministic streak field (no Math.random in draw — stable frame to frame).
+        ctx.globalAlpha = 0.45; ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = 1;
+        const seed = Math.floor(this.t * 24);
+        for (let i = 0; i < 44; i++) {
+          const rx = (i * 97 + seed * 31) % JH.VIEW_W;
+          const ry = (i * 61 + seed * 47) % (JH.VIEW_H - 24);
+          ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 2, ry + 9); ctx.stroke();
+        }
+      }
+      ctx.restore();
     }
 
     // Draws the exact area the pending attack will hit, filling toward impact.

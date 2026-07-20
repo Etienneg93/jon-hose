@@ -2423,14 +2423,18 @@
         if (wave && wave.wall) {
           if (this.wall && !this.wall.dead) {
             this.wall.update(dt);
-            // Keep pressure on: respawn reinforcements up to a concurrent cap.
-            this.wallSpawnTimer -= dt;
-            if (this.wallSpawnTimer <= 0 && this.enemies.length < JH.WALL.maxAlive) {
-              this.wallSpawnTimer = JH.WALL.spawnEvery;
+            // Reinforcements arrive in pairs with a breather after kills:
+            // Balance.wallReinforce holds the countdown while the field is
+            // full, so the delay starts when kills thin it (live-feedback
+            // pacing nerf — was a 1.5s per-enemy top-up).
+            const aliveCount = this.enemies.filter((e) => !e.dead && !e.isBoss).length;
+            const rf = JH.Balance.wallReinforce(aliveCount, this.wallSpawnTimer, dt, JH.WALL);
+            this.wallSpawnTimer = rf.timer;
+            for (let k = 0; k < rf.spawn; k++) {
               const type = this.wallPool[(Math.random() * this.wallPool.length) | 0] || "mook";
               const ey = JH.DEPTH_MIN + 8 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 16);
               const e = this.spawnEnemy(type, this.wall.x - 16, ey, { infinite: true, elite: this.nextEliteScale() });
-              e.spawnGrace = 0.2;
+              e.spawnGrace = 0.2 + k * 0.15;   // stagger the pair a beat
             }
           }
           if (!this.wall || this.wall.dead) {

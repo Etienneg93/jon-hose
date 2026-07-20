@@ -2727,6 +2727,51 @@ test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly onc
   assert.strictEqual(g.player.pressureBuffT, 0, "latch prevents re-granting on subsequent enraged frames");
 });
 
+// ---- Big Drip: heavy rain replaces add-summons ----
+
+test("big drip: no summons; rain windup roots him and telegraphs a safe spot", () => {
+  const g = makeThinkGame(400, 40);
+  const boss = new JH.Boss(60, 40, JH.BOSS, "boss");
+  assert.strictEqual(JH.BOSS.summonCd, undefined, "summon config removed");
+  boss.rainTimer = 0;                  // force the rain to start on this tick
+  const x0 = boss.x;
+  boss.think(1 / 60, g);
+  assert.ok(boss.rainState && boss.rainState.phase === "wind", "windup begins");
+  assert.strictEqual(boss.state, "rainwind", "boss channels while winding");
+  boss.think(0.5, g);
+  assert.strictEqual(boss.x, x0, "rooted during the windup");
+  assert.strictEqual(g.enemies.length, 0, "no adds spawned");
+  // Windup duration derives from config.
+  boss.rainState.t = 0.001;
+  boss.think(1 / 60, g);
+  assert.strictEqual(boss.rainState.phase, "pour", "windup length flows from BOSS.rain.wind");
+});
+
+test("big drip rain: pour hits outside the safe rim, never inside (rim is hitbox)", () => {
+  const R = JH.BOSS.rain;
+  const g = makeThinkGame(400, 40);
+  const boss = new JH.Boss(60, 40, JH.BOSS, "boss");
+  boss.rainState = { phase: "pour", t: R.dur, tick: 0, safeX: 200, safeY: 40 };
+  // Player just OUTSIDE the safe rim on the x axis: takes the tick.
+  g.player.x = 200 + R.safeR + 1; g.player.y = 40;
+  g.player.invulnTimer = 0; g.player.dashTimer = 0; g.player.dashGraceT = 0;
+  const hp0 = g.player.hp;
+  boss.think(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - R.tickDmg, "outside the rim the rain hits");
+  // Player just INSIDE the rim: next tick does nothing.
+  boss.rainState.tick = 0;
+  g.player.invulnTimer = 0;
+  g.player.x = 200 + R.safeR - 1;
+  const hp1 = g.player.hp;
+  boss.think(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp1, "inside the safe ellipse the rain never hits");
+  // Pour ends -> cooldown rearms from config.
+  boss.rainState.t = 0.001; boss.rainState.tick = 9;
+  boss.think(1 / 60, g);
+  assert.strictEqual(boss.rainState, null, "rain ends");
+  assert.ok(Math.abs(boss.rainTimer - R.cd) < 1e-9, "cooldown rearms from BOSS.rain.cd");
+});
+
 test("dropLoot: dryStreak increments on a null roll and resets once an item drops", () => {
   const g = Object.create(JH.Game);
   g.player = makePlayer();

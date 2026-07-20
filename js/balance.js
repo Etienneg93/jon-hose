@@ -371,6 +371,21 @@
       return sprayDamage * frac * (boilover ? T.boiloverScaldMult : 1);
     },
 
+    // Barricade reinforcement pacing: pairs with a breather after kills.
+    // While the field holds more than maxAlive - groupSize enemies the timer
+    // is HELD at respawnDelay, so the countdown only starts once kills thin
+    // the field. Returns { timer, spawn } — spawn is how many to place now
+    // (capped so the field never exceeds maxAlive). Pure.
+    wallReinforce(aliveCount, timer, dt, W) {
+      W = W || root.JH.WALL;
+      if (aliveCount > W.maxAlive - W.groupSize)
+        return { timer: W.respawnDelay, spawn: 0 };
+      timer -= dt;
+      if (timer <= 0)
+        return { timer: W.respawnDelay, spawn: Math.min(W.groupSize, W.maxAlive - aliveCount) };
+      return { timer, spawn: 0 };
+    },
+
     // Kibble grant: extend the regen window, reset the rate (same semantics
     // as the health-pickup collect path and the shop's Kibble Pack buy).
     kibbleGrant(pl, pack) {

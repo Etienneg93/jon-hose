@@ -498,3 +498,27 @@ test("relicPoolIds: excludes minAct-gated defs before their act, includes them f
   assert.deepStrictEqual(Balance.relicPoolIds(defs, 0), ["a", "b"]);
   assert.deepStrictEqual(Balance.relicPoolIds(defs, 2), ["a", "b"]);
 });
+
+test("wallReinforce: pairs with a breather that only counts down after kills", () => {
+  const W = JH.WALL;
+  // Field full: timer is HELD at respawnDelay, nothing spawns.
+  let r = Balance.wallReinforce(W.maxAlive, 0.2, 1 / 60, W);
+  assert.strictEqual(r.spawn, 0);
+  assert.strictEqual(r.timer, W.respawnDelay, "countdown held while the field is full");
+  // Field thinned to the gate: countdown runs but hasn't expired -> no spawn yet.
+  r = Balance.wallReinforce(W.maxAlive - W.groupSize, W.respawnDelay, 1 / 60, W);
+  assert.strictEqual(r.spawn, 0);
+  assert.ok(r.timer < W.respawnDelay, "countdown ticks once the field thins");
+  // Countdown expired -> a full group spawns and the timer rearms.
+  r = Balance.wallReinforce(W.maxAlive - W.groupSize, 0.01, 1 / 60, W);
+  assert.strictEqual(r.spawn, W.groupSize, "reinforcements arrive as a group");
+  assert.strictEqual(r.timer, W.respawnDelay);
+  // One kill off a full field is NOT enough: the gate needs the field down
+  // to maxAlive - groupSize before the countdown even starts.
+  r = Balance.wallReinforce(W.maxAlive - 1, 0.01, 1 / 60, W);
+  assert.strictEqual(r.spawn, 0, "gate stays closed until the field thins to maxAlive - groupSize");
+  assert.strictEqual(r.timer, W.respawnDelay, "and the countdown re-arms while closed");
+  // Field empty: the group still can't exceed maxAlive.
+  r = Balance.wallReinforce(0, 0.01, 1 / 60, W);
+  assert.strictEqual(r.spawn, Math.min(W.groupSize, W.maxAlive), "spawn count capped at maxAlive");
+});
