@@ -426,6 +426,45 @@
       const ang = d > 0.01 ? Math.atan2(dyS, dx) : 0;
       return { x: propX + Math.cos(ang) * r, y: propY + (Math.sin(ang) * r) / 2.4 };
     },
+
+    // ---- Ass Man fight helpers (pure; spec 2026-07-20) ----
+    // Phase from hp fraction: 1 above gates[0], 2 in (gates[1], gates[0]], 3 at/below gates[1].
+    assmanPhase(hpFrac, gates) {
+      if (hpFrac <= gates[1]) return 3;
+      if (hpFrac <= gates[0]) return 2;
+      return 1;
+    },
+    // Ground-plane cone from (bx,by) facing ±1: depth axis divided by ry so the
+    // drawn flattened cone and the hit test share one shape.
+    coneHits(px, py, bx, by, facing, range, halfAngleDeg, ry) {
+      const dx = (px - bx) * facing, dy = (py - by) / (ry || 0.4);
+      if (dx <= 0) return false;
+      if (Math.hypot(dx, dy) > range) return false;
+      return Math.abs(Math.atan2(dy, dx)) <= halfAngleDeg * Math.PI / 180;
+    },
+    // Expanding ring rim (elliptical, depth/ry): hit iff on the rim band AND
+    // outside the safe gap. Angles in degrees, atan2 space (-180..180 wraps).
+    ringGapHits(px, py, cx, cy, r, rimW, gapCenterDeg, gapWidthDeg, ry) {
+      const dx = px - cx, dy = (py - cy) / (ry || 0.34);
+      if (Math.abs(Math.hypot(dx, dy) - r) > rimW) return false;
+      const a = Math.atan2(dy, dx) * 180 / Math.PI;
+      const delta = ((a - gapCenterDeg) % 360 + 540) % 360 - 180;
+      return Math.abs(delta) > gapWidthDeg / 2;
+    },
+    semverCmp(a, b) {
+      const pa = String(a || "0").split(".").map(Number), pb = String(b || "0").split(".").map(Number);
+      for (let i = 0; i < 3; i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d < 0 ? -1 : 1; }
+      return 0;
+    },
+    // Leaderboard sort: newer game version first, then waves cleared desc,
+    // then time asc. Array.prototype.sort comparator shape.
+    lbCompare(a, b) {
+      const v = Balance.semverCmp((b || {}).gameVersion, (a || {}).gameVersion);
+      if (v) return v;
+      const w = ((b || {}).wavesCleared || 0) - ((a || {}).wavesCleared || 0);
+      if (w) return w;
+      return (((a || {}).timeSec != null ? a.timeSec : 1e9)) - (((b || {}).timeSec != null ? b.timeSec : 1e9));
+    },
   };
   root.JH = root.JH || {};
   root.JH.Balance = Balance;
