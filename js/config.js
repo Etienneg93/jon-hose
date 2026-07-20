@@ -1301,7 +1301,7 @@
         placements: [{ type: "bidet", x: 112, y: 18 }, { type: "bidet", x: 344, y: 68 }],
         hazards: [{ x: 150, y: 30 }, { x: 290, y: 56 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
-      { name: "BOSS", boss: true, bossType: "assman" },      // wave 36: Ass Man
+      { name: "ASS MAN", boss: true, bossType: "assman" },   // wave 36
     ],
   };
 

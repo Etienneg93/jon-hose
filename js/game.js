@@ -246,7 +246,7 @@
           this.banner("DMG NUMBERS " + (this.showDmgNumbers ? "ON" : "OFF"), 1.0);
           return;
         }
-        const count = JH.LEVEL1.waves.length + 4;  // +1 cutscene, +1 target range, +1 wall boss, +1 post-firewall
+        const count = JH.LEVEL1.waves.length + 5;  // +cutscene +range +wall boss +post-firewall +truck escape
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
         if (e.code === "Enter" || e.code === "NumpadEnter") {
@@ -255,6 +255,7 @@
           else if (this.devCursor === JH.LEVEL1.waves.length + 1) this.devGotoRange();
           else if (this.devCursor === JH.LEVEL1.waves.length + 2) this.devGotoWallBoss();
           else if (this.devCursor === JH.LEVEL1.waves.length + 3) this.devGotoPostFirewall();
+          else if (this.devCursor === JH.LEVEL1.waves.length + 4) this.devGotoTruck();
           else this.devGotoWave(this.devCursor);
         }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
@@ -525,6 +526,13 @@
       sc.phase = "boss";
       T._spawnFirewall(C);
       T._breakFirewall();                          // detonate → split → whiteout → reveal → crash → walk
+      this.devMenu = false;
+    },
+
+    // The full Gate Crash escape from the top: drive-in, road hazards, then
+    // the Firewall break (devGotoPostFirewall skips straight to the break).
+    devGotoTruck() {
+      this.debugEnterTruck();
       this.devMenu = false;
     },
 
@@ -3174,7 +3182,7 @@
 
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
-      const count = waves.length + 4;          // +cutscene +range +firewall +post-firewall
+      const count = waves.length + 5;          // +cutscene +range +firewall +post-firewall +truck
       const W = 224, ROW = 11, PAD = 14;
       // Fit inside the canvas: cap the visible rows and scroll so the cursor
       // stays shown. maxRows is how many ROW-tall lines fit between the header
@@ -3282,6 +3290,18 @@
         ctx.fillText("☁  POST-FIREWALL", PX + 8, pfRy + ROW - 3);
         ctx.fillStyle = pfSel ? "#8ac8ff" : "#445566"; ctx.textAlign = "right";
         ctx.fillText("DEV", PX + W - 6, pfRy + ROW - 3);
+      }
+
+      // Truck escape entry (the full Gate Crash run from the drive-in)
+      const teRy = rowY(waves.length + 4);
+      if (teRy !== null) {
+        const teSel = this.devCursor === waves.length + 4;
+        if (teSel) { ctx.fillStyle = "rgba(255,200,80,0.18)"; ctx.fillRect(PX + 3, teRy, W - 6, ROW - 1); }
+        ctx.fillStyle = teSel ? "#ffc850" : "#667788";
+        ctx.font = (teSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("»  TRUCK ESCAPE", PX + 8, teRy + ROW - 3);
+        ctx.fillStyle = teSel ? "#ffc850" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, teRy + ROW - 3);
       }
 
       // Scroll indicators when the list overflows the window (right edge, clear
