@@ -359,6 +359,7 @@
       waterMult: 1.0,
       deathPatchRadius: 22, deathPatchDur: 0.8,
       deathBurnRange: 30,      // px: Jon within this on death → +1 burn stack
+      wakeRange: 130,        // px from Jon at which a dormant fuse wakes and stalks
       igniteRange: 70,       // px from Jon at which the head-fuse lights
       litSpeedMult: 1.44,    // movespeed x while lit — 54 stalk -> ~78 sprint to detonate
       litDrainFrac: 0.32,    // fraction of maxHp burned off per second while lit

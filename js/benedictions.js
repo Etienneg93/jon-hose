@@ -5,10 +5,9 @@
 
    DEFS entries:
      boon:       {id, element, verb, name, desc, descII, kind:"boon"}
-                 verb: "stream" | "dash" | "body" — drives the HUD/sigil
-                 corner mark (Assets.verbMark) that tells same-element
-                 boons apart. Duos/legendaries carry no verb (their frame
-                 ring is the distinguisher).
+                 verb: "stream" | "dash" | "body" — categorizes which
+                 player action the boon rides (used by pillar gating).
+                 Duos/legendaries carry no verb.
      duo:        {id, name, desc, needs:[el,el], kind:"duo"}
      legendary:  {id, name, desc, element, kind:"legendary"}
 

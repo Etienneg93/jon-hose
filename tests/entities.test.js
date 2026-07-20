@@ -1054,10 +1054,39 @@ test("super plunger: usingTicket releases when the target dies mid-pull, and on 
 
 // ---- fuse: proximity-lit self-destruct + elite/super death-split ----
 
+test("fuse spawns dormant: inert beyond wakeRange, wakes inside it with grace", () => {
+  const d = JH.ENEMIES.fuse;
+  const g = makeThinkGame(100 + d.wakeRange + 40, 40);   // player beyond wakeRange
+  const f = JH.makeEnemy("fuse", 100, 40);
+  f.spawnGrace = 0; f.dropping = false;
+  const x0 = f.x;
+  f.update(0.5, g);
+  assert.strictEqual(f.dormant, true, "stays dormant out of range");
+  assert.strictEqual(f.x, x0, "dormant fuse does not move");
+  assert.strictEqual(!!f.lit, false, "dormant fuse cannot light");
+  g.player.x = 100 + d.wakeRange - 10;                   // step inside wakeRange
+  f.update(1 / 60, g);
+  assert.strictEqual(f.dormant, false, "wakes in range");
+  assert.ok(f.spawnGrace > 0, "wake grants a touch-grace beat");
+});
+
+test("spray damage wakes a dormant fuse", () => {
+  const g = makeThinkGame(400, 40);
+  const f = JH.makeEnemy("fuse", 100, 40);
+  f.spawnGrace = 0; f.dropping = false;
+  f.update(1 / 60, g);                                   // settles dormant
+  assert.strictEqual(f.dormant, true);
+  f.takeDamage(1, g, 1, 0);
+  assert.strictEqual(f.dormant, false, "damage wakes it");
+});
+
 test("fuse ignites on proximity and drains its own hp while lit", () => {
   const g = makeThinkGame(60, 40);
   const f = JH.makeEnemy("fuse", 100, 40);     // 40px away < igniteRange 70
   f.spawnGrace = 0; f.dropping = false;
+  f.update(1 / 60, g);                          // wake beat (dormant -> awake)
+  assert.strictEqual(f.dormant, false);
+  f.spawnGrace = 0;                             // skip the wake grace
   f.update(1 / 60, g);
   assert.strictEqual(f.lit, true);
   const hp0 = f.hp;
@@ -1068,7 +1097,7 @@ test("fuse ignites on proximity and drains its own hp while lit", () => {
 test("lit fuse reaching 0 hp self-destructs: blast patch + player damage in range", () => {
   const g = makeThinkGame(110, 40);
   const f = JH.makeEnemy("fuse", 100, 40);
-  f.spawnGrace = 0; f.dropping = false; f.lit = true; f.hp = 0.01;
+  f.spawnGrace = 0; f.dropping = false; f.dormant = false; f.lit = true; f.hp = 0.01;
   const hpBefore = g.player.hp;
   f.update(0.5, g);
   assert.strictEqual(f.dead, true);

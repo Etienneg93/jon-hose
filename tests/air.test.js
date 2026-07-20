@@ -433,11 +433,33 @@ test("plunger art: every runtime pose is a normalized transparent PNG frame", ()
           || a.data[i + 2] !== b.data[i + 2] || a.data[i + 3] !== b.data[i + 3]) n++;
     return n;
   };
-  // The contact frames must be visibly opposite strides. The hand-cleaned
-  // cycle intentionally reuses the neutral pass pose for frames 1 and 3.
-  assert.ok(differingPixels(decoded.walk0, decoded.walk2) > 2500, "walk2 must oppose walk0");
-  assert.ok(differingPixels(decoded.walk0, decoded.walk1) > 2500, "walk1 must be a distinct pass pose");
-  assert.ok(differingPixels(decoded.walk2, decoded.walk3) > 2500, "walk3 must be a distinct pass pose");
+  const opaqueBounds = (png) => {
+    let minX = png.width, minY = png.height, maxX = -1, maxY = -1, pixels = 0;
+    for (let y = 0; y < png.height; y++) {
+      for (let x = 0; x < png.width; x++) {
+        if (!png.data[(y * png.width + x) * 4 + 3]) continue;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        pixels++;
+      }
+    }
+    return { minX, minY, maxX, maxY, pixels };
+  };
+  // Hop cycle contract (frog): walk0 crouch, walk1 launch, walk2 airborne,
+  // walk3 land. Grounded frames share the feet baseline; the airborne frame
+  // bakes a real air-gap above it. All four frames must be distinct poses.
+  for (const [a, b] of [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+    assert.ok(differingPixels(decoded["walk" + a], decoded["walk" + b]) > 2500,
+      `walk${a} and walk${b} must be distinct poses`);
+  const bounds = [0, 1, 2, 3].map(i => opaqueBounds(decoded["walk" + i]));
+  const baseline = bounds[0].maxY;
+  for (const i of [1, 3])
+    assert.strictEqual(bounds[i].maxY, baseline, `walk${i} grounded on the shared baseline`);
+  assert.ok(baseline - bounds[2].maxY >= 20,
+    "walk2 airborne frame must carry a real air-gap above the baseline");
+  const masses = bounds.map(b => b.pixels);
+  assert.ok(Math.max(...masses) / Math.min(...masses) < 1.25,
+    "hop frames keep a stable body mass across the cycle");
 });
 
 test("tpmummy art: every runtime pose is a normalized transparent PNG frame", () => {
@@ -671,16 +693,17 @@ test("gust lanes: range specs re-roll inside their ranges, only at telegraph sta
     assert.ok(lane.band >= 10 && lane.band <= 22, "band inside [bandMin,bandMax]");
     const frozen = { y: lane.y, dir: lane.dir, band: lane.band };
     seen.y.add(lane.y); seen.dir.add(lane.dir); seen.band.add(lane.band);
-    // Geometry is frozen through telegraph + blow + gap.
-    const steps = Math.ceil((G.telegraph + G.blowDur + G.gapDur) * 60) + 1;
-    for (let i = 0; i < steps && !(lane.phase === "telegraph" && i > 10); i++) {
+    // Ride out THIS telegraph, then blow + gap: geometry frozen the whole
+    // way; the next telegraph entry is a fresh roll. (The old step-counted
+    // loop broke out 11 frames into the FIRST telegraph, so 40 "cycles"
+    // advanced the lane ~1 real cycle and dir sampled only ~6 rolls — the
+    // 3%-flake source. One iteration now equals exactly one full cycle.)
+    while (lane.phase === "telegraph") lane.update(1 / 60, g);
+    while (lane.phase !== "telegraph") {
+      assert.deepStrictEqual({ y: lane.y, dir: lane.dir, band: lane.band },
+        frozen, "geometry never changes mid-cycle");
       lane.update(1 / 60, g);
-      if (lane.phase !== "telegraph")
-        assert.deepStrictEqual({ y: lane.y, dir: lane.dir, band: lane.band },
-          frozen, "geometry never changes mid-cycle");
     }
-    // Land exactly on the next telegraph for the next iteration.
-    while (lane.phase !== "telegraph") lane.update(1 / 60, g);
   }
   // 40 cycles of a 40px range: rolls must actually vary.
   assert.ok(seen.y.size > 5, "depth genuinely re-rolls");
