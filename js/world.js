@@ -17,6 +17,20 @@
   // Debris pile sprite (Act 3 floor dressing). 309×272 source art.
   const _debrisImg = JH.Loader.img("sprites/environment/debris.png");
 
+  // Baked skyline building variants (6 per act pack) and per-act ground
+  // strips (1920×408, horizontally tileable). Both fall back to the
+  // procedural rect painting below while images load / are absent.
+  const _bgBuildings = { street: [], ruins: [], boiler: [], air: [] };
+  for (const k in _bgBuildings)
+    for (let i = 0; i < 6; i++)
+      _bgBuildings[k].push(JH.Loader.img("sprites/bg/" + k + i + ".png"));
+  const _bgGrounds = {
+    street: JH.Loader.img("sprites/bg/ground_street.jpg"),
+    ruins:  JH.Loader.img("sprites/bg/ground_ruins.jpg"),
+    boiler: JH.Loader.img("sprites/bg/ground_boiler.jpg"),
+    air:    JH.Loader.img("sprites/bg/ground_air.jpg"),
+  };
+
   // ----------------------------------------------------------- geometry
   const Geo = {
     feetScreenY: (worldY, z) => JH.FLOOR_TOP + worldY - (z || 0),
@@ -164,9 +178,18 @@
         // screen width so the first broken silhouette enters from the right
         // edge as the player crosses into the district, not two acts later).
         const broken = x > (JH.ZONE2_START - 200) * 0.5 + JH.VIEW_W;
+        const fire = x > (JH.ZONE3_START - 200) * 0.5 + JH.VIEW_W;
         const air = x > (JH.ZONE4_START - 200) * 0.5 + JH.VIEW_W;
         const b = {
           x, w, h: air ? Math.round(h * 0.7) : h, broken: broken && !air, air, jag: null, windows: [],
+          // Baked-variant selection: hashed from x so it does not consume
+          // rA() (keeps the deterministic layout identical to the fallback).
+          // flip/skip/scale-jitter break up the 6-variant repetition.
+          pack: air ? "air" : (fire ? "boiler" : (broken ? "ruins" : "street")),
+          v: ((x * 2654435761) >>> 8) % 6,
+          flip: ((x * 2654435761) >>> 4) & 1,
+          skip: (((x * 2654435761) >>> 16) % 100) < 16,
+          sj: 0.85 + (((x * 2654435761) >>> 20) % 31) / 100,
           c: air ? "#c8b060"
             : broken ? (rA() > 0.5 ? "#241f24" : "#2b242a")
                      : (rA() > 0.5 ? "#1b2740" : "#202d4a"),
@@ -282,13 +305,18 @@
         }
       }
 
-      // Far skyline (slow parallax)
+      // Far skyline (slow parallax) — fades out over the cloudline; dark
+      // far-tower slabs read wrong floating in the bright Air sky.
       const pFar = cam * 0.25;
-      for (const b of this.farBuildings) {
-        const sx = b.x - pFar;
-        if (sx + b.w < 0 || sx > W) continue;
-        ctx.fillStyle = b.c;
-        ctx.fillRect(Math.round(sx), top - b.h, b.w, b.h);
+      if (airT < 1) {
+        ctx.globalAlpha = 1 - airT;
+        for (const b of this.farBuildings) {
+          const sx = b.x - pFar;
+          if (sx + b.w < 0 || sx > W) continue;
+          ctx.fillStyle = b.c;
+          ctx.fillRect(Math.round(sx), top - b.h, b.w, b.h);
+        }
+        ctx.globalAlpha = 1;
       }
       // Near skyline (medium parallax) + lit windows
       const pNear = cam * 0.5;
@@ -299,6 +327,29 @@
         // actually on (this.airOn) — otherwise they're distant dark
         // silhouettes, same fill as the rest of the near skyline, so camera
         // position alone (e.g. the truck run) can't paint gold towers.
+        // Baked building blit: variant scaled to the slot width, baseline on
+        // the horizon. Air slots stay dark procedural rects until airOn (the
+        // gold-monument read is gated the same way as the fallback tint).
+        const bimg = _bgBuildings[b.pack] && _bgBuildings[b.pack][b.v];
+        if (bimg && bimg._ready && !(b.air && !this.airOn)) {
+          if (b.skip) continue;   // random gap — sky between buildings
+          const dw = Math.round((b.w + 14) * b.sj);
+          const dh = Math.min(top - 6, Math.round(dw * bimg.naturalHeight / bimg.naturalWidth));
+          ctx.imageSmoothingEnabled = false;
+          // +2px into the floor band: kills the parallax sliver between
+          // building bases and the walkable ground.
+          const bx = Math.round(sx - 7), by = top - dh + 2;
+          if (b.flip) {
+            ctx.save();
+            ctx.translate(bx + dw, by);
+            ctx.scale(-1, 1);
+            ctx.drawImage(bimg, 0, 0, dw, dh);
+            ctx.restore();
+          } else {
+            ctx.drawImage(bimg, bx, by, dw, dh);
+          }
+          continue;
+        }
         ctx.fillStyle = (b.air && !this.airOn) ? "#1b2740" : b.c;
         if (b.broken && b.jag) {
           for (const s of b.jag) ctx.fillRect(Math.round(sx + s.x), top - s.h, s.w, s.h);
@@ -347,11 +398,36 @@
       ctx.fillRect(0, top, W, H - top);
       ctx.fillStyle = "#222633";
       ctx.fillRect(0, top, W, 4);
-      // Lane lines scrolling with camera (full parallax = 1.0)
-      ctx.fillStyle = "#3a4154";
-      const lane = top + (H - top) * 0.55;
-      for (let x = -((cam) % 40); x < W; x += 40) {
-        ctx.fillRect(Math.round(x), Math.round(lane), 18, 3);
+      // Baked per-act ground strips: street base always, act strips faded in
+      // on the same zone ramps as the tints below. 480-logical-px tiles,
+      // full parallax. Falls through to the flat fills + dashes when absent.
+      const airTg = this.airOn
+        ? Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE4_START - 200)) / 500))
+        : 0;
+      const zoneTg = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airTg);
+      const fireTg = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airTg);
+      const bandH = H - top;
+      const groundImg = (img, alpha) => {
+        if (!(img && img._ready) || alpha <= 0) return false;
+        ctx.globalAlpha = alpha;
+        ctx.imageSmoothingEnabled = false;
+        const ox = -(((cam % 480) + 480) % 480);
+        ctx.drawImage(img, Math.round(ox), top, 480, bandH);
+        ctx.drawImage(img, Math.round(ox) + 480, top, 480, bandH);
+        ctx.globalAlpha = 1;
+        return true;
+      };
+      const streetGround = groundImg(_bgGrounds.street, 1);
+      groundImg(_bgGrounds.ruins, zoneTg);
+      groundImg(_bgGrounds.boiler, fireTg);
+      groundImg(_bgGrounds.air, airTg);
+      if (!streetGround) {
+        // Lane lines scrolling with camera (full parallax = 1.0)
+        ctx.fillStyle = "#3a4154";
+        const lane = top + (H - top) * 0.55;
+        for (let x = -((cam) % 40); x < W; x += 40) {
+          ctx.fillRect(Math.round(x), Math.round(lane), 18, 3);
+        }
       }
       // Sidewalk edge at the back
       ctx.fillStyle = "#39405440";

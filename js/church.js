@@ -393,6 +393,34 @@
       // clamped so the image's edges are never exposed.
       const BD_PARALLAX = 0.35;
       const drawBackdrop = () => {
+        const nave = ART.nave, ground = ART.ground;
+        const floorTop = JH.FLOOR_TOP;
+        if (nave && nave._ready && ground && ground._ready) {
+          // Street-style split: nave wall mirror-tiled at 0.35 parallax above
+          // the floor line, walkable ground strip tiling at full parallax
+          // below — same band the level floor uses, so Jon connects to it.
+          ctx.imageSmoothingEnabled = false;
+          const bandH = floorTop + 6;
+          const tw = Math.round(bandH * (nave.naturalWidth / nave.naturalHeight));
+          const pan = camX * BD_PARALLAX;
+          const first = Math.floor(pan / tw) - 1;
+          for (let k = first; (k * tw - pan) < VW; k++) {
+            const tx = Math.round(k * tw - pan);
+            if (((k % 2) + 2) % 2 === 1) {
+              ctx.save();
+              ctx.translate(tx + tw, 0);
+              ctx.scale(-1, 1);
+              ctx.drawImage(nave, 0, 0, tw, bandH);
+              ctx.restore();
+            } else {
+              ctx.drawImage(nave, tx, 0, tw, bandH);
+            }
+          }
+          const gx = -(((camX % 480) + 480) % 480);
+          ctx.drawImage(ground, Math.round(gx), floorTop, 480, VH - floorTop);
+          ctx.drawImage(ground, Math.round(gx) + 480, floorTop, 480, VH - floorTop);
+          return;
+        }
         const img = ART.backdrop;
         if (!(img && img._ready)) {
           ctx.fillStyle = "#0a0c14"; ctx.fillRect(0, 0, VW, VH);
