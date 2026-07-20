@@ -4424,7 +4424,7 @@
       for (const e of game.enemies) {
         if (e.dead || e.dropping) continue;
         if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, JH.BENE_AOE.gravelHit)) continue;
-        e.takeDamage(this.dmg, game, this.dir, this.knock, true);
+        e.takeDamage(this.dmg, game, this.dir, this.knock);
         burst(game, this.x, this.y, this.z, "#c8a050", 14, { speed: 110, life: 0.35, up: 50, size: 2 });
         game.shake(3);
         game.audio.play("whack", { pitch: 0.6 });
