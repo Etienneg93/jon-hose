@@ -1455,10 +1455,21 @@
   // hipcheck/toss/airclap/exhaust.
   const AM_H = 58;
   const _amImgs = {};
+  const _amImgsL = {};   // left-facing bakes: mirrored body, chest text un-flipped
   ["idle", "flight", "slam", "kneel", "clapwind", "clap", "hipcheck", "toss", "airclap", "exhaust"]
-    .forEach((k) => { _amImgs[k] = JH.Loader.img("sprites/assman/baked/" + k + ".png"); });
+    .forEach((k) => {
+      _amImgs[k] = JH.Loader.img("sprites/assman/baked/" + k + ".png");
+      _amImgsL[k] = JH.Loader.img("sprites/assman/baked/" + k + "_l.png");
+    });
+  // Toilet Toss projectile: blitted spinning by ToiletBomb.draw.
+  Assets.toiletImg = JH.Loader.img("sprites/assman/baked/toilet.png");
   Assets.register("assman", (p, opt, ctx, x, y, facing) => {
-    const img = _amImgs[opt.state] || _amImgs.idle;
+    const key = _amImgs[opt.state] ? opt.state : "idle";
+    // Facing left: use the readable-text left bake when loaded; runtime
+    // mirror of the right bake is the fallback (text mirrors, art intact).
+    const lImg = facing < 0 ? _amImgsL[key] : null;
+    const useL = lImg && lImg.complete && lImg.naturalWidth;
+    const img = useL ? lImg : _amImgs[key];
     if (!img || !img.complete || !img.naturalWidth) {
       // Fallback placeholder while sprites are loading.
       p(-9, 0, 18, AM_H, "#1d2f66");
@@ -1469,7 +1480,7 @@
     const dw = Math.round(img.naturalWidth * scale);
     ctx.save();
     ctx.translate(x, y);
-    if (facing < 0) ctx.scale(-1, 1);
+    if (facing < 0 && !useL) ctx.scale(-1, 1);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, -Math.round(dw / 2), -AM_H, dw, AM_H);
     ctx.restore();

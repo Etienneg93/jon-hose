@@ -5781,12 +5781,22 @@
       if (this.landed) { ctx.globalAlpha = 0.12; ctx.fillStyle = "#e8ddcf"; ctx.fill(); }
       ctx.restore();
       if (!this.landed) {
-        // the porcelain in flight (sprite hook lands in Task 7; box fallback)
+        // the porcelain in flight: baked sprite spun in-flight, box fallback
+        // during the image-load window
         const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0) - this.z;
         ctx.save();
         ctx.translate(sx, sy); ctx.rotate(this.spin);
-        ctx.fillStyle = "#efe9dd"; ctx.fillRect(-6, -7, 12, 14);
-        ctx.strokeStyle = "#141414"; ctx.lineWidth = 1; ctx.strokeRect(-6, -7, 12, 14);
+        const img = JH.Assets.toiletImg;
+        if (img && img.complete && img.naturalWidth) {
+          const th = 24, tw = Math.round(th * img.naturalWidth / img.naturalHeight);
+          const prev = ctx.imageSmoothingEnabled;
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(img, -tw / 2, -th / 2, tw, th);
+          ctx.imageSmoothingEnabled = prev;
+        } else {
+          ctx.fillStyle = "#efe9dd"; ctx.fillRect(-6, -7, 12, 14);
+          ctx.strokeStyle = "#141414"; ctx.lineWidth = 1; ctx.strokeRect(-6, -7, 12, 14);
+        }
         ctx.restore();
       }
     }
