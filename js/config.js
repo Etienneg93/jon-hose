@@ -437,10 +437,11 @@
     // Heavy rain (replaces add-summons; only fires below hpGate): the boss
     // roots and volleys droplets SKYWARD through the windup (the "those are
     // going to land" read), then stays rooted while the whole arena pours.
-    // The green safe ellipse's drawn rim IS the no-hit zone; ticks route
-    // through takeHit (i-frames apply).
+    // The danger overlay's ellipse hole IS the no-hit zone (rim is hitbox,
+    // inverted); ticks route through takeHit (i-frames apply). Windup fires
+    // volleyCount skyward droplets every volleyEvery.
     rain: { wind: 2.2, dur: 3.0, tickDmg: 8, tickEvery: 0.5, safeR: 42, cd: 12,
-            hpGate: 0.66, volleyEvery: 0.12 },
+            hpGate: 0.66, volleyEvery: 0.04, volleyCount: 3 },
   };
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable

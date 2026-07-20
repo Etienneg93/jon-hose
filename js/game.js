@@ -3989,7 +3989,8 @@
             }
             ctx.font = "5px monospace"; ctx.textAlign = "center";
             ctx.fillStyle = spinning ? "#556070" : en.id && !en.sold ? "#dfe8f5" : "#556070";
-            ctx.fillText(spinning ? "· · ·" : label.slice(0, 12), wcx, hy + 44);
+            // maxWidth condenses long names ("ASBESTOS SOCKS") instead of chopping.
+            ctx.fillText(spinning ? "· · ·" : label, wcx, hy + 44, 42);
             if (!spinning && price != null) {
               // Tier hues (relic gold / rare bronze) stay hued even when
               // unaffordable — dim via alpha, don't swap to grey-brown.

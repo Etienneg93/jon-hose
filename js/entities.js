@@ -3388,8 +3388,9 @@
             rs.volT = (rs.volT || 0) - dt;
             if (rs.volT <= 0) {
               rs.volT = R.volleyEvery;
-              burst(game, this.x + (Math.random() * 24 - 12), this.y, this.bodyH,
-                JH.PAL.water, 2, { speed: 30, life: 0.9, up: 320, grav: -60, size: 2 });
+              for (let v = 0; v < (R.volleyCount || 1); v++)
+                burst(game, this.x + (Math.random() * 44 - 22), this.y, this.bodyH,
+                  JH.PAL.water, 2, { speed: 40, life: 0.9, up: 300 + Math.random() * 80, grav: -60, size: 2 });
             }
             if (rs.t <= 0) {
               rs.phase = "pour"; rs.t = R.dur; rs.tick = 0;
@@ -3497,16 +3498,28 @@
     drawRain(ctx, cam) {
       const rs = this.rainState, R = this.def.rain;
       const sx = rs.safeX - cam, sy = Geo.feetScreenY(rs.safeY, 0);
+      // Danger overlay: the whole walkable band reddens with an ellipse hole
+      // punched at the safe spot (even-odd fill) — the hole is the exact
+      // no-hit ellipse the pour tests (rim is hitbox, inverted). No green
+      // safe marker: the gap in the danger read is the tell.
+      const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 4;
+      const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 4;
       ctx.save();
       const flash = Math.floor(this.t * 8) & 1;
-      ctx.globalAlpha = rs.phase === "wind" ? (0.45 + (flash ? 0.25 : 0)) : 0.85;
-      ctx.strokeStyle = "#80ff80"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(0, yT, JH.VIEW_W, yB - yT);
+      ctx.ellipse(Math.round(sx), Math.round(sy), R.safeR, R.safeR * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#ff3c3c";
+      ctx.globalAlpha = rs.phase === "wind" ? (flash ? 0.22 : 0.11) : 0.17;
+      ctx.fill("evenodd");
+      // Boundary rim on the hole edge — flashing red/gold, same grammar as
+      // drawTelegraph.
+      ctx.globalAlpha = rs.phase === "wind" ? (flash ? 0.9 : 0.5) : 0.75;
+      ctx.strokeStyle = flash ? "#ff5a5a" : "#ffd23f";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.ellipse(Math.round(sx), Math.round(sy), R.safeR, R.safeR * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.globalAlpha = rs.phase === "pour" ? 0.12 : 0.06;
-      ctx.fillStyle = "#80ff80";
-      ctx.fill();
       if (rs.phase === "pour") {
         // Deterministic streak field (no Math.random in draw — stable frame
         // to frame); the safe spot keeps a visible dry column above it.
