@@ -987,6 +987,31 @@
     igniteDelay: 0.12, // s after launch before the ball ignites (burn + hit active)
   };
 
+  // ---- Ass Man (wave 36) — first multi-phase boss ----
+  // Spec: docs/superpowers/specs/2026-07-20-ass-man-fight-design.md
+  JH.ASSMAN = {
+    name: "Ass Man", hp: 2200, speed: 40, bodyW: 34, bodyH: 58,
+    touchDmg: 12, contactCd: 1.0, suds: 400, color: "boss",
+    enrageAt: 0.33,             // phase-3 entry latches enrage (prayer_bead hook)
+    survivesDefeat: true,       // kneels at 0 HP — no corpse/explosion VFX
+    gates: [0.66, 0.33],        // phase gates on hp FRACTION (never timers)
+    transitionInvuln: 1.6,      // s invulnerable during each phase beat
+    decideEvery: 2.2,           // s between phase-1 move picks
+    clap:     { wind: 0.9, range: 95, halfAngleDeg: 38, dmg: 22, shove: 260 },
+    hip:      { brace: 0.7, speed: 300, dist: 200, dmg: 16, skid: 0.8 },
+    toss:     { landRx: 30, dmg: 20, shardDur: 2.5, shardDmg: 6, shardEvery: 0.5,
+                lobSpeed: 240, gravity: 520 },
+    clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },
+    slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
+                airZ: 46, shadowEvery: 2.0 },
+    gustEveryLoops: 2, gustDur: 6,
+    storm:    { rings: 3, ringSpeed: 90, ringDmg: 12, gapDeg: 55, gapRotDeg: 40,
+                ringEvery: 1.4, rimW: 7, burstGap: 0.6 },
+    exhaust:  { dur: 4, dmgTakenMult: 1.25 },
+    kneelBeat: 1.5,
+    barks: { p2: "THE CHEEKS HAVE CLAPPED BACK.", p3: "GLUTE FORCE TRAUMA." },
+  };
+
   // ---- Fire-truck escape (post-Slayer between-worlds set-piece) --------
   // Self-contained ~60s scrolling escape; JH.TruckRun scene consumes these.
   // Depth axis (lanes) is the dodge/aim axis; the hose is a forward swath.
@@ -1275,6 +1300,7 @@
         placements: [{ type: "bidet", x: 112, y: 18 }, { type: "bidet", x: 344, y: 68 }],
         hazards: [{ x: 150, y: 30 }, { x: 290, y: 56 }],
         spawns: [{ type: "plunger", count: 3 }, { type: "tpmummy", count: 3 }, { type: "gasbag", count: 2 }] },
+      { name: "BOSS", boss: true, bossType: "assman" },      // wave 36: Ass Man
     ],
   };
 

@@ -6012,6 +6012,34 @@
   }
   JH.SlayerBoss = SlayerBoss;
 
+  // ---- Ass Man (wave 36): three-phase duel. Phases fill in over the ----
+  // ---- fight-plan tasks; this skeleton walks + contact only.        ----
+  class AssManBoss extends Boss {
+    constructor(x, y) {
+      super(x, y, Object.assign({}, JH.ASSMAN), "assman");   // instance def copy: kneel/air zero touchDmg safely
+      this.phase = 1;
+      this._invulnT = 0;
+      this._decideT = JH.ASSMAN.decideEvery;
+      this._grounded = true;
+      this._kneeling = false;
+    }
+    think(dt, game) {
+      const pl = game.player, d = this.def;
+      if (this.strikeFx > 0) this.strikeFx -= dt;
+      if (this._invulnT > 0) this._invulnT -= dt;
+      // chase (skeleton)
+      const dx = pl.x - this.x, dy = pl.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 30) {
+        this.x += (dx / dist) * d.speed * dt;
+        this.y += (dy / dist) * d.speed * dt;
+        this.facing = dx >= 0 ? 1 : -1;
+        this.state = "walk";
+      } else this.state = "idle";
+    }
+  }
+  JH.AssManBoss = AssManBoss;
+
   // ---- Furnace: rhythm-based curated elite ----
   // Sustained spray causes it to heat up (reduced damage, visual glow), then
   // vent steam (knockback + burn). Burst-spray rhythm is the counter. No elite-
@@ -6880,6 +6908,7 @@
     if (type === "slayer") return new SlayerBoss(x, y);
     if (type === "gatewaykrusher") return new GatewayKrusherBoss(x, y);
     if (type === "wallboss") return new WallBoss(x, y);
+    if (type === "assman") return new AssManBoss(x, y);
     if (type === "neighbor") return new NeighborNPC(x, y);
     return new Enemy(type, x, y);
   };

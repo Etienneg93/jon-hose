@@ -71,7 +71,8 @@ test("air act: every act-indexed array has an entry for actLevel 4 (index 5)", (
 test("air act: WAVE_TRIGGERS matches the wave list (no length warning)", () => {
   assert.strictEqual(warnings.filter((w) => w.includes("WAVE_TRIGGERS")).length, 0,
     "game.js warned: " + warnings.join(" | "));
-  assert.strictEqual(JH.LEVEL1.waves.length, 35);  // 29 + the 6 air waves (30-35)
+  const last = JH.LEVEL1.waves[JH.LEVEL1.waves.length - 1];
+  assert.strictEqual(last.bossType, "assman", "last wave is assman boss (wave 36)");
 });
 
 test("air act: waves 30-32 are authored per spec (pair, +gusts, +gasbags/tough)", () => {
@@ -157,8 +158,9 @@ test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily doe
     };
     assert.strictEqual(runClear(31), null, "clearing wave 32 (index 31) must not win anymore");
     const lastIdx = JH.LEVEL1.waves.length - 1;
-    assert.strictEqual(lastIdx, 34, "wave 35 is temporarily the last wave");
-    assert.strictEqual(runClear(lastIdx), lastIdx, "clearing wave 35 still calls win() (temporary, Plan 3 moves it)");
+    const last = JH.LEVEL1.waves[lastIdx];
+    assert.strictEqual(last.bossType, "assman", "last wave is the Ass Man boss");
+    assert.strictEqual(runClear(lastIdx), lastIdx, "clearing the last wave calls win()");
   } finally { global.document = doc; JH.Music = prevMusic; }
 });
 
@@ -412,7 +414,7 @@ test("dev range catalog exposes every implemented combat enemy and boss", () => 
   assert.deepStrictEqual([...catalog].sort(), [...implemented].sort());
   for (const id of ["plunger", "tpmummy", "gasbag", "bidet"])
     assert.ok(catalog.includes(id), id + " must be dispensable in the range");
-  for (const id of ["boss", "switch", "quake", "gatewaykrusher", "wallboss", "slayer"])
+  for (const id of ["boss", "switch", "quake", "gatewaykrusher", "wallboss", "slayer", "assman"])
     assert.ok(catalog.includes(id), id + " boss must be dispensable in the range");
 });
 
