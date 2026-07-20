@@ -1729,12 +1729,26 @@
             { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
       }
       // Scald DoT: raw hp damage + own die() call (not takeDamage) so a
-      // burning tick never triggers knockback or re-wets the enemy.
+      // burning tick never triggers knockback or re-wets the enemy. The hp
+      // drains continuously, but the damage NUMBER batches into discrete
+      // half-second ticks (DMGNUM.dotTickEvery) — per-frame accrual moved
+      // the tally ~1 point per 0.2s with no event, which read as the DoT
+      // not counting at all.
       if (this.scaldT > 0) {
         this.scaldT = Math.max(0, this.scaldT - dt);
         const scaldDmg = this.scaldDps * dt;
         this.hp -= scaldDmg;
-        this.accrueDmgNum(scaldDmg, game);   // fire DoT feeds the same tally (reads orange while burning)
+        this._dotNumBuf = (this._dotNumBuf || 0) + scaldDmg;
+        this._dotNumT = (this._dotNumT == null ? JH.DMGNUM.dotTickEvery : this._dotNumT) - dt;
+        if (this._dotNumT <= 0 || this.scaldT <= 0) {
+          this.accrueDmgNum(this._dotNumBuf, game);   // one visible orange tick-punch
+          this._dotNumBuf = 0;
+          this._dotNumT = JH.DMGNUM.dotTickEvery;
+        } else if (this._dmgAccum > 0 && game && game.showDmgNumbers) {
+          // Burning = damage ongoing: keep the tally alive between ticks so
+          // the running total never resets mid-burn (holdT == dotTickEvery).
+          this._dmgHoldT = JH.DMGNUM.holdT;
+        }
         // Steam motes puff up off the enemy (rising, drifting) — the boil read.
         if (Math.random() < 7 * dt) burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.6, this.y,
           this.bodyH * 0.4, JH.PAL.steamHi, 1, { speed: 12, life: 0.5, up: 42, grav: -18, size: 1 });

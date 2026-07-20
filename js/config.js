@@ -631,6 +631,7 @@
     fullAt: 60,                // value at which size/brightness saturate
     killBump: 3,               // extra px on the killing-blow total pop
     holdT: 0.5,                // s the enemy tally holds after the last hit, then resets
+    dotTickEvery: 0.5,         // s between visible DoT tick-punches into the tally
     enemyLo: "#d8c86a", enemyHi: "#fff2a0",   // pale→bright yellow (hose/direct damage)
     fireLo:  "#ff8a30", fireHi:  "#ffd060",   // tally leans orange while the enemy is burning (DoT read)
     critLo:  "#ffd24a", critHi:  "#ffffff",   // hot gold→white while the tick is a CRIT (bonus pressure / amped)

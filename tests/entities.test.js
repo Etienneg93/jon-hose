@@ -1478,6 +1478,25 @@ test("applyScald ticks damage over its duration and expires", () => {
   assert.strictEqual(m.scaldT, 0);
 });
 
+test("scald DoT ticks the damage tally in discrete dotTickEvery punches", () => {
+  const D = JH.DMGNUM;
+  const g = makeThinkGame(400, 40);
+  g.showDmgNumbers = true;
+  const e = JH.makeEnemy("mook", 100, 40);
+  e.hp = e.maxHp = 1000;
+  g.enemies = [e];
+  e.applyScald(10, 5);
+  e.update(D.dotTickEvery * 0.6, g);   // inside the first tick window
+  assert.strictEqual(e._dmgAccum || 0, 0, "no tally movement before the first tick");
+  e.update(D.dotTickEvery * 0.6, g);   // crosses the tick boundary
+  const total = D.dotTickEvery * 1.2 * 10;   // dps 10 over both steps
+  assert.ok(Math.abs((e._dmgAccum || 0) - total) < 0.5,
+    "the tick flushes the full buffered burn into the tally");
+  e.update(D.dotTickEvery * 0.6, g);   // between ticks again
+  assert.ok(e._dmgHoldT > 0, "hold stays alive between ticks while burning");
+  assert.ok(e._dmgAccum >= total - 0.5, "running total persists mid-burn");
+});
+
 test("Scalding Faith: full-pressure spray applies scald", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("scalding_faith");
