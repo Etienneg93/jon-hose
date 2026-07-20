@@ -272,3 +272,75 @@ test("assman P2: clap back wave travels the lane, dodged by depth", () => {
   while (b2._waves.length && guard++ < 900) b2.think(1 / 60, g2);
   assert.strictEqual(g2.player.hp, hp2, "dodged by depth");
 });
+
+// ---- Phase 3 (Glute Force Trauma) + kneel ----
+
+test("assman P3: storm rings expand, gap rotates, rim hits the player", () => {
+  const D = JH.ASSMAN, S = D.storm;
+  const g = makeThinkGame(0, 40);
+  const b = JH.makeEnemy("assman", 200, 40);
+  b.phase = 3; b._grounded = true;
+  b.think(1 / 60, g);                             // arms the storm
+  assert.ok(b._storm, "storm armed");
+  // spawn all rings — the harness never runs Player.update(), so decay
+  // invulnTimer by hand each frame (same house rule as the P1 toss test):
+  // otherwise an incidental early graze from ring 0 sweeping past the
+  // player's start position leaves i-frames permanently latched and the
+  // intended hit below never lands.
+  let guard = 0;
+  while ((b._storm.spawned || 0) < S.rings && guard++ < 2000) {
+    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
+    b.think(1 / 60, g);
+  }
+  assert.strictEqual(b._storm.rings.length > 0, true);
+  // gap centers rotate ring to ring
+  const gaps = b._storm.rings.map((r) => r.gapA);
+  if (gaps.length >= 2) assert.strictEqual((gaps[1] - gaps[0] + 360) % 360, S.gapRotDeg % 360);
+  // park the player on a rim point opposite the first ring's gap → takes ringDmg
+  const ring = b._storm.rings[0];
+  const away = (ring.gapA + 180) * Math.PI / 180;
+  g.player.x = b.x + Math.cos(away) * (ring.r + 30);
+  g.player.y = b.y + Math.sin(away) * (ring.r + 30) * 0.34;
+  const hp0 = g.player.hp;
+  guard = 0;
+  while (g.player.hp === hp0 && guard++ < 2000) {
+    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
+    b.think(1 / 60, g);
+  }
+  assert.ok(g.player.hp <= hp0 - S.ringDmg, "expanding rim caught the player");
+});
+
+test("assman P3: exhaustion window — 1.25x damage taken, then next burst", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(0, 40);
+  const b = JH.makeEnemy("assman", 200, 40);
+  b.phase = 3; b._grounded = true;
+  b.think(1 / 60, g);
+  // fast-forward: exhaust after the burst completes
+  let guard = 0;
+  while (!(b._exhaustT > 0) && guard++ < 5000) b.think(1 / 60, g);
+  assert.ok(b._exhaustT > 0, "exhaustion window opened");
+  assert.strictEqual(b.state, "exhaust");
+  const hp0 = b.hp;
+  b.takeDamage(100, g, 1, 0);
+  assert.strictEqual(b.hp, hp0 - 100 * D.exhaust.dmgTakenMult, "opening takes bonus damage");
+});
+
+test("assman kneel: no death VFX, beat, then onEnemyKilled — and Slayer gated too", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(0, 40);
+  let killed = null; let fxPushed = 0;
+  g.onEnemyKilled = (e) => { killed = e; };
+  g.embers = { push: () => { fxPushed++; } };
+  const b = JH.makeEnemy("assman", 200, 40);
+  b.phase = 3;
+  b.takeDamage(b.hp + 10, g, 1, 0);               // lethal
+  assert.ok(b._kneeling, "kneels instead of dying");
+  assert.strictEqual(b.dead, false);
+  assert.strictEqual(fxPushed, 0, "no corpse/explosion VFX");
+  for (let t = 0; t < D.kneelBeat + 0.1; t += 1 / 60) b.think(1 / 60, g);
+  assert.strictEqual(b.dead, true);
+  assert.strictEqual(killed, b, "routed through onEnemyKilled (ally path)");
+  // Slayer: survivesDefeat gates its boom-big
+  assert.strictEqual(JH.SLAYER.survivesDefeat, true);
+});

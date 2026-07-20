@@ -6079,7 +6079,10 @@
       if (this.dead) return;
       this.dead = true;
       game.audio.play("win");
-      game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
+      // Defeated-but-surviving bosses skip the corpse/explosion VFX — they
+      // are about to stand up in a cutscene (shared gate: Slayer + Ass Man).
+      if (!this.def.survivesDefeat)
+        game.embers.push(new JH.FxBurst(this.x, this.y, "boom-big", { scale: 0.9 }));
       spawnCoinFountain(game, this.x, this.y, this.def.suds);  // local fn in same IIFE
       game.onEnemyKilled(this);   // triggers Church.markBossDefeated("slayer")
     }
@@ -6117,14 +6120,18 @@
       // ---- phase gates: hp fraction only ----
       const want = JH.Balance.assmanPhase(this.hp / this.maxHp, d.gates);
       if (want > this.phase && !this._transitionT) {
+        // clamp to sequential: a hit that drops hp straight past gate 2 still
+        // steps through phase 2 first — gate to 3 on the NEXT gate-cross
+        // check, once phase 2 is actually running.
+        const wantNext = Math.min(want, this.phase + 1);
         // finish nothing mid-air: slam completes because gates only re-check here
         this.move = null; this._coneLock = null; this._skidT = 0;
         this._transitionT = d.transitionInvuln;
         this._invulnT = d.transitionInvuln;
-        this._nextPhase = want;
-        this.phase = want;   // flips immediately; the beat below only gates behavior/damage
+        this._nextPhase = wantNext;
+        this.phase = wantNext;   // flips immediately; the beat below only gates behavior/damage
         this.state = "transition";
-        game.banner(want === 2 ? d.barks.p2 : d.barks.p3, 1.6);
+        game.banner(wantNext === 2 ? d.barks.p2 : d.barks.p3, 1.6);
         game.audio.play("jump");
         return;
       }
@@ -6142,6 +6149,7 @@
             this._grounded = true; this.z = 0;
             this.def.touchDmg = JH.ASSMAN.touchDmg;
             this._p3 = null;                                           // Task 6 arms the storm
+            this._waves = [];                                          // clear in-flight P2 clap-back waves
           }
         }
         return;
@@ -6236,7 +6244,96 @@
       }
     }
 
-    thinkP3(dt, game, pl, d) { this.state = "idle"; }      // Task 6 replaces
+    // ---- Phase 3: Glute Force Trauma — clap-storm bursts + exhaustion ----
+    thinkP3(dt, game, pl, d) {
+      const S = d.storm;
+      if (this._exhaustT > 0) {
+        this._exhaustT -= dt;
+        this.state = "exhaust";
+        if (this._exhaustT <= 0) this._storm = null;       // next burst arms below
+        return;
+      }
+      if (!this._storm) {
+        this._storm = { rings: [], spawnT: 0, spawned: 0, gapA: Math.floor(Math.random() * 360), restT: 0 };
+        this.state = "clapwind";
+        return;
+      }
+      const st = this._storm;
+      // spawn rings on cadence
+      if (st.spawned < S.rings) {
+        st.spawnT -= dt;
+        if (st.spawnT <= 0) {
+          st.spawnT = S.ringEvery;
+          st.rings.push({ r: 6, gapA: (st.gapA + st.spawned * S.gapRotDeg) % 360, hit: false });
+          st.spawned++;
+          this.state = "clap"; this.strikeFx = 0.2;
+          game.shake(5); game.audio.play("whack");
+        }
+      }
+      // expand + hit-test rims (one shape: ringGapHits mirrors drawStorm)
+      for (let i = st.rings.length - 1; i >= 0; i--) {
+        const ring = st.rings[i];
+        ring.r += S.ringSpeed * dt;
+        if (pl.alive && !ring.hit &&
+            JH.Balance.ringGapHits(pl.x, pl.y, this.x, this.y, ring.r, S.rimW, ring.gapA, S.gapDeg, 0.34)) {
+          if (pl.takeHit(S.ringDmg, game, this.x) !== false) ring.hit = true;
+        }
+        if (ring.r > 480) st.rings.splice(i, 1);
+      }
+      // burst over → exhaustion
+      if (st.spawned >= S.rings && st.rings.length === 0) {
+        st.restT += dt;
+        if (st.restT >= S.burstGap) {
+          this._exhaustT = d.exhaust.dur;
+          this.state = "exhaust";
+        }
+      } else this.state = st.rings.length ? "clap" : "clapwind";
+    }
+
+    drawStorm(ctx, cam) {
+      if (!this._storm) return;
+      const S = this.def.storm;
+      const cx = this.x - cam, cy = Geo.feetScreenY(this.y, 0);
+      ctx.save();
+      for (const ring of this._storm.rings) {
+        const g0 = (ring.gapA - S.gapDeg / 2) * Math.PI / 180;
+        const g1 = (ring.gapA + S.gapDeg / 2) * Math.PI / 180;
+        ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        // rim drawn from gap end to gap start (the gap itself stays open) —
+        // same center/r/gap params as ringGapHits, ry 0.34
+        ctx.save();
+        ctx.translate(Math.round(cx), Math.round(cy));
+        ctx.scale(1, 0.34);
+        ctx.arc(0, 0, ring.r, g1, g0 + Math.PI * 2);
+        ctx.restore();
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ---- 0 HP: the kneel (never a death) ----
+    die(game) {
+      if (this.dead || this._kneeling) return;
+      this._kneeling = true;
+      this.hp = 0;
+      this.state = "kneel";
+      this._kneelT = this.def.kneelBeat;
+      this.def.touchDmg = 0;
+      this.move = null; this._storm = null; this._waves = [];
+      game.audio.play("win");
+      // survivesDefeat: NO FxBurst, no corpse sequence — the kneel IS the beat.
+    }
+
+    stepKneel(dt, game) {
+      this.state = "kneel";
+      this._kneelT -= dt;
+      if (this._kneelT <= 0 && !this.dead) {
+        this.dead = true;
+        spawnCoinFountain(game, this.x, this.y, this.def.suds);
+        game.onEnemyKilled(this);                          // ally path: Church.markBossDefeated("assman") lights the Air pillar
+      }
+    }
 
     drawP2Fx(ctx, cam) {
       const d = this.def;

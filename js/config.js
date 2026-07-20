@@ -958,6 +958,7 @@
   JH.SLAYER = {
     name: "The Slayer", hp: 1900, bodyW: 44, bodyH: 58,
     touchDmg: 15, contactCd: 0.9, suds: 280, color: "slayerBody",
+    survivesDefeat: true,       // ally cutscene follows — no corpse/explosion VFX
     // Movement: charge-up → dash (no walk cycle)
     chargeDur: 0.75,          // fire-particle build-up before dash
     dashSpeed: 380,           // px/s during dash
