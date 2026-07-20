@@ -426,15 +426,18 @@
   };
 
   JH.BOSS = {
-    name: "The Big Drip", hp: 496, speed: 34, bodyW: 40, bodyH: 56,
+    name: "The Big Drip", hp: 620, speed: 34, bodyW: 40, bodyH: 56,
     touchDmg: 14, contactCd: 0.9, suds: 120, color: "boss",
     slamDmg: 20, slamRange: 40, slamWind: 0.85,
     sweepDmg: 16, sweepRange: 56, sweepWind: 1.0,
     enrageAt: 0.4,            // hp fraction → faster attacks
-    // Heavy rain (replaces add-summons): rooted windup telegraphs ONE dry
-    // safe ellipse, then the whole arena pours. Drawn safe rim IS the
-    // no-hit zone; ticks route through takeHit (i-frames apply).
-    rain: { wind: 2.2, dur: 3.0, tickDmg: 8, tickEvery: 0.5, safeR: 42, cd: 12 },
+    // Heavy rain (replaces add-summons; only fires below hpGate): the boss
+    // roots and volleys droplets SKYWARD through the windup (the "those are
+    // going to land" read), then stays rooted while the whole arena pours.
+    // The green safe ellipse's drawn rim IS the no-hit zone; ticks route
+    // through takeHit (i-frames apply).
+    rain: { wind: 2.2, dur: 3.0, tickDmg: 8, tickEvery: 0.5, safeR: 42, cd: 12,
+            hpGate: 0.66, volleyEvery: 0.12 },
   };
 
   // Act-2 boss — "The Switch of Doom": an 8-port network switch with cable

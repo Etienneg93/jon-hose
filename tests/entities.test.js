@@ -2729,22 +2729,33 @@ test("Prayer Bead: a boss's first enrage flip grants a pressure buff exactly onc
 
 // ---- Big Drip: heavy rain replaces add-summons ----
 
-test("big drip: no summons; rain windup roots him and telegraphs a safe spot", () => {
+test("big drip: no summons; rain gated below hpGate; windup roots and volleys", () => {
   const g = makeThinkGame(400, 40);
   const boss = new JH.Boss(60, 40, JH.BOSS, "boss");
   assert.strictEqual(JH.BOSS.summonCd, undefined, "summon config removed");
-  boss.rainTimer = 0;                  // force the rain to start on this tick
+  boss.rainTimer = 0;                  // primed — but the HP gate must hold it
+  boss.think(1 / 60, g);
+  assert.strictEqual(boss.rainState, null, "no rain above the HP gate");
+  boss.hp = boss.maxHp * (JH.BOSS.rain.hpGate - 0.01);   // just under the gate
+  boss.rainTimer = 0;
   const x0 = boss.x;
   boss.think(1 / 60, g);
-  assert.ok(boss.rainState && boss.rainState.phase === "wind", "windup begins");
+  assert.ok(boss.rainState && boss.rainState.phase === "wind", "windup begins under the gate");
   assert.strictEqual(boss.state, "rainwind", "boss channels while winding");
-  boss.think(0.5, g);
+  const parts0 = g.particles.length;
+  boss.think(JH.BOSS.rain.volleyEvery + 0.01, g);
+  assert.ok(g.particles.length > parts0, "skyward droplet volley fires during the windup");
   assert.strictEqual(boss.x, x0, "rooted during the windup");
   assert.strictEqual(g.enemies.length, 0, "no adds spawned");
   // Windup duration derives from config.
   boss.rainState.t = 0.001;
   boss.think(1 / 60, g);
   assert.strictEqual(boss.rainState.phase, "pour", "windup length flows from BOSS.rain.wind");
+  // Rooted straight through the pour as well.
+  const x1 = boss.x;
+  boss.think(0.4, g);
+  assert.strictEqual(boss.x, x1, "rooted during the pour");
+  assert.strictEqual(boss.state, "rainwind", "still channeling through the pour");
 });
 
 test("big drip rain: pour hits outside the safe rim, never inside (rim is hitbox)", () => {

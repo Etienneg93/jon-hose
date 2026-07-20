@@ -3356,13 +3356,19 @@
           const rs = this.rainState;
           rs.t -= dt;
           if (rs.phase === "wind") {
+            // Skyward droplet volley — the "those are going to land" read.
+            rs.volT = (rs.volT || 0) - dt;
+            if (rs.volT <= 0) {
+              rs.volT = R.volleyEvery;
+              burst(game, this.x + (Math.random() * 24 - 12), this.y, this.bodyH,
+                JH.PAL.water, 2, { speed: 30, life: 0.9, up: 320, grav: -60, size: 2 });
+            }
             if (rs.t <= 0) {
               rs.phase = "pour"; rs.t = R.dur; rs.tick = 0;
               game.shake(4); game.audio.play("blast");
-            } else {
-              this.state = "rainwind";   // rooted channel — free damage window
-              return;
             }
+            this.state = "rainwind";   // rooted channel — free damage window
+            return;
           }
           if (rs.phase === "pour") {
             rs.tick -= dt;
@@ -3371,9 +3377,12 @@
               if (pl.alive && !Geo.inGroundEllipse(pl.x, pl.y, rs.safeX, rs.safeY, R.safeR))
                 pl.takeHit(R.tickDmg, game, pl.x + 20, 40);
             }
-            if (rs.t <= 0) { this.rainState = null; this.rainTimer = R.cd; }
+            if (rs.t <= 0) { this.rainState = null; this.rainTimer = R.cd; return; }
+            this.state = "rainwind";   // stays rooted through the pour too
+            return;
           }
-        } else {
+        } else if (this.hp / this.maxHp < R.hpGate) {
+          // The rain phase only exists below the HP gate.
           this.rainTimer -= dt;
           if (this.rainTimer <= 0 && this.state !== "tele") {
             const b = game.bounds || { minX: 0, maxX: JH.LEVEL_LEN };
@@ -3453,29 +3462,32 @@
       }
     }
 
-    // Heavy rain read: the safe ellipse is drawn at EXACTLY the radius the
-    // pour's no-hit test uses (rim is hitbox, inverted); windup pulses it,
-    // pour fills it faintly and streaks rain everywhere else.
+    // Heavy rain read: the safe ellipse (GREEN = safe) is drawn at EXACTLY
+    // the radius the pour's no-hit test uses (rim is hitbox, inverted). The
+    // windup pulses it while the boss volleys droplets skyward; the pour
+    // streaks rain everywhere EXCEPT a dry column above the safe spot.
     drawRain(ctx, cam) {
       const rs = this.rainState, R = this.def.rain;
       const sx = rs.safeX - cam, sy = Geo.feetScreenY(rs.safeY, 0);
       ctx.save();
       const flash = Math.floor(this.t * 8) & 1;
       ctx.globalAlpha = rs.phase === "wind" ? (0.45 + (flash ? 0.25 : 0)) : 0.85;
-      ctx.strokeStyle = "#9be8ff"; ctx.lineWidth = 2;
+      ctx.strokeStyle = "#80ff80"; ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.ellipse(Math.round(sx), Math.round(sy), R.safeR, R.safeR * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.globalAlpha = rs.phase === "pour" ? 0.14 : 0.07;
-      ctx.fillStyle = "#9be8ff";
+      ctx.globalAlpha = rs.phase === "pour" ? 0.12 : 0.06;
+      ctx.fillStyle = "#80ff80";
       ctx.fill();
       if (rs.phase === "pour") {
-        // Deterministic streak field (no Math.random in draw — stable frame to frame).
+        // Deterministic streak field (no Math.random in draw — stable frame
+        // to frame); the safe spot keeps a visible dry column above it.
         ctx.globalAlpha = 0.45; ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = 1;
         const seed = Math.floor(this.t * 24);
         for (let i = 0; i < 44; i++) {
           const rx = (i * 97 + seed * 31) % JH.VIEW_W;
           const ry = (i * 61 + seed * 47) % (JH.VIEW_H - 24);
+          if (Math.abs(rx - sx) < R.safeR) continue;   // dry shaft over safety
           ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 2, ry + 9); ctx.stroke();
         }
       }
