@@ -1448,6 +1448,33 @@
            : opt.state === "wind" ? "wind" : walkOrIdle(opt),
     stalkerFallback);
 
+  // ===================== ASS MAN (boss 4 — Air) ========================
+  // Baked pose set (tools/assman-bake.py, 4x logical) + procedural
+  // silhouette fallback for the image-load window. opt.state carries the
+  // AssManBoss.poseKey() output: idle/flight/slam/kneel/clapwind/clap/
+  // hipcheck/toss/airclap/exhaust.
+  const AM_H = 58;
+  const _amImgs = {};
+  ["idle", "flight", "slam", "kneel", "clapwind", "clap", "hipcheck", "toss", "airclap", "exhaust"]
+    .forEach((k) => { _amImgs[k] = JH.Loader.img("sprites/assman/baked/" + k + ".png"); });
+  Assets.register("assman", (p, opt, ctx, x, y, facing) => {
+    const img = _amImgs[opt.state] || _amImgs.idle;
+    if (!img || !img.complete || !img.naturalWidth) {
+      // Fallback placeholder while sprites are loading.
+      p(-9, 0, 18, AM_H, "#1d2f66");
+      p(-9, AM_H * 0.45, 18, 6, "#d9a520");
+      return;
+    }
+    const scale = AM_H / img.naturalHeight;
+    const dw = Math.round(img.naturalWidth * scale);
+    ctx.save();
+    ctx.translate(x, y);
+    if (facing < 0) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -AM_H, dw, AM_H);
+    ctx.restore();
+  });
+
   // ============================ BOSS ==================================
   Assets.register("boss", (p, opt) => {
     const f = opt.frame | 0;

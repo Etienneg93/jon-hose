@@ -6476,6 +6476,45 @@
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, d.clap.range, -half, half); ctx.closePath(); ctx.stroke();
       ctx.restore();
     }
+
+    // Maps internal fight state -> baked pose key (js/assets.js "assman" painter).
+    poseKey() {
+      const s = this.state;
+      if (this._kneeling) return "kneel";
+      if (s === "transition") return this._nextPhase === 2 ? "flight" : "clap";
+      if (s === "fly") return "flight";
+      if (s === "airclap") return "airclap";
+      if (s === "slampause" || s === "slamfall") return "slam";
+      if (s === "slamland") return "kneel";              // landed recovery reads as grounded/open
+      if (s === "clapwind") return "clapwind";
+      if (s === "clap") return "clap";
+      if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
+      if (s === "toss") return "toss";
+      if (s === "exhaust") return "exhaust";
+      return "idle";
+    }
+
+    draw(ctx, cam) {
+      const sx = this.x - cam;
+      const groundY = Geo.feetScreenY(this.y, 0);
+      // telegraphs under the body
+      this.drawCone(ctx, cam);
+      this.drawP2Fx(ctx, cam);
+      this.drawStorm(ctx, cam);
+      Assets.shadow(ctx, sx, groundY, this.bodyW * 0.6);
+      const sy = Geo.feetScreenY(this.y, this.z);
+      Assets.draw(ctx, "assman", sx, sy, this.facing, {
+        state: this.poseKey(), hurt: this.flashTimer > 0, hurtAlpha: Math.min(this.flashTimer / 0.18, 1),
+      });
+      // hp bar — mirrors SlayerBoss.draw's inline bar.
+      if (this.hp < this.maxHp) {
+        const w = this.bodyW + 8;
+        const bx = Math.round(sx - w / 2), by = Math.round(groundY - this.bodyH - 10);
+        ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 6);
+        ctx.fillStyle = "#1d2f66"; ctx.fillRect(bx, by, w, 4);
+        ctx.fillStyle = "#bfe0ff"; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 4);
+      }
+    }
   }
   JH.AssManBoss = AssManBoss;
 
