@@ -344,3 +344,16 @@ test("assman kneel: no death VFX, beat, then onEnemyKilled — and Slayer gated 
   // Slayer: survivesDefeat gates its boom-big
   assert.strictEqual(JH.SLAYER.survivesDefeat, true);
 });
+
+test("telemetry payload carries wavesCleared and gameVersion", () => {
+  require("../js/telemetry.js");
+  const T = JH.Telemetry;
+  let sent = null;
+  T.configure({ endpoint: "x", enabled: true, gameVersion: JH.TELEMETRY.version });
+  T._setTransport((p) => { sent = p; });
+  T.startRun("testhandle");
+  T.finishWin({ timeSec: 100, kills: 5, deaths: 0, sudsEarned: 10, finalWaveIndex: 35, finalWaveName: "BOSS" });
+  assert.ok(sent, "payload sent");
+  assert.strictEqual(sent.wavesCleared, 36, "win: finalWaveIndex + 1");
+  assert.strictEqual(sent.gameVersion, JH.TELEMETRY.version);
+});

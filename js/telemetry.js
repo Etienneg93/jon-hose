@@ -30,6 +30,7 @@
     },
 
     setTransport(fn) { this._transport = fn; },
+    _setTransport(fn) { this._transport = fn; },
 
     _live(handle) { return this.enabled && !!this.endpoint && !!handle; },
 
@@ -61,10 +62,12 @@
       const r = this.run; if (!r) return null;
       stats = stats || {};
       const pick = (k, dflt) => (stats[k] != null ? stats[k] : dflt);
+      const finalIdx = pick("finalWaveIndex", r.finalWaveIndex);
       return {
         handle: r.handle, runId: r.runId, gameVersion: r.gameVersion, outcome: outcome,
-        finalWaveIndex: pick("finalWaveIndex", r.finalWaveIndex),
+        finalWaveIndex: finalIdx,
         finalWaveName: pick("finalWaveName", r.finalWaveName),
+        wavesCleared: outcome === "win" ? (finalIdx || 0) + 1 : (finalIdx || 0),
         deaths: stats.deaths | 0, kills: stats.kills | 0,
         timeSec: +(stats.timeSec || 0), sudsEarned: Math.floor(stats.sudsEarned || 0),
         wavesReached: Object.keys(r.wavesReached).map(Number).sort((a, b) => a - b),

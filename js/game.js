@@ -2001,7 +2001,7 @@
         if (!rows || !rows.length) { list.innerHTML = "<li>No wins yet — be the first.</li>"; return; }
         list.innerHTML = rows.map((r, i) =>
           "<li>" + (i + 1) + ". " + escapeHtml(r.handle || "anon") +
-          " — " + Number(r.timeSec).toFixed(1) + "s (" + (r.deaths | 0) + " deaths)</li>").join("");
+          " — " + (r.wavesCleared != null ? "w" + r.wavesCleared + " · " : "") + Number(r.timeSec).toFixed(1) + "s (" + (r.deaths | 0) + " deaths)</li>").join("");
       };
       if (JH.Telemetry && JH.Telemetry.fetchLeaderboard) JH.Telemetry.fetchLeaderboard(render);
       else render(null);
