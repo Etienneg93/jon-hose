@@ -6027,15 +6027,124 @@
       const pl = game.player, d = this.def;
       if (this.strikeFx > 0) this.strikeFx -= dt;
       if (this._invulnT > 0) this._invulnT -= dt;
-      // chase (skeleton)
+      // Prayer Bead: first enrage flip (phase-3 gate) grants the pressure buff.
+      const enraged = this.hp / this.maxHp < d.enrageAt;
+      if (enraged && !this._enrageLatched) {
+        this._enrageLatched = true;
+        if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
+      }
+      this.thinkP1(dt, game, pl, d);
+    }
+
+    // ---- Phase 1: Grounded Glutes — range-banded move picks ----
+    thinkP1(dt, game, pl, d) {
+      // resolve an in-flight move first
+      if (this.move) { this.stepMove(dt, game, pl, d); return; }
+      if (this._skidT > 0) {                     // hip-check whiff: punish window
+        this._skidT -= dt; this.state = "skid"; return;
+      }
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
+      this._decideT -= dt;
+      if (this._decideT <= 0) {
+        this._decideT = d.decideEvery;
+        const pick = this._forceMove ||
+          (dist < d.clap.range * 0.9 ? "clap" : dist < 240 ? (Math.random() < 0.5 ? "clap" : "hip") : (Math.random() < 0.5 ? "hip" : "toss"));
+        this._forceMove = null;
+        this.startMove(pick, game, pl, d);
+        return;
+      }
+      // footsies: brisk walk-in
       if (dist > 30) {
         this.x += (dx / dist) * d.speed * dt;
         this.y += (dy / dist) * d.speed * dt;
         this.facing = dx >= 0 ? 1 : -1;
         this.state = "walk";
       } else this.state = "idle";
+    }
+
+    startMove(kind, game, pl, d) {
+      if (kind === "clap") {
+        this.facing = pl.x >= this.x ? 1 : -1;
+        this._coneLock = { x: this.x, y: this.y, facing: this.facing };
+        this.move = { kind: "clap", t: d.clap.wind };
+        this.state = "clapwind";
+        game.audio.play("jump");                 // windup cue; THUNDERCRACK on release
+      } else if (kind === "hip") {
+        this.facing = pl.x >= this.x ? 1 : -1;
+        this.move = { kind: "hip", t: d.hip.brace, dashed: 0, hit: false };
+        this.state = "hipbrace";
+      } else {                                   // toss (Task 4 fills the projectile)
+        this.facing = pl.x >= this.x ? 1 : -1;
+        this.move = { kind: "toss", t: 0.5, tx: pl.x, ty: pl.y, thrown: false };
+        this.state = "toss";
+      }
+    }
+
+    stepMove(dt, game, pl, d) {
+      const m = this.move;
+      if (m.kind === "clap") {
+        m.t -= dt;
+        this.state = "clapwind";
+        if (m.t <= 0) {
+          // release: ONE cone shape (drawn by drawCone with identical params)
+          const L = this._coneLock;
+          if (pl.alive && JH.Balance.coneHits(pl.x, pl.y, L.x, L.y, L.facing, d.clap.range, d.clap.halfAngleDeg, JH.GROUND_RY))
+            pl.takeHit(d.clap.dmg, game, L.x, d.clap.shove);   // knock param carries the shove (Big Drip rain precedent)
+          this.state = "clap"; this.strikeFx = 0.25;
+          game.shake(7); game.audio.play("whack");             // THUNDERCRACK slot
+          this.move = null; this._coneLock = null;
+          this._coneAfter = 0.3;                               // brief release-pose hold via strikeFx
+        }
+        return;
+      }
+      if (m.kind === "hip") {
+        if (m.t > 0) { m.t -= dt; this.state = "hipbrace"; return; }
+        this.state = "hipdash";
+        const step = d.hip.speed * dt;
+        this.x += this.facing * step;
+        m.dashed += step;
+        if (!m.hit && pl.alive && Math.abs(pl.x - this.x) < this.bodyW * 0.6 && Math.abs(pl.y - this.y) < 14) {
+          m.hit = true;
+          pl.takeHit(d.hip.dmg, game, this.x, 320);
+        }
+        if (m.dashed >= d.hip.dist || m.hit) {
+          this.move = null;
+          if (!m.hit) this._skidT = d.hip.skid;   // whiff: punishable skid
+          else this.state = "idle";
+        }
+        return;
+      }
+      if (m.kind === "toss") {                    // placeholder until Task 4
+        this.move = null; this.state = "idle";
+      }
+    }
+
+    // Cone telegraph: identical (origin, facing, range, halfAngle, GROUND_RY)
+    // as Balance.coneHits — rim is hitbox.
+    drawCone(ctx, cam) {
+      if (!this.move || this.move.kind !== "clap" || !this._coneLock) return;
+      const d = this.def, L = this._coneLock;
+      const sx = L.x - cam, sy = Geo.feetScreenY(L.y, 0);
+      const prog = 1 - this.move.t / d.clap.wind;
+      const half = d.clap.halfAngleDeg * Math.PI / 180;
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.scale(L.facing, JH.GROUND_RY);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, d.clap.range, -half, half);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,60,60,0.16)"; ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, d.clap.range * prog, -half, half);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,60,60,0.35)"; ctx.fill();
+      ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, d.clap.range, -half, half); ctx.closePath(); ctx.stroke();
+      ctx.restore();
     }
   }
   JH.AssManBoss = AssManBoss;

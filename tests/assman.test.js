@@ -83,3 +83,63 @@ test("assman helpers: leaderboard comparator — version, waves, time", () => {
   // missing fields sort last, never throw
   assert.ok(B.lbCompare(mk("0.32.0", 36, 100), {}) < 0);
 });
+
+// ---- Phase 1 think() tests ----
+
+function makePlayer() {
+  JH.Upgrades.reset();
+  return new JH.Player(60, 40);
+}
+
+// Minimal game stub for enemy think() tests.
+function makeThinkGame(px, py) {
+  return {
+    player: Object.assign(makePlayer(), { x: px, y: py }),
+    enemies: [], embers: [], particles: [], firePatches: [], shields: [],
+    pulseRings: [],
+    bounds: { minX: 0, maxX: 480 },
+    audio: { play() {} }, shake() {}, hitStop() {}, defer() {},
+    killJuice() {}, dropLoot() {}, onEnemyKilled() {}, spawnEnemy() {},
+    canAttack() { return this._tickets !== false; }, _tickets: true,
+    sigils: [], banner() {},
+  };
+}
+
+test("assman P1: cheek clap — telegraph then cone hit, shape shared", () => {
+  const g = makeThinkGame(140, 40);              // player close, dead ahead
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies = [b];
+  const C = JH.ASSMAN.clap;
+  b._decideT = 0;                                // force a decision now
+  b.think(1 / 60, g);
+  assert.strictEqual(b.state, "clapwind", "close range picks the clap");
+  const hp0 = g.player.hp;
+  // run out the windup; the release frame applies cone damage once
+  for (let t = 0; t < C.wind + 0.1; t += 1 / 60) b.think(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - C.dmg, "cone caught the player once");
+  // same fight, player parked outside the cone angle: no damage
+  const g2 = makeThinkGame(100, 120);            // deep off-axis
+  const b2 = JH.makeEnemy("assman", 100, 40);
+  b2._decideT = 0; b2._forceMove = "clap";       // test hook (see Step 3)
+  b2.think(1 / 60, g2);
+  const hp2 = g2.player.hp;
+  for (let t = 0; t < C.wind + 0.1; t += 1 / 60) b2.think(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "outside the cone: telegraph = hit shape");
+});
+
+test("assman P1: hip check — dash with punishable skid on whiff", () => {
+  const g = makeThinkGame(360, 40);              // far: picks hip or toss; force hip
+  const b = JH.makeEnemy("assman", 100, 40);
+  b._decideT = 0; b._forceMove = "hip";
+  b.think(1 / 60, g);
+  assert.strictEqual(b.state, "hipbrace");
+  const H = JH.ASSMAN.hip;
+  for (let t = 0; t < H.brace + 0.05; t += 1 / 60) b.think(1 / 60, g);
+  assert.strictEqual(b.state, "hipdash");
+  const x0 = b.x;
+  g.player.x = 2000;                             // guarantee a whiff
+  for (let t = 0; t < H.dist / H.speed + 0.1; t += 1 / 60) b.think(1 / 60, g);
+  assert.ok(b.x > x0 + H.dist * 0.8, "dashed forward");
+  assert.strictEqual(b.state, "skid", "whiff ends in the skid window");
+  assert.ok(b._skidT > 0 && b._skidT <= H.skid);
+});
