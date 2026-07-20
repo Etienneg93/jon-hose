@@ -19,3 +19,7 @@ every run. The deployed Apps Script's leaderboard read must sort with:
 Mirrors `JH.Balance.lbCompare` (js/balance.js), which is the unit-tested
 source of truth. Old rows without `wavesCleared` sort as 0 waves — they age
 out under version priority anyway.
+
+Release checklist: redeploy the Apps Script with this comparator BEFORE
+shipping the 36-wave build — the client sort is defense-in-depth, not a
+substitute (the server may truncate rows before the client sees them).

@@ -6107,6 +6107,16 @@
       super.takeDamage(dmg * mult, game, dirX, knock, crit);
     }
 
+    // Scald cannot tick through the airborne band or transition invuln —
+    // "vulnerable ONLY during slam windows" includes DoTs.
+    tickScald(dt, game) {
+      if (this._invulnT > 0 || (this.phase === 2 && !this._grounded)) {
+        this.scaldT = 0; this._dotNumBuf = 0;
+        return;
+      }
+      super.tickScald(dt, game);
+    }
+
     think(dt, game) {
       const pl = game.player, d = this.def;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -6119,7 +6129,7 @@
       if (this._kneeling) { this.stepKneel(dt, game); return; }        // Task 6
       // ---- phase gates: hp fraction only ----
       const want = JH.Balance.assmanPhase(this.hp / this.maxHp, d.gates);
-      if (want > this.phase && !this._transitionT) {
+      if (want > this.phase && !this._transitionT && !this.move && (this._skidT || 0) <= 0) {
         // clamp to sequential: a hit that drops hp straight past gate 2 still
         // steps through phase 2 first — gate to 3 on the NEXT gate-cross
         // check, once phase 2 is actually running.
@@ -6138,17 +6148,22 @@
       if (this._transitionT) {
         this._transitionT -= dt;
         this.state = "transition";
+        // Phase 3 (grounded storm) plants center-arena so the clap-storm rings
+        // have room to expand on both sides — drift, don't teleport.
+        if (this._nextPhase === 3) {
+          const cx0 = game.bounds ? (game.bounds.minX + game.bounds.maxX) / 2 : this.x;
+          this.x += Math.sign(cx0 - this.x) * Math.min(Math.abs(cx0 - this.x), this.def.speed * 3 * dt);
+        }
         if (this._transitionT <= 0) {
           this.phase = this._nextPhase; this._transitionT = 0;
           if (this.phase === 2) {
             this._grounded = false; this.z = d.slam.airZ;
             this.def.touchDmg = 0;                                     // no contact from the sky
-            this._p2 = { mode: "shadow", t: 2.0, loops: 0, cbT: d.clapback.every, tx: 0, ty: 0 };
+            this._p2 = { mode: "shadow", t: d.slam.shadowEvery, loops: 0, cbT: d.clapback.every, tx: 0, ty: 0 };
             this._waves = this._waves || [];
           } else if (this.phase === 3) {
             this._grounded = true; this.z = 0;
             this.def.touchDmg = JH.ASSMAN.touchDmg;
-            this._p3 = null;                                           // Task 6 arms the storm
             this._waves = [];                                          // clear in-flight P2 clap-back waves
           }
         }
@@ -6239,7 +6254,7 @@
       this._recoverT -= dt;
       if (this._recoverT <= 0) {
         this._grounded = false; this.z = d.slam.airZ;
-        P.mode = "shadow"; P.t = 2.0; P.cbT = d.clapback.every;
+        P.mode = "shadow"; P.t = d.slam.shadowEvery; P.cbT = d.clapback.every;
         this.state = "fly";
       }
     }
@@ -6278,7 +6293,7 @@
             JH.Balance.ringGapHits(pl.x, pl.y, this.x, this.y, ring.r, S.rimW, ring.gapA, S.gapDeg, 0.34)) {
           if (pl.takeHit(S.ringDmg, game, this.x) !== false) ring.hit = true;
         }
-        if (ring.r > 480) st.rings.splice(i, 1);
+        if (ring.r > S.cullR) st.rings.splice(i, 1);
       }
       // burst over → exhaustion
       if (st.spawned >= S.rings && st.rings.length === 0) {
@@ -6298,7 +6313,7 @@
       for (const ring of this._storm.rings) {
         const g0 = (ring.gapA - S.gapDeg / 2) * Math.PI / 180;
         const g1 = (ring.gapA + S.gapDeg / 2) * Math.PI / 180;
-        ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = S.rimW * 0.6; ctx.globalAlpha = 0.85;
         ctx.beginPath();
         // rim drawn from gap end to gap start (the gap itself stays open) —
         // same center/r/gap params as ringGapHits, ry 0.34
@@ -6417,7 +6432,6 @@
           this.state = "clap"; this.strikeFx = 0.25;
           game.shake(7); game.audio.play("whack");             // THUNDERCRACK slot
           this.move = null; this._coneLock = null;
-          this._coneAfter = 0.3;                               // brief release-pose hold via strikeFx
         }
         return;
       }
@@ -6512,7 +6526,7 @@
         const bx = Math.round(sx - w / 2), by = Math.round(groundY - this.bodyH - 10);
         ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx - 1, by - 1, w + 2, 6);
         ctx.fillStyle = "#1d2f66"; ctx.fillRect(bx, by, w, 4);
-        ctx.fillStyle = "#bfe0ff"; ctx.fillRect(bx, by, Math.round(w * (this.hp / this.maxHp)), 4);
+        ctx.fillStyle = "#bfe0ff"; ctx.fillRect(bx, by, Math.round(w * Math.max(0, this.hp / this.maxHp)), 4);
       }
     }
   }

@@ -938,11 +938,13 @@
       // cross below deliberately excludes bosses — they get their own drop).
       // Also above the cutscene early-returns: quake/slayer are boss beats;
       // their sigils sit harmlessly through the cutscene (startWave clears
-      // any left unpicked). The final (Slayer) wave keeps its beat: its
-      // cutscene early-return below fires before the win() check, so win()
-      // never runs synchronously here and the sigils are pickable in the
-      // post-cutscene free-walk.
-      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse)) {
+      // any left unpicked). Slayer isn't the final wave: its cutscene
+      // early-return below fires before the win() check, so win() never
+      // runs synchronously here and the sigils are pickable in the
+      // post-cutscene free-walk. The true final wave (AssMan) has no
+      // cutscene, so it's excluded explicitly — no sigils under win().
+      if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse) &&
+          this.waveIndex < JH.LEVEL1.waves.length - 1) {
         const offers = JH.Benedictions.pickOffers({
           active: JH.Benedictions.active,
           pillarRanks: (JH.Church && JH.Church.state.pillars) || {},
@@ -1997,8 +1999,9 @@
       const list = document.getElementById("lb-list");
       list.innerHTML = "<li>Loading…</li>";
       this.showScreen("screen-leaderboard");
-      const render = (rows) => {
-        if (!rows || !rows.length) { list.innerHTML = "<li>No wins yet — be the first.</li>"; return; }
+      const render = (rowsIn) => {
+        const rows = (rowsIn || []).slice().sort(JH.Balance.lbCompare);
+        if (!rows.length) { list.innerHTML = "<li>No wins yet — be the first.</li>"; return; }
         list.innerHTML = rows.map((r, i) =>
           "<li>" + (i + 1) + ". " + escapeHtml(r.handle || "anon") +
           " — " + (r.wavesCleared != null ? "w" + r.wavesCleared + " · " : "") + Number(r.timeSec).toFixed(1) + "s (" + (r.deaths | 0) + " deaths)</li>").join("");

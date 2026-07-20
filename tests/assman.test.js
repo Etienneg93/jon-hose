@@ -198,6 +198,50 @@ test("assman phases: gate on hp fraction with a transition beat + invuln", () =>
   assert.strictEqual(b.hp, hp0, "no damage during the transition beat");
 });
 
+test("assman P1: phase gate waits for an in-flight move to resolve", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(140, 40);           // close range, dead ahead — picks clap
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies = [b];
+  b._decideT = 0; b._forceMove = "clap";
+  b.think(1 / 60, g);                         // starts the clap windup
+  assert.strictEqual(b.state, "clapwind");
+  assert.ok(b.move, "move in flight");
+  b.hp = b.maxHp * (D.gates[0] - 0.01);       // drop below gate 1 mid-move
+  b.think(1 / 60, g);
+  assert.strictEqual(b.phase, 1, "gate held off while the clap is still in flight");
+  // run the clap out to resolution (release + skid-free completion)
+  let guard = 0;
+  while (b.move && guard++ < 300) b.think(1 / 60, g);
+  assert.ok(!b.move, "clap resolved");
+  assert.strictEqual(b.phase, 1, "still phase 1 the instant the move clears");
+  // next think() call: the gate re-checks and fires now that the move is clear
+  b.think(1 / 60, g);
+  assert.strictEqual(b.phase, 2, "gate fires once the move resolves");
+  assert.strictEqual(b.state, "transition");
+});
+
+test("assman: scald cannot tick through the airborne phase-2 band — cleared, no hp loss", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);
+  const b = JH.makeEnemy("assman", 100, 40);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b.applyScald(50, 3);
+  assert.ok(b.scaldT > 0, "scalded");
+  const hp0 = b.hp;
+  b.tickScald(1 / 60, g);
+  assert.strictEqual(b.hp, hp0, "no DoT damage while airborne");
+  assert.strictEqual(b.scaldT, 0, "scald cleared outright, not just paused");
+  // grounded (slamland) phase 2 IS in the hit band — scald ticks normally there
+  const b2 = JH.makeEnemy("assman", 100, 40);
+  b2.phase = 2; b2._grounded = true; b2.z = 0;
+  b2.applyScald(50, 3);
+  const hp2 = b2.hp;
+  b2.tickScald(1 / 60, g);
+  assert.ok(b2.hp < hp2, "grounded phase 2: DoT still ticks");
+  assert.ok(b2.scaldT > 0, "scald not cleared while grounded");
+});
+
 test("assman P2: airborne = untouchable; slam landing recovery = the window", () => {
   const D = JH.ASSMAN;
   const g = makeThinkGame(300, 40);
@@ -296,8 +340,12 @@ test("assman P3: storm rings expand, gap rotates, rim hits the player", () => {
   // gap centers rotate ring to ring
   const gaps = b._storm.rings.map((r) => r.gapA);
   if (gaps.length >= 2) assert.strictEqual((gaps[1] - gaps[0] + 360) % 360, S.gapRotDeg % 360);
-  // park the player on a rim point opposite the first ring's gap → takes ringDmg
-  const ring = b._storm.rings[0];
+  // park the player on a rim point opposite the freshest ring's gap → takes
+  // ringDmg. The freshest (last-spawned) ring is used, not the oldest: by the
+  // time all S.rings have spawned the oldest ring's r is already well into
+  // its lifespan, and cullR (storm.cullR — burst length ~= spec's ~5s) can
+  // retire it before its rim reaches a point this far out.
+  const ring = b._storm.rings[b._storm.rings.length - 1];
   const away = (ring.gapA + 180) * Math.PI / 180;
   g.player.x = b.x + Math.cos(away) * (ring.r + 30);
   g.player.y = b.y + Math.sin(away) * (ring.r + 30) * 0.34;

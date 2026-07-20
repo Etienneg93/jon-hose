@@ -67,7 +67,7 @@
         handle: r.handle, runId: r.runId, gameVersion: r.gameVersion, outcome: outcome,
         finalWaveIndex: finalIdx,
         finalWaveName: pick("finalWaveName", r.finalWaveName),
-        wavesCleared: outcome === "win" ? (finalIdx || 0) + 1 : (finalIdx || 0),
+        wavesCleared: Math.max(0, outcome === "win" ? (finalIdx || 0) + 1 : (finalIdx || 0)),
         deaths: stats.deaths | 0, kills: stats.kills | 0,
         timeSec: +(stats.timeSec || 0), sudsEarned: Math.floor(stats.sudsEarned || 0),
         wavesReached: Object.keys(r.wavesReached).map(Number).sort((a, b) => a - b),
