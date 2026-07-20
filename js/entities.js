@@ -2920,6 +2920,7 @@
     }
     inBand(y) { return Math.abs(y - this.y) <= this.band; }
     update(dt, game) {
+      if (this._bossT != null) { this._bossT -= dt; if (this._bossT <= 0) { this.dead = true; return; } }
       const G = JH.GUST;
       this.t += dt;
       this.phaseT -= dt;
@@ -6096,17 +6097,169 @@
       this._grounded = true;
       this._kneeling = false;
     }
+    takeDamage(dmg, game, dirX, knock, crit) {
+      if (this._invulnT > 0) return;                       // transition beat
+      if (this.phase === 2 && !this._grounded) return;     // airborne: out of the hit band
+      const mult = (this._exhaustT || 0) > 0 ? this.def.exhaust.dmgTakenMult : 1;
+      super.takeDamage(dmg * mult, game, dirX, knock, crit);
+    }
+
     think(dt, game) {
       const pl = game.player, d = this.def;
       if (this.strikeFx > 0) this.strikeFx -= dt;
       if (this._invulnT > 0) this._invulnT -= dt;
-      // Prayer Bead: first enrage flip (phase-3 gate) grants the pressure buff.
       const enraged = this.hp / this.maxHp < d.enrageAt;
       if (enraged && !this._enrageLatched) {
         this._enrageLatched = true;
         if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
-      this.thinkP1(dt, game, pl, d);
+      if (this._kneeling) { this.stepKneel(dt, game); return; }        // Task 6
+      // ---- phase gates: hp fraction only ----
+      const want = JH.Balance.assmanPhase(this.hp / this.maxHp, d.gates);
+      if (want > this.phase && !this._transitionT) {
+        // finish nothing mid-air: slam completes because gates only re-check here
+        this.move = null; this._coneLock = null; this._skidT = 0;
+        this._transitionT = d.transitionInvuln;
+        this._invulnT = d.transitionInvuln;
+        this._nextPhase = want;
+        this.phase = want;   // flips immediately; the beat below only gates behavior/damage
+        this.state = "transition";
+        game.banner(want === 2 ? d.barks.p2 : d.barks.p3, 1.6);
+        game.audio.play("jump");
+        return;
+      }
+      if (this._transitionT) {
+        this._transitionT -= dt;
+        this.state = "transition";
+        if (this._transitionT <= 0) {
+          this.phase = this._nextPhase; this._transitionT = 0;
+          if (this.phase === 2) {
+            this._grounded = false; this.z = d.slam.airZ;
+            this.def.touchDmg = 0;                                     // no contact from the sky
+            this._p2 = { mode: "shadow", t: 2.0, loops: 0, cbT: d.clapback.every, tx: 0, ty: 0 };
+            this._waves = this._waves || [];
+          } else if (this.phase === 3) {
+            this._grounded = true; this.z = 0;
+            this.def.touchDmg = JH.ASSMAN.touchDmg;
+            this._p3 = null;                                           // Task 6 arms the storm
+          }
+        }
+        return;
+      }
+      if (this.phase === 1) { this.thinkP1(dt, game, pl, d); return; }
+      if (this.phase === 2) { this.thinkP2(dt, game, pl, d); return; }
+      this.thinkP3(dt, game, pl, d);                                   // Task 6
+    }
+
+    // ---- Phase 2: Air Superiority ----
+    thinkP2(dt, game, pl, d) {
+      const P = this._p2;
+      this._waves = this._waves || [];
+      // Enemy.update() runs basePhysics(dt) BEFORE think() every frame; with
+      // z > 0 that applies gravity to z/vz unconditionally. Pin the hold
+      // height (and zero vz so it can't accumulate) every airborne frame
+      // here — slamfall drives z itself via a manual descent below, and
+      // slamland is already grounded (z = 0), so both skip the pin.
+      if (!this._grounded && P.mode !== "slamfall") { this.z = d.slam.airZ; this.vz = 0; }
+      // clap-back waves always advance (even during the slam)
+      for (let i = this._waves.length - 1; i >= 0; i--) {
+        const w = this._waves[i];
+        const x0 = w.x;
+        w.x += w.dir * d.clapback.waveSpeed * dt;
+        if (pl.alive && !w.hit && Math.abs(pl.y - w.y) <= d.clapback.band &&
+            ((x0 - pl.x) * (w.x - pl.x) <= 0)) {                       // front crossed the player
+          w.hit = true;
+          pl.takeHit(d.clapback.dmg, game, w.x - w.dir * 20);
+        }
+        // Boss arenas lock game.bounds to the arena width, not the whole
+        // level scroll (game.js bounds default) — same fallback idiom as
+        // ToiletBomb's cleanup above (game.bounds ?? JH.LEVEL_LEN).
+        const wMin = game.bounds ? game.bounds.minX - 60 : -60;
+        const wMax = game.bounds ? game.bounds.maxX + 60 : JH.LEVEL_LEN + 60;
+        if (w.x < wMin || w.x > wMax) this._waves.splice(i, 1);
+      }
+      if (P.mode === "shadow") {
+        this.state = "fly";
+        // track the player's x from the air
+        const dx = pl.x - this.x;
+        this.x += Math.sign(dx) * Math.min(Math.abs(dx), d.speed * 2.4 * dt);
+        this.facing = dx >= 0 ? 1 : -1;
+        P.cbT -= dt;
+        if (P.cbT <= 0) {
+          P.cbT = d.clapback.every;
+          this._waves.push({ x: this.x, y: this.y, dir: this.facing, hit: false });
+          this.state = "airclap"; this.strikeFx = 0.2;
+          game.audio.play("whack");
+        }
+        P.t -= dt;
+        if (P.t <= 0) {
+          P.mode = "slampause"; P.t = d.slam.pause;
+          P.tx = pl.x; P.ty = pl.y;                                    // lock the drop point
+          this.x = pl.x; this.y = pl.y;                                // hover above it
+          this.state = "slampause";
+        }
+        return;
+      }
+      if (P.mode === "slampause") {
+        this.state = "slampause";
+        P.t -= dt;
+        if (P.t <= 0) { P.mode = "slamfall"; this.state = "slamfall"; }
+        return;
+      }
+      if (P.mode === "slamfall") {
+        this.state = "slamfall";
+        this.z -= d.slam.fallSpeed * dt;
+        if (this.z <= 0) {
+          this.z = 0; this._grounded = true;
+          this.state = "slamland";
+          P.mode = "slamland";   // else the mode-dispatch above re-enters "slamfall" forever
+          this._recoverT = d.slam.recovery;
+          game.shake(8); game.audio.play("whack");
+          if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.slam.rx))
+            pl.takeHit(d.slam.dmg, game, this.x, d.slam.shove);
+          P.loops++;
+          if (P.loops % d.gustEveryLoops === 0 && game.gustLanes && JH.GustLane) {
+            const lane = new JH.GustLane({ y: pl.y, dir: this.facing });
+            lane._bossT = d.gustDur;                                   // boss lanes expire
+            game.gustLanes.push(lane);
+          }
+        }
+        return;
+      }
+      // slamland: the ONLY vulnerability window
+      this.state = "slamland";
+      this._recoverT -= dt;
+      if (this._recoverT <= 0) {
+        this._grounded = false; this.z = d.slam.airZ;
+        P.mode = "shadow"; P.t = 2.0; P.cbT = d.clapback.every;
+        this.state = "fly";
+      }
+    }
+
+    thinkP3(dt, game, pl, d) { this.state = "idle"; }      // Task 6 replaces
+
+    drawP2Fx(ctx, cam) {
+      const d = this.def;
+      if (this._waves) for (const w of this._waves) {
+        const sx = w.x - cam, syT = Geo.feetScreenY(w.y - d.clapback.band, 0), syB = Geo.feetScreenY(w.y + d.clapback.band, 0);
+        ctx.save();
+        ctx.strokeStyle = "#bfe0ff"; ctx.globalAlpha = 0.8; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(sx, syT - 16); ctx.lineTo(sx, syB); ctx.stroke();
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath(); ctx.moveTo(sx - w.dir * 6, syT - 16); ctx.lineTo(sx - w.dir * 6, syB); ctx.stroke();
+        ctx.restore();
+      }
+      if (this._p2 && (this._p2.mode === "slampause" || this._p2.mode === "slamfall")) {
+        const sx = this._p2.tx - cam, sy = Geo.feetScreenY(this._p2.ty, 0);
+        const flash = Math.floor(this.t * 12) & 1;
+        ctx.save();
+        ctx.strokeStyle = flash ? "#ff5a5a" : "#ffd23f"; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(sy), this.def.slam.rx, this.def.slam.rx * JH.GROUND_RY, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.15; ctx.fillStyle = "#ff5a5a"; ctx.fill();
+        ctx.restore();
+      }
     }
 
     // ---- Phase 1: Grounded Glutes — range-banded move picks ----

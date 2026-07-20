@@ -2201,6 +2201,7 @@
       for (const fp of this.firePatches) fp.update(dt, this);
       for (const sc of this.stinkClouds) sc.update(dt, this);
       for (const gl of this.gustLanes) gl.update(dt, this);
+      this.gustLanes = this.gustLanes.filter((gl) => !gl.dead);
       // After gust lanes so a gust push across the edge resolves the same step.
       if (this.cloudlineEdge) this.cloudlineEdge.update(dt, this);
       for (const hz of this.windHazards) hz.update(dt, this);

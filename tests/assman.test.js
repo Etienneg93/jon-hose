@@ -179,3 +179,96 @@ test("assman toss: toilet arcs, lands with rim-true impact + shard ticks", () =>
   for (let t = 0; t < T.shardDur; t += 1 / 60) if (!bomb.update(1 / 60, g)) break;
   assert.ok(!bomb.update(1 / 60, g), "dead after shardDur");
 });
+
+// ---- Phase gates + Phase 2 (Air Superiority) ----
+
+test("assman phases: gate on hp fraction with a transition beat + invuln", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(400, 40);
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies = [b];
+  b.hp = b.maxHp * (D.gates[0] - 0.01);          // below gate 1
+  b.think(1 / 60, g);
+  assert.strictEqual(b.phase, 2);
+  assert.strictEqual(b.state, "transition");
+  assert.ok(b._invulnT > 0 && b._invulnT <= D.transitionInvuln);
+  // invulnerable during the beat
+  const hp0 = b.hp;
+  b.takeDamage(50, g, 1, 0);
+  assert.strictEqual(b.hp, hp0, "no damage during the transition beat");
+});
+
+test("assman P2: airborne = untouchable; slam landing recovery = the window", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies = [b];
+  b.hp = b.maxHp * (D.gates[0] - 0.01);
+  // run through the transition beat into flight
+  for (let t = 0; t < D.transitionInvuln + 0.1; t += 1 / 60) b.think(1 / 60, g);
+  assert.ok(!b._grounded, "airborne after the beat");
+  const hpAir = b.hp;
+  b.takeDamage(60, g, 1, 0);
+  assert.strictEqual(b.hp, hpAir, "out of the hit band while airborne");
+  // force the slam cycle to the landing
+  b._p2 = { mode: "slampause", t: 0.01, loops: 0, cbT: 9, tx: g.player.x, ty: g.player.y };
+  b.state = "slampause";
+  let guard = 0;
+  while (!b._grounded && guard++ < 900) b.think(1 / 60, g);
+  assert.strictEqual(b.state, "slamland");
+  assert.ok(b._recoverT > 0 && b._recoverT <= D.slam.recovery);
+  b.takeDamage(60, g, 1, 0);
+  assert.strictEqual(b.hp, hpAir - 60, "vulnerable ONLY during landed recovery");
+});
+
+test("assman P2: slam ellipse is rim-true and the gust lane summons", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);
+  g.gustLanes = [];
+  const b = JH.makeEnemy("assman", 100, 40);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b._p2 = { mode: "slamfall", t: 0, loops: 1, cbT: 9, tx: 300, ty: 40 };   // loops odd → this landing summons
+  b.x = 300; b.y = 40; b.state = "slamfall";
+  const hp0 = g.player.hp;                        // player at the impact point
+  let guard = 0;
+  while (b.state !== "slamland" && guard++ < 900) b.think(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - D.slam.dmg, "landing ellipse caught the player");
+  assert.strictEqual(g.gustLanes.length, 1, "every 2nd loop summons a gust lane");
+  // outside the rim: safe
+  const g2 = makeThinkGame(300 + D.slam.rx + 25, 40);
+  g2.gustLanes = [];
+  const b2 = JH.makeEnemy("assman", 100, 40);
+  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ;
+  b2._p2 = { mode: "slamfall", t: 0, loops: 0, cbT: 9, tx: 300, ty: 40 };
+  b2.x = 300; b2.y = 40; b2.state = "slamfall";
+  const hp2 = g2.player.hp;
+  guard = 0;
+  while (b2.state !== "slamland" && guard++ < 900) b2.think(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "rim is hitbox");
+});
+
+test("assman P2: clap back wave travels the lane, dodged by depth", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(260, 40);
+  const b = JH.makeEnemy("assman", 100, 40);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0 };
+  b.y = 40;                                       // same depth lane as the player
+  b.think(1 / 60, g);
+  assert.strictEqual(b._waves.length, 1, "clap back fired");
+  const hp0 = g.player.hp;
+  let guard = 0;
+  while (b._waves.length && guard++ < 900) b.think(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - D.clapback.dmg, "wave crossed the player in-lane");
+  // depth-dodged copy
+  const g2 = makeThinkGame(260, 40 + D.clapback.band + 10);
+  const b2 = JH.makeEnemy("assman", 100, 40);
+  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ;
+  b2._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0 };
+  b2.y = 40;
+  const hp2 = g2.player.hp;
+  guard = 0;
+  b2.think(1 / 60, g2);
+  while (b2._waves.length && guard++ < 900) b2.think(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "dodged by depth");
+});
