@@ -1477,16 +1477,19 @@ test("Pressure Sermon: SERMON.charge seconds of spray arms the pip regardless of
   B.reset();
 });
 
-test("Pressure Sermon wave: front hits each enemy once with SERMON.dmg, band-gated", () => {
+test("Pressure Sermon wave: front hits each enemy once for sermonWaveFrac of spray damage, band-gated", () => {
   const C = JH.SERMON;
+  const sprayDamage = 20;
+  const expected = sprayDamage * JH.BENE_TUNE.sermonWaveFrac;
   const mk = (x, y) => ({ x, y, dead: false, dropping: false, hp: 100,
     takeDamage(d) { this.hp -= d; }, applyKnockback() {} });
   const near = mk(60, 40), deep = mk(60, 40 + C.halfDepth + 5), far = mk(60 + C.range + 50, 40);
-  const g = { sermonWaves: [{ x: 20, y: 40, dir: 1, traveled: 0, hit: new Set() }],
+  const g = { player: { stats: { sprayDamage } },
+              sermonWaves: [{ x: 20, y: 40, dir: 1, traveled: 0, hit: new Set() }],
               enemies: [near, deep, far] };
   for (let i = 0; i < 120 && g.sermonWaves.length; i++)
     JH.Game.updateSermonWaves.call(g, 1 / 60);
-  assert.strictEqual(near.hp, 100 - C.dmg, "in-band enemy hit exactly once");
+  assert.strictEqual(near.hp, 100 - expected, "in-band enemy hit exactly once for sermonWaveFrac of spray damage");
   assert.strictEqual(deep.hp, 100, "outside the depth band: untouched");
   assert.strictEqual(far.hp, 100, "beyond range: wave dissipated first");
   assert.strictEqual(g.sermonWaves.length, 0, "wave culled at range");
@@ -1966,6 +1969,35 @@ test("Whirlwind Walk: dashing near a live ember destroys it", () => {
   p.update(0.016, g);
   assert.ok(p.dashTimer > 0, "dash fired");
   assert.strictEqual(em.dead, true, "ember destroyed by the dash sweep");
+  B.reset();
+});
+
+test("Whirlwind Walk: gust scales with spray damage and destroyed projectiles pop droplets", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("whirlwind_walk");
+  const sim = makeBufferedInput();
+  const p = makePlayer();
+  const g = dashStubGame(sim.In);
+  // Gust target overlaps Jon's body (bodiesOverlap gate).
+  const gustTarget = new JH.Enemy("mook", p.x + 2, p.y);
+  // Ember sits inside whirlwindSweep (20px) but far enough in depth (18px)
+  // that it — and anything near it — can't also be gust-touched (ay < 14 gate).
+  const em = new JH.Ember(p.x, p.y + 18, 10, 0, 0, 10, {});
+  // Droplet target sits inside dropletPop (12px) of the ember, well outside
+  // gust range of the player.
+  const dropletTarget = new JH.Enemy("mook", em.x, em.y + 8);
+  g.enemies = [gustTarget, dropletTarget];
+  g.embers = [em];
+  const gustHpBefore = gustTarget.hp, dropletHpBefore = dropletTarget.hp;
+  sim.In._keys.right = true;
+  sim.In._keys.dash = true; sim.frame(16);
+  p.update(0.016, g);
+  assert.ok(p.dashTimer > 0, "dash fired");
+  assert.strictEqual(em.dead, true, "ember destroyed by the dash sweep");
+  const expectedGust = p.stats.sprayDamage * JH.BENE_TUNE.whirlGustFrac;
+  const expectedDroplet = p.stats.sprayDamage * JH.BENE_TUNE.dropletPopFrac;
+  assert.strictEqual(gustHpBefore - gustTarget.hp, expectedGust, "gust deals whirlGustFrac of spray damage");
+  assert.strictEqual(dropletHpBefore - dropletTarget.hp, expectedDroplet, "droplet pop deals dropletPopFrac of spray damage");
   B.reset();
 });
 

@@ -579,16 +579,21 @@
         if (this.beneRank("whirlwind_walk")) {
           for (const em of game.embers) {
             if (!em.isProjectile || em.dead) continue;
-            if (Math.hypot(em.x - this.x, em.y - this.y) >= 14) continue;
+            if (Math.hypot(em.x - this.x, em.y - this.y) >= JH.BENE_AOE.whirlwindSweep) continue;
             em.dead = true;
-            burst(game, em.x, em.y, em.z || 0, "#ffffff", 6, { speed: 60, life: 0.25, up: 20 });
+            const pr = JH.BENE_AOE.dropletPop;
+            for (const e2 of game.enemies) {
+              if (e2.dead || Math.hypot(e2.x - em.x, e2.y - em.y) > pr) continue;
+              e2.takeDamage(this.stats.sprayDamage * JH.BENE_TUNE.dropletPopFrac, game, this.facing, 0);
+            }
+            burst(game, em.x, em.y, em.z || 0, "#9be8ff", 10, { speed: 80, life: 0.3, up: 30, size: 2 });
           }
           for (const e of game.enemies) {
             if (e.dead || e.isBoss || e.dropping || this._gustTouched.has(e)) continue;
             if (!Geo.bodiesOverlap(this, e)) continue;
             this._gustTouched.add(e);
             e.applyKnockback(this.facing, 140);
-            e.takeDamage(15, game, this.facing, 0);
+            e.takeDamage(this.stats.sprayDamage * JH.BENE_TUNE.whirlGustFrac, game, this.facing, 0);
           }
         }
         // Dash expiry: post-dash i-frame grace (Pillar of Air III) and

@@ -1523,7 +1523,7 @@
             : (e.x <= w.x + step && e.x >= w.x - 4);
           if (!passed) continue;
           w.hit.add(e);
-          e.takeDamage(C.dmg, this, w.dir, 0);
+          e.takeDamage(this.player.stats.sprayDamage * JH.BENE_TUNE.sermonWaveFrac, this, w.dir, 0);
           e.applyKnockback(w.dir, C.kb, (e.y - w.y) * 0.02);
         }
       }

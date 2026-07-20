@@ -49,7 +49,7 @@
       descII: "{g:18%} for 3s" },
     { id: "backdraft", verb: "dash", element: "fire", kind: "boon", name: "Backdraft",
       desc: "Dashing through enemies Scalds them",
-      descII: "+8 burst pop" },
+      descII: "{g:20%} {i:dmg} burst pop" },
     { id: "trial_by_fire", verb: "stream", element: "fire", kind: "boon", name: "Trial by Fire",
       desc: "+20% spray dmg to enemies that are burning, Scalded, or standing in a fire patch (needs a Scald source)",
       descII: "+30%" },
@@ -95,13 +95,13 @@
 
     // Legendaries — one per element, prereq >=2 owned boons of that element
     { id: "pressure_sermon", kind: "legendary", element: "water", name: "Pressure Sermon",
-      desc: "Releasing spray after ≥0.8s of continuous full pressure emits a knockback cone (10 water)" },
+      desc: "Release ≥0.8s of full-pressure spray: a wavefront of {g:40%} {i:dmg} + heavy {i:knockback}" },
     { id: "bushfire", kind: "legendary", element: "fire", name: "Boilover",
       desc: "Scald burns {g:+50%} hotter and rolls to enemies within 40px while it lasts" },
     { id: "standing_stone", kind: "legendary", element: "earth", name: "Standing Stone",
       desc: "After 0.5s of not moving: no knockback taken, +25% damage, wider spray until you move" },
     { id: "whirlwind_walk", kind: "legendary", element: "air", name: "Whirlwind Walk",
-      desc: "Dashing destroys enemy projectiles it touches and gusts non-boss enemies aside (15 dmg + knock)" },
+      desc: "Dashing destroys enemy projectiles (droplet pop: {g:10%} {i:dmg}) and gusts enemies for {g:25%} {i:dmg}" },
   ];
 
   const ELEMENTS = ["water", "fire", "earth", "air"];

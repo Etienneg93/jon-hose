@@ -127,7 +127,6 @@
 
   JH.SERMON = {
     charge: 0.8,     // s of continuous (non-dry) spray to arm
-    dmg: 15,         // flat damage as the front passes
     kb: 220,         // knockback impulse
     speed: 260,      // px/s wavefront travel
     range: 190,      // px before the wave dissipates
