@@ -998,7 +998,7 @@
     transitionInvuln: 1.6,      // s invulnerable during each phase beat
     decideEvery: 2.2,           // s between phase-1 move picks
     clap:     { wind: 0.9, range: 95, halfAngleDeg: 38, dmg: 22, shove: 260 },
-    hip:      { brace: 0.7, speed: 300, dist: 200, dmg: 16, skid: 0.8 },
+    hip:      { brace: 0.7, speed: 300, dist: 200, dmg: 16, skid: 0.8, shove: 320 },
     toss:     { landRx: 30, dmg: 20, shardDur: 2.5, shardDmg: 6, shardEvery: 0.5,
                 lobSpeed: 240, gravity: 520 },
     clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },

@@ -143,3 +143,28 @@ test("assman P1: hip check — dash with punishable skid on whiff", () => {
   assert.strictEqual(b.state, "skid", "whiff ends in the skid window");
   assert.ok(b._skidT > 0 && b._skidT <= H.skid);
 });
+
+test("assman toss: toilet arcs, lands with rim-true impact + shard ticks", () => {
+  const T = JH.ASSMAN.toss;
+  const g = makeThinkGame(200, 40);
+  const bomb = new JH.ToiletBomb(100, 40, 200, 40, T);
+  g.embers = [bomb];
+  // fly until landing
+  let guard = 0;
+  while (!bomb.landed && guard++ < 600) bomb.update(1 / 60, g);
+  assert.ok(bomb.landed, "landed");
+  // player stood on the landing spot: impact damage applied exactly once
+  assert.strictEqual(g.player.hp, 100 - T.dmg);
+  // shard zone ticks while standing inside
+  const hpAfterImpact = g.player.hp;
+  for (let t = 0; t < T.shardEvery + 0.05; t += 1 / 60) bomb.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hpAfterImpact - T.shardDmg, "one shard tick");
+  // outside the rim: no ticks
+  g.player.x = 200 + T.landRx + 20;
+  const hp2 = g.player.hp;
+  for (let t = 0; t < T.shardEvery * 2; t += 1 / 60) bomb.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp2, "rim is hitbox — outside is safe");
+  // zone expires
+  for (let t = 0; t < T.shardDur; t += 1 / 60) if (!bomb.update(1 / 60, g)) break;
+  assert.ok(!bomb.update(1 / 60, g), "dead after shardDur");
+});

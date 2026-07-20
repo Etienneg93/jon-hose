@@ -5719,6 +5719,85 @@
   }
   JH.SmeltBomb = SmeltBomb;
 
+  // ---- ToiletBomb: Ass Man's Toilet Toss ----
+  // Ballistic arc to a marked landing ellipse; impact hit + a shard zone
+  // ticking inside the SAME ellipse (one shape: telegraph, draw, hit).
+  class ToiletBomb {
+    constructor(x, y, tx, ty, T) {
+      this.x = x; this.y = y; this.z = 40;
+      this.T = T;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      const flightT = Math.max(0.5, dist / T.lobSpeed);
+      this.vx = (tx - x) / flightT;
+      this.vy = (ty - y) / flightT;
+      this.vz = 0.5 * T.gravity * flightT - this.z / flightT;
+      this.tx = tx; this.ty = ty;
+      this.landed = false;
+      this.zoneT = 0; this.tickT = 0;
+      this.spin = 0;
+      this.isProjectile = true;
+    }
+    update(dt, game) {
+      const T = this.T, pl = game.player;
+      if (!this.landed) {
+        this.x += this.vx * dt; this.y += this.vy * dt;
+        this.vz -= T.gravity * dt; this.z += this.vz * dt;
+        this.spin += dt * 9;
+        if (this.z <= 0) {
+          this.landed = true;
+          this.zoneT = T.shardDur; this.tickT = T.shardEvery;
+          game.shake(4); game.audio.play("whack");
+          if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx))
+            pl.takeHit(T.dmg, game, this.x);
+        }
+        return true;
+      }
+      this.zoneT -= dt;
+      this.tickT -= dt;
+      if (this.tickT <= 0) {
+        this.tickT = T.shardEvery;
+        // Shard chip damage is a continuous zone tick (broken porcelain
+        // underfoot), same family as a burn DoT — bypasses invulnTimer like
+        // Player.tickBurn does, so shardEvery (0.5s, shorter than the 0.6s
+        // impact i-frames) isn't starved by the impact hit that just landed.
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx)) {
+          const lost = Math.min(pl.hp, pl.soakOvershield(T.shardDmg));
+          pl.hp -= lost;
+          pl.hurt(true);
+          if (game.showDmgNumbers && lost > 0 && game.float)
+            game.float(pl.x, pl.y, "-" + Math.round(lost), "#ff5030", { life: 0.6, rise: 18 });
+          if (pl.hp <= 0) pl.alive = false;
+        }
+      }
+      return this.zoneT > 0;
+    }
+    draw(ctx, cam) {
+      const T = this.T;
+      const gy = Geo.feetScreenY(this.landed ? this.y : this.ty, 0);
+      const gx = (this.landed ? this.x : this.tx) - cam;
+      // landing/shard ellipse — the one shape
+      ctx.save();
+      ctx.strokeStyle = this.landed ? "#e8ddcf" : "#ff5a5a";
+      ctx.globalAlpha = this.landed ? 0.7 : 0.5;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(Math.round(gx), Math.round(gy), T.landRx, T.landRx * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      if (this.landed) { ctx.globalAlpha = 0.12; ctx.fillStyle = "#e8ddcf"; ctx.fill(); }
+      ctx.restore();
+      if (!this.landed) {
+        // the porcelain in flight (sprite hook lands in Task 7; box fallback)
+        const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0) - this.z;
+        ctx.save();
+        ctx.translate(sx, sy); ctx.rotate(this.spin);
+        ctx.fillStyle = "#efe9dd"; ctx.fillRect(-6, -7, 12, 14);
+        ctx.strokeStyle = "#141414"; ctx.lineWidth = 1; ctx.strokeRect(-6, -7, 12, 14);
+        ctx.restore();
+      }
+    }
+  }
+  JH.ToiletBomb = ToiletBomb;
+
   // Stands back; lobs arcing SmeltBombs at the player on a cooldown.
   // waterMult:0.5 means sustained spray does half damage.
   class Smelt extends Enemy {
@@ -6106,7 +6185,7 @@
         m.dashed += step;
         if (!m.hit && pl.alive && Math.abs(pl.x - this.x) < this.bodyW * 0.6 && Math.abs(pl.y - this.y) < 14) {
           m.hit = true;
-          pl.takeHit(d.hip.dmg, game, this.x, 320);
+          pl.takeHit(d.hip.dmg, game, this.x, d.hip.shove);
         }
         if (m.dashed >= d.hip.dist || m.hit) {
           this.move = null;
@@ -6115,8 +6194,15 @@
         }
         return;
       }
-      if (m.kind === "toss") {                    // placeholder until Task 4
-        this.move = null; this.state = "idle";
+      if (m.kind === "toss") {
+        m.t -= dt;
+        this.state = "toss";
+        if (!m.thrown && m.t <= 0.25) {          // release beat inside the pose
+          m.thrown = true;
+          game.embers.push(new JH.ToiletBomb(this.x + this.facing * 10, this.y, m.tx, m.ty, d.toss));
+        }
+        if (m.t <= 0) { this.move = null; this.state = "idle"; }
+        return;
       }
     }
 
