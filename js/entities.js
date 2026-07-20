@@ -5756,18 +5756,12 @@
       this.tickT -= dt;
       if (this.tickT <= 0) {
         this.tickT = T.shardEvery;
-        // Shard chip damage is a continuous zone tick (broken porcelain
-        // underfoot), same family as a burn DoT — bypasses invulnTimer like
-        // Player.tickBurn does, so shardEvery (0.5s, shorter than the 0.6s
-        // impact i-frames) isn't starved by the impact hit that just landed.
-        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx)) {
-          const lost = Math.min(pl.hp, pl.soakOvershield(T.shardDmg));
-          pl.hp -= lost;
-          pl.hurt(true);
-          if (game.showDmgNumbers && lost > 0 && game.float)
-            game.float(pl.x, pl.y, "-" + Math.round(lost), "#ff5030", { life: 0.6, rise: 18 });
-          if (pl.hp <= 0) pl.alive = false;
-        }
+        // Ticks route through takeHit — same house rule as the Big Drip
+        // pour tick (Boss.think rain branch): i-frames, dash grace, and Eye
+        // of the Storm all get an honest shot at negating a shard tick, same
+        // as every other player-damage source. No bypass.
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx))
+          pl.takeHit(T.shardDmg, game, this.x);
       }
       return this.zoneT > 0;
     }

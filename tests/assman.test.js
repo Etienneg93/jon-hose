@@ -155,14 +155,25 @@ test("assman toss: toilet arcs, lands with rim-true impact + shard ticks", () =>
   assert.ok(bomb.landed, "landed");
   // player stood on the landing spot: impact damage applied exactly once
   assert.strictEqual(g.player.hp, 100 - T.dmg);
-  // shard zone ticks while standing inside
+  // Shard ticks route through takeHit (i-frames apply, same house rule as
+  // the Big Drip pour tick) — the harness never runs Player.update, so we
+  // decay invulnTimer by hand each frame the way the real game loop would.
+  // The impact's own 0.6s invuln outlives the first scheduled tick (0.5s
+  // later), so that first tick is honestly negated; the second tick
+  // (~1.0s post-impact) lands once i-frames have decayed.
   const hpAfterImpact = g.player.hp;
-  for (let t = 0; t < T.shardEvery + 0.05; t += 1 / 60) bomb.update(1 / 60, g);
-  assert.strictEqual(g.player.hp, hpAfterImpact - T.shardDmg, "one shard tick");
+  for (let t = 0; t < T.shardEvery * 2 + 0.05; t += 1 / 60) {
+    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
+    bomb.update(1 / 60, g);
+  }
+  assert.strictEqual(g.player.hp, hpAfterImpact - T.shardDmg, "first tick eaten by impact i-frames, second tick lands");
   // outside the rim: no ticks
   g.player.x = 200 + T.landRx + 20;
   const hp2 = g.player.hp;
-  for (let t = 0; t < T.shardEvery * 2; t += 1 / 60) bomb.update(1 / 60, g);
+  for (let t = 0; t < T.shardEvery * 2; t += 1 / 60) {
+    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
+    bomb.update(1 / 60, g);
+  }
   assert.strictEqual(g.player.hp, hp2, "rim is hitbox — outside is safe");
   // zone expires
   for (let t = 0; t < T.shardDur; t += 1 / 60) if (!bomb.update(1 / 60, g)) break;
