@@ -1060,9 +1060,9 @@
           this.gravelT = 0;
           game.embers.push(new JH.GravelRock(
             this.x + this.facing * 14, this.y, this.facing,
-            this.stats.sprayDamage * T.gravelDmgFrac, T.gravelKnock));
+            this.stats.sprayDamage * T.gravelDmgFrac, T.gravelKnock, oz));
           // Launch read: muzzle kick + grit burst so the fire moment lands.
-          burst(game, this.x + this.facing * 14, this.y, 12, "#c8a050", 8,
+          burst(game, this.x + this.facing * 14, this.y, oz, "#c8a050", 8,
             { speed: 80, life: 0.25, up: 30, size: 2 });
           game.shake(2);
           game.audio.play("whack", { pitch: 0.8 });
@@ -4405,8 +4405,9 @@
   // knock), dies on hit or at gravelRange. Not isProjectile — Whirlwind's
   // sweep only eats enemy shots.
   class GravelRock {
-    constructor(x, y, dir, dmg, knock) {
+    constructor(x, y, dir, dmg, knock, z) {
       this.x = x; this.y = y; this.dir = dir;
+      this.z = z != null ? z : 10;   // flies at nozzle height (spawner passes oz)
       this.dmg = dmg; this.knock = knock;
       this.t = 0; this.traveled = 0; this.dead = false;
       this.isFx = true;
@@ -4418,13 +4419,13 @@
       this.x += this.dir * step; this.traveled += step;
       // Dust trail so the flight reads at speed.
       if (Math.random() < 22 * dt)
-        burst(game, this.x - this.dir * 6, this.y, 10, "#c8a050", 1,
+        burst(game, this.x - this.dir * 6, this.y, this.z, "#c8a050", 1,
           { speed: 20, life: 0.28, up: 12, size: 1 });
       for (const e of game.enemies) {
         if (e.dead || e.dropping) continue;
         if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, JH.BENE_AOE.gravelHit)) continue;
         e.takeDamage(this.dmg, game, this.dir, this.knock, true);
-        burst(game, this.x, this.y, 10, "#c8a050", 14, { speed: 110, life: 0.35, up: 50, size: 2 });
+        burst(game, this.x, this.y, this.z, "#c8a050", 14, { speed: 110, life: 0.35, up: 50, size: 2 });
         game.shake(3);
         game.audio.play("whack", { pitch: 0.6 });
         this.dead = true;
@@ -4438,7 +4439,7 @@
       return true;
     }
     draw(ctx, cam) {
-      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 10);
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
       ctx.save();
       ctx.translate(Math.round(sx), Math.round(sy));
       ctx.rotate(this.t * 10 * this.dir);
