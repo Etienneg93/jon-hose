@@ -21,6 +21,14 @@
   // strips (1920×408, horizontally tileable). Both fall back to the
   // procedural rect painting below while images load / are absent.
   const _bgBuildings = { street: [], ruins: [], boiler: [], air: [] };
+  // Far sky backdrops (one band per zone), crossfaded with the same zone
+  // weights as the sky tint washes. Drawn mirror-tiled so edges never seam.
+  const _skyBands = {
+    street: JH.Loader.img("sprites/bg/sky_street.png"),
+    ruins:  JH.Loader.img("sprites/bg/sky_ruins.png"),
+    boiler: JH.Loader.img("sprites/bg/sky_boiler.png"),
+    air:    JH.Loader.img("sprites/bg/sky_air.png"),
+  };
   for (const k in _bgBuildings)
     for (let i = 0; i < 6; i++)
       _bgBuildings[k].push(JH.Loader.img("sprites/bg/" + k + i + ".png"));
@@ -248,16 +256,6 @@
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, top);
 
-      // Moon
-      ctx.fillStyle = "#dfe8ff";
-      ctx.beginPath();
-      ctx.arc(W - 64, 40, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#27375e";
-      ctx.beginPath();
-      ctx.arc(W - 58, 36, 12, 0, Math.PI * 2);
-      ctx.fill();
-
       // Air World (cloudline street) — fades in past ZONE4_START and damps
       // the older acts' tints out so the sky reads as a clean handoff. Gated
       // on airOn, not just camera position, so the fire-truck run's
@@ -267,6 +265,41 @@
         : 0;
       // Ruined-district smog haze — fades in as you approach Act 3.
       const zoneT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE2_START - 200)) / 500)) * (1 - airT);
+      const fireTEarly = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airT);
+
+      // Far sky-band backdrops: painter-stacked with the zone weights (street
+      // under, later zones fade over it), mirror-tiled at slow parallax so
+      // the band never shows a seam regardless of the bake's edges.
+      const bandLayers = [["street", 1], ["ruins", zoneT], ["boiler", fireTEarly], ["air", airT]];
+      const pBand = cam * 0.12;
+      for (const [zk, wgt] of bandLayers) {
+        const img = _skyBands[zk];
+        if (!img || !img._ready || wgt <= 0) continue;
+        const bw = Math.max(1, Math.round(img.naturalWidth * top / img.naturalHeight));
+        ctx.globalAlpha = wgt;
+        ctx.imageSmoothingEnabled = false;
+        let x0 = -(((pBand % (bw * 2)) + bw * 2) % (bw * 2));
+        for (let tx = x0, ti = Math.round(x0 / bw); tx < W; tx += bw, ti++) {
+          if ((ti % 2 + 2) % 2 === 1) {
+            ctx.save(); ctx.translate(tx + bw, 0); ctx.scale(-1, 1);
+            ctx.drawImage(img, 0, 0, bw, top);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, tx, 0, bw, top);
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      // Moon
+      ctx.fillStyle = "#dfe8ff";
+      ctx.beginPath();
+      ctx.arc(W - 64, 40, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#27375e";
+      ctx.beginPath();
+      ctx.arc(W - 58, 36, 12, 0, Math.PI * 2);
+      ctx.fill();
       if (zoneT > 0) {
         ctx.fillStyle = "rgba(70,45,30," + (0.5 * zoneT).toFixed(3) + ")";
         ctx.fillRect(0, 0, W, top);
@@ -278,7 +311,7 @@
 
       // Boiler District (fire world) — hot red sky wash + molten horizon glow.
       // Ramps in past ZONE3_START, same pattern as the Act-3 haze above.
-      const fireT = Math.max(0, Math.min(1, (cam + W * 0.5 - (JH.ZONE3_START - 200)) / 500)) * (1 - airT);
+      const fireT = fireTEarly;
       if (fireT > 0) {
         ctx.fillStyle = "rgba(120,20,0," + (0.42 * fireT).toFixed(3) + ")";
         ctx.fillRect(0, 0, W, top);
@@ -306,10 +339,13 @@
       }
 
       // Far skyline (slow parallax) — fades out over the cloudline; dark
-      // far-tower slabs read wrong floating in the bright Air sky.
+      // far-tower slabs read wrong floating in the bright Air sky. Once a
+      // baked sky band carries the far distance, the flat slabs drop to a
+      // faint mid-depth silhouette instead of competing with it.
+      const bandOn = _skyBands.street && _skyBands.street._ready;
       const pFar = cam * 0.25;
       if (airT < 1) {
-        ctx.globalAlpha = 1 - airT;
+        ctx.globalAlpha = (1 - airT) * (bandOn ? 0.4 : 1);
         for (const b of this.farBuildings) {
           const sx = b.x - pFar;
           if (sx + b.w < 0 || sx > W) continue;
