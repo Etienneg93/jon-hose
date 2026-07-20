@@ -2868,12 +2868,15 @@
         // drawn rim IS the hit rim in every case.
         if (this.pulseRings) for (const ring of this.pulseRings) {
           const sx = ring.x - cam, sy = JH.Geo.feetScreenY(ring.y, 0);
+          // Rings default to the 0.34 pulse flatten; a ring may carry its own
+          // final ry (Boilover's taller contagion ellipse) — grown in step.
+          const ryNow = ring.ry != null ? ring.r * (ring.ry / ring.targetR) : ring.r * 0.34;
           ctx.save();
           ctx.globalAlpha = Math.max(0, 1 - ring.t / (ring.dur + 0.15));
           ctx.strokeStyle = ring.color || JH.PAL.waterHi;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.ellipse(sx, sy, ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
+          ctx.ellipse(sx, sy, ring.r, ryNow, 0, 0, Math.PI * 2);
           ctx.stroke();
           ctx.restore();
         }

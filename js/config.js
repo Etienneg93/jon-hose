@@ -80,7 +80,8 @@
   // Benediction AoE radii (world px): ONE constant per effect, shared by the
   // hit test and its drawn ring/telegraph (rim is hitbox).
   JH.BENE_AOE = {
-    bushfireSpread: 40,     // scald contagion jump radius
+    bushfireSpread: 55,      // Boilover contagion rx
+    bushfireSpreadRy: 33,    // …and its depth reach (taller than GROUND_RY: fire rolls through the crowd)
     whirlwindSweep: 20,     // dash projectile-destroy radius around Jon
     focusQuake: 38,          // quake pulse radius (drawn ring IS the hit rim)
     steamVent: 24,           // steam vent hazard radius

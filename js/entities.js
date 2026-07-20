@@ -1744,19 +1744,19 @@
           this._spreadT = JH.BENE_TUNE.boiloverRecheckS;
           const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
           if (bfRank) {
-            const sr = JH.BENE_AOE.bushfireSpread;
+            const sr = JH.BENE_AOE.bushfireSpread, sry = JH.BENE_AOE.bushfireSpreadRy;
             let spread = 0;
             for (const o of game.enemies) {
               if (o === this || o.dead || (o.scaldT || 0) > 0) continue;
-              if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, sr, sr * 0.34)) continue;
+              if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, sr, sry)) continue;
               o.applyScald(this.scaldDps, this.scaldT);
               spread++;
             }
-            // ring at the exact spread radius (rim is hitbox) — only when the
-            // recheck actually caught someone, so an empty recheck doesn't spam
-            // a ring with nothing to show for it.
+            // ring at the exact spread ellipse (rim is hitbox — ry carried so
+            // the taller contagion shape draws true) — only when the recheck
+            // actually caught someone.
             if (spread > 0 && game.pulseRings) game.pulseRings.push({
-              x: this.x, y: this.y, r: 0, targetR: sr, dur: 0.25, t: 0,
+              x: this.x, y: this.y, r: 0, targetR: sr, ry: sry, dur: 0.25, t: 0,
               dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#ff8c2a",
             });
           }

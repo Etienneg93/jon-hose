@@ -2043,6 +2043,22 @@ test("Boilover contagion re-checks while scalded (not once)", () => {
   B.reset();
 });
 
+test("Boilover contagion reaches across DEPTH (taller spread ellipse)", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("bushfire");
+  const T = JH.BENE_TUNE, A = JH.BENE_AOE;
+  const g = makeThinkGame(400, 40);
+  const a = new JH.Enemy("mook", 100, 40);
+  const near = new JH.Enemy("mook", 100, 40 + A.bushfireSpreadRy - 4);  // same x, deep offset inside ry
+  const far = new JH.Enemy("mook", 100, 40 + A.bushfireSpreadRy + 6);   // just past the depth rim
+  g.enemies = [a, near, far];
+  a.applyScald(4, 10);
+  a.update(T.boiloverRecheckS + 0.01, g);
+  assert.ok(near.scaldT > 0, "spread reaches an enemy offset in depth inside bushfireSpreadRy");
+  assert.strictEqual(far.scaldT, 0, "and stops at the depth rim");
+  B.reset();
+});
+
 test("Whirlwind Walk: dashing near a live ember destroys it", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("whirlwind_walk");

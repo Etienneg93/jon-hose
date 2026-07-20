@@ -96,7 +96,7 @@
     { id: "pressure_sermon", kind: "legendary", element: "water", name: "Pressure Sermon",
       desc: "Release ≥0.8s of full-pressure spray: a wavefront of {g:40%} {i:dmg} + heavy {i:knockback}" },
     { id: "bushfire", kind: "legendary", element: "fire", name: "Boilover",
-      desc: "Scald burns {g:+50%} hotter and rolls to enemies within 40px while it lasts" },
+      desc: "Scald burns {g:+50%} hotter and rolls onward to enemies near a scalded one while it lasts" },
     { id: "standing_stone", kind: "legendary", element: "earth", name: "Standing Stone",
       desc: "After 0.5s of not moving: no knockback taken, +25% damage, wider spray until you move" },
     { id: "whirlwind_walk", kind: "legendary", element: "air", name: "Whirlwind Walk",
