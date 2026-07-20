@@ -306,7 +306,7 @@
         const r = JH.BENE_AOE.hazardPop;
         for (const e of game.enemies || []) {
           if (e.dead) continue;
-          if (Geo.inGroundEllipse(e.x, e.y, hazard.x, hazard.y, r))
+          if (Geo.inGroundEllipse(e.x, e.y, hazard.x, hazard.y, r, r * 0.34))
             e.takeDamage(dmg, game, 1, 0);
         }
         // Visual-only ring at the pop radius (rim is hitbox; the damage loop
@@ -536,7 +536,7 @@
         if (S.dashBoostDur > 0) this.dashBoostTimer = S.dashBoostDur;
         // Steam Devil (Firestorm): dash spins off a traveling scald vortex
         // that moves along the dash direction independently of Jon.
-        if (this.beneRank("firestorm")) game.embers.push(new JH.SteamDevil(this.x, this.y, this.facing));
+        if (this.beneRank("firestorm")) game.embers.push(new JH.SteamDevil(this.x, this.y, Math.sign(this._dashX) || this.facing));
         // Baptismal Wake: dash leaves an enemy-slowing, enemy-pulling puddle;
         // rank II is a bigger radius and a stronger pull (see SlowZone.pull).
         const wakeRank = this.beneRank("baptismal_wake");
@@ -579,7 +579,8 @@
         if (this.beneRank("whirlwind_walk")) {
           for (const em of game.embers) {
             if (!em.isProjectile || em.dead) continue;
-            if (Math.hypot(em.x - this.x, em.y - this.y) >= JH.BENE_AOE.whirlwindSweep) continue;
+            const swR = JH.BENE_AOE.whirlwindSweep;
+            if (!Geo.inGroundEllipse(em.x, em.y, this.x, this.y, swR, swR * 0.34)) continue;
             em.dead = true;
             const pr = JH.BENE_AOE.dropletPop;
             for (const e2 of game.enemies) {
@@ -1022,8 +1023,9 @@
       });
       // Focus Quake / Gravel Spray: both track the stream's PRIMARY target
       // (hitList[0] — the blocker in non-pierce mode, nearest hit in pierce
-      // mode). Switching targets resets both charges; a short gap (tap-grace,
-      // handled in update()) doesn't.
+      // mode). Switching targets resets the quake charge only — the gravel
+      // timer is spray-time metered and survives target switches; a short
+      // gap (tap-grace, handled in update()) doesn't reset either.
       const focus = hitList.length ? hitList[0].e : null;
       const T = JH.BENE_TUNE;
       this.sprayGapT = 0;
@@ -1037,7 +1039,7 @@
           const qdmg = this.stats.sprayDamage * (this.beneRank("aftershock") >= 2 ? T.quakeDmgFracII : T.quakeDmgFrac);
           for (const o of game.enemies) {
             if (o.dead) continue;
-            if (Math.hypot(o.x - focus.x, o.y - focus.y) > r) continue;
+            if (!Geo.inGroundEllipse(o.x, o.y, focus.x, focus.y, r, r * 0.34)) continue;
             o.takeDamage(qdmg, game, Math.sign(o.x - focus.x) || 1, 0);
             if (this.beneRank("aftershock") >= 2) { o.windTimer = 0; o.cdTimer = Math.max(o.cdTimer || 0, 0.4); }
           }
@@ -1450,6 +1452,20 @@
         ctx.fillStyle = "#66bbff";
       }
       ctx.fillRect(bx, barTop + 4, Math.round(barW * wFrac), 3);
+      // Overflow edge glow: subtle outline tint at the benediction's tank
+      // thresholds — gold at the +dmg edge (overflowHigh(II)), cyan at the
+      // faster-regen edge (overflowLow(II)). Read-only cue, no layout change.
+      const ovRank = this.beneRank("overflow");
+      if (ovRank) {
+        const T = JH.BENE_TUNE;
+        const hi = ovRank >= 2 ? T.overflowHighII : T.overflowHigh;
+        const lo = ovRank >= 2 ? T.overflowLowII : T.overflowLow;
+        const edge = wFrac >= hi ? "rgba(255,210,63,0.5)" : wFrac < lo ? "rgba(108,211,255,0.5)" : null;
+        if (edge) {
+          ctx.strokeStyle = edge; ctx.lineWidth = 1;
+          ctx.strokeRect(bx - 0.5, barTop + 3.5, barW + 1, 4);
+        }
+      }
       // XP: sits ABOVE the HP bar (grows away from Jon's head) only while
       // xpFlashT runs (set on gain), fading over its last 0.5s.
       const xpShown = this.xpFlashT > 0 && JH.Game && JH.Game.playerLevel != null;
@@ -1719,13 +1735,17 @@
           const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
           if (bfRank) {
             const sr = JH.BENE_AOE.bushfireSpread;
+            let spread = 0;
             for (const o of game.enemies) {
               if (o === this || o.dead || (o.scaldT || 0) > 0) continue;
-              if (Math.hypot(o.x - this.x, o.y - this.y) > sr) continue;
+              if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, sr, sr * 0.34)) continue;
               o.applyScald(this.scaldDps, this.scaldT);
+              spread++;
             }
-            // ring at the exact spread radius (rim is hitbox)
-            if (game.pulseRings) game.pulseRings.push({
+            // ring at the exact spread radius (rim is hitbox) — only when the
+            // recheck actually caught someone, so an empty recheck doesn't spam
+            // a ring with nothing to show for it.
+            if (spread > 0 && game.pulseRings) game.pulseRings.push({
               x: this.x, y: this.y, r: 0, targetR: sr, dur: 0.25, t: 0,
               dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#ff8c2a",
             });
@@ -1738,7 +1758,7 @@
           const vdps = game.player.stats.sprayDamage * JH.BENE_TUNE.steamVentDpsFrac;
           for (const o of game.enemies) {
             if (o === this || o.dead) continue;
-            if (Math.hypot(o.x - this.x, o.y - this.y) > vr) continue;
+            if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, vr, vr * 0.34)) continue;
             o.takeDamage(vdps * dt, game, 0, 0);
           }
         }
@@ -3029,8 +3049,15 @@
           && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, f.rx, f.ry)) {
         // Wind hazards are permanent terrain: Hazard Boots eats the chip but
         // the vent stays alive (unlike FirePatch/StinkCloud, no clear-pop).
-        if (!(pl.hazardGuard && pl.hazardGuard(game, this)))
+        // Guard is only consulted when the hit would actually land — mirrors
+        // takeHit's own i-frame gate — so invuln/dash windows don't burn the
+        // guard for free.
+        const wouldLand = pl.invulnTimer <= 0 && pl.dashTimer <= 0 && pl.dashGraceT <= 0;
+        if (wouldLand && pl.hazardGuard && pl.hazardGuard(game, this)) {
+          // eaten
+        } else {
           pl.takeHit(H.dmg, game, this.x, H.knock);
+        }
         this.contactCd = H.contactCd;
       }
       for (const e of game.enemies) {
@@ -4288,9 +4315,10 @@
       this.t += dt;
       this.x += this.dir * T.devilSpeed * dt;
       if (this.t >= T.devilLife) { this.dead = true; return false; }
+      const tr = JH.BENE_AOE.steamDevilTouch;
       for (const e of game.enemies) {
         if (e.dead || e.dropping || this.hit.has(e)) continue;
-        if (Math.hypot(e.x - this.x, e.y - this.y) > 14) continue;
+        if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, tr, tr * 0.34)) continue;
         this.hit.add(e);
         e.applyScald(JH.Balance.scaldDps(game.player.stats.sprayDamage,
           game.player.beneRank("scalding_faith"), !!game.player.beneRank("bushfire")), JH.SCALD.dur);

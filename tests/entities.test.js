@@ -1659,6 +1659,38 @@ test("focus quake: 2s sustained spray on one target quakes around it", () => {
   B.reset();
 });
 
+test("focus quake rank II: faster charge, bigger damage, staggers nearby windups", () => {
+  const B = global.window.JH.Benedictions;
+  const T = JH.BENE_TUNE;
+  B.reset(); B.take("aftershock"); B.take("aftershock");   // rank 2
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater; p.facing = 1;
+  const focus = new JH.Enemy("mook", p.x + 20, p.y);
+  const nearby = new JH.Enemy("mook", focus.x + 10, focus.y);   // inside BENE_AOE.focusQuake, not the blocker
+  focus.hp = focus.maxHp = 1e6;
+  nearby.hp = nearby.maxHp = 1e6;
+  nearby.windTimer = 0.7; nearby.cdTimer = 0;   // mid-windup, no cooldown yet
+  g.enemies = [focus, nearby];
+
+  const step = 0.05;
+  const shortSteps = Math.floor(T.quakeChargeSII / step) - 1;   // just under the rank-II charge threshold
+  for (let i = 0; i < shortSteps; i++) p.doSpray(step, g);
+  assert.strictEqual(nearby.hp, nearby.maxHp, "no quake before quakeChargeSII");
+  assert.strictEqual(nearby.windTimer, 0.7, "windup untouched before the charge fires");
+
+  const hpNearby0 = nearby.hp;
+  p.doSpray(step * 3, g);   // push well past quakeChargeSII
+  const dealt = hpNearby0 - nearby.hp;
+  assert.ok(dealt > 0, "nearby enemy inside the quake radius took damage");
+  assert.ok(Math.abs(dealt - p.stats.sprayDamage * T.quakeDmgFracII) < 1e-6,
+    "rank-II quake deals a flat sprayDamage * quakeDmgFracII hit");
+  assert.strictEqual(p.quakeT, 0, "charge resets once the quake fires");
+  assert.strictEqual(nearby.windTimer, 0, "rank II resets the nearby enemy's windup on the quake pulse");
+  assert.ok(nearby.cdTimer >= 0.4, "rank II staggers the windup with a >=0.4s cooldown floor");
+  B.reset();
+});
+
 test("gravel spray: a rock chunk fires every gravelEveryS of continuous spray", () => {
   const B = global.window.JH.Benedictions;
   const T = JH.BENE_TUNE;
@@ -1980,12 +2012,14 @@ test("Whirlwind Walk: gust scales with spray damage and destroyed projectiles po
   const g = dashStubGame(sim.In);
   // Gust target overlaps Jon's body (bodiesOverlap gate).
   const gustTarget = new JH.Enemy("mook", p.x + 2, p.y);
-  // Ember sits inside whirlwindSweep (20px) but far enough in depth (18px)
-  // that it — and anything near it — can't also be gust-touched (ay < 14 gate).
-  const em = new JH.Ember(p.x, p.y + 18, 10, 0, 0, 10, {});
+  // Ember sits inside whirlwindSweep's flattened hit ellipse (rim is hitbox:
+  // ry = 20 * 0.34 ~ 6.8, so the offset lives on the x-axis, not depth) but
+  // far enough in x that it — and anything near it — can't also be
+  // gust-touched (bodiesOverlap's ax < ~18 gate).
+  const em = new JH.Ember(p.x - 15, p.y, 10, 0, 0, 10, {});
   // Droplet target sits inside dropletPop (12px) of the ember, well outside
   // gust range of the player.
-  const dropletTarget = new JH.Enemy("mook", em.x, em.y + 8);
+  const dropletTarget = new JH.Enemy("mook", em.x - 8, em.y);
   g.enemies = [gustTarget, dropletTarget];
   g.embers = [em];
   const gustHpBefore = gustTarget.hp, dropletHpBefore = dropletTarget.hp;
@@ -2946,5 +2980,30 @@ test("split stream arc share derives from BENE_TUNE", () => {
   assert.ok(secondaryDmg > 0, "secondary took arc damage");
   assert.ok(Math.abs(secondaryDmg / primaryDmg - JH.BENE_TUNE.splitArcFrac) < 1e-6,
     "arc share matches BENE_TUNE.splitArcFrac at rank 1");
+  B.reset();
+});
+
+test("split stream rank II: bigger arc share reaches splitTargetsII secondaries", () => {
+  const B = global.window.JH.Benedictions;
+  B.reset(); B.take("split_stream"); B.take("split_stream");   // rank 2
+  const g = makeThinkGame(60, 40);
+  const p = g.player;
+  p.water = p.stats.maxWater;   // full pressure tier
+  p.facing = 1;
+  const primary = new JH.Enemy("mook", p.x + 30, p.y);        // in spray path, sole blocker
+  const secondary1 = new JH.Enemy("mook", p.x - 20, p.y);     // behind the nozzle, nearest secondary
+  const secondary2 = new JH.Enemy("mook", p.x - 40, p.y);     // behind the nozzle, 2nd-nearest secondary
+  g.enemies = [primary, secondary1, secondary2];
+  assert.strictEqual(JH.BENE_TUNE.splitTargetsII, 2, "sanity: this test targets exactly the rank-II secondary cap");
+  p.doSpray(0.05, g);
+  const primaryDmg = primary.maxHp - primary.hp;
+  const dmg1 = secondary1.maxHp - secondary1.hp;
+  const dmg2 = secondary2.maxHp - secondary2.hp;
+  assert.ok(primaryDmg > 0, "primary took direct spray damage");
+  assert.ok(dmg1 > 0 && dmg2 > 0, "both secondaries within the splitTargetsII cap took arc damage");
+  assert.ok(Math.abs(dmg1 / primaryDmg - JH.BENE_TUNE.splitArcFracII) < 1e-6,
+    "nearer secondary's arc share matches BENE_TUNE.splitArcFracII at rank 2");
+  assert.ok(Math.abs(dmg2 / primaryDmg - JH.BENE_TUNE.splitArcFracII) < 1e-6,
+    "farther (still within-cap) secondary's arc share also matches BENE_TUNE.splitArcFracII");
   B.reset();
 });

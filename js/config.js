@@ -86,6 +86,7 @@
     steamVent: 24,           // steam vent hazard radius
     dropletPop: 12,          // droplet pop radius
     hazardPop: 22,           // Hazard Boots: fire/stink clear-pop radius
+    steamDevilTouch: 14,     // Steam Devil: per-enemy touch/scald radius
   };
 
   // Benediction rework tunables (spec 2026-07-19). Fractions are of the
