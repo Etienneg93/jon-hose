@@ -82,9 +82,10 @@
   JH.BENE_AOE = {
     bushfireSpread: 40,     // scald contagion jump radius
     whirlwindSweep: 20,     // dash projectile-destroy radius around Jon
-    focusQuake: 30,          // aftershock rework: quake pulse radius
+    focusQuake: 38,          // quake pulse radius (drawn ring IS the hit rim)
     steamVent: 24,           // steam vent hazard radius
     dropletPop: 12,          // droplet pop radius
+    gravelHit: 12,           // Gravel Spray rock contact radius
     hazardPop: 22,           // Hazard Boots: fire/stink clear-pop radius
     steamDevilTouch: 14,     // Steam Devil: per-enemy touch/scald radius
   };
@@ -110,6 +111,7 @@
     gravelEveryS: 3, gravelEverySII: 2,
     gravelDmgFrac: 0.60, gravelKnock: 220,
     gravelTapGraceS: 0.3,                          // spray gaps <= this don't reset the timer
+    gravelSpeed: 260, gravelRange: 180,            // rock projectile px/s, max flight px
     galeStride: 0.25, galeStrideII: 0.40,
     tailwindRange: 0.20, tailwindRangeII: 0.30,
     tailwindKnock: 0.20, tailwindKnockII: 0.30,

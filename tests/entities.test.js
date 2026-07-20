@@ -1726,26 +1726,52 @@ test("gravel spray: a rock chunk fires every gravelEveryS of continuous spray", 
   const step = 0.05;
   const crossSteps = Math.ceil(T.gravelEveryS / step) + 1;   // enough ticks to cross the threshold once
 
-  function run(withLandslide) {
-    B.reset();
-    if (withLandslide) B.take("landslide");
+  // Charging is tied to continuous SPRAYING, not to hitting anything: with
+  // no enemies at all, crossing the threshold launches a GravelRock down
+  // the stream line.
+  B.reset(); B.take("landslide");
+  {
     const g = makeThinkGame(60, 40);
     const p = g.player;
     p.water = p.stats.maxWater; p.facing = 1;
-    const focus = new JH.Enemy("mook", p.x + 20, p.y);
-    focus.hp = focus.maxHp = 1e6;   // sustained full-pressure spray would otherwise kill a 40hp mook mid-loop
-    g.enemies = [focus];
-    const hp0 = focus.hp;
+    g.enemies = [];
     for (let i = 0; i < crossSteps; i++) p.doSpray(step, g);
-    return { dealt: hp0 - focus.hp, knock: focus.knockVX || 0, p };
+    const rocks = g.embers.filter((e) => e instanceof JH.GravelRock);
+    assert.strictEqual(rocks.length, 1, "spraying at nothing still fires the rock at the threshold");
+    // The rock travels and hits the first enemy in its path.
+    const rock = rocks[0];
+    const victim = new JH.Enemy("mook", rock.x + 60, p.y);
+    victim.hp = victim.maxHp = 1e6;
+    g.enemies = [victim];
+    const hp0 = victim.hp;
+    for (let i = 0; i < 40 && !rock.dead; i++) rock.update(1 / 60, g);
+    assert.ok(rock.dead, "rock dies on contact");
+    assert.ok(Math.abs((hp0 - victim.hp) - p.stats.sprayDamage * T.gravelDmgFrac) < 1e-6,
+      "the rock deals exactly gravelDmgFrac of spray damage");
+    assert.ok(victim.knockVX > 0, "the rock applies its heavy knockback");
   }
-
-  const base = run(false);       // control: plain stream damage/knockback only
-  const boosted = run(true);     // with Gravel Spray
-  const extra = boosted.dealt - base.dealt;
-  assert.ok(Math.abs(extra - boosted.p.stats.sprayDamage * T.gravelDmgFrac) < 1e-6,
-    "Gravel Spray adds exactly one gravelDmgFrac chunk once the timer crosses gravelEveryS");
-  assert.ok(boosted.knock > base.knock, "the rock chunk applies extra (heavy) knockback on top of the stream's own");
+  // Dry sputter still counts as spraying: base tank (maxWater/waterDrain
+  // ≈ 2.78s) can't sustain 3s wet, so the charge MUST survive running dry
+  // or the rock could never fire at rank 1.
+  {
+    B.reset(); B.take("landslide");
+    const g = makeThinkGame(60, 40);
+    const p = g.player;
+    p.water = 0; p.concertaTimer = 0; p.facing = 1;
+    g.enemies = [];
+    for (let i = 0; i < crossSteps; i++) p.doSpray(step, g);
+    assert.strictEqual(g.embers.filter((e) => e instanceof JH.GravelRock).length, 1,
+      "a fully dry 3s hold still fires the rock");
+  }
+  // A rock that hits nothing dies at gravelRange.
+  {
+    const g = makeThinkGame(60, 40);
+    g.enemies = [];
+    const rock = new JH.GravelRock(0, 40, 1, 10, 100);
+    for (let i = 0; i < 200 && !rock.dead; i++) rock.update(1 / 60, g);
+    assert.ok(rock.dead, "rock expires");
+    assert.ok(rock.traveled >= T.gravelRange, "at gravelRange");
+  }
 
   // Tap-grace: gaps in spraying shorter than gravelTapGraceS don't reset the
   // charge/target; longer gaps do. Exercised through Player.update's release

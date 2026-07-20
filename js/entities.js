@@ -1048,13 +1048,19 @@
           game.shake(3); game.audio.play("whack");
         }
       }
-      if (focus && this.beneRank("landslide")) {
+      // Gravel Spray charges on continuous SPRAYING (not on hitting), and
+      // dry sputter counts too — base tank (100 / 36 drain) only sustains
+      // ~2.78s of wet spray, so a wet-only 3s threshold could never fire.
+      // At the threshold the rock launches down the stream line as a real
+      // projectile (GravelRock) whether or not an enemy is in the water.
+      if (this.beneRank("landslide")) {
         const every = this.beneRank("landslide") >= 2 ? T.gravelEverySII : T.gravelEveryS;
         this.gravelT += dt;
         if (this.gravelT >= every) {
           this.gravelT = 0;
-          focus.takeDamage(this.stats.sprayDamage * T.gravelDmgFrac, game, this.facing, T.gravelKnock, true);
-          burst(game, focus.x, focus.y, 10, "#c8a050", 10, { speed: 90, life: 0.3, up: 40, size: 2 });
+          game.embers.push(new JH.GravelRock(
+            this.x + this.facing * 14, this.y, this.facing,
+            this.stats.sprayDamage * T.gravelDmgFrac, T.gravelKnock));
           game.audio.play("whack", { pitch: 0.8 });
         }
       }
@@ -4389,6 +4395,53 @@
   // and Scalds + nudges each enemy it touches once (own `hit` set). Rides
   // game.embers like BossCore/FxBurst. `isFx = true`, not `isProjectile` —
   // it must NOT be swept/destroyed by Whirlwind Walk's dash-projectile sweep.
+  // Gravel Spray's rock: a friendly projectile fired down the stream line
+  // after BENE_TUNE.gravelEveryS of continuous spraying. Travels flat at the
+  // spawn depth, hits the FIRST enemy inside BENE_AOE.gravelHit (dmg + heavy
+  // knock), dies on hit or at gravelRange. Not isProjectile — Whirlwind's
+  // sweep only eats enemy shots.
+  class GravelRock {
+    constructor(x, y, dir, dmg, knock) {
+      this.x = x; this.y = y; this.dir = dir;
+      this.dmg = dmg; this.knock = knock;
+      this.t = 0; this.traveled = 0; this.dead = false;
+      this.isFx = true;
+    }
+    update(dt, game) {
+      const T = JH.BENE_TUNE;
+      this.t += dt;
+      const step = T.gravelSpeed * dt;
+      this.x += this.dir * step; this.traveled += step;
+      for (const e of game.enemies) {
+        if (e.dead || e.dropping) continue;
+        if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, JH.BENE_AOE.gravelHit)) continue;
+        e.takeDamage(this.dmg, game, this.dir, this.knock, true);
+        burst(game, this.x, this.y, 10, "#c8a050", 10, { speed: 90, life: 0.3, up: 40, size: 2 });
+        game.audio.play("whack", { pitch: 0.8 });
+        this.dead = true;
+        return false;
+      }
+      if (this.traveled >= T.gravelRange) {
+        burst(game, this.x, this.y, 2, "#8a7350", 5, { speed: 50, life: 0.25, up: 20, size: 1 });
+        this.dead = true;
+        return false;
+      }
+      return true;
+    }
+    draw(ctx, cam) {
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 10);
+      ctx.save();
+      ctx.translate(Math.round(sx), Math.round(sy));
+      ctx.rotate(this.t * 10 * this.dir);
+      ctx.fillStyle = "#8a7350";
+      ctx.fillRect(-4, -3, 8, 6);
+      ctx.fillStyle = "#c8a050";
+      ctx.fillRect(-2, -2, 4, 3);
+      ctx.restore();
+    }
+  }
+  JH.GravelRock = GravelRock;
+
   class SteamDevil {
     constructor(x, y, dir) {
       this.x = x; this.y = y; this.dir = dir;

@@ -58,7 +58,7 @@
 
     // Earth — force & interrupts
     { id: "aftershock", verb: "stream", element: "earth", kind: "boon", name: "Aftershock",
-      desc: "Spray one target {g:2s} to crack a quake under it: {g:40%} {i:dmg} nearby",
+      desc: "Spraying the same target {g:2s} straight erupts a shockwave at their feet: {g:40%} {i:dmg} to them and enemies nearby",
       descII: "every {g:1.5s}, {g:60%} + stagger" },
     { id: "sure_grip", verb: "body", element: "earth", kind: "boon", name: "Sure Grip",
       desc: "Spray slows your movement {g:half} as much",
@@ -67,7 +67,7 @@
       desc: "{g:+25} {i:hp}; taking a hit grants {g:+20%} {i:knockback} for 3s",
       descII: "{g:+45} {i:hp}" },
     { id: "landslide", verb: "stream", element: "earth", kind: "boon", name: "Gravel Spray",
-      desc: "Every {g:3s} of spraying, the stream hurls a rock: {g:60%} {i:dmg} + heavy {i:knockback}",
+      desc: "Every {g:3s} of continuous spraying, fire a rock down the stream: {g:60%} {i:dmg} + heavy {i:knockback} to the first enemy hit",
       descII: "every {g:2s}" },
 
     // Air — tempo
