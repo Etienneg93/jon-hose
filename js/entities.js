@@ -1061,6 +1061,10 @@
           game.embers.push(new JH.GravelRock(
             this.x + this.facing * 14, this.y, this.facing,
             this.stats.sprayDamage * T.gravelDmgFrac, T.gravelKnock));
+          // Launch read: muzzle kick + grit burst so the fire moment lands.
+          burst(game, this.x + this.facing * 14, this.y, 12, "#c8a050", 8,
+            { speed: 80, life: 0.25, up: 30, size: 2 });
+          game.shake(2);
           game.audio.play("whack", { pitch: 0.8 });
         }
       }
@@ -4412,17 +4416,22 @@
       this.t += dt;
       const step = T.gravelSpeed * dt;
       this.x += this.dir * step; this.traveled += step;
+      // Dust trail so the flight reads at speed.
+      if (Math.random() < 22 * dt)
+        burst(game, this.x - this.dir * 6, this.y, 10, "#c8a050", 1,
+          { speed: 20, life: 0.28, up: 12, size: 1 });
       for (const e of game.enemies) {
         if (e.dead || e.dropping) continue;
         if (!Geo.inGroundEllipse(e.x, e.y, this.x, this.y, JH.BENE_AOE.gravelHit)) continue;
         e.takeDamage(this.dmg, game, this.dir, this.knock, true);
-        burst(game, this.x, this.y, 10, "#c8a050", 10, { speed: 90, life: 0.3, up: 40, size: 2 });
-        game.audio.play("whack", { pitch: 0.8 });
+        burst(game, this.x, this.y, 10, "#c8a050", 14, { speed: 110, life: 0.35, up: 50, size: 2 });
+        game.shake(3);
+        game.audio.play("whack", { pitch: 0.6 });
         this.dead = true;
         return false;
       }
       if (this.traveled >= T.gravelRange) {
-        burst(game, this.x, this.y, 2, "#8a7350", 5, { speed: 50, life: 0.25, up: 20, size: 1 });
+        burst(game, this.x, this.y, 2, "#8a7350", 6, { speed: 60, life: 0.3, up: 25, size: 2 });
         this.dead = true;
         return false;
       }
@@ -4433,10 +4442,14 @@
       ctx.save();
       ctx.translate(Math.round(sx), Math.round(sy));
       ctx.rotate(this.t * 10 * this.dir);
+      ctx.fillStyle = "#1a1410";                 // outline ring
+      ctx.fillRect(-7, -6, 14, 12);
       ctx.fillStyle = "#8a7350";
-      ctx.fillRect(-4, -3, 8, 6);
+      ctx.fillRect(-6, -5, 12, 10);
       ctx.fillStyle = "#c8a050";
-      ctx.fillRect(-2, -2, 4, 3);
+      ctx.fillRect(-3, -3, 6, 5);
+      ctx.fillStyle = "#e0c080";                 // glint
+      ctx.fillRect(-1, -2, 2, 2);
       ctx.restore();
     }
   }
