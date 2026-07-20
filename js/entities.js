@@ -3594,9 +3594,6 @@
       }
       // Rarity frame + glow rings the icon (boon/duo/legendary per tier).
       Assets.tierFrame(ctx, sx, sy, d, this.offer.deepen ? 2 : 1, 1.1, this.t);
-      // Verb corner mark tells same-element boons apart (boons only — the
-      // duo/legendary frames are their distinguisher).
-      if (this.kind === "boon" && d.verb) Assets.verbMark(ctx, d.verb, sx + 6, sy - 6);
       if (this.offer.deepen) {
         ctx.fillStyle = "#fff"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
         ctx.fillText("II", sx, sy - 15);
@@ -5987,6 +5984,7 @@
         this.z += this.vz * dt;
         if (this.z <= 0) {
           this.z = 0; this.vz = 0; this.dropping = false;
+          this.dormant = false;   // dropped into combat — never dormant
           this.spawnGrace = 0.25;
           const pl = game.player;
           burst(game, this.x, this.y, 4, JH.PAL.firePatchHi, 10, { speed: 90, life: 0.35, up: 40, size: 2 });
@@ -5996,9 +5994,25 @@
         }
         return;
       }
+      const d = this.def, pl = game.player;
+      // Dormant until Jon comes near (wakeRange) or damage wakes it: stands
+      // idle, moves nothing, deals no contact damage. Wake gets a spark beat
+      // and a short grace so waking can't insta-touch.
+      if (this.dormant === undefined) this.dormant = true;
+      if (this.dormant) {
+        this.t += dt;
+        this.frame = 0;
+        if (Math.hypot(pl.x - this.x, pl.y - this.y) < d.wakeRange) {
+          this.dormant = false;
+          this.spawnGrace = Math.max(this.spawnGrace || 0, 0.3);
+          burst(game, this.x, this.y, this.bodyH, JH.PAL.firePatchHi, 4,
+            { speed: 40, life: 0.3, up: 30, size: 1 });
+          if (game.audio) game.audio.play("sizzle", { pitch: 0.7 });
+        }
+        return;
+      }
       // Proximity-lit fuse: within igniteRange the wick lights; while lit it
       // burns the fuse's OWN hp — at 0 (by drain or damage) it self-destructs.
-      const d = this.def, pl = game.player;
       if (!this.lit && this.spawnGrace <= 0 &&
           Math.hypot(pl.x - this.x, pl.y - this.y) < d.igniteRange) {
         this.lit = true;
@@ -6017,7 +6031,19 @@
     }
     takeDamage(dmg, game, dirX, knock) {
       if (this.dropping) return;   // inert until landed
+      if (this.dormant) {          // spray wakes a dormant fuse
+        this.dormant = false;
+        this.spawnGrace = Math.max(this.spawnGrace || 0, 0.3);
+      }
       super.takeDamage(dmg, game, dirX, knock);
+    }
+    draw(ctx, cam) {
+      // Dormant read: dimmed idle — wakes to full brightness.
+      if (this.dormant) {
+        ctx.save(); ctx.globalAlpha = 0.72;
+        super.draw(ctx, cam);
+        ctx.restore();
+      } else super.draw(ctx, cam);
     }
     die(game) {
       const d = this.def;
@@ -6051,7 +6077,7 @@
         // spawnGrace (mirrors the Super Gasbag mini fix). Set both to the
         // same 0.5s so a child landing on Jon can't touch-damage him the
         // instant it appears.
-        if (child) { child.z = 24; child.vz = 90; child.spawnGrace = 0.5; child.contactTimer = 0.5; }
+        if (child) { child.z = 24; child.vz = 90; child.spawnGrace = 0.5; child.contactTimer = 0.5; child.dormant = false; }
       }
       super.die(game);
     }
