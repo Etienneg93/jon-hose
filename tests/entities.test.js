@@ -1497,6 +1497,22 @@ test("scald DoT ticks the damage tally in discrete dotTickEvery punches", () => 
   assert.ok(e._dmgAccum >= total - 0.5, "running total persists mid-burn");
 });
 
+test("training dummy takes real scald DoT and shows the tick numbers", () => {
+  const D = JH.DMGNUM;
+  const g = makeThinkGame(400, 40);
+  g.showDmgNumbers = true;
+  const e = JH.makeEnemy("dummy", 100, 40);
+  g.enemies = [e];
+  const hp0 = e.hp;
+  e.applyScald(10, 5);
+  e.update(D.dotTickEvery * 1.2, g);   // one step past the tick boundary
+  assert.ok(e.hp < hp0, "scald drains the dummy's hp (was cosmetic-only)");
+  assert.ok((e._dmgAccum || 0) > 0, "the DoT feeds the dummy's damage tally");
+  const burned = e.hp;
+  e.update(D.dotTickEvery * 0.5, g);
+  assert.ok(e.hp <= burned, "regen holds off while the burn is active");
+});
+
 test("Scalding Faith: full-pressure spray applies scald", () => {
   const B = global.window.JH.Benedictions;
   B.reset(); B.take("scalding_faith");

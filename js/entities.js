@@ -1713,6 +1713,69 @@
       this.bodyH = this.def.bodyH;
     }
 
+    // Scald DoT: raw hp damage + own die() call (not takeDamage) so a
+    // burning tick never triggers knockback or re-wets the enemy. The hp
+    // drains continuously, but the damage NUMBER batches into discrete
+    // half-second ticks (DMGNUM.dotTickEvery) — per-frame accrual moved
+    // the tally ~1 point per 0.2s with no event, which read as the DoT
+    // not counting at all. Shared: called by Enemy.update AND
+    // TargetDummy.update (which overrides update entirely).
+    tickScald(dt, game) {
+      if (this.scaldT <= 0) return;
+      this.scaldT = Math.max(0, this.scaldT - dt);
+      const scaldDmg = this.scaldDps * dt;
+      this.hp -= scaldDmg;
+      this._dotNumBuf = (this._dotNumBuf || 0) + scaldDmg;
+      this._dotNumT = (this._dotNumT == null ? JH.DMGNUM.dotTickEvery : this._dotNumT) - dt;
+      if (this._dotNumT <= 0 || this.scaldT <= 0) {
+        this.accrueDmgNum(this._dotNumBuf, game);   // one visible orange tick-punch
+        this._dotNumBuf = 0;
+        this._dotNumT = JH.DMGNUM.dotTickEvery;
+      } else if (this._dmgAccum > 0 && game && game.showDmgNumbers) {
+        // Burning = damage ongoing: keep the tally alive between ticks so
+        // the running total never resets mid-burn (holdT == dotTickEvery).
+        this._dmgHoldT = JH.DMGNUM.holdT;
+      }
+      // Steam motes puff up off the enemy (rising, drifting) — the boil read.
+      if (Math.random() < 7 * dt) burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.6, this.y,
+        this.bodyH * 0.4, JH.PAL.steamHi, 1, { speed: 12, life: 0.5, up: 42, grav: -18, size: 1 });
+      // Boilover: while scalded, contagion re-checks every boiloverRecheckS.
+      this._spreadT = (this._spreadT || 0) - dt;
+      if (this._spreadT <= 0) {
+        this._spreadT = JH.BENE_TUNE.boiloverRecheckS;
+        const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
+        if (bfRank) {
+          const sr = JH.BENE_AOE.bushfireSpread, sry = JH.BENE_AOE.bushfireSpreadRy;
+          let spread = 0;
+          for (const o of game.enemies) {
+            if (o === this || o.dead || (o.scaldT || 0) > 0) continue;
+            if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, sr, sry)) continue;
+            o.applyScald(this.scaldDps, this.scaldT);
+            spread++;
+          }
+          // ring at the exact spread ellipse (rim is hitbox — ry carried so
+          // the taller contagion shape draws true) — only when the recheck
+          // actually caught someone.
+          if (spread > 0 && game.pulseRings) game.pulseRings.push({
+            x: this.x, y: this.y, r: 0, targetR: sr, ry: sry, dur: 0.25, t: 0,
+            dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#ff8c2a",
+          });
+        }
+      }
+      // Steam Sermon: while scalded, vent damage to OTHER nearby enemies
+      // (the scalded body cooks its neighbours) — BENE_AOE.steamVent radius.
+      if (game.player.beneRank && game.player.beneRank("steam_sermon")) {
+        const vr = JH.BENE_AOE.steamVent;
+        const vdps = game.player.stats.sprayDamage * JH.BENE_TUNE.steamVentDpsFrac;
+        for (const o of game.enemies) {
+          if (o === this || o.dead) continue;
+          if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, vr, vr * 0.34)) continue;
+          o.takeDamage(vdps * dt, game, 0, 0);
+        }
+      }
+      if (this.hp <= 0) this.die(game);
+    }
+
     // Generic chase toward the player; subclasses override think().
     update(dt, game) {
       this.basePhysics(dt);
@@ -1728,66 +1791,7 @@
             6 + Math.random() * (this.bodyH * 0.6), "#00b4ff", 1,
             { speed: 6, life: 0.45, up: -30, grav: 260, size: 1 });
       }
-      // Scald DoT: raw hp damage + own die() call (not takeDamage) so a
-      // burning tick never triggers knockback or re-wets the enemy. The hp
-      // drains continuously, but the damage NUMBER batches into discrete
-      // half-second ticks (DMGNUM.dotTickEvery) — per-frame accrual moved
-      // the tally ~1 point per 0.2s with no event, which read as the DoT
-      // not counting at all.
-      if (this.scaldT > 0) {
-        this.scaldT = Math.max(0, this.scaldT - dt);
-        const scaldDmg = this.scaldDps * dt;
-        this.hp -= scaldDmg;
-        this._dotNumBuf = (this._dotNumBuf || 0) + scaldDmg;
-        this._dotNumT = (this._dotNumT == null ? JH.DMGNUM.dotTickEvery : this._dotNumT) - dt;
-        if (this._dotNumT <= 0 || this.scaldT <= 0) {
-          this.accrueDmgNum(this._dotNumBuf, game);   // one visible orange tick-punch
-          this._dotNumBuf = 0;
-          this._dotNumT = JH.DMGNUM.dotTickEvery;
-        } else if (this._dmgAccum > 0 && game && game.showDmgNumbers) {
-          // Burning = damage ongoing: keep the tally alive between ticks so
-          // the running total never resets mid-burn (holdT == dotTickEvery).
-          this._dmgHoldT = JH.DMGNUM.holdT;
-        }
-        // Steam motes puff up off the enemy (rising, drifting) — the boil read.
-        if (Math.random() < 7 * dt) burst(game, this.x + (Math.random() - 0.5) * this.bodyW * 0.6, this.y,
-          this.bodyH * 0.4, JH.PAL.steamHi, 1, { speed: 12, life: 0.5, up: 42, grav: -18, size: 1 });
-        // Boilover: while scalded, contagion re-checks every boiloverRecheckS.
-        this._spreadT = (this._spreadT || 0) - dt;
-        if (this._spreadT <= 0) {
-          this._spreadT = JH.BENE_TUNE.boiloverRecheckS;
-          const bfRank = game.player.beneRank ? game.player.beneRank("bushfire") : 0;
-          if (bfRank) {
-            const sr = JH.BENE_AOE.bushfireSpread, sry = JH.BENE_AOE.bushfireSpreadRy;
-            let spread = 0;
-            for (const o of game.enemies) {
-              if (o === this || o.dead || (o.scaldT || 0) > 0) continue;
-              if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, sr, sry)) continue;
-              o.applyScald(this.scaldDps, this.scaldT);
-              spread++;
-            }
-            // ring at the exact spread ellipse (rim is hitbox — ry carried so
-            // the taller contagion shape draws true) — only when the recheck
-            // actually caught someone.
-            if (spread > 0 && game.pulseRings) game.pulseRings.push({
-              x: this.x, y: this.y, r: 0, targetR: sr, ry: sry, dur: 0.25, t: 0,
-              dmg: 0, kb: 0, douse: false, hit: new Set(), color: "#ff8c2a",
-            });
-          }
-        }
-        // Steam Sermon: while scalded, vent damage to OTHER nearby enemies
-        // (the scalded body cooks its neighbours) — BENE_AOE.steamVent radius.
-        if (game.player.beneRank && game.player.beneRank("steam_sermon")) {
-          const vr = JH.BENE_AOE.steamVent;
-          const vdps = game.player.stats.sprayDamage * JH.BENE_TUNE.steamVentDpsFrac;
-          for (const o of game.enemies) {
-            if (o === this || o.dead) continue;
-            if (!Geo.inGroundEllipse(o.x, o.y, this.x, this.y, vr, vr * 0.34)) continue;
-            o.takeDamage(vdps * dt, game, 0, 0);
-          }
-        }
-        if (this.hp <= 0) this.die(game);
-      }
+      this.tickScald(dt, game);
       // vsEnemies SlowZones (Baptismal Wake puddles) tag `_puddleSlow` each
       // frame the enemy stands inside them; pull the think-driven displacement
       // back toward the pre-think position by that fraction. One hook here
@@ -5599,9 +5603,12 @@
       this.tickDmgNum(dt);
       if (this.regenTimer > 0) this.regenTimer -= dt;
       else if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 500 * dt);
-      // Scald wears off here too — this update() overrides Enemy's, so without
-      // this the dummy's scald tint would stick forever after one dash-through.
-      if (this.scaldT > 0) this.scaldT = Math.max(0, this.scaldT - dt);
+      // Real scald DoT on the dummy too (this update() overrides Enemy's,
+      // which used to leave the burn purely cosmetic here). die() is a no-op,
+      // so clamp hp and hold regen off while burning so the drain reads.
+      if (this.scaldT > 0) this.regenTimer = Math.max(this.regenTimer, 1);
+      this.tickScald(dt, game);
+      this.hp = Math.max(1, this.hp);
       if (game.player) this.facing = game.player.x >= this.x ? 1 : -1;
       this.animate(dt, false);
     }
