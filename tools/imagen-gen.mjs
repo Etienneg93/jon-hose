@@ -138,6 +138,28 @@ Tan skin face #f1c08a, dark knit beanie, small dark eyes, scrappy and low-rent. 
     states: { idle: `Standing idle, arms loose at sides, slight menacing hunch. Full body, feet visible. Facing right.` },
   },
 
+  plunger: {
+    refImage: "tmp/plunger-ref.png",
+    refDescription: `The reference image shows the "Plunger Fiend": a small goblin-like imp whose
+head IS a dark rust-red rubber plunger cup, worn like a dome helmet with the brim shading its face;
+a tan wooden handle sticks up from the dome at a slight backward angle. Under the brim: two glowing
+yellow eyes and a sly grin. Rust-red rubbery body, darker red shading, small gold/amber claws on
+hands and bare feet. Hunched, sneaky posture. Replicate this exact character faithfully.`,
+    base: `Pixel art game sprite of the "Plunger Fiend": a goblin imp with a dark rust-red rubber
+plunger cup for a head (tan wooden handle sticking up-backward from the dome), glowing yellow eyes
+under the cup brim, sly grin, rust-red rubbery body, gold claws on hands and bare feet.`,
+    states: {
+      walksheet: `6-frame walk cycle as a horizontal sprite sheet: exactly 6 full-body copies of the
+SAME character side by side in one image, evenly spaced, equal-width columns, no gaps, no borders,
+no labels. All frames the same height with feet on one shared ground line. Walking toward the LEFT,
+sneaky hunched creep. Frame 1: contact — left foot planted forward, right arm swung forward.
+Frame 2: down — body at its lowest, weight settling on the front foot. Frame 3: passing — feet
+together under the body, body rising. Frame 4: opposite contact — right foot planted forward,
+left arm swung forward. Frame 5: down — lowest again on the other side. Frame 6: passing — feet
+together, rising. The wooden handle tilts subtly with the body's bob; eyes stay locked ahead.`,
+    },
+  },
+
   charger: {
     refImage: "", refDescription: "",
     base: `Pixel art game sprite of a "Charger": a bull-rush brute enemy that hunches forward to ram.
@@ -437,7 +459,7 @@ async function main() {
   //   default with --ref     → try imagen-subject first (best for character consistency)
   //   default without --ref  → imagen text-only
   const model = forceModel || (useRef ? "imagen-subject" : "imagen");
-  const aspectRatio = stateKey === "walk" ? "4:3" : "1:1";
+  const aspectRatio = stateKey === "walk" ? "4:3" : stateKey === "walksheet" ? "16:9" : "1:1";
 
   const prompt = [PIXEL_ART_RULES, charDef.base, stateDef].join("\n\n");
 

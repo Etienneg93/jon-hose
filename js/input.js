@@ -47,7 +47,7 @@
     // canvas's CSS bounding rect, not devicePixelRatio — the ctx transform
     // already absorbs dpr, so client coords only need CSS-pixel scaling).
     // Hover-only: no gameplay code should ever branch on a click here.
-    mouse: { x: -1, y: -1, inside: false },
+    mouse: { x: -1, y: -1, inside: false, click: false, clickEdge: false },
     _now() { return performance.now(); },
 
     init() {
@@ -86,6 +86,13 @@
             this.mouse.inside = true;
           });
           canvas.addEventListener("mouseleave", () => { this.mouse.inside = false; });
+          canvas.addEventListener("mousedown", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            this.mouse.x = (e.clientX - rect.left) / rect.width * JH.VIEW_W;
+            this.mouse.y = (e.clientY - rect.top) / rect.height * JH.VIEW_H;
+            this.mouse.inside = true;
+            this.mouse.click = true;
+          });
         }
       }
     },
@@ -126,7 +133,14 @@
       // Record press edges for the buffered actions.
       for (const a of BUFFERED)
         if (this.state[a] && !this._prev[a]) this._bufAt[a] = this._now();
+
+      // Mouse click edge: true for exactly one polled frame per mousedown.
+      this.mouse.clickEdge = this.mouse.click;
+      this.mouse.click = false;
     },
+
+    // Inject a buffered press programmatically (e.g. mouse click -> confirm).
+    bufferPress(a) { this._bufAt[a] = this._now(); },
 
     // Held this frame.
     held(a) { return !!this.state[a]; },

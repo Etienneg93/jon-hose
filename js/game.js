@@ -78,7 +78,7 @@
     acc: 0, lastT: 0, running: false,
     devMenu: false, devCursor: 0,
     devPowerSim: false,   // dev-menu warp grants the act-expected level/bene power (KeyP toggles)
-    showDmgNumbers: false, // dev-menu KeyN: floating damage numbers (enemy tally + player -N)
+    showDmgNumbers: true,  // ON by default; dev-menu KeyN still toggles (enemy tally + player -N)
     dyingBoss: null, deathSeqT: 0,
     checkpointWave: 0,
     diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0,
@@ -2337,6 +2337,23 @@
               if (this.input.pressed("left"))  this.shopWheelSlot = Math.max(0, this.shopWheelSlot - 1);
               if (this.input.pressed("right")) this.shopWheelSlot = Math.min(3, this.shopWheelSlot + 1);
             }
+            // Mouse: clicking a reel window selects that slot and buys it
+            // (window rects are stored by the draw pass each frame).
+            const mc = JH.Input.mouse;
+            if (mc && mc.clickEdge && this._wheelRects) {
+              for (const rc of this._wheelRects) {
+                if (mc.x >= rc.x && mc.x <= rc.x + rc.w && mc.y >= rc.y && mc.y <= rc.y + rc.h) {
+                  const wi = sel.findIndex((s) => s.kind === "wheelRow");
+                  if (wi >= 0) {
+                    this.shopCursor = wi;
+                    this.shopWheelSlot = rc.i;
+                    this.player.shopWheelFocus = true;
+                    this.input.bufferPress("confirm");
+                  }
+                  break;
+                }
+              }
+            }
             if (this.input.buffered("confirm")) {
               this.input.consume("confirm");
               const e = sel[this.shopCursor];
@@ -2602,8 +2619,8 @@
           const rd = JH.RELICS.find((r) => r.id === st.relic);
           const owned = !!this.relics[st.relic];
           ctx.globalAlpha = owned ? 1 : 0.5;
-          JH.Assets.gearFrame(ctx, sx, sy - 12, 1, rd && rd.tier, this.player ? this.player.t : 0);
-          JH.Assets.icon(ctx, st.relic, sx, sy - 12, 1);
+          JH.Assets.gearFrame(ctx, sx, sy - 14, 1.5, rd && rd.tier, this.player ? this.player.t : 0);
+          JH.Assets.icon(ctx, st.relic, sx, sy - 14, 1.5);
           ctx.globalAlpha = 1;
           if (owned) { ctx.fillStyle = "#80ff80"; ctx.fillRect(sx + 7, sy - 20, 2, 2); }
         } else {
@@ -2842,12 +2859,14 @@
           ctx.restore();
         }
 
-        // GUSH pulse rings (Backdraft Valve / Big Spigot) — drawn rim IS the hit rim.
+        // GUSH pulse rings (Backdraft Valve / Big Spigot) + visual-only
+        // benediction AoE rings (Aftershock splash, Boilover spread) —
+        // drawn rim IS the hit rim in every case.
         if (this.pulseRings) for (const ring of this.pulseRings) {
           const sx = ring.x - cam, sy = JH.Geo.feetScreenY(ring.y, 0);
           ctx.save();
           ctx.globalAlpha = Math.max(0, 1 - ring.t / (ring.dur + 0.15));
-          ctx.strokeStyle = JH.PAL.waterHi;
+          ctx.strokeStyle = ring.color || JH.PAL.waterHi;
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.ellipse(sx, sy, ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
@@ -3410,9 +3429,11 @@
       const words = String(str || "").split(" ");
       const lines = [];
       let line = "";
+      // Wrap on VISIBLE length: {g:}/{i:} markup doesn't count against width.
+      const vis = (s) => (JH.Assets.stripMarkup ? JH.Assets.stripMarkup(s) : s).length;
       for (const w of words) {
         const trial = line ? line + " " + w : w;
-        if (trial.length > maxChars && line) {
+        if (vis(trial) > maxChars && line) {
           lines.push(line); line = w;
           if (lines.length >= maxLines) {
             // Out of lines with words left: mark the cut.
@@ -3634,7 +3655,7 @@
           if (b.lines.length) {
             ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
             let ly = rowStart + 12;
-            for (const ln of b.lines) { ctx.fillText(ln, X + 24, ly); ly += 6; }
+            for (const ln of b.lines) { JH.Assets.styledText(ctx, ln, X + 24, ly); ly += 6; }
           }
           by = rowStart + Math.max(24, 16 + b.lines.length * 6);
         }
@@ -3715,7 +3736,10 @@
       const el = def.element || (def.needs && def.needs.join("+")) || "";
       const kind = def.kind === "duo" ? "DUO" : def.kind === "legendary" ? "LEGENDARY" : el.toUpperCase();
       const deep = near.offer.deepen;
-      const desc = (deep && def.descII ? "II: " + def.descII : def.desc) || "";
+      // Rank II keeps the base effect text so the upgrade is never a blind
+      // pick — "base effect  II: what changes".
+      const desc = ((def.desc || "") +
+        (deep && def.descII ? "  II: " + def.descII : "")) || "";
       const W = 300, H = 34, X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.92)";
@@ -3731,14 +3755,13 @@
       ctx.textAlign = "left";
       ctx.font = "6px monospace";
       ctx.fillStyle = "#aebdd4";
-      // Two-line wrap: split near the middle on a space.
-      if (desc.length > 52) {
-        let cut = desc.lastIndexOf(" ", 52);
-        if (cut < 20) cut = 52;
-        ctx.fillText(desc.slice(0, cut), X + 6, Y + 20);
-        ctx.fillText(desc.slice(cut + 1), X + 6, Y + 28);
+      // Markup-aware two-line wrap ({g:}/{i:} tokens render styled).
+      const dlines = this.wrapText(desc, 52, 2);
+      if (dlines.length > 1) {
+        JH.Assets.styledText(ctx, dlines[0], X + 6, Y + 20);
+        JH.Assets.styledText(ctx, dlines[1], X + 6, Y + 28);
       } else {
-        ctx.fillText(desc, X + 6, Y + 22);
+        JH.Assets.styledText(ctx, desc, X + 6, Y + 22);
       }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
       ctx.fillText("E: CHOOSE BENEDICTION", X + W - 6, Y + H - 6);
@@ -3786,14 +3809,13 @@
       ctx.textAlign = "left";
       ctx.font = "6px monospace";
       ctx.fillStyle = "#aebdd4";
-      // Two-line wrap: split near the middle on a space.
-      if (desc.length > 52) {
-        let cut = desc.lastIndexOf(" ", 52);
-        if (cut < 20) cut = 52;
-        ctx.fillText(desc.slice(0, cut), X + 6, Y + 20);
-        ctx.fillText(desc.slice(cut + 1), X + 6, Y + 28);
+      // Markup-aware two-line wrap ({g:}/{i:} tokens render styled).
+      const dlines = this.wrapText(desc, 52, 2);
+      if (dlines.length > 1) {
+        JH.Assets.styledText(ctx, dlines[0], X + 6, Y + 20);
+        JH.Assets.styledText(ctx, dlines[1], X + 6, Y + 28);
       } else {
-        ctx.fillText(desc, X + 6, Y + 22);
+        JH.Assets.styledText(ctx, desc, X + 6, Y + 22);
       }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
       ctx.fillText("E: TOGGLE RELIC", X + W - 6, Y + H - 6);
@@ -3850,9 +3872,12 @@
         rows.push({ t: "head", label: "── " + branch + " ──" });
         U.nodesByBranch(branch).forEach((n) => rows.push({ t: "node", n }));
       });
-      rows.push({ t: "head", label: "── OVERCHARGE ──" });
-      if (U.overchargeUnlocked()) U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
-      else rows.push({ t: "lock", label: "Unlocks after the first boss" });
+      // Overcharge section is fully hidden until its first-boss unlock —
+      // no header, no locked teaser row.
+      if (U.overchargeUnlocked()) {
+        rows.push({ t: "head", label: "── OVERCHARGE ──" });
+        U.repeatables.forEach((n) => rows.push({ t: "rep", n }));
+      }
       rows.push({ t: "head", label: "── RELICS ──" });
       rows.push({ t: "wheel" });
 
@@ -3862,7 +3887,7 @@
         (r.t === "wheel" && cur.kind === "wheelRow"));
 
       let cy = 0, cursorCY = 0;
-      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : r.t === "wheel" ? 34 : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
+      rows.forEach((r) => { r.cy = cy; r.h = r.t === "head" ? HROW : r.t === "wheel" ? 58 : IROW; if (isCurRow(r)) cursorCY = cy; cy += r.h; });
       const contentH = cy;
 
       const viewTop = PY + 26, viewBot = PY + PH - 34, viewH = viewBot - viewTop;
@@ -3887,47 +3912,98 @@
           return;
         }
         if (r.t === "wheel") {
-          // Cards render from the spawn-time snapshot: a bought card shows
-          // SOLD in its own slot, id null (thin pool at spawn) shows "—".
+          // RELIC-O-MAT: the wheel drawn as a slot machine — gold-trim
+          // housing, chasing marquee lights, three recessed reel windows
+          // with rolling icons while the reels spin, and a payout strip
+          // (name + price) under each window so text never strikes the rim.
+          // Tier reads as the settled window's rim color. Entries render
+          // from the spawn-time snapshot: a bought slot shows SOLD, id null
+          // (thin pool at spawn) shows SOLD OUT.
           const entries = JH.Balance.shopWheelEntries(this.wheelStock, this.relics);
+          const hx = PX + 4, hw = PW - 8, hy = ry + 1, hh = 54;
+          this._wheelRects = [];   // click hitboxes, refreshed each draw
+          ctx.fillStyle = "#141b28"; ctx.fillRect(hx, hy, hw, hh);
+          ctx.strokeStyle = "#c8963c"; ctx.lineWidth = 1;
+          ctx.strokeRect(hx + 0.5, hy + 0.5, hw - 1, hh - 1);
+          const lstep = Math.floor((hw - 16) / 12);
+          for (let li = 0; li < 12; li++) {
+            const on = ((li + Math.floor(this.elapsed * 6)) % 3) === 0;
+            ctx.fillStyle = on ? "#ffd23f" : "#54431a";
+            ctx.fillRect(hx + 8 + li * lstep, hy + 3, 2, 2);
+          }
           entries.forEach((en, i) => {
-            const cx = PX + 6 + i * 47, cy2 = ry + 2, focused = isCurRow(r) && this.shopWheelSlot === i;
-            ctx.fillStyle = focused ? "rgba(255,210,63,0.14)" : "rgba(20,28,44,0.9)";
-            ctx.fillRect(cx, cy2, 44, 30);
-            ctx.strokeStyle = focused ? "#ffd23f" : "#2a3550"; ctx.strokeRect(cx, cy2, 44, 30);
-            // Reel spin: for slots 0-2, before this reel's settle time show a
-            // cycling icon instead of the real one (staggered left->right).
+            const wx = hx + 4 + i * 44, wy = hy + 8, ww = 40, wh = 28;
+            const wcx = wx + ww / 2, wcy = wy + wh / 2;
+            const focused = isCurRow(r) && this.shopWheelSlot === i;
             const settle = 0.6 + i * 0.3;
+            const spinning = i < 3 && this.wheelSpinT < settle && en.id && !en.sold;
+            ctx.fillStyle = "#080c14"; ctx.fillRect(wx, wy, ww, wh);
             let iconKey = en.id === "kibble" ? "kibble" : en.id;
             let label, price, rd = null;
-            if (en.id === "kibble") { label = "KIBBLE PACK"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
+            if (en.id === "kibble") { label = "KIBBLE"; price = this.priceOf(JH.KIBBLE_PACK.cost); }
             else if (en.sold) { label = "SOLD"; price = null; }
             else if (en.id) { rd = JH.RELICS.find((x) => x.id === en.id); label = rd.name.toUpperCase(); price = this.priceOf(rd.cost); }
             else { label = "SOLD OUT"; price = null; iconKey = "sold_out"; }
-            if (i < 3 && this.wheelSpinT < settle && en.id && !en.sold) {
-              const pool = JH.RELICS; iconKey = pool[Math.floor(this.wheelSpinT * 14 + i * 3) % pool.length].id;
-              label = "· · ·"; price = null; rd = null;   // mask tier too: steel frame until the reel settles
-            }
-            if (iconKey) {
-              ctx.globalAlpha = en.sold ? 0.35 : iconKey === "sold_out" ? 0.6 : 1;
-              JH.Assets.icon(ctx, iconKey, cx + 22, cy2 + 10, 1);
-              JH.Assets.gearFrame(ctx, cx + 22, cy2 + 10, 1, rd && rd.tier, this.elapsed);
+            ctx.save();
+            ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+            if (spinning) {
+              // Rolling reel: pool icons scroll vertically through the window.
+              const pool = JH.RELICS;
+              const roll = (this.wheelSpinT * 90 + i * 17) % wh;
+              const idx = Math.floor(this.wheelSpinT * 14 + i * 3);
+              JH.Assets.icon(ctx, pool[idx % pool.length].id, wcx, wcy + roll - wh / 2, 1.5);
+              JH.Assets.icon(ctx, pool[(idx + 1) % pool.length].id, wcx, wcy + roll - wh / 2 - wh, 1.5);
+            } else if (iconKey) {
+              ctx.globalAlpha = en.sold ? 0.3 : iconKey === "sold_out" ? 0.6 : 1;
+              JH.Assets.icon(ctx, iconKey, wcx, wcy, 1.5);
               ctx.globalAlpha = 1;
+              if (en.sold) {
+                ctx.fillStyle = "rgba(200,60,50,0.9)"; ctx.font = "bold 6px monospace"; ctx.textAlign = "center";
+                ctx.fillText("SOLD", wcx, wcy + 2);
+              }
+            }
+            ctx.restore();
+            this._wheelRects.push({ x: wx, y: wy, w: ww, h: wh, i });
+            const tierEdge = rd && rd.tier === "relic" ? "#d4af37" : rd && rd.tier === "rare" ? "#c9924a" : "#3a4a66";
+            ctx.strokeStyle = focused ? "#ffd23f" : (spinning ? "#3a4a66" : tierEdge);
+            ctx.lineWidth = focused ? 2 : 1;
+            ctx.strokeRect(wx + 0.5, wy + 0.5, ww - 1, wh - 1);
+            ctx.lineWidth = 1;
+            if (focused) {
+              // Selection can't hide on gold-tier rims: pointer above + glow.
+              ctx.globalAlpha = 0.35;
+              ctx.strokeStyle = "#ffd23f";
+              ctx.strokeRect(wx - 1.5, wy - 1.5, ww + 3, wh + 3);
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = "#ffd23f";
+              ctx.beginPath();
+              ctx.moveTo(wcx - 3, wy - 4); ctx.lineTo(wcx + 3, wy - 4); ctx.lineTo(wcx, wy - 1);
+              ctx.closePath(); ctx.fill();
             }
             ctx.font = "5px monospace"; ctx.textAlign = "center";
-            ctx.fillStyle = en.id && !en.sold ? "#dfe8f5" : "#556070";
-            ctx.fillText(label.slice(0, 12), cx + 22, cy2 + 23);
-            if (price != null) {
-              // Tier hues (relic gold / rare bronze) stay hued even when unaffordable —
-              // dim via alpha instead of swapping to the common path's grey-brown.
+            ctx.fillStyle = spinning ? "#556070" : en.id && !en.sold ? "#dfe8f5" : "#556070";
+            ctx.fillText(spinning ? "· · ·" : label.slice(0, 12), wcx, hy + 44);
+            if (!spinning && price != null) {
+              // Tier hues (relic gold / rare bronze) stay hued even when
+              // unaffordable — dim via alpha, don't swap to grey-brown.
               const tierColor = rd && rd.tier === "relic" ? "#ffd23f" : rd && rd.tier === "rare" ? "#c9924a" : null;
               const afford = pl.suds >= price;
               ctx.fillStyle = tierColor || (afford ? "#ffd23f" : "#775533");
               ctx.globalAlpha = tierColor && !afford ? 0.45 : 1;
-              ctx.fillText(price + "", cx + 22, cy2 + 29);
+              ctx.fillText(price + "", wcx, hy + 51);
               ctx.globalAlpha = 1;
             }
           });
+          // Side lever: knob up when the reels are settled, pulled during the spin.
+          const lvx = hx + hw - 8, lever = this.wheelSpinT < 1.2;
+          ctx.strokeStyle = "#98a4b0"; ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(lvx, hy + 26);
+          ctx.lineTo(lvx, lever ? hy + 38 : hy + 12);
+          ctx.stroke();
+          ctx.lineWidth = 1;
+          ctx.fillStyle = "#ff5a4a";
+          ctx.beginPath(); ctx.arc(lvx, lever ? hy + 40 : hy + 10, 3, 0, Math.PI * 2); ctx.fill();
           ctx.textAlign = "left";
           return;
         }
@@ -4088,15 +4164,16 @@
         const x = x0 + (i % perRow) * 13;
         const y = y0 + Math.floor(i / perRow) * 16;
         ctx.globalAlpha = rank >= 2 ? 1 : 0.55;
-        // Baked element icon (procedural pip while it streams in).
-        if (!JH.Assets.icon(ctx, "el_" + el, x + 4, y + 4, 1)) {
+        // Each benediction's own baked icon (element icon, then procedural
+        // pip, while art streams in). Distinct icons replaced the old verb
+        // corner marks entirely.
+        if (!JH.Assets.icon(ctx, "bene_" + id, x + 4, y + 4, 1) &&
+            !JH.Assets.icon(ctx, "el_" + el, x + 4, y + 4, 1)) {
           ctx.fillStyle = col;
           ctx.fillRect(x, y, 8, 8);
           ctx.strokeStyle = "#0a0e18";
           ctx.strokeRect(x, y, 8, 8);
         }
-        // Verb corner mark tells same-element boons apart (boons only).
-        if (d.kind === "boon" && d.verb) JH.Assets.verbMark(ctx, d.verb, x + 10, y - 2);
         // Rank-2 boons keep the bright ring.
         if (rank >= 2) {
           ctx.strokeStyle = col;

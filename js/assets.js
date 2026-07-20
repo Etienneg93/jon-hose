@@ -494,7 +494,88 @@
   // backdrop. Corner caps (2x2) mark the tier: element color for boon I,
   // white for boon II (plus an outer band), split colors for duos, and
   // shimmering gold for legendaries (plus the pulse glow).
+  // Inline-styled UI text: "{g:...}" renders green (buff values) and
+  // "{i:key}" renders the baked icon inline at text size. Plain text passes
+  // through with the caller's fillStyle. stripMarkup gives the visible
+  // string for wrapping/measurement ({i:...} counts ~2 chars).
+  Assets.stripMarkup = function (str) {
+    return String(str || "").replace(/\{i:[^}]*\}/g, "##").replace(/\{g:([^}]*)\}/g, "$1");
+  };
+  Assets.styledText = function (ctx, str, x, y) {
+    const parts = String(str || "").split(/(\{[gi]:[^}]*\})/);
+    let cx = x;
+    const prevFill = ctx.fillStyle, prevAlign = ctx.textAlign;
+    ctx.textAlign = "left";
+    for (const p of parts) {
+      if (!p) continue;
+      let m;
+      if ((m = p.match(/^\{g:([^}]*)\}$/))) {
+        ctx.fillStyle = "#7ddc7d";
+        ctx.fillText(m[1], cx, y);
+        cx += ctx.measureText(m[1]).width;
+        ctx.fillStyle = prevFill;
+      } else if ((m = p.match(/^\{i:([^}]*)\}$/))) {
+        Assets.icon(ctx, m[1], cx + 3.5, y - 2, 0.5);
+        cx += 8;
+      } else {
+        ctx.fillText(p, cx, y);
+        cx += ctx.measureText(p).width;
+      }
+    }
+    ctx.textAlign = prevAlign;
+    return cx;
+  };
+
+  // Baked benediction frames (sprites/icons/frame_*.png, 72px = 18 logical
+  // at 4x): element-themed per kind/rank — base_<el>, rank2_<el>,
+  // duo_<el1>_<el2>, leg_<el> — with the universal set (base/rank2/duo/
+  // legendary) as a secondary fallback and the procedural frame below as
+  // the last resort. Legendary keeps its procedural pulse glow.
+  const _frameImgs = {};
+  ["base", "rank2", "duo", "legendary",
+   "base_water", "base_fire", "base_earth", "base_air",
+   "rank2_water", "rank2_fire", "rank2_earth", "rank2_air",
+   "duo_water_fire", "duo_water_earth", "duo_water_air",
+   "duo_fire_earth", "duo_fire_air", "duo_earth_air",
+   "leg_water", "leg_fire", "leg_earth", "leg_air"].forEach((k) => {
+    _frameImgs[k] = JH.Loader.img("sprites/icons/frame_" + k + ".png");
+  });
+  // Duo braid files are named in canonical element order — sort a duo's
+  // needs the same way so any future def matches regardless of its order.
+  const _elOrder = { water: 0, fire: 1, earth: 2, air: 3 };
   Assets.tierFrame = function (ctx, x, y, d, rank, scale, t) {
+    const fel = d.element || (d.needs && d.needs[0]) || "water";
+    const duoPair = (d.needs || [fel, fel]).slice()
+      .sort((a, b) => (_elOrder[a] ?? 9) - (_elOrder[b] ?? 9)).join("_");
+    const elKey = d.kind === "legendary" ? "leg_" + fel
+                : d.kind === "duo" ? "duo_" + duoPair
+                : (rank >= 2 ? "rank2_" : "base_") + fel;
+    const fkey = d.kind === "legendary" ? "legendary"
+               : d.kind === "duo" ? "duo"
+               : rank >= 2 ? "rank2" : "base";
+    const fimg = (_frameImgs[elKey] && _frameImgs[elKey]._ready)
+      ? _frameImgs[elKey] : _frameImgs[fkey];
+    if (fimg && fimg._ready) {
+      const fs = Math.round((scale || 1) * (JH.ICONS.size + 6));
+      if (d.kind === "legendary") {
+        const glow = 0.5 + 0.2 * Math.sin((t || 0) * 3);
+        const g = ctx.createRadialGradient(x, y, fs * 0.25, x, y, fs * 1.1);
+        g.addColorStop(0, "rgba(255,210,63," + glow.toFixed(3) + ")");
+        g.addColorStop(1, "rgba(255,210,63,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x - fs * 1.1, y - fs * 1.1, fs * 2.2, fs * 2.2);
+      }
+      // Frames are baked at 320px with the BORDER SQUARE (240px) anchored at
+      // canvas center — the top medallion pokes above without shifting the
+      // border off the icon. Smooth minification: nearest at ~4:1 shredded
+      // the medallion art. Draw box scaled so the border renders at fs.
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = true;
+      const box = fs * (320 / 240);
+      ctx.drawImage(fimg, Math.round(x - box / 2), Math.round(y - box / 2), box, box);
+      ctx.imageSmoothingEnabled = prev;
+      return;
+    }
     const s = Math.round((scale || 1) * (JH.ICONS.size + 4)) / 2;  // half-extent
     const el = d.element || (d.needs && d.needs[0]) || "water";
     const c1 = d.kind === "legendary" ? "#ffd23f" : (JH.SIGIL_COLORS[el] || "#ffd23f");
@@ -576,25 +657,6 @@
     [[-s, -s], [s - 1, -s], [-s, s - 1], [s - 1, s - 1]].forEach(([dx, dy]) =>
       ctx.fillRect(x + dx, y + dy, 1, 1));
     ctx.restore();
-  };
-
-  // Boon verb corner mark (procedural, no PNG): stream = bar, dash = chevron,
-  // body = dot. (x, y) is the TOP-RIGHT corner of the icon the mark tags —
-  // the mark hangs down-left from it. Unknown/missing verb draws nothing.
-  Assets.verbMark = function (ctx, verb, x, y) {
-    x = Math.round(x); y = Math.round(y);
-    if (verb === "stream") {
-      ctx.fillStyle = "#d6f6ff";
-      ctx.fillRect(x - 4, y, 4, 2);
-    } else if (verb === "dash") {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x - 4, y, 2, 1);
-      ctx.fillRect(x - 3, y + 1, 2, 1);
-      ctx.fillRect(x - 4, y + 2, 2, 1);
-    } else if (verb === "body") {
-      ctx.fillStyle = "#ffd23f";
-      ctx.fillRect(x - 3, y, 3, 3);
-    }
   };
 
   // ---- shared bits ----------------------------------------------------
@@ -2033,6 +2095,10 @@
     const makeImg = (src) => JH.Loader.img(src);
     JH.ChurchArt = {
       backdrop:          makeImg("sprites/church/backdrop.jpg"),
+      // Split parallax layers: nave wall (mirror-tiled, 0.35 parallax) +
+      // walkable ground strip (full parallax) — see church.js drawBackdrop.
+      nave:              makeImg("sprites/church/nave.jpg"),
+      ground:            makeImg("sprites/church/ground.jpg"),
       altar:             makeImg("sprites/church/altar.png"),
       shrineDim:         makeImg("sprites/church/shrine_dim.png"),
       shrineLit:         makeImg("sprites/church/shrine_lit.png"),
