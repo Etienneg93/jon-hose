@@ -6227,17 +6227,22 @@
       // (they cycle telegraph/blow/gap forever, blowing pushMult harder).
       if (!this._kneeling && game.gustLanes && JH.GustLane) {
         const want = d.lanes.byPhase[Math.min(this.phase, d.lanes.byPhase.length) - 1];
-        const slots = d.lanes.slotOrder.slice(0, want);
-        const nSlots = d.lanes.slotOrder.length;
+        const nSlots = d.lanes.byPhase[d.lanes.byPhase.length - 1];
         const span = (JH.DEPTH_MAX - JH.DEPTH_MIN) / nSlots;
         const band = Math.min(JH.GUST.bandMax, Math.floor(span * 0.45));
-        for (const slot of slots) {
-          if (game.gustLanes.some((l) => l._bossLane && !l.dead && l._slot === slot)) continue;
+        const taken = new Set(game.gustLanes.filter((l) => l._bossLane && !l.dead).map((l) => l._slot));
+        if (taken.size < want) {
+          // random FREE slot — never a fixed fill order, so which third
+          // blows (and when it moves) stays unpredictable
+          const free = [];
+          for (let i = 0; i < nSlots; i++) if (!taken.has(i)) free.push(i);
+          const slot = free[(Math.random() * free.length) | 0];
           const y0 = JH.DEPTH_MIN + slot * span;
           const lane = new JH.GustLane({ yMin: y0 + band, yMax: y0 + span - band,
             dirs: [1, -1], bandMin: JH.GUST.bandMin, bandMax: band,
             phase: Math.random() * 2 });
           lane._bossLane = true; lane._slot = slot;
+          lane._bossT = d.lanes.lifeMin + Math.random() * (d.lanes.lifeMax - d.lanes.lifeMin);
           lane.pushMult = d.lanes.pushMult;
           game.gustLanes.push(lane);
         }

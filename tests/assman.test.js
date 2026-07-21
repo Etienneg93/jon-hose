@@ -301,6 +301,9 @@ test("assman: ambient gust lanes scale by phase and die with the kneel", () => {
   for (let i = 0; i < 5; i++) b.think(1 / 60, g);
   assert.strictEqual(g.gustLanes.filter((l) => l._bossLane).length, D.lanes.byPhase[2], "phase 3 lane count");
   assert.ok(g.gustLanes.every((l) => l.pushMult === D.lanes.pushMult), "boss lanes blow harder");
+  const slots = g.gustLanes.filter((l) => l._bossLane).map((l) => l._slot);
+  assert.strictEqual(new Set(slots).size, slots.length, "each lane owns a distinct third");
+  assert.ok(g.gustLanes.filter((l) => l._bossLane).every((l) => l._bossT >= D.lanes.lifeMin - 0.2 && l._bossT <= D.lanes.lifeMax), "lanes expire and reshuffle");
   b.die(g);
   assert.strictEqual(g.gustLanes.filter((l) => l._bossLane).length, 0, "the wind dies with the kneel");
 });
@@ -315,7 +318,7 @@ test("assman P1: hip check leaves a wind wake along the dash", () => {
   b._decideT = 0; b._forceMove = "hip";
   b.think(1 / 60, g);
   for (let t = 0; t < D.hip.brace + 0.1; t += 1 / 60) b.think(1 / 60, g);
-  const wakes = g.gustLanes.filter((l) => l._bossT != null);
+  const wakes = g.gustLanes.filter((l) => l._bossT != null && !l._bossLane);
   assert.strictEqual(wakes.length, 1, "one wake lane on launch");
   assert.strictEqual(wakes[0].phase, "blow", "no telegraph — the dash is the telegraph");
   assert.strictEqual(wakes[0].y, 40, "wake lies on the dash line");

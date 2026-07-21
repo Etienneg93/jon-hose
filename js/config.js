@@ -1026,9 +1026,10 @@
     glideZ: 6,                     // ground-movement hover: he flies low, never walks
     // Ambient wind pressure scales with the fight: N persistent gust lanes
     // by phase, blowing harder than terrain lanes.
-    // Lanes live in fixed depth THIRDS (slotOrder picks which fill first),
-    // so they never overlap; a dying lane refreshes its own slot.
-    lanes: { byPhase: [1, 2, 3], pushMult: 1.35, slotOrder: [1, 0, 2] },
+    // Lanes live in depth THIRDS so they never overlap. WHICH third
+    // activates is random (free slots only), and every lane expires after
+    // lifeMin..lifeMax s — the pattern keeps reshuffling all fight.
+    lanes: { byPhase: [1, 2, 3], pushMult: 1.35, lifeMin: 8, lifeMax: 14 },
     storm:    { rings: 4, ringSpeed: 125, ringDmg: 12, gapDeg: 46, gapRotDeg: 55,
                 ringEvery: 1.0, rimW: 7, burstGap: 0.6, cullR: 270,
                 brawlS: 6, brawlCadence: 1.4 },   // P1-kit window between storms
