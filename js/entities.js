@@ -2932,7 +2932,7 @@
       if (this.phase !== "blow") return;
       const pl = game.player;
       if (pl && pl.alive && this.inBand(pl.y))
-        pl.x = clamp(pl.x + this.dir * G.push * dt, game.bounds.minX, game.bounds.maxX);
+        pl.x = clamp(pl.x + this.dir * G.push * (this.pushMult || 1) * dt, game.bounds.minX, game.bounds.maxX);
       for (const e of game.enemies) {
         if (e.dead || e.dropping || e.isBoss) continue;
         if (e.def && e.def.speed === 0) continue;   // emplacements hold fast
@@ -5793,7 +5793,8 @@
   JH.AirBolt = AirBolt;
 
   class ToiletBomb {
-    constructor(x, y, tx, ty, T) {
+    constructor(x, y, tx, ty, T, opts) {
+      this.turret = !!(opts && opts.turret);
       this.x = x; this.y = y; this.z = 40;
       this.T = T;
       const dist = Math.max(1, Math.hypot(tx - x, ty - y));
@@ -5818,7 +5819,7 @@
         if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx))
           pl.takeHit(T.dmg, game, this.x);
         const alive = (game.enemies || []).filter((e) => e._bossTurret && !e.dead).length;
-        if (alive < T.turretMax && game.enemies) {
+        if (this.turret && alive < T.turretMax && game.enemies) {
           const t = JH.makeEnemy("bidet", this.x, this.y);
           t._bossTurret = true;
           t.spawnGrace = 0.6;
@@ -6206,6 +6207,20 @@
         }
         if (ring.r > RR.maxR) this._slamRing = null;
       }
+      // Ambient wind pressure: keep lanes.byPhase[phase] boss lanes alive
+      // (they cycle telegraph/blow/gap forever, blowing pushMult harder).
+      if (!this._kneeling && game.gustLanes && JH.GustLane) {
+        const want = d.lanes.byPhase[Math.min(this.phase, d.lanes.byPhase.length) - 1];
+        const mine = game.gustLanes.filter((l) => l._bossLane && !l.dead).length;
+        if (mine < want) {
+          const lane = new JH.GustLane({ yMin: JH.DEPTH_MIN + 4, yMax: JH.DEPTH_MAX - 4,
+            dirs: [1, -1], bandMin: JH.GUST.bandMin, bandMax: JH.GUST.bandMax,
+            phase: Math.random() * 2 });
+          lane._bossLane = true;
+          lane.pushMult = d.lanes.pushMult;
+          game.gustLanes.push(lane);
+        }
+      }
       if (this._kneeling) { this.stepKneel(dt, game); return; }        // Task 6
       // ---- phase gates: hp fraction only ----
       const want = JH.Balance.assmanPhase(this.hp / this.maxHp, d.gates);
@@ -6353,11 +6368,6 @@
           // impact — the slam's air-element signature
           this._slamRing = { x: this.x, y: this.y, r: d.slam.rx * 0.5, hit: false };
           P.loops++;
-          if (P.loops % d.gustEveryLoops === 0 && game.gustLanes && JH.GustLane) {
-            const lane = new JH.GustLane({ y: pl.y, dir: this.facing });
-            lane._bossT = d.gustDur;                                   // boss lanes expire
-            game.gustLanes.push(lane);
-          }
         }
         return;
       }
@@ -6479,6 +6489,7 @@
       this._kneelT = this.def.kneelBeat;
       this.def.touchDmg = 0;
       this.move = null; this._storm = null; this._waves = []; this._slamRing = null;
+      if (game.gustLanes) game.gustLanes = game.gustLanes.filter((l) => !l._bossLane);
       game.audio.play("win");
       // survivesDefeat: NO FxBurst, no corpse sequence — the kneel IS the beat.
     }
@@ -6542,11 +6553,14 @@
         this._decideT = d.decideEvery;
         // Artillery toss fires on its own cooldown whenever a turret slot is
         // open (never point-blank); otherwise clap in blast range, else mix.
-        const turretsUp = (game.enemies || []).filter((e) => e._bossTurret && !e.dead).length;
+        // Mix target ~40% clap / ~40% hip / ~20% toss. A turret slot only
+        // gates the SPAWNING throws (every other one), not the lob itself.
+        const tossReady = (this._tossCdT || 0) <= 0 && dist > 120;
+        const r = Math.random();
         const pick = this._forceMove ||
-          ((this._tossCdT || 0) <= 0 && turretsUp < d.toss.turretMax && dist > 120 ? "toss"
-            : dist < d.clap.rx * 1.1 ? "clap"
-            : (Math.random() < 0.55 ? "hip" : "clap"));
+          (tossReady && r < 0.28 ? "toss"
+            : dist < d.clap.rx * 0.8 ? (r < 0.65 ? "clap" : "hip")
+            : (r < 0.55 ? "hip" : "clap"));
         this._forceMove = null;
         this.startMove(pick, game, pl, d);
         return;
@@ -6573,7 +6587,9 @@
         this.state = "hipbrace";
       } else {                                   // artillery toss
         this.facing = pl.x >= this.x ? 1 : -1;
-        this.move = { kind: "toss", t: 0.5, tx: pl.x, ty: pl.y, thrown: false };
+        this._tossN = (this._tossN || 0) + 1;
+        this.move = { kind: "toss", t: 0.5, tx: pl.x, ty: pl.y, thrown: false,
+                      turret: this._tossN % 2 === 1 };   // every OTHER throw spawns
         this.state = "toss";
         this._tossCdT = d.toss.cd;
       }
@@ -6582,32 +6598,61 @@
     stepMove(dt, game, pl, d) {
       const m = this.move;
       if (m.kind === "clap") {
-        m.t -= dt;
-        this.state = "charge";
         const L = this._clapLock;
-        // Suction: the charge drags Jon toward the blast center (x-axis,
-        // gust idiom); dashing breaks the pull for its duration.
-        if (pl.alive && pl.dashTimer <= 0) {
-          const pdx = L.x - pl.x;
-          if (Math.abs(pdx) > 4)
-            pl.x += Math.sign(pdx) * Math.min(Math.abs(pdx), d.clap.pull * dt);
+        if (!m.blast) {
+          m.t -= dt;
+          this.state = "charge";
+          // Suction: the charge drags Jon toward the blast center (x-axis,
+          // gust idiom); dashing breaks the pull for its duration.
+          if (pl.alive && pl.dashTimer <= 0) {
+            const pdx = L.x - pl.x;
+            if (Math.abs(pdx) > 4)
+              pl.x += Math.sign(pdx) * Math.min(Math.abs(pdx), d.clap.pull * dt);
+          }
+          if (m.t <= 0) {
+            // THE CLAP: held frame while the blast front races outward
+            m.blast = { r: 8, hit: false };
+            this.strikeFx = 0.3;
+            game.shake(9); game.audio.play("whack");           // THUNDERCRACK slot
+          }
+          return;
         }
-        if (m.t <= 0) {
-          // release: radial blast — drawn ellipse IS the hit ellipse
-          if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, L.x, L.y, d.clap.rx))
-            pl.takeHit(d.clap.dmg, game, L.x, d.clap.shove);
-          this.state = "clap"; this.strikeFx = 0.3;
-          game.shake(9); game.audio.play("whack");             // THUNDERCRACK slot
+        // expanding blast front: the moving rim IS the hit shape; it sweeps
+        // everything out to the drawn boundary at rx
+        this.state = "clap";
+        m.blast.r += d.clap.blastSpeed * dt;
+        if (pl.alive && !m.blast.hit &&
+            JH.Balance.ringGapHits(pl.x, pl.y, L.x, L.y, m.blast.r, d.clap.blastRimW, 0, -1, 0.34)) {
+          if (pl.takeHit(d.clap.dmg, game, L.x, d.clap.shove) !== false) m.blast.hit = true;
+        }
+        if (m.blast.r >= d.clap.rx + d.clap.blastRimW) {
           this.move = null; this._clapLock = null;
         }
         return;
       }
       if (m.kind === "hip") {
         if (m.t > 0) { m.t -= dt; this.state = "hipbrace"; return; }
+        if (!m.launched) {
+          // sonic-boom launch + a wind WAKE along his path that keeps
+          // blowing after he passes (short-lived gust lane, no telegraph:
+          // the dash itself is the telegraph)
+          m.launched = true;
+          game.shake(3); game.audio.play("jump");
+          burst(game, this.x, this.y, 14, "#eaf4ff", 8, { speed: 70, life: 0.35, size: 1 });
+          if (game.gustLanes && JH.GustLane) {
+            const wake = new JH.GustLane({ y: this.y, dir: this.facing });
+            wake._bossT = d.hip.wakeDur;
+            wake.pushMult = d.lanes.pushMult;
+            wake.phase = "blow"; wake.phaseT = d.hip.wakeDur;
+            game.gustLanes.push(wake);
+          }
+        }
         this.state = "hipdash";
         const step = d.hip.speed * dt;
         this.x += this.facing * step;
         m.dashed += step;
+        if (Math.random() < 20 * dt)
+          burst(game, this.x - this.facing * 10, this.y, 6, "#dfe9f5", 1, { speed: 20, life: 0.3, size: 1 });
         if (!m.hit && pl.alive && Math.abs(pl.x - this.x) < this.bodyW * 0.6 && Math.abs(pl.y - this.y) < 14) {
           m.hit = true;
           pl.takeHit(d.hip.dmg, game, this.x, d.hip.shove);
@@ -6624,7 +6669,7 @@
         this.state = "toss";
         if (!m.thrown && m.t <= 0.25) {          // release beat inside the pose
           m.thrown = true;
-          game.embers.push(new JH.ToiletBomb(this.x + this.facing * 10, this.y, m.tx, m.ty, d.toss));
+          game.embers.push(new JH.ToiletBomb(this.x + this.facing * 10, this.y, m.tx, m.ty, d.toss, { turret: m.turret }));
         }
         if (m.t <= 0) { this.move = null; this.state = "idle"; }
         return;
@@ -6637,7 +6682,8 @@
       if (!this.move || this.move.kind !== "clap" || !this._clapLock) return;
       const d = this.def, L = this._clapLock;
       const sx = L.x - cam, sy = Geo.feetScreenY(L.y, 0);
-      const prog = 1 - this.move.t / d.clap.charge;
+      const m = this.move;
+      const prog = m.blast ? 1 : 1 - m.t / d.clap.charge;
       const flash = Math.floor(this.t * 12) & 1;
       ctx.save();
       ctx.strokeStyle = flash ? "#ff5a5a" : "#ffd23f";
@@ -6646,6 +6692,13 @@
       ctx.ellipse(Math.round(sx), Math.round(sy), d.clap.rx, d.clap.rx * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 0.10 + prog * 0.22; ctx.fillStyle = "#ff5a5a"; ctx.fill();
+      if (m.blast) {
+        // the racing blast front — same center/r/rim as the hit test
+        ctx.globalAlpha = 0.95; ctx.strokeStyle = "#eaf4ff"; ctx.lineWidth = d.clap.blastRimW * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(sy), m.blast.r, m.blast.r * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       // inward-racing dashes on spokes: the suction read
       ctx.globalAlpha = 0.7; ctx.strokeStyle = "#bfe6ff"; ctx.lineWidth = 1;
       const N = 10;

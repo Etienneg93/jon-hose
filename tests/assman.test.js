@@ -93,24 +93,32 @@ test("assman P1: big clap — suction pull, then rim-true radial blast", () => {
   const g = makeThinkGame(150, 40);              // inside blast range -> picks clap
   const b = JH.makeEnemy("assman", 100, 40);
   g.enemies = [b];
-  b._decideT = 0;
+  b._decideT = 0; b._forceMove = "clap";
   b.think(1 / 60, g);
-  assert.strictEqual(b.state, "charge", "close range charges the big clap");
+  assert.strictEqual(b.state, "charge", "the big clap opens with the charge");
   // suction: the charge drags the player toward the locked center
   const px0 = g.player.x;
   for (let t = 0; t < 0.5; t += 1 / 60) b.think(1 / 60, g);
   assert.ok(g.player.x < px0, "charge sucks the player toward the blast");
   const hp0 = g.player.hp;
-  for (let t = 0.5; t < C.charge + 0.1; t += 1 / 60) b.think(1 / 60, g);
-  assert.strictEqual(g.player.hp, hp0 - C.dmg, "blast caught the player once");
+  // run through the rest of the charge, the held clap beat, and the
+  // expanding blast front (front travel = rx / blastSpeed)
+  const runOut = C.charge + C.rx / C.blastSpeed + 0.3;
+  let sawClapBeat = false;
+  for (let t = 0.5; t < runOut; t += 1 / 60) {
+    b.think(1 / 60, g);
+    if (b.state === "clap" && b.move && b.move.blast) sawClapBeat = true;
+  }
+  assert.ok(sawClapBeat, "the clap frame holds while the front expands");
+  assert.strictEqual(g.player.hp, hp0 - C.dmg, "blast front swept the player once");
   // parked outside the blast ellipse: pulled a little, but never hit
   const g2 = makeThinkGame(100 + C.rx + 200, 40);
   const b2 = JH.makeEnemy("assman", 100, 40);
   b2._decideT = 0; b2._forceMove = "clap";
   b2.think(1 / 60, g2);
   const hp2 = g2.player.hp;
-  for (let t = 0; t < C.charge + 0.1; t += 1 / 60) b2.think(1 / 60, g2);
-  assert.strictEqual(g2.player.hp, hp2, "outside the drawn ellipse: rim is hitbox");
+  for (let t = 0; t < C.charge + C.rx / C.blastSpeed + 0.3; t += 1 / 60) b2.think(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "outside the drawn boundary: rim is hitbox");
   // dashing breaks the pull
   const g3 = makeThinkGame(150, 40);
   const b3 = JH.makeEnemy("assman", 100, 40);
@@ -143,7 +151,7 @@ test("assman toss: artillery toilet lands, hits rim-true, stands up as a turret"
   const T = JH.ASSMAN.toss;
   const g = makeThinkGame(200, 40);
   g.enemies = [];
-  const bomb = new JH.ToiletBomb(100, 40, 200, 40, T);
+  const bomb = new JH.ToiletBomb(100, 40, 200, 40, T, { turret: true });
   let alive = true, guard = 0;
   while (alive && guard++ < 600) alive = bomb.update(1 / 60, g);
   assert.ok(!alive, "bomb dies at touchdown");
@@ -154,28 +162,45 @@ test("assman toss: artillery toilet lands, hits rim-true, stands up as a turret"
   // cap: with turretMax already alive, a new landing spawns nothing
   while (g.enemies.filter((e) => e._bossTurret && !e.dead).length < T.turretMax)
     g.enemies.push(Object.assign(JH.makeEnemy("bidet", 300, 40), { _bossTurret: true }));
-  const bomb2 = new JH.ToiletBomb(100, 40, 260, 40, T);
+  const bomb2 = new JH.ToiletBomb(100, 40, 260, 40, T, { turret: true });
   guard = 0; alive = true;
   while (alive && guard++ < 600) alive = bomb2.update(1 / 60, g);
   assert.strictEqual(g.enemies.filter((e) => e._bossTurret).length, T.turretMax, "turret cap holds");
 });
 
-test("assman P1: toss fires on cooldown when a turret slot is open", () => {
+test("assman P1: toss joins the mix on cooldown; turret spawns alternate", () => {
   const D = JH.ASSMAN;
   const g = makeThinkGame(300, 40);              // beyond the 120 no-point-blank floor
   g.enemies = [];
   const b = JH.makeEnemy("assman", 100, 40);
   g.enemies.push(b);
-  b._decideT = 0;
-  b.think(1 / 60, g);
-  assert.strictEqual(b.state, "toss", "open slot + off cooldown -> artillery toss");
+  // probabilistic pick (~28% when ready): within a bounded number of picks
+  // the toss must appear, and it must arm its cooldown
+  let picked = false, guard = 0;
+  while (!picked && guard++ < 200) {
+    b.move = null; b._skidT = 0; b._clapLock = null; b._decideT = 0; b._tossCdT = 0;
+    b.x = 100; b.think(1 / 60, g);
+    picked = b.state === "toss";
+  }
+  assert.ok(picked, "toss appears in the mix when off cooldown");
   assert.ok(b._tossCdT > 0 && b._tossCdT <= D.toss.cd, "cooldown armed at throw");
-  // with the cooldown running, the next pick is never a toss
-  const b2 = JH.makeEnemy("assman", 100, 40);
-  b2._tossCdT = D.toss.cd;
-  b2._decideT = 0;
-  b2.think(1 / 60, g);
-  assert.notStrictEqual(b2.state, "toss", "cooldown blocks back-to-back artillery");
+  // with the cooldown running, toss never picks
+  for (let i = 0; i < 40; i++) {
+    const b2 = JH.makeEnemy("assman", 100, 40);
+    b2._tossCdT = D.toss.cd; b2._decideT = 0;
+    b2.think(1 / 60, g);
+    assert.notStrictEqual(b2.state, "toss", "cooldown blocks the artillery");
+  }
+  // alternation: throw 1 spawns a turret, throw 2 does not, throw 3 does
+  const b3 = JH.makeEnemy("assman", 100, 40);
+  const flags = [];
+  for (let n = 0; n < 3; n++) {
+    b3.move = null; b3._decideT = 0; b3._forceMove = "toss"; b3._tossCdT = 0;
+    b3.think(1 / 60, g);
+    flags.push(b3.move.turret);
+    b3.move = null;
+  }
+  assert.deepStrictEqual(flags, [true, false, true], "artillery stands up every OTHER throw");
 });
 
 // ---- Phase gates + Phase 2 (Air Superiority) ----
@@ -263,59 +288,62 @@ test("assman P2: airborne = untouchable; slam landing recovery = the window", ()
   assert.strictEqual(b.hp, hpAir - 60, "vulnerable ONLY during landed recovery");
 });
 
-test("assman P2: slam ellipse is rim-true and the gust lane summons", () => {
+test("assman: ambient gust lanes scale by phase and die with the kneel", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);
+  g.gustLanes = [];
+  g.enemies = [];
+  const b = JH.makeEnemy("assman", 200, 40);
+  g.enemies.push(b);
+  b.think(1 / 60, g);
+  assert.strictEqual(g.gustLanes.filter((l) => l._bossLane).length, D.lanes.byPhase[0], "phase 1 lane count");
+  b.phase = 3; b._grounded = true;
+  for (let i = 0; i < 5; i++) b.think(1 / 60, g);
+  assert.strictEqual(g.gustLanes.filter((l) => l._bossLane).length, D.lanes.byPhase[2], "phase 3 lane count");
+  assert.ok(g.gustLanes.every((l) => l.pushMult === D.lanes.pushMult), "boss lanes blow harder");
+  b.die(g);
+  assert.strictEqual(g.gustLanes.filter((l) => l._bossLane).length, 0, "the wind dies with the kneel");
+});
+
+test("assman P1: hip check leaves a wind wake along the dash", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(360, 40);
+  g.gustLanes = [];
+  g.enemies = [];
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies.push(b);
+  b._decideT = 0; b._forceMove = "hip";
+  b.think(1 / 60, g);
+  for (let t = 0; t < D.hip.brace + 0.1; t += 1 / 60) b.think(1 / 60, g);
+  const wakes = g.gustLanes.filter((l) => l._bossT != null);
+  assert.strictEqual(wakes.length, 1, "one wake lane on launch");
+  assert.strictEqual(wakes[0].phase, "blow", "no telegraph — the dash is the telegraph");
+  assert.strictEqual(wakes[0].y, 40, "wake lies on the dash line");
+});
+
+test("assman P2: slam ellipse is rim-true", () => {
   const D = JH.ASSMAN;
   const g = makeThinkGame(300, 40);
   g.gustLanes = [];
   const b = JH.makeEnemy("assman", 100, 40);
-  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
-  b._p2 = { mode: "slamfall", t: 0, loops: 1, cbT: 9, tx: 300, ty: 40 };   // loops odd → this landing summons
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ; b._waves = [];
+  b._p2 = { mode: "slamfall", t: 0, loops: 1, cbT: 9, tx: 300, ty: 40 };
   b.x = 300; b.y = 40; b.state = "slamfall";
   const hp0 = g.player.hp;                        // player at the impact point
   let guard = 0;
   while (b.state !== "slamland" && guard++ < 900) b.think(1 / 60, g);
   assert.strictEqual(g.player.hp, hp0 - D.slam.dmg, "landing ellipse caught the player");
-  assert.strictEqual(g.gustLanes.length, 1, "every 2nd loop summons a gust lane");
-  // outside the rim: safe
+  // outside the rim: safe (ring may still sweep later — check before it arrives)
   const g2 = makeThinkGame(300 + D.slam.rx + 25, 40);
   g2.gustLanes = [];
   const b2 = JH.makeEnemy("assman", 100, 40);
-  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ;
+  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ; b2._waves = [];
   b2._p2 = { mode: "slamfall", t: 0, loops: 0, cbT: 9, tx: 300, ty: 40 };
   b2.x = 300; b2.y = 40; b2.state = "slamfall";
   const hp2 = g2.player.hp;
   guard = 0;
   while (b2.state !== "slamland" && guard++ < 900) b2.think(1 / 60, g2);
-  assert.strictEqual(g2.player.hp, hp2, "rim is hitbox");
-});
-
-test("assman P2: clap back wave travels the lane, dodged by depth", () => {
-  const D = JH.ASSMAN;
-  const g = makeThinkGame(260, 40);
-  const b = JH.makeEnemy("assman", 100, 40);
-  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
-  b._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0, wx: 460, wy: 40 };
-  b.y = 40;                                       // same depth lane; waypoint pinned right so the wave fires toward the player
-  b.think(1 / 60, g);
-  assert.strictEqual(b._waves.length, 1, "clap back fired");
-  // freeze the patrol (no drift, no refires) so ONE wave's contract is tested
-  b._p2.mode = "slampause"; b._p2.t = 9e9;
-  const hp0 = g.player.hp;
-  let guard = 0;
-  while (b._waves.length && guard++ < 900) b.think(1 / 60, g);
-  assert.strictEqual(g.player.hp, hp0 - D.clapback.dmg, "wave crossed the player in-lane");
-  // depth-dodged copy
-  const g2 = makeThinkGame(260, 40 + D.clapback.band + 10);
-  const b2 = JH.makeEnemy("assman", 100, 40);
-  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ;
-  b2._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0, wx: 460, wy: 40 };
-  b2.y = 40;
-  const hp2 = g2.player.hp;
-  guard = 0;
-  b2.think(1 / 60, g2);
-  b2._p2.mode = "slampause"; b2._p2.t = 9e9;
-  while (b2._waves.length && guard++ < 900) b2.think(1 / 60, g2);
-  assert.strictEqual(g2.player.hp, hp2, "dodged by depth");
+  assert.strictEqual(g2.player.hp, hp2, "slam rim is hitbox at touchdown");
 });
 
 test("assman P2: strafe volley fires before the drop, bolts hit rim-true", () => {

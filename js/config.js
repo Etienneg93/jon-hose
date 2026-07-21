@@ -998,15 +998,19 @@
     gates: [0.66, 0.33],        // phase gates on hp FRACTION (never timers)
     transitionInvuln: 1.6,      // s invulnerable during each phase beat
     decideEvery: 1.8,           // s between phase-1 move picks
-    // Big Clap: charged radial blast; the charge SUCKS Jon toward him
-    // (x-pull, broken while dashing). Drawn ellipse = hit ellipse.
-    clap:     { charge: 1.6, rx: 85, dmg: 26, shove: 320, pull: 85 },
-    hip:      { brace: 0.7, speed: 300, dist: 200, dmg: 16, skid: 0.8, shove: 320 },
-    // Toilet Toss = artillery drop: the porcelain lands, deals impact
-    // damage, then STANDS UP as a Bidet Turret (cap turretMax alive,
-    // own cooldown — fires from any range when off cooldown).
+    // Big Clap: the charge SUCKS Jon toward him (x-pull, dash breaks it),
+    // then a held CLAP frame while the blast front expands outward to rx
+    // (drawn boundary ellipse = final hit reach; the front is the hit rim).
+    clap:     { charge: 1.6, rx: 85, dmg: 26, shove: 320, pull: 85,
+                blastSpeed: 240, blastRimW: 12 },
+    // Hip check: sonic-boom launch; the dash leaves a wind WAKE — a
+    // short-lived gust lane along his path (wakeDur s).
+    hip:      { brace: 0.7, speed: 300, dist: 200, dmg: 16, skid: 0.8, shove: 320,
+                wakeDur: 3 },
+    // Toilet Toss: common artillery lob; every OTHER throw the porcelain
+    // STANDS UP as a Bidet Turret (cap turretMax alive).
     toss:     { landRx: 30, dmg: 20, lobSpeed: 240, gravity: 520,
-                cd: 14, turretMax: 2 },
+                cd: 7, turretMax: 2 },
     clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },
     slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
                 airZ: 72, shadowEvery: 3.4,
@@ -1018,7 +1022,9 @@
                 ring: { speed: 150, dmg: 8, rimW: 6, maxR: 130, knock: 260 } },
     flySpeed: 190,                 // P2 patrol speed between waypoints
     glideZ: 6,                     // ground-movement hover: he flies low, never walks
-    gustEveryLoops: 2, gustDur: 6,
+    // Ambient wind pressure scales with the fight: N persistent gust lanes
+    // by phase, blowing harder than terrain lanes.
+    lanes: { byPhase: [1, 2, 3], pushMult: 1.35 },
     storm:    { rings: 4, ringSpeed: 125, ringDmg: 12, gapDeg: 46, gapRotDeg: 55,
                 ringEvery: 1.0, rimW: 7, burstGap: 0.6, cullR: 270,
                 brawlS: 6, brawlCadence: 1.4 },   // P1-kit window between storms
