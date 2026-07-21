@@ -405,6 +405,70 @@ test("assman P2: landing spawns the pressure ring — expanding rim hits once", 
   assert.strictEqual(g.player.hp, hp0 - RR.dmg, "rim swept the player exactly once");
 });
 
+test("assman P2: ranged alternation — volley burst, then the chasing beam", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);
+  g.enemies = []; g.gustLanes = [];
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies.push(b);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b._p2 = { mode: "shadow", t: 9e9, loops: 0, tx: 0, ty: 0, fireT: 0.01, wx: 460, wy: 40 };
+  // action 1: a burst of `burst` bolts
+  let guard = 0;
+  while (g.embers.filter((e) => e instanceof JH.AirBolt).length < D.airfire.burst && guard++ < 900)
+    b.think(1 / 60, g);
+  assert.strictEqual(g.embers.filter((e) => e instanceof JH.AirBolt).length, D.airfire.burst, "full burst");
+  // action 2: the beam — charge, then the spot chases Jon
+  b._p2.fireT = 0.01;
+  guard = 0;
+  while (!(b._p2.ranged && b._p2.ranged.kind === "beam") && guard++ < 900) b.think(1 / 60, g);
+  assert.ok(b._p2.ranged && b._p2.ranged.kind === "beam", "beam follows the volley");
+  assert.strictEqual(b.state, "beamcharge", "chargeup beat first");
+  while (b._p2.ranged.mode === "charge" && guard++ < 900) b.think(1 / 60, g);
+  const B = b._p2.ranged;
+  const d0 = Math.hypot(g.player.x - B.tx, g.player.y - B.ty);
+  for (let t = 0; t < 0.5; t += 1 / 60) b.think(1 / 60, g);
+  const d1 = Math.hypot(g.player.x - B.tx, g.player.y - B.ty);
+  assert.ok(d1 < d0, "the beam spot chases Jon");
+  assert.ok(D.beam.chase < 100, "chase speed stays outrunnable");
+  // standing in the spot ticks through takeHit
+  g.player.x = B.tx; g.player.y = B.ty;
+  const hp0 = g.player.hp;
+  for (let t = 0; t < D.beam.tickEvery * 2 + 0.05 && b._p2.ranged; t += 1 / 60) {
+    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
+    g.player.x = b._p2.ranged.tx; g.player.y = b._p2.ranged.ty;
+    b.think(1 / 60, g);
+  }
+  assert.ok(g.player.hp < hp0, "beam ticks damage in the spot");
+});
+
+test("assman P3: storm entry flies to center; immune during circles", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(0, 40);
+  g.bounds = { minX: 0, maxX: 480 };
+  g.enemies = []; g.gustLanes = [];
+  const b = JH.makeEnemy("assman", 420, 70);
+  g.enemies.push(b);
+  b.phase = 3; b._grounded = true;
+  let sawRise = false, sawAir = false, guard = 0;
+  while (!b._storm && guard++ < 1200) {
+    b.think(1 / 60, g);
+    if (b.state === "p3rise") sawRise = true;
+    if ((b.z || 0) > D.slam.airZ * 0.8) sawAir = true;
+  }
+  assert.ok(sawRise && sawAir, "he flies UP to travel");
+  assert.ok(Math.abs(b.x - 240) < 30, "storm plants at arena center");
+  // immune while the circles run
+  const hp0 = b.hp;
+  b.takeDamage(100, g, 1, 0);
+  assert.strictEqual(b.hp, hp0, "immune during the storm");
+  // vulnerable again in the exhaustion window
+  while (!(b._exhaustT > 0) && guard++ < 8000) b.think(1 / 60, g);
+  assert.ok(b._exhaustT > 0, "reached exhaustion");
+  b.takeDamage(100, g, 1, 0);
+  assert.ok(b.hp < hp0, "the opening is the vulnerability");
+});
+
 // ---- Phase 3 (Glute Force Trauma) + kneel ----
 
 test("assman P3: storm rings expand, gap rotates, rim hits the player", () => {
@@ -495,7 +559,7 @@ test("assman pose reads: glide for movement, slam-then-exhaust landing", () => {
   const D = JH.ASSMAN;
   const b = JH.makeEnemy("assman", 200, 40);
   b.state = "walk";
-  assert.strictEqual(b.poseKey(), "flight", "ground movement glides on the flight pose");
+  assert.ok(["hover", "idle"].includes(b.poseKey()), "ground drift reads hover (idle before assets load)");
   b.state = "slamland";
   b._recoverT = D.slam.recovery - D.slam.landPose * 0.5;   // just landed
   assert.strictEqual(b.poseKey(), "slam", "touchdown holds the ass-contact frame");

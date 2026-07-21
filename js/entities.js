@@ -6184,6 +6184,9 @@
     takeDamage(dmg, game, dirX, knock, crit) {
       if (this._invulnT > 0) return;                       // transition beat
       if (this.phase === 2 && !this._grounded) return;     // airborne: out of the hit band
+      // P3: immune while the circles run and during the entry flight —
+      // the exhaustion window (and the brawl) are the openings.
+      if (this.phase === 3 && (this._p3fly || (this._storm && (this._exhaustT || 0) <= 0 && (this._p3brawlT || 0) <= 0))) return;
       const mult = (this._exhaustT || 0) > 0 ? this.def.exhaust.dmgTakenMult : 1;
       super.takeDamage(dmg * mult, game, dirX, knock, crit);
     }
@@ -6307,6 +6310,7 @@
         // he FLIES, he doesn't hover-follow. Depth drifts too. Re-pin z
         // every frame: basePhysics gravity runs before think().
         this.z = d.slam.airZ; this.vz = 0;
+        this._beam = (P.ranged && P.ranged.kind === "beam") ? P.ranged : null;
         const b = game.bounds || { minX: this.x - 200, maxX: this.x + 200 };
         if (P.wx == null || Math.abs(P.wx - this.x) < 14) {
           P.wx = b.minX + 40 + Math.random() * Math.max(40, (b.maxX - b.minX) - 80);
@@ -6317,17 +6321,57 @@
         this.x += (dxw / dw) * d.flySpeed * dt;
         this.y += (dyw / dw) * d.flySpeed * 0.45 * dt;
         this.facing = dxw >= 0 ? 1 : -1;
-        // periodic ranged pressure: a marked pressure bolt at Jon
+        // ranged pressure alternates: bolt VOLLEY <-> chasing BEAM
         P.fireT = (P.fireT == null ? d.airfire.every * 0.5 : P.fireT) - dt;
-        if (P.fireT <= 0) {
+        if (P.fireT <= 0 && !P.ranged) {
           P.fireT = d.airfire.every;
-          P.poseT = 0.35;
-          this.strikeFx = 0.25;
-          game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.airfire));
-          game.audio.play("jump");
+          P.rangedN = (P.rangedN || 0) + 1;
+          if (P.rangedN % 2 === 1)
+            P.ranged = { kind: "volley", n: d.airfire.burst, t: 0.05 };
+          else
+            P.ranged = { kind: "beam", mode: "charge", t: d.beam.chargeS, tx: this.x, ty: this.y };   // spot starts under HIM, then drags toward Jon
         }
-        if (P.poseT > 0) P.poseT -= dt;
-        this.state = P.poseT > 0 ? "airclap" : "fly";
+        if (P.ranged) {
+          this.faceToward(pl.x);
+          if (P.ranged.kind === "volley") {
+            // burst of marked bolts, held in the shooting frame
+            this.state = "airclap";
+            P.ranged.t -= dt;
+            if (P.ranged.t <= 0) {
+              P.ranged.t = d.airfire.burstGap;
+              P.ranged.n--;
+              this.strikeFx = 0.2;
+              game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.airfire));
+              game.audio.play("jump");
+              if (P.ranged.n <= 0) P.ranged = null;
+            }
+          } else {
+            // chargeup (megaman FX in draw), then the beam spot chases Jon
+            const B = P.ranged;
+            if (B.mode === "charge") {
+              this.state = "beamcharge";
+              B.t -= dt;
+              if (B.t <= 0) { B.mode = "on"; B.t = d.beam.dur; B.tick = 0; game.audio.play("whack"); }
+            } else {
+              this.state = "beam";
+              const bdx = pl.x - B.tx, bdy = pl.y - B.ty;
+              const bd = Math.hypot(bdx, bdy) || 1;
+              const step = Math.min(bd, d.beam.chase * dt);
+              B.tx += (bdx / bd) * step;
+              B.ty += (bdy / bd) * step;
+              B.tick -= dt;
+              if (B.tick <= 0) {
+                B.tick = d.beam.tickEvery;
+                if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, B.tx, B.ty, d.beam.rx))
+                  pl.takeHit(d.beam.tickDmg, game, B.tx);
+              }
+              B.t -= dt;
+              if (B.t <= 0) P.ranged = null;
+            }
+          }
+          return;   // channeling holds the patrol (and its timer)
+        }
+        this.state = "fly";
         P.t -= dt;
         if (P.t <= 0) {
           // slam windup happens WHERE HE IS — no teleport. The target
@@ -6335,7 +6379,7 @@
           P.mode = "slampause"; P.t = d.slam.pause;
           P.tx = pl.x; P.ty = pl.y;
           this.state = "slampause";
-          P.wx = null;
+          P.wx = null; this._beam = null;
         }
         return;
       }
@@ -6414,21 +6458,52 @@
         if ((this._skidT || 0) > 0) { this._skidT -= dt; this.state = "skid"; return; }
         this._p3recenter = true;
       }
-      // walk back to arena center before the next storm plants
+      // storm entry ceremony: fly UP, soar to arena center, land there
       if (this._p3recenter) {
         const b = game.bounds || { minX: this.x, maxX: this.x };
         const cx0 = (b.minX + b.maxX) / 2;
-        const dxc = cx0 - this.x;
-        if (Math.abs(dxc) > 16) {
-          this.x += Math.sign(dxc) * Math.min(Math.abs(dxc), d.speed * 2 * dt);
-          this.facing = dxc >= 0 ? 1 : -1;
-          this.state = "walk";
+        const cy0 = (JH.DEPTH_MIN + JH.DEPTH_MAX) / 2;
+        const F = this._p3fly || (this._p3fly = { mode: "rise" });
+        if (F.mode === "rise") {
+          this.state = "p3rise";
+          this.vz = 0;
+          this.z = Math.min(d.slam.airZ, this.z + (d.slam.airZ / 0.55) * dt);
+          if (this.z >= d.slam.airZ) F.mode = "travel";
           return;
         }
+        if (F.mode === "travel") {
+          this.state = "fly";
+          this.z = d.slam.airZ; this.vz = 0;
+          const dxc = cx0 - this.x, dyc = cy0 - this.y;
+          const dc = Math.hypot(dxc, dyc);
+          if (dc > 10) {
+            this.x += (dxc / dc) * d.flySpeed * dt;
+            this.y += (dyc / dc) * d.flySpeed * 0.45 * dt;
+            this.faceToward(cx0, 4);
+            return;
+          }
+          F.mode = "drop";
+          return;
+        }
+        // drop: settle onto the center; on touchdown FALL THROUGH so the
+        // storm arms this same frame (a return here let the finisher above
+        // re-trigger the whole ceremony in a loop)
+        this.state = "hoverdown";
+        this.vz = 0;
+        this.z = Math.max(0, this.z - (d.slam.airZ / 0.4) * dt);
+        if (this.z > 0) return;
+        this._p3fly = null;
         this._p3recenter = false;
       }
       if (!this._storm) {
-        this._storm = { rings: [], spawnT: 0, spawned: 0, gapA: Math.floor(Math.random() * 360), restT: 0 };
+        this._storm = { rings: [], spawnT: 0, spawned: 0, gapA: Math.floor(Math.random() * 360), restT: 0,
+                        chargeT: S.chargeS };
+        this.state = "clapwind";
+        return;
+      }
+      if (this._storm.chargeT > 0) {
+        // megaman charge beat before the first ring (drawChargeFx renders it)
+        this._storm.chargeT -= dt;
         this.state = "clapwind";
         return;
       }
@@ -6468,6 +6543,7 @@
       if (!this._storm) return;
       const S = this.def.storm;
       const cx = this.x - cam, cy = Geo.feetScreenY(this.y, 0);
+      if (this._storm.chargeT > 0) this.drawChargeFx(ctx, cx, cy - 24, 26, "#bfe6ff");
       ctx.save();
       for (const ring of this._storm.rings) {
         const g0 = (ring.gapA - S.gapDeg / 2) * Math.PI / 180;
@@ -6520,8 +6596,53 @@
       }
     }
 
+    // Megaman-style charge: sparks racing INWARD on spokes + a pulsing
+    // glow on him. Pure draw-side (deterministic from this.t).
+    drawChargeFx(ctx, cx, cy, r, color) {
+      ctx.save();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + this.t * 0.9;
+        const k = 1 - ((this.t * 2.4 + i * 0.37) % 1);
+        const rr = r * (0.35 + k * 1.15);
+        const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr * 0.6;
+        ctx.globalAlpha = 0.9 * (1 - k * 0.5);
+        ctx.fillStyle = "#1a2a44";
+        ctx.fillRect(Math.round(px) - 1.5, Math.round(py) - 1.5, 3, 3);
+        ctx.fillStyle = k > 0.5 ? "#bfe6ff" : "#ffffff";
+        ctx.fillRect(Math.round(px) - 0.5, Math.round(py) - 0.5, 1.5, 1.5);
+      }
+      ctx.globalAlpha = 0.35 + 0.2 * Math.sin(this.t * 12);
+      ctx.strokeStyle = color || "#bfe6ff"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(Math.round(cx), Math.round(cy), r * 0.5, r * 0.32, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+
     drawP2Fx(ctx, cam) {
       const d = this.def;
+      // sustained beam: hand -> chasing ground spot (spot rim = hit rim)
+      if (this._beam) {
+        const B = this._beam;
+        const hx = this.x - cam + this.facing * 8;
+        const hy = Geo.feetScreenY(this.y, this.z) - 30;
+        const gx = B.tx - cam, gy = Geo.feetScreenY(B.ty, 0);
+        ctx.save();
+        if (B.mode === "charge") {
+          this.drawChargeFx(ctx, hx, hy, 22, "#bfe6ff");
+        } else {
+          ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 6; ctx.globalAlpha = 0.9;
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(gx, gy); ctx.stroke();
+          ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(gx, gy); ctx.stroke();
+          ctx.globalAlpha = 0.95;
+          ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.ellipse(Math.round(gx), Math.round(gy), d.beam.rx, d.beam.rx * JH.GROUND_RY, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 0.25; ctx.fillStyle = "#ff5a5a"; ctx.fill();
+        }
+        ctx.restore();
+      }
       if (this._slamRing) {
         const RR = d.slam.ring, ring = this._slamRing;
         ctx.save();
@@ -6747,11 +6868,14 @@
         return (this._recoverT > this.def.slam.recovery - this.def.slam.landPose) ? "slam" : "exhaust";
       if (s === "clapwind") return "clapwind";
       if (s === "charge") return "charge";
+      if (s === "p3rise") return "riseup";
+      if (s === "hoverdown" || s === "beamcharge") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("hover")) ? "hover" : "flight";
+      if (s === "beam") return "flight";                 // fist-forward = the beam hand
       if (s === "clap") return "clap";
       if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
       if (s === "toss") return "toss";
       if (s === "exhaust") return "exhaust";
-      if (s === "walk") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("soar")) ? "soar" : "flight";   // he never walks — he glides
+      if (s === "walk") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("hover")) ? "hover" : "idle";   // ground drift: upright hover
       return "idle";
     }
 

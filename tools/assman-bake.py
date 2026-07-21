@@ -7,7 +7,7 @@ SRC = "sprites/assman"
 OUT = "sprites/assman/baked"
 TARGET_H = 232        # 58 logical * 4
 POSES = { "idle": "ass-man.png" }
-for k in ["flight","slam","kneel","clapwind","clap","hipcheck","toss","airclap","exhaust","charge","riseup","soar"]:
+for k in ["flight","slam","kneel","clapwind","clap","hipcheck","toss","airclap","exhaust","charge","riseup","soar","hover"]:
     POSES[k] = f"pose_{k}.png"
 os.makedirs(OUT, exist_ok=True)
 for name, f in POSES.items():

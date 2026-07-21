@@ -1460,11 +1460,11 @@
   const AM_POSE_H = {
     idle: 58, flight: 56, riseup: 66, slam: 44, kneel: 40,
     clapwind: 56, charge: 54, clap: 56, hipcheck: 50, toss: 60,
-    airclap: 54, exhaust: 46, soar: 19,
+    airclap: 54, exhaust: 46, soar: 19, hover: 56,
   };
   const _amImgs = {};
   const _amImgsL = {};   // left-facing bakes: mirrored body, chest text un-flipped
-  ["idle", "flight", "slam", "kneel", "clapwind", "clap", "hipcheck", "toss", "airclap", "exhaust", "charge", "riseup", "soar"]
+  ["idle", "flight", "slam", "kneel", "clapwind", "clap", "hipcheck", "toss", "airclap", "exhaust", "charge", "riseup", "soar", "hover"]
     .forEach((k) => {
       _amImgs[k] = JH.Loader.img("sprites/assman/baked/" + k + ".png");
       _amImgsL[k] = JH.Loader.img("sprites/assman/baked/" + k + "_l.png");

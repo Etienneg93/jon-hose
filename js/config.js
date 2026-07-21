@@ -1011,11 +1011,12 @@
     // STANDS UP as a Bidet Turret (cap turretMax alive).
     toss:     { landRx: 30, dmg: 20, lobSpeed: 240, gravity: 520,
                 cd: 7, turretMax: 2 },
-    // P2 ranged pressure: while flying he periodically fires pressure
-    // bolts at Jon — each with a marked mini landing ellipse (the honest
-    // telegraph). Replaces the old un-telegraphed lane waves + pre-slam
-    // strafe volley.
-    airfire:  { every: 1.6, strafeDmg: 8, strafeRx: 14 },
+    // P2 ranged pressure alternates two moves on the airfire cadence:
+    // a BURST of marked pressure bolts (airclap frame), and a chargeup ->
+    // sustained BEAM from his hand whose ground spot CHASES Jon slower
+    // than run speed — outrun it. Both rim-true (marked ellipses).
+    airfire:  { every: 2.2, burst: 3, burstGap: 0.18, strafeDmg: 8, strafeRx: 14 },
+    beam:     { chargeS: 0.9, dur: 2.2, chase: 95, rx: 12, tickDmg: 6, tickEvery: 0.25 },
     slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
                 airZ: 72, shadowEvery: 3.4, diveSpeed: 330,
                 landPose: 0.4,     // s of ass-contact slam pose before the exhaust recovery read
@@ -1030,9 +1031,12 @@
     // activates is random (free slots only), and every lane expires after
     // lifeMin..lifeMax s — the pattern keeps reshuffling all fight.
     lanes: { byPhase: [1, 2, 3], pushMult: 1.35, lifeMin: 8, lifeMax: 14 },
+    // Storm entry is a ceremony: fly UP, soar to arena center, land, then
+    // a chargeS charge-up (megaman FX) before the rings — and he is IMMUNE
+    // while the circles run (the exhaustion window is the whole opening).
     storm:    { rings: 4, ringSpeed: 125, ringDmg: 12, gapDeg: 46, gapRotDeg: 55,
                 ringEvery: 1.0, rimW: 7, burstGap: 0.6, cullR: 270,
-                brawlS: 6, brawlCadence: 1.4 },   // P1-kit window between storms
+                brawlS: 6, brawlCadence: 1.4, chargeS: 0.7 },
     exhaust:  { dur: 3.2, dmgTakenMult: 1.25 },
     kneelBeat: 1.5,
     barks: { p2: "THE CHEEKS HAVE CLAPPED BACK.", p3: "GLUTE FORCE TRAUMA." },
