@@ -6489,13 +6489,14 @@
           F.mode = "drop";
           return;
         }
-        // drop: settle onto the center; on touchdown FALL THROUGH so the
-        // storm arms this same frame (a return here let the finisher above
-        // re-trigger the whole ceremony in a loop)
-        this.state = "hoverdown";
+        // dive-land at center, P2 slam grammar (butt-first, thump, dust) —
+        // on touchdown FALL THROUGH so the storm arms this same frame
+        this.state = "p3dive";
         this.vz = 0;
-        this.z = Math.max(0, this.z - (d.slam.airZ / 0.4) * dt);
+        this.z = Math.max(0, this.z - d.slam.fallSpeed * dt);
         if (this.z > 0) return;
+        game.shake(6); game.audio.play("whack");
+        burst(game, this.x, this.y, 4, "#eaf4ff", 10, { speed: 60, life: 0.4, size: 1 });
         this._p3fly = null;
         this._p3recenter = false;
       }
@@ -6541,6 +6542,28 @@
           this.state = "exhaust";
         }
       } else this.state = st.rings.length ? "clap" : "clapwind";
+    }
+
+    // Tornado wrap while channeling the storm (and the entry flight):
+    // orbiting wind dashes around his body — the immune-and-dangerous read.
+    drawTornado(ctx, cam) {
+      const sx = this.x - cam, syF = Geo.feetScreenY(this.y, this.z || 0);
+      const H = this.bodyH + 12;
+      ctx.save();
+      for (let i = 0; i < 12; i++) {
+        const ph = this.t * 5 + i * 0.9;
+        const cyc = (this.t * 0.9 + i / 12) % 1;              // feet -> head climb
+        const y = syF - cyc * H;
+        const r = 15 + 9 * (1 - cyc) + Math.sin(ph * 0.7) * 2; // funnel: wide at the feet
+        const px = sx + Math.cos(ph) * r;
+        const front = Math.sin(ph) > 0;
+        ctx.globalAlpha = (front ? 0.85 : 0.35) * (0.55 + 0.45 * (1 - cyc));
+        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(px - 5, y); ctx.lineTo(px + 5, y); ctx.stroke();
+        ctx.strokeStyle = front ? "#eaf4ff" : "#8fb2d8"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(px - 5, y); ctx.lineTo(px + 5, y); ctx.stroke();
+      }
+      ctx.restore();
     }
 
     drawStorm(ctx, cam) {
@@ -6873,6 +6896,7 @@
       if (s === "clapwind") return "clapwind";
       if (s === "charge") return "charge";
       if (s === "p3rise") return "riseup";
+      if (s === "p3dive") return "slam";
       if (s === "hoverdown") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("hover")) ? "hover" : "flight";
       if (s === "beamcharge" || s === "beam") return "airclap";   // same shooting frame as the bolt volley
       if (s === "clap") return "clap";
@@ -6899,6 +6923,10 @@
       Assets.draw(ctx, "assman", sx, sy - lift, this.facing, {
         state: this.poseKey(), hurt: this.flashTimer > 0, hurtAlpha: Math.min(this.flashTimer / 0.18, 1),
       });
+      // tornado = the immunity tell: entry flight + charge + rings
+      if (this.phase === 3 && !this._kneeling &&
+          (this._p3fly || (this._storm && (this._exhaustT || 0) <= 0)))
+        this.drawTornado(ctx, cam);
       // hp bar — mirrors SlayerBoss.draw's inline bar.
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 8;
