@@ -991,27 +991,33 @@
   // ---- Ass Man (wave 36) — first multi-phase boss ----
   // Spec: docs/superpowers/specs/2026-07-20-ass-man-fight-design.md
   JH.ASSMAN = {
-    name: "Ass Man", hp: 2200, speed: 40, bodyW: 34, bodyH: 58,
+    name: "Ass Man", hp: 2200, speed: 55, bodyW: 34, bodyH: 58,
     touchDmg: 12, contactCd: 1.0, suds: 400, color: "boss",
     enrageAt: 0.33,             // phase-3 entry latches enrage (prayer_bead hook)
     survivesDefeat: true,       // kneels at 0 HP — no corpse/explosion VFX
     gates: [0.66, 0.33],        // phase gates on hp FRACTION (never timers)
     transitionInvuln: 1.6,      // s invulnerable during each phase beat
-    decideEvery: 2.2,           // s between phase-1 move picks
-    clap:     { wind: 0.9, range: 95, halfAngleDeg: 38, dmg: 22, shove: 260 },
+    decideEvery: 1.8,           // s between phase-1 move picks
+    // Big Clap: charged radial blast; the charge SUCKS Jon toward him
+    // (x-pull, broken while dashing). Drawn ellipse = hit ellipse.
+    clap:     { charge: 1.6, rx: 85, dmg: 26, shove: 320, pull: 85 },
     hip:      { brace: 0.7, speed: 300, dist: 200, dmg: 16, skid: 0.8, shove: 320 },
-    toss:     { landRx: 30, dmg: 20, shardDur: 2.5, shardDmg: 6, shardEvery: 0.5,
-                lobSpeed: 240, gravity: 520 },
+    // Toilet Toss = artillery drop: the porcelain lands, deals impact
+    // damage, then STANDS UP as a Bidet Turret (cap turretMax alive,
+    // own cooldown — fires from any range when off cooldown).
+    toss:     { landRx: 30, dmg: 20, lobSpeed: 240, gravity: 520,
+                cd: 14, turretMax: 2 },
     clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },
     slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
-                airZ: 46, shadowEvery: 2.0,
+                airZ: 72, shadowEvery: 3.4,
                 landPose: 0.4 },   // s of ass-contact slam pose before the exhaust recovery read
+    flySpeed: 190,                 // P2 patrol speed between waypoints
     glideZ: 6,                     // ground-movement hover: he flies low, never walks
     gustEveryLoops: 2, gustDur: 6,
-    storm:    { rings: 3, ringSpeed: 90, ringDmg: 12, gapDeg: 55, gapRotDeg: 40,
-                ringEvery: 1.4, rimW: 7, burstGap: 0.6, cullR: 270,
+    storm:    { rings: 4, ringSpeed: 125, ringDmg: 12, gapDeg: 46, gapRotDeg: 55,
+                ringEvery: 1.0, rimW: 7, burstGap: 0.6, cullR: 270,
                 brawlS: 6, brawlCadence: 1.4 },   // P1-kit window between storms
-    exhaust:  { dur: 4, dmgTakenMult: 1.25 },
+    exhaust:  { dur: 3.2, dmgTakenMult: 1.25 },
     kneelBeat: 1.5,
     barks: { p2: "THE CHEEKS HAVE CLAPPED BACK.", p3: "GLUTE FORCE TRAUMA." },
   };

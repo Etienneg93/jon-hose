@@ -5759,54 +5759,46 @@
       this.vy = (ty - y) / flightT;
       this.vz = 0.5 * T.gravity * flightT - this.z / flightT;
       this.tx = tx; this.ty = ty;
-      this.landed = false;
-      this.zoneT = 0; this.tickT = 0;
+      this.landed = false;   // flips only in draw semantics: bomb dies at touchdown
       this.spin = 0;
       this.isProjectile = true;
     }
     update(dt, game) {
       const T = this.T, pl = game.player;
-      if (!this.landed) {
-        this.x += this.vx * dt; this.y += this.vy * dt;
-        this.vz -= T.gravity * dt; this.z += this.vz * dt;
-        this.spin += dt * 9;
-        if (this.z <= 0) {
-          this.landed = true;
-          this.zoneT = T.shardDur; this.tickT = T.shardEvery;
-          game.shake(4); game.audio.play("whack");
-          if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx))
-            pl.takeHit(T.dmg, game, this.x);
-        }
-        return true;
-      }
-      this.zoneT -= dt;
-      this.tickT -= dt;
-      if (this.tickT <= 0) {
-        this.tickT = T.shardEvery;
-        // Ticks route through takeHit — same house rule as the Big Drip
-        // pour tick (Boss.think rain branch): i-frames, dash grace, and Eye
-        // of the Storm all get an honest shot at negating a shard tick, same
-        // as every other player-damage source. No bypass.
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this.vz -= T.gravity * dt; this.z += this.vz * dt;
+      this.spin += dt * 9;
+      if (this.z <= 0) {
+        // impact, then the porcelain STANDS UP as a Bidet Turret (cap
+        // re-checked at landing; the throw pick also gates on it)
+        game.shake(4); game.audio.play("whack");
         if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, T.landRx))
-          pl.takeHit(T.shardDmg, game, this.x);
+          pl.takeHit(T.dmg, game, this.x);
+        const alive = (game.enemies || []).filter((e) => e._bossTurret && !e.dead).length;
+        if (alive < T.turretMax && game.enemies) {
+          const t = JH.makeEnemy("bidet", this.x, this.y);
+          t._bossTurret = true;
+          t.spawnGrace = 0.6;
+          game.enemies.push(t);
+        }
+        return false;
       }
-      return this.zoneT > 0;
+      return true;
     }
     draw(ctx, cam) {
       const T = this.T;
-      const gy = Geo.feetScreenY(this.landed ? this.y : this.ty, 0);
-      const gx = (this.landed ? this.x : this.tx) - cam;
-      // landing/shard ellipse — the one shape
+      const gy = Geo.feetScreenY(this.ty, 0);
+      const gx = this.tx - cam;
+      // marked landing ellipse — the one shape the impact tests
       ctx.save();
-      ctx.strokeStyle = this.landed ? "#e8ddcf" : "#ff5a5a";
-      ctx.globalAlpha = this.landed ? 0.7 : 0.5;
+      ctx.strokeStyle = "#ff5a5a";
+      ctx.globalAlpha = 0.5;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.ellipse(Math.round(gx), Math.round(gy), T.landRx, T.landRx * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();
-      if (this.landed) { ctx.globalAlpha = 0.12; ctx.fillStyle = "#e8ddcf"; ctx.fill(); }
       ctx.restore();
-      if (!this.landed) {
+      {
         // the porcelain in flight: baked sprite spun in-flight, box fallback
         // during the image-load window
         const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0) - this.z;
@@ -6171,7 +6163,7 @@
         // check, once phase 2 is actually running.
         const wantNext = Math.min(want, this.phase + 1);
         // finish nothing mid-air: slam completes because gates only re-check here
-        this.move = null; this._coneLock = null; this._skidT = 0;
+        this.move = null; this._clapLock = null; this._skidT = 0;
         this._transitionT = d.transitionInvuln;
         this._invulnT = d.transitionInvuln;
         this._nextPhase = wantNext;
@@ -6239,10 +6231,19 @@
       }
       if (P.mode === "shadow") {
         this.state = "fly";
-        // track the player's x from the air
-        const dx = pl.x - this.x;
-        this.x += Math.sign(dx) * Math.min(Math.abs(dx), d.speed * 2.4 * dt);
-        this.facing = dx >= 0 ? 1 : -1;
+        // Patrol: sweep waypoint-to-waypoint across the arena at flySpeed —
+        // he FLIES, he doesn't hover-follow. Depth drifts too, so clap-back
+        // lanes vary and are dodged by reading his altitude line.
+        const b = game.bounds || { minX: this.x - 200, maxX: this.x + 200 };
+        if (P.wx == null || Math.abs(P.wx - this.x) < 14) {
+          P.wx = b.minX + 40 + Math.random() * Math.max(40, (b.maxX - b.minX) - 80);
+          P.wy = JH.DEPTH_MIN + 6 + Math.random() * (JH.DEPTH_MAX - JH.DEPTH_MIN - 12);
+        }
+        const dxw = P.wx - this.x, dyw = P.wy - this.y;
+        const dw = Math.hypot(dxw, dyw) || 1;
+        this.x += (dxw / dw) * d.flySpeed * dt;
+        this.y += (dyw / dw) * d.flySpeed * 0.45 * dt;
+        this.facing = dxw >= 0 ? 1 : -1;
         P.cbT -= dt;
         if (P.cbT <= 0) {
           P.cbT = d.clapback.every;
@@ -6256,6 +6257,7 @@
           P.tx = pl.x; P.ty = pl.y;                                    // lock the drop point
           this.x = pl.x; this.y = pl.y;                                // hover above it
           this.state = "slampause";
+          P.wx = null;                                                 // fresh patrol next loop
         }
         return;
       }
@@ -6450,11 +6452,17 @@
       }
       const dx = pl.x - this.x, dy = pl.y - this.y;
       const dist = Math.hypot(dx, dy);
+      if ((this._tossCdT || 0) > 0) this._tossCdT -= dt;
       this._decideT -= dt;
       if (this._decideT <= 0) {
         this._decideT = d.decideEvery;
+        // Artillery toss fires on its own cooldown whenever a turret slot is
+        // open (never point-blank); otherwise clap in blast range, else mix.
+        const turretsUp = (game.enemies || []).filter((e) => e._bossTurret && !e.dead).length;
         const pick = this._forceMove ||
-          (dist < d.clap.range * 0.9 ? "clap" : dist < 240 ? (Math.random() < 0.5 ? "clap" : "hip") : (Math.random() < 0.5 ? "hip" : "toss"));
+          ((this._tossCdT || 0) <= 0 && turretsUp < d.toss.turretMax && dist > 120 ? "toss"
+            : dist < d.clap.rx * 1.1 ? "clap"
+            : (Math.random() < 0.55 ? "hip" : "clap"));
         this._forceMove = null;
         this.startMove(pick, game, pl, d);
         return;
@@ -6471,18 +6479,19 @@
     startMove(kind, game, pl, d) {
       if (kind === "clap") {
         this.facing = pl.x >= this.x ? 1 : -1;
-        this._coneLock = { x: this.x, y: this.y, facing: this.facing };
-        this.move = { kind: "clap", t: d.clap.wind };
-        this.state = "clapwind";
-        game.audio.play("jump");                 // windup cue; THUNDERCRACK on release
+        this._clapLock = { x: this.x, y: this.y };   // blast center locks at charge start
+        this.move = { kind: "clap", t: d.clap.charge };
+        this.state = "charge";
+        game.audio.play("jump");                 // charge cue; THUNDERCRACK on release
       } else if (kind === "hip") {
         this.facing = pl.x >= this.x ? 1 : -1;
         this.move = { kind: "hip", t: d.hip.brace, dashed: 0, hit: false };
         this.state = "hipbrace";
-      } else {                                   // toss (Task 4 fills the projectile)
+      } else {                                   // artillery toss
         this.facing = pl.x >= this.x ? 1 : -1;
         this.move = { kind: "toss", t: 0.5, tx: pl.x, ty: pl.y, thrown: false };
         this.state = "toss";
+        this._tossCdT = d.toss.cd;
       }
     }
 
@@ -6490,15 +6499,22 @@
       const m = this.move;
       if (m.kind === "clap") {
         m.t -= dt;
-        this.state = "clapwind";
+        this.state = "charge";
+        const L = this._clapLock;
+        // Suction: the charge drags Jon toward the blast center (x-axis,
+        // gust idiom); dashing breaks the pull for its duration.
+        if (pl.alive && pl.dashTimer <= 0) {
+          const pdx = L.x - pl.x;
+          if (Math.abs(pdx) > 4)
+            pl.x += Math.sign(pdx) * Math.min(Math.abs(pdx), d.clap.pull * dt);
+        }
         if (m.t <= 0) {
-          // release: ONE cone shape (drawn by drawCone with identical params)
-          const L = this._coneLock;
-          if (pl.alive && JH.Balance.coneHits(pl.x, pl.y, L.x, L.y, L.facing, d.clap.range, d.clap.halfAngleDeg, JH.GROUND_RY))
-            pl.takeHit(d.clap.dmg, game, L.x, d.clap.shove);   // knock param carries the shove (Big Drip rain precedent)
-          this.state = "clap"; this.strikeFx = 0.25;
-          game.shake(7); game.audio.play("whack");             // THUNDERCRACK slot
-          this.move = null; this._coneLock = null;
+          // release: radial blast — drawn ellipse IS the hit ellipse
+          if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, L.x, L.y, d.clap.rx))
+            pl.takeHit(d.clap.dmg, game, L.x, d.clap.shove);
+          this.state = "clap"; this.strikeFx = 0.3;
+          game.shake(9); game.audio.play("whack");             // THUNDERCRACK slot
+          this.move = null; this._clapLock = null;
         }
         return;
       }
@@ -6531,30 +6547,34 @@
       }
     }
 
-    // Cone telegraph: identical (origin, facing, range, halfAngle, GROUND_RY)
-    // as Balance.coneHits — rim is hitbox.
-    drawCone(ctx, cam) {
-      if (!this.move || this.move.kind !== "clap" || !this._coneLock) return;
-      const d = this.def, L = this._coneLock;
+    // Big Clap telegraph: the blast ellipse (drawn = hit, rim rule) plus
+    // suction streaks racing inward toward the locked charge center.
+    drawBigClap(ctx, cam) {
+      if (!this.move || this.move.kind !== "clap" || !this._clapLock) return;
+      const d = this.def, L = this._clapLock;
       const sx = L.x - cam, sy = Geo.feetScreenY(L.y, 0);
-      const prog = 1 - this.move.t / d.clap.wind;
-      const half = d.clap.halfAngleDeg * Math.PI / 180;
+      const prog = 1 - this.move.t / d.clap.charge;
+      const flash = Math.floor(this.t * 12) & 1;
       ctx.save();
-      ctx.translate(sx, sy);
-      ctx.scale(L.facing, JH.GROUND_RY);
+      ctx.strokeStyle = flash ? "#ff5a5a" : "#ffd23f";
+      ctx.lineWidth = 1.5; ctx.globalAlpha = 0.9;
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, d.clap.range, -half, half);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(255,60,60,0.16)"; ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, d.clap.range * prog, -half, half);
-      ctx.closePath();
-      ctx.fillStyle = "rgba(255,60,60,0.35)"; ctx.fill();
-      ctx.strokeStyle = (Math.floor(this.t * 12) & 1) ? "#ff5a5a" : "#ffd23f";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, d.clap.range, -half, half); ctx.closePath(); ctx.stroke();
+      ctx.ellipse(Math.round(sx), Math.round(sy), d.clap.rx, d.clap.rx * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.10 + prog * 0.22; ctx.fillStyle = "#ff5a5a"; ctx.fill();
+      // inward-racing dashes on spokes: the suction read
+      ctx.globalAlpha = 0.7; ctx.strokeStyle = "#bfe6ff"; ctx.lineWidth = 1;
+      const N = 10;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        const k = 1 - ((this.t * 1.6 + i * 0.13) % 1);
+        const r0 = d.clap.rx * (0.25 + k * 0.95);
+        const r1 = Math.max(r0 - 9, 6);
+        ctx.beginPath();
+        ctx.moveTo(sx + Math.cos(a) * r0, sy + Math.sin(a) * r0 * JH.GROUND_RY);
+        ctx.lineTo(sx + Math.cos(a) * r1, sy + Math.sin(a) * r1 * JH.GROUND_RY);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -6562,7 +6582,7 @@
     poseKey() {
       const s = this.state;
       if (this._kneeling) return "kneel";
-      if (s === "transition") return this._nextPhase === 2 ? "flight" : "clap";
+      if (s === "transition") return this._nextPhase === 2 ? "riseup" : "clap";
       if (s === "fly") return "flight";
       if (s === "airclap") return "airclap";
       if (s === "slampause" || s === "slamfall") return "slam";
@@ -6571,6 +6591,7 @@
       if (s === "slamland")
         return (this._recoverT > this.def.slam.recovery - this.def.slam.landPose) ? "slam" : "exhaust";
       if (s === "clapwind") return "clapwind";
+      if (s === "charge") return "charge";
       if (s === "clap") return "clap";
       if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
       if (s === "toss") return "toss";
@@ -6583,7 +6604,7 @@
       const sx = this.x - cam;
       const groundY = Geo.feetScreenY(this.y, 0);
       // telegraphs under the body
-      this.drawCone(ctx, cam);
+      this.drawBigClap(ctx, cam);
       this.drawP2Fx(ctx, cam);
       this.drawStorm(ctx, cam);
       Assets.shadow(ctx, sx, groundY, this.bodyW * 0.6);

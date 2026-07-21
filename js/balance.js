@@ -434,14 +434,6 @@
       if (hpFrac <= gates[0]) return 2;
       return 1;
     },
-    // Ground-plane cone from (bx,by) facing ±1: depth axis divided by ry so the
-    // drawn flattened cone and the hit test share one shape.
-    coneHits(px, py, bx, by, facing, range, halfAngleDeg, ry) {
-      const dx = (px - bx) * facing, dy = (py - by) / (ry || 0.4);
-      if (dx <= 0) return false;
-      if (Math.hypot(dx, dy) > range) return false;
-      return Math.abs(Math.atan2(dy, dx)) <= halfAngleDeg * Math.PI / 180;
-    },
     // Expanding ring rim (elliptical, depth/ry): hit iff on the rim band AND
     // outside the safe gap. Angles in degrees, atan2 space (-180..180 wraps).
     ringGapHits(px, py, cx, cy, r, rimW, gapCenterDeg, gapWidthDeg, ry) {

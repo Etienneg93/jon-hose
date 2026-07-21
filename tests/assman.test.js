@@ -41,23 +41,6 @@ test("assman helpers: phase gating from hp fraction", () => {
   assert.strictEqual(B.assmanPhase(0, G), 3);
 });
 
-test("assman helpers: cone membership — rim is hitbox", () => {
-  const B = JH.Balance, C = JH.ASSMAN.clap;
-  // dead ahead inside range: hit
-  assert.ok(B.coneHits(100 + C.range - 1, 40, 100, 40, 1, C.range, C.halfAngleDeg, JH.GROUND_RY));
-  // behind: miss
-  assert.ok(!B.coneHits(60, 40, 100, 40, 1, C.range, C.halfAngleDeg, JH.GROUND_RY));
-  // beyond range: miss
-  assert.ok(!B.coneHits(100 + C.range + 2, 40, 100, 40, 1, C.range, C.halfAngleDeg, JH.GROUND_RY));
-  // just inside the angular edge (depth axis divided by ry): hit; just outside: miss
-  const rad = (C.halfAngleDeg - 1) * Math.PI / 180;
-  const dx = Math.cos(rad) * C.range * 0.9, dy = Math.sin(rad) * C.range * 0.9 * JH.GROUND_RY;
-  assert.ok(B.coneHits(100 + dx, 40 + dy, 100, 40, 1, C.range, C.halfAngleDeg, JH.GROUND_RY));
-  const rad2 = (C.halfAngleDeg + 2) * Math.PI / 180;
-  const dx2 = Math.cos(rad2) * C.range * 0.9, dy2 = Math.sin(rad2) * C.range * 0.9 * JH.GROUND_RY;
-  assert.ok(!B.coneHits(100 + dx2, 40 + dy2, 100, 40, 1, C.range, C.halfAngleDeg, JH.GROUND_RY));
-});
-
 test("assman helpers: ring rim hits except inside the rotating gap", () => {
   const B = JH.Balance, S = JH.ASSMAN.storm;
   const r = 80;
@@ -105,26 +88,38 @@ function makeThinkGame(px, py) {
   };
 }
 
-test("assman P1: cheek clap — telegraph then cone hit, shape shared", () => {
-  const g = makeThinkGame(140, 40);              // player close, dead ahead
+test("assman P1: big clap — suction pull, then rim-true radial blast", () => {
+  const C = JH.ASSMAN.clap;
+  const g = makeThinkGame(150, 40);              // inside blast range -> picks clap
   const b = JH.makeEnemy("assman", 100, 40);
   g.enemies = [b];
-  const C = JH.ASSMAN.clap;
-  b._decideT = 0;                                // force a decision now
+  b._decideT = 0;
   b.think(1 / 60, g);
-  assert.strictEqual(b.state, "clapwind", "close range picks the clap");
+  assert.strictEqual(b.state, "charge", "close range charges the big clap");
+  // suction: the charge drags the player toward the locked center
+  const px0 = g.player.x;
+  for (let t = 0; t < 0.5; t += 1 / 60) b.think(1 / 60, g);
+  assert.ok(g.player.x < px0, "charge sucks the player toward the blast");
   const hp0 = g.player.hp;
-  // run out the windup; the release frame applies cone damage once
-  for (let t = 0; t < C.wind + 0.1; t += 1 / 60) b.think(1 / 60, g);
-  assert.strictEqual(g.player.hp, hp0 - C.dmg, "cone caught the player once");
-  // same fight, player parked outside the cone angle: no damage
-  const g2 = makeThinkGame(100, 120);            // deep off-axis
+  for (let t = 0.5; t < C.charge + 0.1; t += 1 / 60) b.think(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - C.dmg, "blast caught the player once");
+  // parked outside the blast ellipse: pulled a little, but never hit
+  const g2 = makeThinkGame(100 + C.rx + 200, 40);
   const b2 = JH.makeEnemy("assman", 100, 40);
-  b2._decideT = 0; b2._forceMove = "clap";       // test hook (see Step 3)
+  b2._decideT = 0; b2._forceMove = "clap";
   b2.think(1 / 60, g2);
   const hp2 = g2.player.hp;
-  for (let t = 0; t < C.wind + 0.1; t += 1 / 60) b2.think(1 / 60, g2);
-  assert.strictEqual(g2.player.hp, hp2, "outside the cone: telegraph = hit shape");
+  for (let t = 0; t < C.charge + 0.1; t += 1 / 60) b2.think(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "outside the drawn ellipse: rim is hitbox");
+  // dashing breaks the pull
+  const g3 = makeThinkGame(150, 40);
+  const b3 = JH.makeEnemy("assman", 100, 40);
+  b3._decideT = 0; b3._forceMove = "clap";
+  b3.think(1 / 60, g3);
+  g3.player.dashTimer = 1;
+  const px3 = g3.player.x;
+  for (let t = 0; t < 0.4; t += 1 / 60) b3.think(1 / 60, g3);
+  assert.strictEqual(g3.player.x, px3, "dash breaks the suction");
 });
 
 test("assman P1: hip check — dash with punishable skid on whiff", () => {
@@ -144,40 +139,43 @@ test("assman P1: hip check — dash with punishable skid on whiff", () => {
   assert.ok(b._skidT > 0 && b._skidT <= H.skid);
 });
 
-test("assman toss: toilet arcs, lands with rim-true impact + shard ticks", () => {
+test("assman toss: artillery toilet lands, hits rim-true, stands up as a turret", () => {
   const T = JH.ASSMAN.toss;
   const g = makeThinkGame(200, 40);
+  g.enemies = [];
   const bomb = new JH.ToiletBomb(100, 40, 200, 40, T);
-  g.embers = [bomb];
-  // fly until landing
-  let guard = 0;
-  while (!bomb.landed && guard++ < 600) bomb.update(1 / 60, g);
-  assert.ok(bomb.landed, "landed");
-  // player stood on the landing spot: impact damage applied exactly once
-  assert.strictEqual(g.player.hp, 100 - T.dmg);
-  // Shard ticks route through takeHit (i-frames apply, same house rule as
-  // the Big Drip pour tick) — the harness never runs Player.update, so we
-  // decay invulnTimer by hand each frame the way the real game loop would.
-  // The impact's own 0.6s invuln outlives the first scheduled tick (0.5s
-  // later), so that first tick is honestly negated; the second tick
-  // (~1.0s post-impact) lands once i-frames have decayed.
-  const hpAfterImpact = g.player.hp;
-  for (let t = 0; t < T.shardEvery * 2 + 0.05; t += 1 / 60) {
-    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
-    bomb.update(1 / 60, g);
-  }
-  assert.strictEqual(g.player.hp, hpAfterImpact - T.shardDmg, "first tick eaten by impact i-frames, second tick lands");
-  // outside the rim: no ticks
-  g.player.x = 200 + T.landRx + 20;
-  const hp2 = g.player.hp;
-  for (let t = 0; t < T.shardEvery * 2; t += 1 / 60) {
-    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
-    bomb.update(1 / 60, g);
-  }
-  assert.strictEqual(g.player.hp, hp2, "rim is hitbox — outside is safe");
-  // zone expires
-  for (let t = 0; t < T.shardDur; t += 1 / 60) if (!bomb.update(1 / 60, g)) break;
-  assert.ok(!bomb.update(1 / 60, g), "dead after shardDur");
+  let alive = true, guard = 0;
+  while (alive && guard++ < 600) alive = bomb.update(1 / 60, g);
+  assert.ok(!alive, "bomb dies at touchdown");
+  assert.strictEqual(g.player.hp, 100 - T.dmg, "impact hit applied once (player on the spot)");
+  const turrets = g.enemies.filter((e) => e._bossTurret);
+  assert.strictEqual(turrets.length, 1, "the porcelain stands up as a turret");
+  assert.strictEqual(turrets[0].type, "bidet");
+  // cap: with turretMax already alive, a new landing spawns nothing
+  while (g.enemies.filter((e) => e._bossTurret && !e.dead).length < T.turretMax)
+    g.enemies.push(Object.assign(JH.makeEnemy("bidet", 300, 40), { _bossTurret: true }));
+  const bomb2 = new JH.ToiletBomb(100, 40, 260, 40, T);
+  guard = 0; alive = true;
+  while (alive && guard++ < 600) alive = bomb2.update(1 / 60, g);
+  assert.strictEqual(g.enemies.filter((e) => e._bossTurret).length, T.turretMax, "turret cap holds");
+});
+
+test("assman P1: toss fires on cooldown when a turret slot is open", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);              // beyond the 120 no-point-blank floor
+  g.enemies = [];
+  const b = JH.makeEnemy("assman", 100, 40);
+  g.enemies.push(b);
+  b._decideT = 0;
+  b.think(1 / 60, g);
+  assert.strictEqual(b.state, "toss", "open slot + off cooldown -> artillery toss");
+  assert.ok(b._tossCdT > 0 && b._tossCdT <= D.toss.cd, "cooldown armed at throw");
+  // with the cooldown running, the next pick is never a toss
+  const b2 = JH.makeEnemy("assman", 100, 40);
+  b2._tossCdT = D.toss.cd;
+  b2._decideT = 0;
+  b2.think(1 / 60, g);
+  assert.notStrictEqual(b2.state, "toss", "cooldown blocks back-to-back artillery");
 });
 
 // ---- Phase gates + Phase 2 (Air Superiority) ----
@@ -204,8 +202,8 @@ test("assman P1: phase gate waits for an in-flight move to resolve", () => {
   const b = JH.makeEnemy("assman", 100, 40);
   g.enemies = [b];
   b._decideT = 0; b._forceMove = "clap";
-  b.think(1 / 60, g);                         // starts the clap windup
-  assert.strictEqual(b.state, "clapwind");
+  b.think(1 / 60, g);                         // starts the clap charge
+  assert.strictEqual(b.state, "charge");
   assert.ok(b.move, "move in flight");
   b.hp = b.maxHp * (D.gates[0] - 0.01);       // drop below gate 1 mid-move
   b.think(1 / 60, g);
@@ -296,10 +294,12 @@ test("assman P2: clap back wave travels the lane, dodged by depth", () => {
   const g = makeThinkGame(260, 40);
   const b = JH.makeEnemy("assman", 100, 40);
   b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
-  b._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0 };
-  b.y = 40;                                       // same depth lane as the player
+  b._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0, wx: 460, wy: 40 };
+  b.y = 40;                                       // same depth lane; waypoint pinned right so the wave fires toward the player
   b.think(1 / 60, g);
   assert.strictEqual(b._waves.length, 1, "clap back fired");
+  // freeze the patrol (no drift, no refires) so ONE wave's contract is tested
+  b._p2.mode = "slampause"; b._p2.t = 9e9;
   const hp0 = g.player.hp;
   let guard = 0;
   while (b._waves.length && guard++ < 900) b.think(1 / 60, g);
@@ -308,11 +308,12 @@ test("assman P2: clap back wave travels the lane, dodged by depth", () => {
   const g2 = makeThinkGame(260, 40 + D.clapback.band + 10);
   const b2 = JH.makeEnemy("assman", 100, 40);
   b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ;
-  b2._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0 };
+  b2._p2 = { mode: "shadow", t: 9, loops: 0, cbT: 0, tx: 0, ty: 0, wx: 460, wy: 40 };
   b2.y = 40;
   const hp2 = g2.player.hp;
   guard = 0;
   b2.think(1 / 60, g2);
+  b2._p2.mode = "slampause"; b2._p2.t = 9e9;
   while (b2._waves.length && guard++ < 900) b2.think(1 / 60, g2);
   assert.strictEqual(g2.player.hp, hp2, "dodged by depth");
 });
