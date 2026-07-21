@@ -324,8 +324,10 @@ test("assman P3: storm rings expand, gap rotates, rim hits the player", () => {
   const g = makeThinkGame(0, 40);
   const b = JH.makeEnemy("assman", 200, 40);
   b.phase = 3; b._grounded = true;
-  b.think(1 / 60, g);                             // arms the storm
-  assert.ok(b._storm, "storm armed");
+  // storms plant center-arena: he recenters first, then the storm arms
+  let guard0 = 0;
+  while (!b._storm && guard0++ < 900) b.think(1 / 60, g);
+  assert.ok(b._storm, "storm armed after recentering");
   // spawn all rings — the harness never runs Player.update(), so decay
   // invulnTimer by hand each frame (same house rule as the P1 toss test):
   // otherwise an incidental early graze from ring 0 sweeping past the
@@ -399,6 +401,18 @@ test("assman P3: brawl window between storms, then recenter and re-arm", () => {
   assert.ok(b._storm, "next storm armed after recentering");
   const cx0 = (g.bounds.minX + g.bounds.maxX) / 2;
   assert.ok(Math.abs(b.x - cx0) <= 20, "storm plants at arena center");
+});
+
+test("assman pose reads: glide for movement, slam-then-exhaust landing", () => {
+  const D = JH.ASSMAN;
+  const b = JH.makeEnemy("assman", 200, 40);
+  b.state = "walk";
+  assert.strictEqual(b.poseKey(), "flight", "ground movement glides on the flight pose");
+  b.state = "slamland";
+  b._recoverT = D.slam.recovery - D.slam.landPose * 0.5;   // just landed
+  assert.strictEqual(b.poseKey(), "slam", "touchdown holds the ass-contact frame");
+  b._recoverT = D.slam.recovery - D.slam.landPose - 0.1;   // past the hold
+  assert.strictEqual(b.poseKey(), "exhaust", "then the open recovery read");
 });
 
 test("assman kneel: no death VFX, beat, then onEnemyKilled — and Slayer gated too", () => {

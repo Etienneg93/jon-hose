@@ -6313,9 +6313,14 @@
         d.decideEvery = S.brawlCadence;
         this.thinkP1(dt, game, pl, d);
         d.decideEvery = saved;
-        if (this._p3brawlT <= 0 && !this.move && (this._skidT || 0) <= 0)
-          this._p3recenter = true;
         return;
+      }
+      // brawl over: an in-flight move/skid finishes BEFORE recentering, so
+      // the storm can never plant mid-dash off-center.
+      if (!this._p3recenter && !this._storm) {
+        if (this.move) { this.stepMove(dt, game, pl, d); return; }
+        if ((this._skidT || 0) > 0) { this._skidT -= dt; this.state = "skid"; return; }
+        this._p3recenter = true;
       }
       // walk back to arena center before the next storm plants
       if (this._p3recenter) {
@@ -6561,12 +6566,16 @@
       if (s === "fly") return "flight";
       if (s === "airclap") return "airclap";
       if (s === "slampause" || s === "slamfall") return "slam";
-      if (s === "slamland") return "exhaust";            // recovery = the game's "I'm open" pose
+      // Landing: hold the ass-contact slam frame (sells the impact), then
+      // the bent-over exhaust read for the rest of the vulnerability window.
+      if (s === "slamland")
+        return (this._recoverT > this.def.slam.recovery - this.def.slam.landPose) ? "slam" : "exhaust";
       if (s === "clapwind") return "clapwind";
       if (s === "clap") return "clap";
       if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
       if (s === "toss") return "toss";
       if (s === "exhaust") return "exhaust";
+      if (s === "walk") return "flight";                 // he never walks — he glides
       return "idle";
     }
 
@@ -6579,17 +6588,13 @@
       this.drawStorm(ctx, cam);
       Assets.shadow(ctx, sx, groundY, this.bodyW * 0.6);
       const sy = Geo.feetScreenY(this.y, this.z);
-      // Single-frame walk sells motion with a step-bob + lean into the
-      // stride (house pattern for baked one-frame bosses).
-      const walking = this.state === "walk";
-      const bob = walking ? Math.abs(Math.sin(this.t * 9)) * -2.5 : 0;
-      const lean = walking ? this.facing * 0.07 : 0;
-      ctx.save();
-      if (walking) { ctx.translate(sx, sy); ctx.rotate(lean); ctx.translate(-sx, -sy); }
-      Assets.draw(ctx, "assman", sx, sy + bob, this.facing, {
+      // Ground movement is a low superman glide: flight pose lifted glideZ
+      // with a gentle float bob. The shadow stays planted at the feet line.
+      const gliding = this.state === "walk";
+      const lift = gliding ? this.def.glideZ + Math.sin(this.t * 6) * 1.5 : 0;
+      Assets.draw(ctx, "assman", sx, sy - lift, this.facing, {
         state: this.poseKey(), hurt: this.flashTimer > 0, hurtAlpha: Math.min(this.flashTimer / 0.18, 1),
       });
-      ctx.restore();
       // hp bar — mirrors SlayerBoss.draw's inline bar.
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 8;

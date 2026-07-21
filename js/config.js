@@ -1004,7 +1004,9 @@
                 lobSpeed: 240, gravity: 520 },
     clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },
     slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
-                airZ: 46, shadowEvery: 2.0 },
+                airZ: 46, shadowEvery: 2.0,
+                landPose: 0.4 },   // s of ass-contact slam pose before the exhaust recovery read
+    glideZ: 6,                     // ground-movement hover: he flies low, never walks
     gustEveryLoops: 2, gustDur: 6,
     storm:    { rings: 3, ringSpeed: 90, ringDmg: 12, gapDeg: 55, gapRotDeg: 40,
                 ringEvery: 1.4, rimW: 7, burstGap: 0.6, cullR: 270,
