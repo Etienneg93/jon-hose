@@ -399,3 +399,15 @@ rule; awaiting user playtest before any merge.
    leaderboard comparator/payload, victory-flow move, and named minor release.
 3. Deferred art: bake the remaining Air roster after feel survives playtest;
    the Plunger Fiend frame set and silhouette pass are complete.
+
+## Ass Man fight pass (plan 2026-07-20-ass-man-fight.md)
+
+Task 1: complete (commits 18b65a7..59060b8, review clean)
+Task 2: complete (commits 59060b8..5f34ea9, review clean; Minor: lbCompare timeSec ternary readability)
+Task 3: complete (commits 5f34ea9..434ad50, review clean; Minor: hip shove literal 320 [plan-inherited, add hip.shove to config], clap angle-boundary untested)
+Task 4: complete (commits 434ad50..faba026, review clean after fix round: shard ticks restored to takeHit; hip.shove config carried in)
+Task 5: complete (commits faba026..b6dae56, opus review clean; 4 implementer fixes to plan snippet all validated. Carried to T6: clear _waves on phase-3 arm, sequential-phase clamp. Minor ledgered: contact dmg during beat [thematic, playtest call])
+Task 6: complete (commits b6dae56..e9f08e6, review clean; carried T5 fixes in [waves clear + sequential clamp]; awareness note: hp drives negative while kneeling, inert)
+Task 7: complete (commits e9f08e6..1e506de, review clean; controller visual pass done: all phases render, kneel excellent. USER CALL: chest lettering mirrors when facing left [all masters face right]; storm ring rim subtle — playtest feel)
+Task 8: complete (commits 1e506de..8b30ee0, review clean; Minor: _setTransport duplicates existing setTransport seam — dedup nit)
+Final review: complete (fix commit 712635a; 2 Importants + 8 Minors fixed; deferred to playtest: toilet prop art [user-verify loop], P3 flourish fx, contact-during-beat thematic call, chest lettering mirror). Headless full-fight verified: P1->P2 8.5s, P2->P3 29.9s, kneel->win, 150 refused/256 landed through gates. Suite 450/450. HELD for user playtest.
