@@ -6873,8 +6873,8 @@
       if (s === "clapwind") return "clapwind";
       if (s === "charge") return "charge";
       if (s === "p3rise") return "riseup";
-      if (s === "hoverdown" || s === "beamcharge") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("hover")) ? "hover" : "flight";
-      if (s === "beam") return "flight";                 // fist-forward = the beam hand
+      if (s === "hoverdown") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("hover")) ? "hover" : "flight";
+      if (s === "beamcharge" || s === "beam") return "airclap";   // same shooting frame as the bolt volley
       if (s === "clap") return "clap";
       if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
       if (s === "toss") return "toss";

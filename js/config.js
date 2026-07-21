@@ -628,7 +628,9 @@
   // cap); the killing-blow total hands off to a floater. Damage Jon TAKES is a
   // discrete red -N floater. Size + brightness ramp with magnitude.
   JH.DMGNUM = {
-    minSize: 6, maxSize: 13,   // logical font px, ramped by the tally magnitude
+    minSize: 8, maxSize: 13,   // logical font px, ramped by the tally magnitude
+                               // (floor raised from 6: tiny bold glyphs smeared
+                               // under the 1px outline at display scale)
     fullAt: 60,                // value at which size/brightness saturate
     killBump: 3,               // extra px on the killing-blow total pop
     holdT: 0.5,                // s the enemy tally holds after the last hit, then resets
