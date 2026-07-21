@@ -5785,8 +5785,17 @@
       ctx.ellipse(Math.round(gx), Math.round(gy), this.S.strafeRx, this.S.strafeRx * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0) - this.z;
-      ctx.globalAlpha = 0.9; ctx.strokeStyle = "#bfe6ff"; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 5 * Math.sign(this.tx - this.x0 || 1), sy - 4); ctx.stroke();
+      // dark-ringed bright bolt: reads on sky AND clouds
+      ctx.globalAlpha = 1;
+      const tdx = -6 * Math.sign(this.tx - this.x0 || 1);
+      ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + tdx, sy - 5); ctx.stroke();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + tdx, sy - 5); ctx.stroke();
+      ctx.fillStyle = "#1a2a44";
+      ctx.beginPath(); ctx.arc(sx, sy, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffd23f";
+      ctx.beginPath(); ctx.arc(sx, sy, 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -6211,12 +6220,17 @@
       // (they cycle telegraph/blow/gap forever, blowing pushMult harder).
       if (!this._kneeling && game.gustLanes && JH.GustLane) {
         const want = d.lanes.byPhase[Math.min(this.phase, d.lanes.byPhase.length) - 1];
-        const mine = game.gustLanes.filter((l) => l._bossLane && !l.dead).length;
-        if (mine < want) {
-          const lane = new JH.GustLane({ yMin: JH.DEPTH_MIN + 4, yMax: JH.DEPTH_MAX - 4,
-            dirs: [1, -1], bandMin: JH.GUST.bandMin, bandMax: JH.GUST.bandMax,
+        const slots = d.lanes.slotOrder.slice(0, want);
+        const nSlots = d.lanes.slotOrder.length;
+        const span = (JH.DEPTH_MAX - JH.DEPTH_MIN) / nSlots;
+        const band = Math.min(JH.GUST.bandMax, Math.floor(span * 0.45));
+        for (const slot of slots) {
+          if (game.gustLanes.some((l) => l._bossLane && !l.dead && l._slot === slot)) continue;
+          const y0 = JH.DEPTH_MIN + slot * span;
+          const lane = new JH.GustLane({ yMin: y0 + band, yMax: y0 + span - band,
+            dirs: [1, -1], bandMin: JH.GUST.bandMin, bandMax: band,
             phase: Math.random() * 2 });
-          lane._bossLane = true;
+          lane._bossLane = true; lane._slot = slot;
           lane.pushMult = d.lanes.pushMult;
           game.gustLanes.push(lane);
         }
@@ -6243,6 +6257,12 @@
       if (this._transitionT) {
         this._transitionT -= dt;
         this.state = "transition";
+        // Lift-off is FLOWN, not teleported: rise through the beat in the
+        // riseup pose, reaching airZ exactly as phase 2 arms.
+        if (this._nextPhase === 2) {
+          const k = 1 - Math.max(0, this._transitionT) / d.transitionInvuln;
+          this.z = d.slam.airZ * k;
+        }
         // Phase 3 (grounded storm) plants center-arena so the clap-storm rings
         // have room to expand on both sides — drift, don't teleport.
         if (this._nextPhase === 3) {
@@ -6466,10 +6486,20 @@
       for (const ring of this._storm.rings) {
         const g0 = (ring.gapA - S.gapDeg / 2) * Math.PI / 180;
         const g1 = (ring.gapA + S.gapDeg / 2) * Math.PI / 180;
-        ctx.strokeStyle = "#bfe0ff"; ctx.lineWidth = S.rimW * 0.6; ctx.globalAlpha = 0.85;
-        ctx.beginPath();
         // rim drawn from gap end to gap start (the gap itself stays open) —
-        // same center/r/gap params as ringGapHits, ry 0.34
+        // same center/r/gap params as ringGapHits, ry 0.34. Dark underlay +
+        // white core so the rim reads on the cloud deck.
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = S.rimW * 0.9;
+        ctx.beginPath();
+        ctx.save();
+        ctx.translate(Math.round(cx), Math.round(cy));
+        ctx.scale(1, 0.34);
+        ctx.arc(0, 0, ring.r, g1, g0 + Math.PI * 2);
+        ctx.restore();
+        ctx.stroke();
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = S.rimW * 0.45;
+        ctx.beginPath();
         ctx.save();
         ctx.translate(Math.round(cx), Math.round(cy));
         ctx.scale(1, 0.34);
@@ -6509,17 +6539,25 @@
       if (this._waves) for (const w of this._waves) {
         const sx = w.x - cam, syT = Geo.feetScreenY(w.y - d.clapback.band, 0), syB = Geo.feetScreenY(w.y + d.clapback.band, 0);
         ctx.save();
-        ctx.strokeStyle = "#bfe0ff"; ctx.globalAlpha = 0.8; ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(sx, syT - 16); ctx.lineTo(sx, syB); ctx.stroke();
-        ctx.globalAlpha = 0.25;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(sx, syT - 16); ctx.lineTo(sx, syB); ctx.stroke();
+        ctx.globalAlpha = 0.35; ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(sx - w.dir * 6, syT - 16); ctx.lineTo(sx - w.dir * 6, syB); ctx.stroke();
         ctx.restore();
       }
       if (this._slamRing) {
         const RR = d.slam.ring, ring = this._slamRing;
         ctx.save();
-        ctx.strokeStyle = "#eaf4ff"; ctx.lineWidth = RR.rimW * 0.6;
-        ctx.globalAlpha = 0.9 * (1 - ring.r / RR.maxR);
+        const rAlpha = 0.95 * (1 - ring.r / RR.maxR);
+        ctx.globalAlpha = rAlpha;
+        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = RR.rimW * 0.9;
+        ctx.beginPath();
+        ctx.ellipse(Math.round(ring.x - cam), Math.round(Geo.feetScreenY(ring.y, 0)), ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = RR.rimW * 0.45;
         ctx.beginPath();
         ctx.ellipse(Math.round(ring.x - cam), Math.round(Geo.feetScreenY(ring.y, 0)), ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -6694,13 +6732,19 @@
       ctx.globalAlpha = 0.10 + prog * 0.22; ctx.fillStyle = "#ff5a5a"; ctx.fill();
       if (m.blast) {
         // the racing blast front — same center/r/rim as the hit test
-        ctx.globalAlpha = 0.95; ctx.strokeStyle = "#eaf4ff"; ctx.lineWidth = d.clap.blastRimW * 0.5;
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = d.clap.blastRimW * 0.8;
+        ctx.beginPath();
+        ctx.ellipse(Math.round(sx), Math.round(sy), m.blast.r, m.blast.r * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = d.clap.blastRimW * 0.4;
         ctx.beginPath();
         ctx.ellipse(Math.round(sx), Math.round(sy), m.blast.r, m.blast.r * 0.34, 0, 0, Math.PI * 2);
         ctx.stroke();
       }
-      // inward-racing dashes on spokes: the suction read
-      ctx.globalAlpha = 0.7; ctx.strokeStyle = "#bfe6ff"; ctx.lineWidth = 1;
+      // inward-racing dashes on spokes: the suction read (dark slate — the
+      // pale cyan vanished on the cloud deck)
+      ctx.globalAlpha = 0.8; ctx.strokeStyle = "#2a4668"; ctx.lineWidth = 1.5;
       const N = 10;
       for (let i = 0; i < N; i++) {
         const a = (i / N) * Math.PI * 2;
@@ -7549,17 +7593,25 @@
       const lx = this.tx - cam, ly = Geo.feetScreenY(this.ty, 0);
       const flash = Math.floor(this.t * 10) & 1;
       ctx.save();
-      ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = flash ? "#bfe6ff" : "rgba(120,200,255,0.5)";
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = "#143050"; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, d.landRadius, d.landRadius * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = flash ? "#ffffff" : JH.PAL.water; ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.ellipse(lx, ly, d.landRadius, d.landRadius * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();
       const sx = this.x - cam, sy = Geo.feetScreenY(this.y, this.z);
       Assets.glow(ctx, Math.round(sx), Math.round(sy), 10, JH.PAL.water, 0.7);
       ctx.globalAlpha = 1;
+      // dark ring + specular: the cyan orb alone vanished on the cloud deck
+      ctx.fillStyle = "#143050";
+      ctx.beginPath(); ctx.arc(Math.round(sx), Math.round(sy), 6.5, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = flash ? JH.PAL.waterHi : JH.PAL.water;
       ctx.beginPath(); ctx.arc(Math.round(sx), Math.round(sy), 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(Math.round(sx) - 1.5, Math.round(sy) - 1.5, 1.6, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -7603,9 +7655,12 @@
       const lx = this.aimX - cam, ly = Geo.feetScreenY(this.aimY, 0);
       const flash = Math.floor(this.t * 10) & 1;
       ctx.save();
-      ctx.globalAlpha = 0.45;
-      ctx.strokeStyle = flash ? "#bfe6ff" : "rgba(120,200,255,0.4)";
-      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.65;
+      ctx.strokeStyle = "#143050"; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, d.landRadius, d.landRadius * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = flash ? "#ffffff" : JH.PAL.water; ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.ellipse(lx, ly, d.landRadius, d.landRadius * JH.GROUND_RY, 0, 0, Math.PI * 2);
       ctx.stroke();

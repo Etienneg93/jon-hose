@@ -187,7 +187,10 @@
         // edge as the player crosses into the district, not two acts later).
         const broken = x > (JH.ZONE2_START - 200) * 0.5 + JH.VIEW_W;
         const fire = x > (JH.ZONE3_START - 200) * 0.5 + JH.VIEW_W;
-        const air = x > (JH.ZONE4_START - 200) * 0.5 + JH.VIEW_W;
+        // No +VIEW_W bias: every building visible from the air checkpoint
+        // must roll the air pack (they stay dark procedural rects until
+        // airOn, so the boiler district's final screens read as gloom).
+        const air = x > (JH.ZONE4_START - 200) * 0.5;
         const b = {
           x, w, h: air ? Math.round(h * 0.7) : h, broken: broken && !air, air, jag: null, windows: [],
           // Baked-variant selection: hashed from x so it does not consume
