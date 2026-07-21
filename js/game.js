@@ -3125,12 +3125,15 @@
           // Emphasized floaters (big / sized / punched) get a dark outline.
           const outlined = f.big || f.size || f.punch;
           ctx.save();
-          ctx.translate(fx, fy);
+          // Integer translate + 1/scale outline offsets: fractional
+          // positions shimmered into doubled glyphs on the upscale.
+          ctx.translate(Math.round(fx), Math.round(fy));
           if (scale !== 1) ctx.scale(scale, scale);
           if (outlined) {
+            const oo = 1 / scale;
             ctx.fillStyle = "#0a0e18";
-            ctx.fillText(f.text, 1, 1); ctx.fillText(f.text, -1, 1);
-            ctx.fillText(f.text, 1, -1); ctx.fillText(f.text, -1, -1);
+            ctx.fillText(f.text, oo, oo); ctx.fillText(f.text, -oo, oo);
+            ctx.fillText(f.text, oo, -oo); ctx.fillText(f.text, -oo, -oo);
           }
           ctx.fillStyle = f.color;
           ctx.fillText(f.text, 0, 0);

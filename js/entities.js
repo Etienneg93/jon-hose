@@ -1999,11 +1999,15 @@
         ctx.save();
         ctx.globalAlpha = 0.45 + 0.55 * fade;
         ctx.font = "bold " + fontPx + "px monospace"; ctx.textAlign = "center";
-        ctx.translate(sx, ty);
+        // Integer translate + outline offsets compensated by 1/scale: keeps
+        // the 4 outline copies exactly 1px off the fill at ANY punch scale
+        // (fractional offsets shimmered into doubled glyphs on the upscale).
+        ctx.translate(Math.round(sx), ty);
         ctx.scale(scale, scale);
+        const o = 1 / scale;
         ctx.fillStyle = "#0a0e18";
-        ctx.fillText(txt, 1, 1); ctx.fillText(txt, -1, 1);
-        ctx.fillText(txt, 1, -1); ctx.fillText(txt, -1, -1);
+        ctx.fillText(txt, o, o); ctx.fillText(txt, -o, o);
+        ctx.fillText(txt, o, -o); ctx.fillText(txt, -o, -o);
         ctx.fillStyle = col;
         ctx.fillText(txt, 0, 0);
         ctx.restore();
