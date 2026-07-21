@@ -525,7 +525,7 @@ test("assman P3: exhaustion window — 1.25x damage taken, then next burst", () 
   assert.strictEqual(b.state, "exhaust");
   const hp0 = b.hp;
   b.takeDamage(100, g, 1, 0);
-  assert.strictEqual(b.hp, hp0 - 100 * D.exhaust.dmgTakenMult, "opening takes bonus damage");
+  assert.strictEqual(b.hp, hp0 - 100, "the opening takes normal damage (no multiplier)");
 });
 
 test("assman P3: brawl window between storms, then recenter and re-arm", () => {

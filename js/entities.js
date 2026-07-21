@@ -6191,8 +6191,7 @@
       // P3: immune while the circles run and during the entry flight —
       // the exhaustion window (and the brawl) are the openings.
       if (this.phase === 3 && (this._p3fly || (this._storm && (this._exhaustT || 0) <= 0 && (this._p3brawlT || 0) <= 0))) return;
-      const mult = (this._exhaustT || 0) > 0 ? this.def.exhaust.dmgTakenMult : 1;
-      super.takeDamage(dmg * mult, game, dirX, knock, crit);
+      super.takeDamage(dmg, game, dirX, knock, crit);
     }
 
     // Scald cannot tick through the airborne band or transition invuln —

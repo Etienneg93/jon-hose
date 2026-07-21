@@ -1039,7 +1039,7 @@
     storm:    { rings: 4, ringSpeed: 125, ringDmg: 12, gapDeg: 46, gapRotDeg: 55,
                 ringEvery: 1.0, rimW: 7, burstGap: 0.6, cullR: 270,
                 brawlS: 6, brawlCadence: 1.4, chargeS: 0.7 },
-    exhaust:  { dur: 2.6, dmgTakenMult: 1.25 },
+    exhaust:  { dur: 2.6 },
     kneelBeat: 1.5,
     barks: { p2: "THE CHEEKS HAVE CLAPPED BACK.", p3: "GLUTE FORCE TRAUMA." },
   };
