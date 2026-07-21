@@ -318,6 +318,59 @@ test("assman P2: clap back wave travels the lane, dodged by depth", () => {
   assert.strictEqual(g2.player.hp, hp2, "dodged by depth");
 });
 
+test("assman P2: strafe volley fires before the drop, bolts hit rim-true", () => {
+  const D = JH.ASSMAN;
+  const g = makeThinkGame(300, 40);
+  g.enemies = [];
+  const b = JH.makeEnemy("assman", 300, 40);
+  g.enemies.push(b);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ; b._waves = [];
+  b._p2 = { mode: "slampause", t: D.slam.pause, strafeN: D.slam.strafeCount, strafeT: 0.01,
+            loops: 0, cbT: 9, tx: 300, ty: 40 };
+  let guard = 0;
+  while ((b._p2.strafeN || 0) > 0 && guard++ < 600) b.think(1 / 60, g);
+  const bolts = g.embers.filter((e) => e instanceof JH.AirBolt);
+  assert.strictEqual(bolts.length, D.slam.strafeCount, "full volley fired");
+  assert.strictEqual(b.state === "slampause" || b.state === "fly", true);
+  // a bolt that lands on the player hits once through takeHit
+  const bolt = new JH.AirBolt(300, 40, D.slam.airZ, g.player.x, g.player.y, D.slam);
+  const hp0 = g.player.hp;
+  guard = 0;
+  let alive = true;
+  while (alive && guard++ < 300) alive = bolt.update(1 / 60, g);
+  assert.strictEqual(g.player.hp, hp0 - D.slam.strafeDmg, "bolt impact rim-true");
+  // outside the mini ellipse: safe
+  const g2 = makeThinkGame(300 + D.slam.strafeRx + 20, 40);
+  const bolt2 = new JH.AirBolt(300, 40, D.slam.airZ, 300, 40, D.slam);
+  const hp2 = g2.player.hp;
+  guard = 0; alive = true;
+  while (alive && guard++ < 300) alive = bolt2.update(1 / 60, g2);
+  assert.strictEqual(g2.player.hp, hp2, "outside the marked ellipse: safe");
+});
+
+test("assman P2: landing spawns the pressure ring — expanding rim hits once", () => {
+  const D = JH.ASSMAN, RR = D.slam.ring;
+  const g = makeThinkGame(2000, 40);              // player far: slam itself misses
+  g.enemies = [];
+  const b = JH.makeEnemy("assman", 300, 40);
+  g.enemies.push(b);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ; b._waves = [];
+  b._p2 = { mode: "slamfall", t: 0, loops: 0, cbT: 9, tx: 300, ty: 40 };
+  b.x = 300; b.y = 40; b.state = "slamfall";
+  let guard = 0;
+  while (!b._slamRing && guard++ < 900) b.think(1 / 60, g);
+  assert.ok(b._slamRing, "ring spawned at touchdown");
+  // park the player where the rim will sweep (x-axis, ry cancels)
+  g.player.x = 300 + RR.maxR * 0.7; g.player.y = 40;
+  const hp0 = g.player.hp;
+  guard = 0;
+  while (b._slamRing && guard++ < 900) {
+    g.player.invulnTimer = Math.max(0, (g.player.invulnTimer || 0) - 1 / 60);
+    b.think(1 / 60, g);
+  }
+  assert.strictEqual(g.player.hp, hp0 - RR.dmg, "rim swept the player exactly once");
+});
+
 // ---- Phase 3 (Glute Force Trauma) + kneel ----
 
 test("assman P3: storm rings expand, gap rotates, rim hits the player", () => {

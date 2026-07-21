@@ -5749,6 +5749,49 @@
   // ---- ToiletBomb: Ass Man's Toilet Toss ----
   // Ballistic arc to a marked landing ellipse; impact hit + a shard zone
   // ticking inside the SAME ellipse (one shape: telegraph, draw, hit).
+  // Ass Man P2 strafe bolt: a pressure shot from the outstretched hand to
+  // a marked ground point (drawn mini ellipse = hit ellipse).
+  class AirBolt {
+    constructor(x, y, z, tx, ty, S) {
+      this.x = x; this.y = y; this.z = z || 60;
+      this.x0 = x; this.y0 = y; this.z0 = this.z;
+      this.tx = tx; this.ty = ty; this.S = S;
+      const dist = Math.max(1, Math.hypot(tx - x, ty - y));
+      this.fT = Math.max(0.35, dist / 320);
+      this.t = 0;
+      this.isProjectile = true;
+    }
+    update(dt, game) {
+      this.t += dt;
+      const k = Math.min(1, this.t / this.fT);
+      this.x = this.x0 + (this.tx - this.x0) * k;
+      this.y = this.y0 + (this.ty - this.y0) * k;
+      this.z = this.z0 * (1 - k);
+      if (k >= 1) {
+        const pl = game.player;
+        game.shake(2); game.audio.play("whack");
+        burst(game, this.x, this.y, 4, "#bfe6ff", 6, { speed: 40, life: 0.3, size: 1 });
+        if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, this.S.strafeRx))
+          pl.takeHit(this.S.strafeDmg, game, this.x);
+        return false;
+      }
+      return true;
+    }
+    draw(ctx, cam) {
+      const gx = this.tx - cam, gy = Geo.feetScreenY(this.ty, 0);
+      ctx.save();
+      ctx.strokeStyle = "#ff5a5a"; ctx.globalAlpha = 0.55; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(Math.round(gx), Math.round(gy), this.S.strafeRx, this.S.strafeRx * JH.GROUND_RY, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      const sx = this.x - cam, sy = Geo.feetScreenY(this.y, 0) - this.z;
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = "#bfe6ff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 5 * Math.sign(this.tx - this.x0 || 1), sy - 4); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  JH.AirBolt = AirBolt;
+
   class ToiletBomb {
     constructor(x, y, tx, ty, T) {
       this.x = x; this.y = y; this.z = 40;
@@ -6154,6 +6197,15 @@
         this._enrageLatched = true;
         if (game.relics && game.relics.prayer_bead) JH.Balance.prayerBeadProc(game.player, JH.RELIC_TUNE);
       }
+      if (this._slamRing) {
+        const RR = d.slam.ring, ring = this._slamRing;
+        ring.r += RR.speed * dt;
+        if (pl.alive && !ring.hit &&
+            JH.Balance.ringGapHits(pl.x, pl.y, ring.x, ring.y, ring.r, RR.rimW, 0, -1, 0.34)) {
+          if (pl.takeHit(RR.dmg, game, ring.x, RR.knock) !== false) ring.hit = true;
+        }
+        if (ring.r > RR.maxR) this._slamRing = null;
+      }
       if (this._kneeling) { this.stepKneel(dt, game); return; }        // Task 6
       // ---- phase gates: hp fraction only ----
       const want = JH.Balance.assmanPhase(this.hp / this.maxHp, d.gates);
@@ -6254,14 +6306,33 @@
         P.t -= dt;
         if (P.t <= 0) {
           P.mode = "slampause"; P.t = d.slam.pause;
-          P.tx = pl.x; P.ty = pl.y;                                    // lock the drop point
-          this.x = pl.x; this.y = pl.y;                                // hover above it
+          P.strafeN = d.slam.strafeCount; P.strafeT = 0.12;            // volley first
+          P.tx = pl.x; P.ty = pl.y;
+          this.x = pl.x; this.y = pl.y;                                // hover above
           this.state = "slampause";
           P.wx = null;                                                 // fresh patrol next loop
         }
         return;
       }
       if (P.mode === "slampause") {
+        if ((P.strafeN || 0) > 0) {
+          // strafe volley: pressure bolts from the outstretched hand
+          this.state = "fly";
+          this.facing = pl.x >= this.x ? 1 : -1;
+          P.strafeT -= dt;
+          if (P.strafeT <= 0) {
+            P.strafeT = d.slam.strafeEvery;
+            P.strafeN--;
+            game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.slam));
+            game.audio.play("jump");
+            if (P.strafeN <= 0) {
+              // volley done: NOW lock the drop on the player's position
+              P.tx = pl.x; P.ty = pl.y;
+              this.x = pl.x; this.y = pl.y;
+            }
+          }
+          return;
+        }
         this.state = "slampause";
         P.t -= dt;
         if (P.t <= 0) { P.mode = "slamfall"; this.state = "slamfall"; }
@@ -6278,6 +6349,9 @@
           game.shake(8); game.audio.play("whack");
           if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.slam.rx))
             pl.takeHit(d.slam.dmg, game, this.x, d.slam.shove);
+          // pressure ring: an expanding rim shockwave races out from the
+          // impact — the slam's air-element signature
+          this._slamRing = { x: this.x, y: this.y, r: d.slam.rx * 0.5, hit: false };
           P.loops++;
           if (P.loops % d.gustEveryLoops === 0 && game.gustLanes && JH.GustLane) {
             const lane = new JH.GustLane({ y: pl.y, dir: this.facing });
@@ -6404,7 +6478,7 @@
       this.state = "kneel";
       this._kneelT = this.def.kneelBeat;
       this.def.touchDmg = 0;
-      this.move = null; this._storm = null; this._waves = [];
+      this.move = null; this._storm = null; this._waves = []; this._slamRing = null;
       game.audio.play("win");
       // survivesDefeat: NO FxBurst, no corpse sequence — the kneel IS the beat.
     }
@@ -6428,6 +6502,16 @@
         ctx.beginPath(); ctx.moveTo(sx, syT - 16); ctx.lineTo(sx, syB); ctx.stroke();
         ctx.globalAlpha = 0.25;
         ctx.beginPath(); ctx.moveTo(sx - w.dir * 6, syT - 16); ctx.lineTo(sx - w.dir * 6, syB); ctx.stroke();
+        ctx.restore();
+      }
+      if (this._slamRing) {
+        const RR = d.slam.ring, ring = this._slamRing;
+        ctx.save();
+        ctx.strokeStyle = "#eaf4ff"; ctx.lineWidth = RR.rimW * 0.6;
+        ctx.globalAlpha = 0.9 * (1 - ring.r / RR.maxR);
+        ctx.beginPath();
+        ctx.ellipse(Math.round(ring.x - cam), Math.round(Geo.feetScreenY(ring.y, 0)), ring.r, ring.r * 0.34, 0, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
       }
       if (this._p2 && (this._p2.mode === "slampause" || this._p2.mode === "slamfall")) {

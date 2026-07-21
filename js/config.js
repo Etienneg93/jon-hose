@@ -1010,7 +1010,12 @@
     clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },
     slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
                 airZ: 72, shadowEvery: 3.4,
-                landPose: 0.4 },   // s of ass-contact slam pose before the exhaust recovery read
+                landPose: 0.4,     // s of ass-contact slam pose before the exhaust recovery read
+                // pre-drop strafe volley (outstretched-hand flight pose):
+                strafeCount: 3, strafeEvery: 0.28, strafeDmg: 8, strafeRx: 14,
+                // landing pressure ring: expanding rim shockwave after the
+                // slam ellipse (what makes it NOT a Switch slam)
+                ring: { speed: 150, dmg: 8, rimW: 6, maxR: 130, knock: 260 } },
     flySpeed: 190,                 // P2 patrol speed between waypoints
     glideZ: 6,                     // ground-movement hover: he flies low, never walks
     gustEveryLoops: 2, gustDur: 6,

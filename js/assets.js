@@ -1458,8 +1458,8 @@
   // uniform height made the crouches (kneel/slam/exhaust) tower over the
   // standing idle. Heights are logical px, feet-anchored.
   const AM_POSE_H = {
-    idle: 58, flight: 50, riseup: 62, slam: 44, kneel: 38,
-    clapwind: 56, charge: 52, clap: 56, hipcheck: 50, toss: 62,
+    idle: 58, flight: 63, riseup: 74, slam: 44, kneel: 34,
+    clapwind: 56, charge: 52, clap: 56, hipcheck: 46, toss: 62,
     airclap: 54, exhaust: 44,
   };
   const _amImgs = {};
