@@ -6264,6 +6264,7 @@
         const wantNext = Math.min(want, this.phase + 1);
         // finish nothing mid-air: slam completes because gates only re-check here
         this.move = null; this._clapLock = null; this._skidT = 0;
+        this._zAtGate = this.z || 0;
         this._transitionT = d.transitionInvuln;
         this._invulnT = d.transitionInvuln;
         this._nextPhase = wantNext;
@@ -6276,11 +6277,23 @@
       if (this._transitionT) {
         this._transitionT -= dt;
         this.state = "transition";
-        // Lift-off is FLOWN, not teleported: rise through the beat in the
-        // riseup pose, reaching airZ exactly as phase 2 arms.
+        // Transitions are FLOWN, not teleported. Phase 2: rise through the
+        // beat (riseup pose) reaching airZ as it arms. Phase 3: if the gate
+        // caught him AIRBORNE (patrolling), descend through the beat and
+        // thump down — never snap to the floor.
         if (this._nextPhase === 2) {
           const k = 1 - Math.max(0, this._transitionT) / d.transitionInvuln;
           this.z = d.slam.airZ * k;
+          this.vz = 0;
+        } else if (this._nextPhase === 3 && (this._zAtGate || 0) > 0) {
+          const k = 1 - Math.max(0, this._transitionT) / d.transitionInvuln;
+          const nz = Math.max(0, this._zAtGate * (1 - k));
+          if (nz <= 0 && this.z > 0) {
+            game.shake(6); game.audio.play("whack");
+            burst(game, this.x, this.y, 4, "#eaf4ff", 8, { speed: 55, life: 0.35, size: 1 });
+          }
+          this.z = nz;
+          this.vz = 0;
         }
         // Phase 3 (grounded storm) plants center-arena so the clap-storm rings
         // have room to expand on both sides — drift, don't teleport.
@@ -6885,7 +6898,8 @@
     poseKey() {
       const s = this.state;
       if (this._kneeling) return "kneel";
-      if (s === "transition") return this._nextPhase === 2 ? "riseup" : "clap";
+      if (s === "transition")
+        return this._nextPhase === 2 ? "riseup" : ((this.z || 0) > 4 ? "slam" : "clap");
       if (s === "fly") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("soar")) ? "soar" : "flight";
       if (s === "airclap") return "airclap";
       if (s === "slampause" || s === "slamfall") return "slam";
