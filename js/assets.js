@@ -1459,18 +1459,24 @@
   // standing idle. Heights are logical px, feet-anchored.
   const AM_POSE_H = {
     idle: 58, flight: 63, riseup: 74, slam: 44, kneel: 34,
-    clapwind: 56, charge: 52, clap: 56, hipcheck: 46, toss: 62,
-    airclap: 54, exhaust: 44,
+    clapwind: 56, charge: 48, clap: 56, hipcheck: 46, toss: 62,
+    airclap: 54, exhaust: 44, soar: 20,
   };
   const _amImgs = {};
   const _amImgsL = {};   // left-facing bakes: mirrored body, chest text un-flipped
-  ["idle", "flight", "slam", "kneel", "clapwind", "clap", "hipcheck", "toss", "airclap", "exhaust", "charge", "riseup"]
+  ["idle", "flight", "slam", "kneel", "clapwind", "clap", "hipcheck", "toss", "airclap", "exhaust", "charge", "riseup", "soar"]
     .forEach((k) => {
       _amImgs[k] = JH.Loader.img("sprites/assman/baked/" + k + ".png");
       _amImgsL[k] = JH.Loader.img("sprites/assman/baked/" + k + "_l.png");
     });
   // Toilet Toss projectile: blitted spinning by ToiletBomb.draw.
   Assets.toiletImg = JH.Loader.img("sprites/assman/baked/toilet.png");
+  // Entity-side gate: is a pose's bake loaded? (poseKey falls back to the
+  // diagonal flight pose until the soar bake arrives.)
+  Assets.assmanPoseReady = (k) => {
+    const i = _amImgs[k];
+    return !!(i && i.complete && i.naturalWidth);
+  };
   Assets.register("assman", (p, opt, ctx, x, y, facing) => {
     const key = _amImgs[opt.state] ? opt.state : "idle";
     // Facing left: use the readable-text left bake when loaded; runtime

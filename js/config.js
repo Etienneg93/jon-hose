@@ -1011,12 +1011,14 @@
     // STANDS UP as a Bidet Turret (cap turretMax alive).
     toss:     { landRx: 30, dmg: 20, lobSpeed: 240, gravity: 520,
                 cd: 7, turretMax: 2 },
-    clapback: { every: 1.8, dmg: 14, band: 12, waveSpeed: 260 },
+    // P2 ranged pressure: while flying he periodically fires pressure
+    // bolts at Jon — each with a marked mini landing ellipse (the honest
+    // telegraph). Replaces the old un-telegraphed lane waves + pre-slam
+    // strafe volley.
+    airfire:  { every: 1.6, strafeDmg: 8, strafeRx: 14 },
     slam:     { pause: 0.8, rx: 44, dmg: 26, shove: 300, recovery: 2.6, fallSpeed: 420,
-                airZ: 72, shadowEvery: 3.4,
+                airZ: 72, shadowEvery: 3.4, diveSpeed: 330,
                 landPose: 0.4,     // s of ass-contact slam pose before the exhaust recovery read
-                // pre-drop strafe volley (outstretched-hand flight pose):
-                strafeCount: 3, strafeEvery: 0.28, strafeDmg: 8, strafeRx: 14,
                 // landing pressure ring: expanding rim shockwave after the
                 // slam ellipse (what makes it NOT a Switch slam)
                 ring: { speed: 150, dmg: 8, rimW: 6, maxR: 130, knock: 260 } },

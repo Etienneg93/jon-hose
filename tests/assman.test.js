@@ -13,7 +13,7 @@ test("assman: def exists with phase gates and full move tables", () => {
   const D = JH.ASSMAN;
   assert.ok(D && D.hp > JH.SLAYER.hp, "hardest boss yet: hp above Slayer");
   assert.deepStrictEqual(D.gates, [0.66, 0.33]);
-  for (const k of ["clap", "hip", "toss", "clapback", "slam", "storm", "exhaust"])
+  for (const k of ["clap", "hip", "toss", "airfire", "slam", "storm", "exhaust"])
     assert.ok(D[k], "move table " + k);
 });
 
@@ -326,54 +326,53 @@ test("assman P2: slam ellipse is rim-true", () => {
   const g = makeThinkGame(300, 40);
   g.gustLanes = [];
   const b = JH.makeEnemy("assman", 100, 40);
-  b.phase = 2; b._grounded = false; b.z = D.slam.airZ; b._waves = [];
-  b._p2 = { mode: "slamfall", t: 0, loops: 1, cbT: 9, tx: 300, ty: 40 };
-  b.x = 300; b.y = 40; b.state = "slamfall";
-  const hp0 = g.player.hp;                        // player at the impact point
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b._p2 = { mode: "slampause", t: 0.02, loops: 1, tx: 300, ty: 40 };
+  b.x = 240; b.y = 40; b.state = "slampause";
+  const hp0 = g.player.hp;                        // player at the dive target
   let guard = 0;
   while (b.state !== "slamland" && guard++ < 900) b.think(1 / 60, g);
+  assert.strictEqual(Math.round(b.x), 300, "he lands ON the locked target — dived, not teleported");
   assert.strictEqual(g.player.hp, hp0 - D.slam.dmg, "landing ellipse caught the player");
-  // outside the rim: safe (ring may still sweep later — check before it arrives)
-  const g2 = makeThinkGame(300 + D.slam.rx + 25, 40);
+  // the dodge contract: the telegraph chases until the dive LOCKS; moving
+  // away during the dive travel escapes the rim
+  const g2 = makeThinkGame(300, 40);
   g2.gustLanes = [];
   const b2 = JH.makeEnemy("assman", 100, 40);
-  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ; b2._waves = [];
-  b2._p2 = { mode: "slamfall", t: 0, loops: 0, cbT: 9, tx: 300, ty: 40 };
-  b2.x = 300; b2.y = 40; b2.state = "slamfall";
+  b2.phase = 2; b2._grounded = false; b2.z = D.slam.airZ;
+  b2._p2 = { mode: "slampause", t: 0.02, loops: 0, tx: 300, ty: 40 };
+  b2.x = 240; b2.y = 40; b2.state = "slampause";
+  guard = 0;
+  while (b2._p2.mode !== "slamfall" && guard++ < 300) b2.think(1 / 60, g2);
+  g2.player.x = 300 + D.slam.rx + 25;             // dash out AFTER the lock
   const hp2 = g2.player.hp;
   guard = 0;
   while (b2.state !== "slamland" && guard++ < 900) b2.think(1 / 60, g2);
-  assert.strictEqual(g2.player.hp, hp2, "slam rim is hitbox at touchdown");
+  assert.strictEqual(g2.player.hp, hp2, "moved after the lock: rim is hitbox, no hit");
 });
 
-test("assman P2: strafe volley fires before the drop, bolts hit rim-true", () => {
+test("assman P2: flying fire — periodic marked bolts while patrolling", () => {
   const D = JH.ASSMAN;
   const g = makeThinkGame(300, 40);
-  g.enemies = [];
-  const b = JH.makeEnemy("assman", 300, 40);
+  g.enemies = []; g.gustLanes = [];
+  const b = JH.makeEnemy("assman", 100, 40);
   g.enemies.push(b);
-  b.phase = 2; b._grounded = false; b.z = D.slam.airZ; b._waves = [];
-  b._p2 = { mode: "slampause", t: D.slam.pause, strafeN: D.slam.strafeCount, strafeT: 0.01,
-            loops: 0, cbT: 9, tx: 300, ty: 40 };
-  let guard = 0;
-  while ((b._p2.strafeN || 0) > 0 && guard++ < 600) b.think(1 / 60, g);
-  const bolts = g.embers.filter((e) => e instanceof JH.AirBolt);
-  assert.strictEqual(bolts.length, D.slam.strafeCount, "full volley fired");
-  assert.strictEqual(b.state === "slampause" || b.state === "fly", true);
-  // a bolt that lands on the player hits once through takeHit
-  const bolt = new JH.AirBolt(300, 40, D.slam.airZ, g.player.x, g.player.y, D.slam);
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b._p2 = { mode: "shadow", t: 9e9, loops: 0, tx: 0, ty: 0, fireT: 0.01, wx: 460, wy: 40 };
+  let fired = 0, sawPose = false, guard = 0;
+  while (fired < 2 && guard++ < 600) {
+    b.think(1 / 60, g);
+    fired = g.embers.filter((e) => e instanceof JH.AirBolt).length;
+    if (b.state === "airclap") sawPose = true;
+  }
+  assert.strictEqual(fired, 2, "bolts fire on the airfire cadence");
+  assert.ok(sawPose, "the airclap frame shows on each shot");
+  // bolt contract: marked mini ellipse is the hit shape
+  const bolt = new JH.AirBolt(300, 40, D.slam.airZ, g.player.x, g.player.y, D.airfire);
   const hp0 = g.player.hp;
-  guard = 0;
-  let alive = true;
+  let alive = true; guard = 0;
   while (alive && guard++ < 300) alive = bolt.update(1 / 60, g);
-  assert.strictEqual(g.player.hp, hp0 - D.slam.strafeDmg, "bolt impact rim-true");
-  // outside the mini ellipse: safe
-  const g2 = makeThinkGame(300 + D.slam.strafeRx + 20, 40);
-  const bolt2 = new JH.AirBolt(300, 40, D.slam.airZ, 300, 40, D.slam);
-  const hp2 = g2.player.hp;
-  guard = 0; alive = true;
-  while (alive && guard++ < 300) alive = bolt2.update(1 / 60, g2);
-  assert.strictEqual(g2.player.hp, hp2, "outside the marked ellipse: safe");
+  assert.strictEqual(g.player.hp, hp0 - D.airfire.strafeDmg, "bolt impact rim-true");
 });
 
 test("assman P2: landing spawns the pressure ring — expanding rim hits once", () => {
@@ -382,14 +381,18 @@ test("assman P2: landing spawns the pressure ring — expanding rim hits once", 
   g.enemies = [];
   const b = JH.makeEnemy("assman", 300, 40);
   g.enemies.push(b);
-  b.phase = 2; b._grounded = false; b.z = D.slam.airZ; b._waves = [];
-  b._p2 = { mode: "slamfall", t: 0, loops: 0, cbT: 9, tx: 300, ty: 40 };
-  b.x = 300; b.y = 40; b.state = "slamfall";
+  b.phase = 2; b._grounded = false; b.z = D.slam.airZ;
+  b._p2 = { mode: "slampause", t: 0.02, loops: 0, tx: 300, ty: 40 };
+  b.x = 300; b.y = 40; b.state = "slampause";
+  // hold the player at the slam point through the lock, then step out past
+  // the slam rim so only the RING can reach them
+  g.player.x = 300; g.player.y = 40;
   let guard = 0;
+  while (b._p2.mode !== "slamfall" && guard++ < 300) b.think(1 / 60, g);
+  g.player.x = 300 + RR.maxR * 0.7; g.player.y = 40;
+  guard = 0;
   while (!b._slamRing && guard++ < 900) b.think(1 / 60, g);
   assert.ok(b._slamRing, "ring spawned at touchdown");
-  // park the player where the rim will sweep (x-axis, ry cancels)
-  g.player.x = 300 + RR.maxR * 0.7; g.player.y = 40;
   const hp0 = g.player.hp;
   guard = 0;
   while (b._slamRing && guard++ < 900) {

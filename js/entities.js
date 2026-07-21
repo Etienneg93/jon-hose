@@ -6198,6 +6198,13 @@
       super.tickScald(dt, game);
     }
 
+    // Turn only when the target is clearly past center — kills the flicker
+    // when hovering directly above/next to the player.
+    faceToward(x, hys) {
+      const dx = x - this.x;
+      if (Math.abs(dx) > (hys == null ? 10 : hys)) this.facing = dx >= 0 ? 1 : -1;
+    }
+
     think(dt, game) {
       const pl = game.player, d = this.def;
       if (this.strikeFx > 0) this.strikeFx -= dt;
@@ -6274,12 +6281,10 @@
           if (this.phase === 2) {
             this._grounded = false; this.z = d.slam.airZ;
             this.def.touchDmg = 0;                                     // no contact from the sky
-            this._p2 = { mode: "shadow", t: d.slam.shadowEvery, loops: 0, cbT: d.clapback.every, tx: 0, ty: 0 };
-            this._waves = this._waves || [];
+            this._p2 = { mode: "shadow", t: d.slam.shadowEvery, loops: 0, tx: 0, ty: 0 };
           } else if (this.phase === 3) {
             this._grounded = true; this.z = 0;
-            this.def.touchDmg = JH.ASSMAN.touchDmg;
-            this._waves = [];                                          // clear in-flight P2 clap-back waves
+            this.def.touchDmg = JH.ASSMAN.touchDmg;                                          // clear in-flight P2 clap-back waves
           }
         }
         return;
@@ -6292,35 +6297,11 @@
     // ---- Phase 2: Air Superiority ----
     thinkP2(dt, game, pl, d) {
       const P = this._p2;
-      this._waves = this._waves || [];
-      // Enemy.update() runs basePhysics(dt) BEFORE think() every frame; with
-      // z > 0 that applies gravity to z/vz unconditionally. Pin the hold
-      // height (and zero vz so it can't accumulate) every airborne frame
-      // here — slamfall drives z itself via a manual descent below, and
-      // slamland is already grounded (z = 0), so both skip the pin.
-      if (!this._grounded && P.mode !== "slamfall") { this.z = d.slam.airZ; this.vz = 0; }
-      // clap-back waves always advance (even during the slam)
-      for (let i = this._waves.length - 1; i >= 0; i--) {
-        const w = this._waves[i];
-        const x0 = w.x;
-        w.x += w.dir * d.clapback.waveSpeed * dt;
-        if (pl.alive && !w.hit && Math.abs(pl.y - w.y) <= d.clapback.band &&
-            ((x0 - pl.x) * (w.x - pl.x) <= 0)) {                       // front crossed the player
-          w.hit = true;
-          pl.takeHit(d.clapback.dmg, game, w.x - w.dir * 20);
-        }
-        // Boss arenas lock game.bounds to the arena width, not the whole
-        // level scroll (game.js bounds default) — same fallback idiom as
-        // ToiletBomb's cleanup above (game.bounds ?? JH.LEVEL_LEN).
-        const wMin = game.bounds ? game.bounds.minX - 60 : -60;
-        const wMax = game.bounds ? game.bounds.maxX + 60 : JH.LEVEL_LEN + 60;
-        if (w.x < wMin || w.x > wMax) this._waves.splice(i, 1);
-      }
       if (P.mode === "shadow") {
-        this.state = "fly";
         // Patrol: sweep waypoint-to-waypoint across the arena at flySpeed —
-        // he FLIES, he doesn't hover-follow. Depth drifts too, so clap-back
-        // lanes vary and are dodged by reading his altitude line.
+        // he FLIES, he doesn't hover-follow. Depth drifts too. Re-pin z
+        // every frame: basePhysics gravity runs before think().
+        this.z = d.slam.airZ; this.vz = 0;
         const b = game.bounds || { minX: this.x - 200, maxX: this.x + 200 };
         if (P.wx == null || Math.abs(P.wx - this.x) < 14) {
           P.wx = b.minX + 40 + Math.random() * Math.max(40, (b.maxX - b.minX) - 80);
@@ -6331,55 +6312,58 @@
         this.x += (dxw / dw) * d.flySpeed * dt;
         this.y += (dyw / dw) * d.flySpeed * 0.45 * dt;
         this.facing = dxw >= 0 ? 1 : -1;
-        P.cbT -= dt;
-        if (P.cbT <= 0) {
-          P.cbT = d.clapback.every;
-          this._waves.push({ x: this.x, y: this.y, dir: this.facing, hit: false });
-          this.state = "airclap"; this.strikeFx = 0.2;
-          game.audio.play("whack");
+        // periodic ranged pressure: a marked pressure bolt at Jon
+        P.fireT = (P.fireT == null ? d.airfire.every * 0.5 : P.fireT) - dt;
+        if (P.fireT <= 0) {
+          P.fireT = d.airfire.every;
+          P.poseT = 0.35;
+          this.strikeFx = 0.25;
+          game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.airfire));
+          game.audio.play("jump");
         }
+        if (P.poseT > 0) P.poseT -= dt;
+        this.state = P.poseT > 0 ? "airclap" : "fly";
         P.t -= dt;
         if (P.t <= 0) {
+          // slam windup happens WHERE HE IS — no teleport. The target
+          // ellipse tracks Jon through the pause and locks at dive start.
           P.mode = "slampause"; P.t = d.slam.pause;
-          P.strafeN = d.slam.strafeCount; P.strafeT = 0.12;            // volley first
           P.tx = pl.x; P.ty = pl.y;
-          this.x = pl.x; this.y = pl.y;                                // hover above
           this.state = "slampause";
-          P.wx = null;                                                 // fresh patrol next loop
+          P.wx = null;
         }
         return;
       }
       if (P.mode === "slampause") {
-        if ((P.strafeN || 0) > 0) {
-          // strafe volley: pressure bolts from the outstretched hand
-          this.state = "fly";
-          this.facing = pl.x >= this.x ? 1 : -1;
-          P.strafeT -= dt;
-          if (P.strafeT <= 0) {
-            P.strafeT = d.slam.strafeEvery;
-            P.strafeN--;
-            game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.slam));
-            game.audio.play("jump");
-            if (P.strafeN <= 0) {
-              // volley done: NOW lock the drop on the player's position
-              P.tx = pl.x; P.ty = pl.y;
-              this.x = pl.x; this.y = pl.y;
-            }
-          }
-          return;
-        }
+        this.z = d.slam.airZ; this.vz = 0;
         this.state = "slampause";
+        this.faceToward(pl.x);
+        P.tx = pl.x; P.ty = pl.y;                 // telegraph chases until the dive locks
         P.t -= dt;
-        if (P.t <= 0) { P.mode = "slamfall"; this.state = "slamfall"; }
+        if (P.t <= 0) {
+          P.mode = "slamfall";
+          this.state = "slamfall";
+          // lock the target and dive there diagonally from HERE
+          const dist2 = Math.hypot(P.tx - this.x, P.ty - this.y);
+          const diveT = Math.max(this.z / d.slam.fallSpeed, dist2 / d.slam.diveSpeed);
+          P.dvx = (P.tx - this.x) / diveT;
+          P.dvy = (P.ty - this.y) / diveT;
+          P.dvz = this.z / diveT;
+          this.faceToward(P.tx);
+        }
         return;
       }
       if (P.mode === "slamfall") {
         this.state = "slamfall";
-        this.z -= d.slam.fallSpeed * dt;
+        this.vz = 0;                              // the dive owns z
+        this.x += P.dvx * dt;
+        this.y += P.dvy * dt;
+        this.z -= P.dvz * dt;
         if (this.z <= 0) {
+          this.x = P.tx; this.y = P.ty;           // land exactly on the drawn ellipse
           this.z = 0; this._grounded = true;
           this.state = "slamland";
-          P.mode = "slamland";   // else the mode-dispatch above re-enters "slamfall" forever
+          P.mode = "slamland";
           this._recoverT = d.slam.recovery;
           game.shake(8); game.audio.play("whack");
           if (pl.alive && Geo.inGroundEllipse(pl.x, pl.y, this.x, this.y, d.slam.rx))
@@ -6396,14 +6380,11 @@
       this._recoverT -= dt;
       if (this._recoverT <= 0) {
         this._grounded = false; this.z = d.slam.airZ;
-        P.mode = "shadow"; P.t = d.slam.shadowEvery; P.cbT = d.clapback.every;
+        P.mode = "shadow"; P.t = d.slam.shadowEvery; P.fireT = d.airfire.every * 0.5;
         this.state = "fly";
       }
     }
 
-    // ---- Phase 3: Glute Force Trauma — storm → exhaustion → brawl loop ----
-    // The storm is the signature; between bursts he chases with the phase-1
-    // kit at brawlCadence, then re-centers for the next storm.
     thinkP3(dt, game, pl, d) {
       const S = d.storm;
       if (this._exhaustT > 0) {
@@ -6518,7 +6499,7 @@
       this.state = "kneel";
       this._kneelT = this.def.kneelBeat;
       this.def.touchDmg = 0;
-      this.move = null; this._storm = null; this._waves = []; this._slamRing = null;
+      this.move = null; this._storm = null; this._slamRing = null;
       if (game.gustLanes) game.gustLanes = game.gustLanes.filter((l) => !l._bossLane);
       game.audio.play("win");
       // survivesDefeat: NO FxBurst, no corpse sequence — the kneel IS the beat.
@@ -6536,18 +6517,6 @@
 
     drawP2Fx(ctx, cam) {
       const d = this.def;
-      if (this._waves) for (const w of this._waves) {
-        const sx = w.x - cam, syT = Geo.feetScreenY(w.y - d.clapback.band, 0), syB = Geo.feetScreenY(w.y + d.clapback.band, 0);
-        ctx.save();
-        ctx.globalAlpha = 0.95;
-        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.moveTo(sx, syT - 16); ctx.lineTo(sx, syB); ctx.stroke();
-        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(sx, syT - 16); ctx.lineTo(sx, syB); ctx.stroke();
-        ctx.globalAlpha = 0.35; ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(sx - w.dir * 6, syT - 16); ctx.lineTo(sx - w.dir * 6, syB); ctx.stroke();
-        ctx.restore();
-      }
       if (this._slamRing) {
         const RR = d.slam.ring, ring = this._slamRing;
         ctx.save();
@@ -6607,9 +6576,9 @@
       if (dist > 30) {
         this.x += (dx / dist) * d.speed * dt;
         this.y += (dy / dist) * d.speed * dt;
-        this.facing = dx >= 0 ? 1 : -1;
+        this.faceToward(pl.x);
         this.state = "walk";
-      } else this.state = "idle";
+      } else { this.faceToward(pl.x); this.state = "idle"; }
     }
 
     startMove(kind, game, pl, d) {
@@ -6764,7 +6733,7 @@
       const s = this.state;
       if (this._kneeling) return "kneel";
       if (s === "transition") return this._nextPhase === 2 ? "riseup" : "clap";
-      if (s === "fly") return "flight";
+      if (s === "fly") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("soar")) ? "soar" : "flight";
       if (s === "airclap") return "airclap";
       if (s === "slampause" || s === "slamfall") return "slam";
       // Landing: hold the ass-contact slam frame (sells the impact), then
@@ -6777,7 +6746,7 @@
       if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
       if (s === "toss") return "toss";
       if (s === "exhaust") return "exhaust";
-      if (s === "walk") return "flight";                 // he never walks — he glides
+      if (s === "walk") return (JH.Assets && JH.Assets.assmanPoseReady && JH.Assets.assmanPoseReady("soar")) ? "soar" : "flight";   // he never walks — he glides
       return "idle";
     }
 
