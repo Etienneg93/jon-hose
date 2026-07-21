@@ -1458,9 +1458,9 @@
   // uniform height made the crouches (kneel/slam/exhaust) tower over the
   // standing idle. Heights are logical px, feet-anchored.
   const AM_POSE_H = {
-    idle: 58, flight: 63, riseup: 74, slam: 44, kneel: 34,
-    clapwind: 56, charge: 48, clap: 56, hipcheck: 46, toss: 62,
-    airclap: 54, exhaust: 44, soar: 20,
+    idle: 58, flight: 56, riseup: 66, slam: 44, kneel: 40,
+    clapwind: 56, charge: 54, clap: 56, hipcheck: 50, toss: 60,
+    airclap: 54, exhaust: 46, soar: 19,
   };
   const _amImgs = {};
   const _amImgsL = {};   // left-facing bakes: mirrored body, chest text un-flipped
@@ -1497,7 +1497,7 @@
     ctx.translate(x, y);
     if (facing < 0 && !useL) ctx.scale(-1, 1);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, -Math.round(dw / 2), -AM_H, dw, AM_H);
+    ctx.drawImage(img, -Math.round(dw / 2), -drawH, dw, drawH);
     ctx.restore();
   });
 
