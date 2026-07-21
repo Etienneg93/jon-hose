@@ -1007,7 +1007,8 @@
                 airZ: 46, shadowEvery: 2.0 },
     gustEveryLoops: 2, gustDur: 6,
     storm:    { rings: 3, ringSpeed: 90, ringDmg: 12, gapDeg: 55, gapRotDeg: 40,
-                ringEvery: 1.4, rimW: 7, burstGap: 0.6, cullR: 270 },
+                ringEvery: 1.4, rimW: 7, burstGap: 0.6, cullR: 270,
+                brawlS: 6, brawlCadence: 1.4 },   // P1-kit window between storms
     exhaust:  { dur: 4, dmgTakenMult: 1.25 },
     kneelBeat: 1.5,
     barks: { p2: "THE CHEEKS HAVE CLAPPED BACK.", p3: "GLUTE FORCE TRAUMA." },

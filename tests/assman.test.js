@@ -374,6 +374,33 @@ test("assman P3: exhaustion window — 1.25x damage taken, then next burst", () 
   assert.strictEqual(b.hp, hp0 - 100 * D.exhaust.dmgTakenMult, "opening takes bonus damage");
 });
 
+test("assman P3: brawl window between storms, then recenter and re-arm", () => {
+  const D = JH.ASSMAN, S = D.storm;
+  const g = makeThinkGame(60, 40);
+  g.bounds = { minX: 0, maxX: 480 };
+  const b = JH.makeEnemy("assman", 400, 40);
+  b.phase = 3; b._grounded = true;
+  // run to the exhaustion window, then let it lapse
+  let guard = 0;
+  while (!(b._exhaustT > 0) && guard++ < 6000) b.think(1 / 60, g);
+  assert.ok(b._exhaustT > 0, "reached exhaustion");
+  while (b._exhaustT > 0 && guard++ < 8000) b.think(1 / 60, g);
+  assert.ok(b._p3brawlT > 0, "brawl window armed after the opening");
+  assert.strictEqual(b._storm, null, "storm cleared during the brawl");
+  // brawl runs the P1 kit: within the window he must pick a move
+  let sawMove = false;
+  while (b._p3brawlT > 0 && guard++ < 12000) {
+    b.think(1 / 60, g);
+    if (b.move || ["clapwind", "hipbrace", "hipdash", "toss"].includes(b.state)) sawMove = true;
+  }
+  assert.ok(sawMove, "P1 moves fire during the brawl window");
+  // after the brawl he recenters and a fresh storm arms
+  while (!b._storm && guard++ < 20000) b.think(1 / 60, g);
+  assert.ok(b._storm, "next storm armed after recentering");
+  const cx0 = (g.bounds.minX + g.bounds.maxX) / 2;
+  assert.ok(Math.abs(b.x - cx0) <= 20, "storm plants at arena center");
+});
+
 test("assman kneel: no death VFX, beat, then onEnemyKilled — and Slayer gated too", () => {
   const D = JH.ASSMAN;
   const g = makeThinkGame(0, 40);

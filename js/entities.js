@@ -2942,27 +2942,53 @@
     }
     draw(ctx, cam) {
       // Edge lines at laneY ± band = exactly the tested band (rim is hitbox).
+      // Dark slate palette + direction chevrons: the pale originals vanished
+      // on the Air World's white cloud deck.
       const yT = Geo.feetScreenY(this.y - this.band, 0), yB = Geo.feetScreenY(this.y + this.band, 0);
       const blowing = this.phase === "blow";
       const flash = this.phase === "telegraph" && (Math.floor(this.t * 8) & 1);
       ctx.save();
-      ctx.globalAlpha = blowing ? 0.5 : this.phase === "telegraph" ? (flash ? 0.6 : 0.25) : 0.1;
-      ctx.strokeStyle = "#bfe6ff";
-      ctx.lineWidth = 1;
+      // faint band tint so the lane reads as a zone, not just two lines
+      if (blowing || this.phase === "telegraph") {
+        ctx.globalAlpha = blowing ? 0.14 : 0.08;
+        ctx.fillStyle = "#2a4668";
+        ctx.fillRect(0, yT, JH.VIEW_W, Math.max(1, yB - yT));
+      }
+      ctx.globalAlpha = blowing ? 0.75 : this.phase === "telegraph" ? (flash ? 0.85 : 0.4) : 0.15;
+      ctx.strokeStyle = "#2a4668";
+      ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 5]);
       ctx.beginPath(); ctx.moveTo(0, yT); ctx.lineTo(JH.VIEW_W, yT); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, yB); ctx.lineTo(JH.VIEW_W, yB); ctx.stroke();
       ctx.setLineDash([]);
-      // Wind streaks INSIDE the band only (never outside the tested edges).
+      // Wind streaks INSIDE the band only (never outside the tested edges):
+      // dark core + white cap reads on clouds AND night streets.
       if (blowing || this.phase === "telegraph") {
         const n = blowing ? 9 : 4;
         for (let i = 0; i < n; i++) {
           const k = (this.t * (blowing ? 1.4 : 0.4) + i / n) % 1;
           const lx = this.dir > 0 ? k * JH.VIEW_W : (1 - k) * JH.VIEW_W;
           const ly = yT + 2 + ((i * 37) % Math.max(1, yB - yT - 4));
-          ctx.globalAlpha = (blowing ? 0.5 : 0.2) * (1 - Math.abs(k - 0.5) * 1.6);
-          ctx.fillStyle = "#dff2ff";
-          ctx.fillRect(Math.round(lx), Math.round(ly), 14, 1);
+          ctx.globalAlpha = (blowing ? 0.7 : 0.35) * (1 - Math.abs(k - 0.5) * 1.6);
+          ctx.fillStyle = "#35507a";
+          ctx.fillRect(Math.round(lx), Math.round(ly), 14, 2);
+          ctx.fillStyle = "#eaf4ff";
+          ctx.fillRect(Math.round(lx) + (this.dir > 0 ? 10 : 0), Math.round(ly), 4, 1);
+        }
+        // direction chevrons marching along the band centerline
+        const cy = (yT + yB) / 2;
+        const step = 56;
+        const off = ((this.t * (blowing ? 90 : 30) * this.dir) % step + step) % step;
+        ctx.fillStyle = blowing ? "#eaf4ff" : "#2a4668";
+        ctx.strokeStyle = "#1a2a44"; ctx.lineWidth = 1;
+        ctx.globalAlpha = blowing ? 0.9 : (flash ? 0.8 : 0.45);
+        for (let x = -step + off; x < JH.VIEW_W + step; x += step) {
+          ctx.beginPath();
+          ctx.moveTo(x - 4 * this.dir, cy - 4);
+          ctx.lineTo(x + 3 * this.dir, cy);
+          ctx.lineTo(x - 4 * this.dir, cy + 4);
+          ctx.stroke();
+          if (blowing) ctx.fill();
         }
       }
       ctx.restore();
@@ -6269,14 +6295,40 @@
       }
     }
 
-    // ---- Phase 3: Glute Force Trauma — clap-storm bursts + exhaustion ----
+    // ---- Phase 3: Glute Force Trauma — storm → exhaustion → brawl loop ----
+    // The storm is the signature; between bursts he chases with the phase-1
+    // kit at brawlCadence, then re-centers for the next storm.
     thinkP3(dt, game, pl, d) {
       const S = d.storm;
       if (this._exhaustT > 0) {
         this._exhaustT -= dt;
         this.state = "exhaust";
-        if (this._exhaustT <= 0) this._storm = null;       // next burst arms below
+        if (this._exhaustT <= 0) { this._storm = null; this._p3brawlT = S.brawlS; }
         return;
+      }
+      // brawl window: P1 moves, faster picks (instance def copy — safe swap)
+      if (this._p3brawlT > 0) {
+        this._p3brawlT -= dt;
+        const saved = d.decideEvery;
+        d.decideEvery = S.brawlCadence;
+        this.thinkP1(dt, game, pl, d);
+        d.decideEvery = saved;
+        if (this._p3brawlT <= 0 && !this.move && (this._skidT || 0) <= 0)
+          this._p3recenter = true;
+        return;
+      }
+      // walk back to arena center before the next storm plants
+      if (this._p3recenter) {
+        const b = game.bounds || { minX: this.x, maxX: this.x };
+        const cx0 = (b.minX + b.maxX) / 2;
+        const dxc = cx0 - this.x;
+        if (Math.abs(dxc) > 16) {
+          this.x += Math.sign(dxc) * Math.min(Math.abs(dxc), d.speed * 2 * dt);
+          this.facing = dxc >= 0 ? 1 : -1;
+          this.state = "walk";
+          return;
+        }
+        this._p3recenter = false;
       }
       if (!this._storm) {
         this._storm = { rings: [], spawnT: 0, spawned: 0, gapA: Math.floor(Math.random() * 360), restT: 0 };
@@ -6509,7 +6561,7 @@
       if (s === "fly") return "flight";
       if (s === "airclap") return "airclap";
       if (s === "slampause" || s === "slamfall") return "slam";
-      if (s === "slamland") return "kneel";              // landed recovery reads as grounded/open
+      if (s === "slamland") return "exhaust";            // recovery = the game's "I'm open" pose
       if (s === "clapwind") return "clapwind";
       if (s === "clap") return "clap";
       if (s === "hipbrace" || s === "hipdash" || s === "skid") return "hipcheck";
@@ -6527,9 +6579,17 @@
       this.drawStorm(ctx, cam);
       Assets.shadow(ctx, sx, groundY, this.bodyW * 0.6);
       const sy = Geo.feetScreenY(this.y, this.z);
-      Assets.draw(ctx, "assman", sx, sy, this.facing, {
+      // Single-frame walk sells motion with a step-bob + lean into the
+      // stride (house pattern for baked one-frame bosses).
+      const walking = this.state === "walk";
+      const bob = walking ? Math.abs(Math.sin(this.t * 9)) * -2.5 : 0;
+      const lean = walking ? this.facing * 0.07 : 0;
+      ctx.save();
+      if (walking) { ctx.translate(sx, sy); ctx.rotate(lean); ctx.translate(-sx, -sy); }
+      Assets.draw(ctx, "assman", sx, sy + bob, this.facing, {
         state: this.poseKey(), hurt: this.flashTimer > 0, hurtAlpha: Math.min(this.flashTimer / 0.18, 1),
       });
+      ctx.restore();
       // hp bar — mirrors SlayerBoss.draw's inline bar.
       if (this.hp < this.maxHp) {
         const w = this.bodyW + 8;
