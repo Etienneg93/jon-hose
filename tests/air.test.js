@@ -138,7 +138,7 @@ test("air act placements: every pre-placed enemy is a Bidet inside the 440px are
   }
 });
 
-test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily does", () => {
+test("air act: wave 32 clearing doesn't win; the Ass Man wave enters his cutscene, then win()", () => {
   const prevMusic = JH.Music;
   JH.Music = Object.assign({}, prevMusic, { setTrack() {} });
   const doc = global.document;
@@ -154,13 +154,23 @@ test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily doe
       g.win = function () { wonAt = this.waveIndex; };
       g.waveIndex = waveIndex; g.waveActive = true;
       g.waveCleared_();
-      return wonAt;
+      return { wonAt, g };
     };
-    assert.strictEqual(runClear(31), null, "clearing wave 32 (index 31) must not win anymore");
+    assert.strictEqual(runClear(31).wonAt, null, "clearing wave 32 (index 31) must not win");
     const lastIdx = JH.LEVEL1.waves.length - 1;
     const last = JH.LEVEL1.waves[lastIdx];
     assert.strictEqual(last.bossType, "assman", "last wave is the Ass Man boss");
-    assert.strictEqual(runClear(lastIdx), lastIdx, "clearing the last wave calls win()");
+    // Clearing the final wave now opens the Ass Man ally cutscene instead of
+    // winning synchronously (parity with Quake/Slayer). win() fires only once
+    // the cutscene resolves via afterAssManCutscene.
+    const cleared = runClear(lastIdx);
+    assert.strictEqual(cleared.wonAt, null, "clearing the last wave defers win() to the cutscene");
+    assert.strictEqual(cleared.g.state, "cutscene", "clearing the last wave enters the cutscene");
+    assert.strictEqual(cleared.g.cutscene.who, "assman", "it's the Ass Man cutscene");
+    let wonAt = null;
+    cleared.g.win = function () { wonAt = this.waveIndex; };
+    cleared.g.afterAssManCutscene();
+    assert.strictEqual(wonAt, lastIdx, "resolving the Ass Man cutscene calls win()");
   } finally { global.document = doc; JH.Music = prevMusic; }
 });
 

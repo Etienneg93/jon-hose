@@ -1004,6 +1004,19 @@
         return;
       }
 
+      // After Ass Man (the final boss), play his ally cutscene, then win().
+      // Placed above the last-wave win() shortcut below so the kneel resolves
+      // into the portrait scene instead of jumping straight to the win screen.
+      const assmanIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "assman");
+      if (assmanIdx >= 0 && this.waveIndex === assmanIdx) {
+        JH.Camera.unlock();
+        this.state = "cutscene";
+        this.cutscene = { phase: 0, who: "assman" };
+        document.getElementById("hud").classList.add("hidden");
+        document.getElementById("banner").classList.add("hidden");
+        return;
+      }
+
       if (clearedWave) {
         document.getElementById("hud-wave").textContent = clearedWave.name;
         document.getElementById("hud-wave-label").classList.remove("hidden");
@@ -1083,6 +1096,13 @@
       this.banner("THE SLAYER JOINS YOUR SIDE!  —  CHOOSE ONE", 2.6);
     },
 
+    // Ass Man is the final built wave: his cutscene resolves straight into the
+    // victory screen (no next act to arm yet). win() owns the state swap.
+    afterAssManCutscene() {
+      this.cutscene = null;
+      this.win();
+    },
+
     // Sequence fired once the Slayer benediction is chosen: the Fire World
     // rumbles, a dread sting hits, and the escape truck drives in and brakes
     // just at the right edge of the screen. Board it (E) to start the escape.
@@ -1145,6 +1165,7 @@
       const cs = this.cutscene;
       if (!cs) return;
       if (cs.who === "slayer") { this.drawSlayerCutscene(ctx, cs); return; }
+      if (cs.who === "assman") { this.drawAssManCutscene(ctx, cs); return; }
       const lines = [
         ["...You're stronger than I expected.", "I underestimated you."],
         ["The quake in my heart...", "You've silenced it."],
@@ -1292,6 +1313,75 @@
 
       for (let i = 0; i < lines.length; i++) {
         ctx.fillStyle = i <= phase ? JH.PAL.slayerEmber : "#3a2010";
+        ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
+      }
+    },
+
+    drawAssManCutscene(ctx, cs) {
+      const lines = [
+        ["...You really wiped the floor with me.", "Nobody gets past the cheeks."],
+        ["All that pressure I was holding in...", "You let it out."],
+        ["Consider my ass... on your side.", "Let's go clean up this town."],
+      ];
+      const phase = clamp(cs.phase, 0, lines.length - 1);
+
+      ctx.fillStyle = "rgba(0,0,0,0.88)";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+
+      const PX = 10, PY = 10, PW = 96, PH = 108;
+      ctx.fillStyle = "#0a1226";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = JH.PAL.assmanGold;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      const talking = (cs.timer || 0) < 2.0;
+      const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
+      const img = JH.getAssManPortrait ? JH.getAssManPortrait(mouthOpen) : null;
+      if (img && img._ready) {
+        ctx.drawImage(img, PX, PY, PW, PH);
+      } else {
+        // Procedural fallback — navy chassis, gold belt, red eyes (matches the
+        // in-game silhouette placeholder). mouthOpen widens the jaw slit.
+        const cx = PX + PW / 2, cy = PY + PH - 4;
+        const f = (lx, ly, w, h, col) => {
+          ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+        };
+        f(-26, 0, 52, 62, JH.PAL.assmanBody); f(-26, 0, 52, 8, JH.PAL.assmanDk);
+        f(-26, 34, 52, 6, JH.PAL.assmanGold);          // belt
+        f(-20, 62, 40, 30, JH.PAL.assmanBody); f(-20, 62, 40, 7, JH.PAL.assmanDk);  // head
+        f(-12, 78, 8, 5, "#ff5a5a"); f(4, 78, 8, 5, "#ff5a5a");                     // eyes
+        f(-8, 66, 16, mouthOpen ? 5 : 2, JH.PAL.assmanDk);                          // mouth
+      }
+
+      ctx.fillStyle = JH.PAL.assmanGold;
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("ASS MAN", PX, PY + PH + 9);
+
+      const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
+      ctx.fillStyle = "#060a16";
+      ctx.fillRect(DX, DY, DW, DH);
+      ctx.strokeStyle = "#1a2a55";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(DX, DY, DW, DH);
+
+      ctx.fillStyle = "#dfe6ff";
+      ctx.font = "6px monospace";
+      const dl = lines[phase];
+      ctx.fillText(dl[0], DX + 6, DY + 18);
+      if (dl[1]) ctx.fillText(dl[1], DX + 6, DY + 30);
+
+      if (Math.floor(performance.now() / 500) % 2) {
+        ctx.fillStyle = "#5a6da0";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ E ]  ADVANCE", DX + DW - 4, DY + DH - 5);
+        ctx.textAlign = "left";
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillStyle = i <= phase ? JH.PAL.assmanGold : "#20284a";
         ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
       }
     },
@@ -2165,7 +2255,9 @@
             cs.phase++;
             cs.timer = 0;
             if (cs.phase >= 3) {
-              if (this.cutscene && this.cutscene.who === "slayer")
+              if (this.cutscene && this.cutscene.who === "assman")
+                this.afterAssManCutscene();
+              else if (this.cutscene && this.cutscene.who === "slayer")
                 this.afterSlayerCutscene(this.cutscene.nextWave);
               else
                 this.afterCutscene(this.cutscene ? this.cutscene.nextWave : 10);

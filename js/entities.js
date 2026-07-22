@@ -6174,6 +6174,15 @@
   }
   JH.SlayerBoss = SlayerBoss;
 
+  // Ass Man ranged-muzzle offsets by pose (logical px): dx from body center in
+  // facing units, dz above the feet line. ONE anchor for the beam and the bolt
+  // volley so both emit from the outstretched hand (was: beam from the hand,
+  // bolts from body center 30px lower with no facing offset — visibly split).
+  const AM_MUZZLE = {
+    airclap: { dx: 8, dz: 30 },   // shooting pose (volley + held beam frame)
+    _default: { dx: 8, dz: 30 },
+  };
+
   // ---- Ass Man (wave 36): three-phase duel. Phases fill in over the ----
   // ---- fight-plan tasks; this skeleton walks + contact only.        ----
   class AssManBoss extends Boss {
@@ -6357,7 +6366,8 @@
               P.ranged.t = d.airfire.burstGap;
               P.ranged.n--;
               this.strikeFx = 0.2;
-              game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.airfire));
+              const m = this.muzzle();
+              game.embers.push(new AirBolt(m.x, m.y, m.z, pl.x, pl.y, d.airfire));
               game.audio.play("jump");
               if (P.ranged.n <= 0) P.ranged = null;
             }
@@ -6661,8 +6671,9 @@
       // sustained beam: hand -> chasing ground spot (spot rim = hit rim)
       if (this._beam) {
         const B = this._beam;
-        const hx = this.x - cam + this.facing * 8;
-        const hy = Geo.feetScreenY(this.y, this.z) - 30;
+        const m = this.muzzle();
+        const hx = m.x - cam;
+        const hy = Geo.feetScreenY(m.y, m.z);
         const gx = B.tx - cam, gy = Geo.feetScreenY(B.ty, 0);
         ctx.save();
         if (B.mode === "charge") {
@@ -6894,6 +6905,13 @@
     }
 
     // Maps internal fight state -> baked pose key (js/assets.js "assman" painter).
+    // Ranged origin: the outstretched hand for the current pose, feet-anchored
+    // and facing-mirrored. Shared by the beam draw and the AirBolt volley.
+    muzzle() {
+      const M = AM_MUZZLE[this.poseKey()] || AM_MUZZLE._default;
+      return { x: this.x + this.facing * M.dx, y: this.y, z: (this.z || 0) + M.dz };
+    }
+
     poseKey() {
       const s = this.state;
       if (this._kneeling) return "kneel";

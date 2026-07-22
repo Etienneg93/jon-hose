@@ -207,6 +207,7 @@
     bulwark: "#5a6b7a", bulwarkDk: "#33404c", bulwarkShield: "#cfe9ff",
     stalker: "#8a2f5a", stalkerDk: "#591b3a",
     slayerBody: "#3a2010", slayerDk: "#1e0f00", slayerEmber: "#ff6010",
+    assmanBody: "#1d2f66", assmanDk: "#0f1a3d", assmanGold: "#d9a520",
     smelt: "#5a3020",      smeltDk: "#3a1a08",  smeltGlow: "#ff8030",
     fuse: "#ff4810",       fuseDk: "#cc2800",
     furnaceBody: "#4a3020",furnaceDk: "#2a1808",furnaceHot: "#ff6820",
