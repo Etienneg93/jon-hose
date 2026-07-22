@@ -1,0 +1,13 @@
+Codec-comms dialogue portrait bust of "ASS MAN", a costumed superhero — the
+JHCU's first hero. Head-and-shoulders, facing the viewer, confident closed-mouth
+grin. Dark navy super-suit (#1d2f66) with a bright gold belt/collar and gold
+gloves (#d9a520), a flowing cape just visible at the shoulders. Chiseled jaw,
+bold heroic bearing, a little goofy dignity. Rim-lit from one side.
+
+— 2D pixel-art codec/comms dialogue portrait bust, MGS-codec framing,
+head-and-shoulders centered, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), no text, flat even lighting. Opaque
+dark-navy background (#0a1226). Target ~200 wide × 230 tall. Must read cleanly
+when scaled down into a 96×108 box.
+
+TARGET FILE: sprites/assman/assman-portrait-mouthclosed.png (opaque, no cutout)

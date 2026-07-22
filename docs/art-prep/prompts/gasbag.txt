@@ -1,0 +1,24 @@
+A "Gasbag": a hovering stink-spirit — a sagging, gently bobbing balloon-sack of
+foul green gas with a puckered vent at the bottom and a knotted top, plus a
+small dopey two-dot face. Sanitation-world air enemy. It drifts at head height.
+
+Body green #7fae4a, darker underbelly/vent #4f7a2a, pale highlight rim #b9d98a,
+tiny dark eyes/mouth #2a2a1a. Round, soft, faintly translucent, a little gross
+and comic.
+
+— 2D pixel-art game sprite, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), single subject centered with clear
+margin, no text, no drop shadow, flat even lighting, must read at very low
+resolution. Background: flat solid magenta (#FF00FF) for clean cutout.
+Generate ~160px tall (draws at 28×29 logical).
+
+FRAME SET (5 poses — gen this base, then derive the others by hand; single-image
+gens only, conserve credits):
+  idle0 / idle1  — resting sack; idle1 is a 1px breath-bob variant of idle0.
+  wind0 / wind1  — inflating for a vent burst: wind0 slightly swollen, wind1
+                   fully strained/taut (bigger, stretched highlight).
+  vent           — mid-vent: sack deflated/pinched at the puckered base with a
+                   little gas puff escaping downward.
+
+TARGET FILES: sprites/gasbag/{idle0,idle1,wind0,wind1,vent}.png (transparent,
+hard-alpha cutout). No bake step — registerBaked scales the source at runtime.

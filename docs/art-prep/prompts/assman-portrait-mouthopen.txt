@@ -1,0 +1,15 @@
+Same costumed superhero bust as assman-portrait-mouthclosed — "ASS MAN", the
+JHCU's first hero — IDENTICAL pose, framing, palette, and lighting, but caught
+mid-speech with the MOUTH OPEN (talking). Keep every other pixel as close to the
+closed-mouth portrait as possible so the two frames flip cleanly as a talking
+animation; only the jaw/mouth changes.
+
+Dark navy super-suit (#1d2f66), gold belt/collar/gloves (#d9a520), cape at the
+shoulders. Confident, mid-quip.
+
+— 2D pixel-art codec/comms dialogue portrait bust, MGS-codec framing,
+head-and-shoulders centered, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), no text, flat even lighting. Opaque
+dark-navy background (#0a1226). Target ~200 wide × 230 tall.
+
+TARGET FILE: sprites/assman/assman-portrait-mouthopen.png (opaque, no cutout)
