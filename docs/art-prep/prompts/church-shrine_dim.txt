@@ -1,0 +1,16 @@
+A side-shrine niche in the Church of the Holy Hose in its DORMANT/unlit state: a
+small carved stone alcove holding a hose-and-droplet emblem, cold and unlit, no
+glow — waiting to be awakened. Weathered grey stone, faint dust.
+
+Cold grey stone #3a3e45 / dark #11141f, dull unlit emblem. Matches the church's
+dim, reverent look.
+
+— 2D pixel-art game sprite prop, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), single subject centered with clear
+margin, no text, no drop shadow, flat even lighting, must read at very low
+resolution. Background: flat solid magenta (#FF00FF) for clean cutout.
+Generate ~180px tall (shrine niche, ~32–40px logical).
+
+TARGET FILE: sprites/church/shrine_dim.png (transparent, hard-alpha cutout)
+PAIR: keep the silhouette/size IDENTICAL to church-shrine_lit so the two swap
+cleanly when the shrine lights up.

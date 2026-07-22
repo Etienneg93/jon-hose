@@ -1,0 +1,15 @@
+The altar of the Church of the Holy Hose: a modest sacred altar built around a
+reverent coil of garden hose and a brass spigot, a shallow basin of still holy
+water catching a soft cyan glow, a couple of lit candles. Humble, devotional,
+lightly absurd (it worships a hose). Dark stone/wood base.
+
+Dark stone #11141f, brass #ffd23f, holy cyan glow #6cd3ff / pale #d6f6ff,
+candle warm #ffc27a. Sits against the church nave.
+
+— 2D pixel-art game sprite prop, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), single subject centered with clear
+margin, no text, no drop shadow, flat even lighting, must read at very low
+resolution. Background: flat solid magenta (#FF00FF) for clean cutout.
+Generate ~200px tall (altar prop, ~40–48px logical).
+
+TARGET FILE: sprites/church/altar.png (transparent, hard-alpha cutout)
