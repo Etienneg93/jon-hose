@@ -206,7 +206,9 @@ git commit -m "art(air-act): border collie idle, four-frame trot, leg-lift"
   - `JH.AirEntry.phaseAt(C, t)` → `string`, one of `ORDER`.
   - `JH.AirEntry.enter(game)`, `.update(dt, game)`, `.skip(game)` — Tasks 5/6.
   - `JH.AirEntry.actors(game)` → array of `{x, y, draw(ctx, cam)}` — Task 5.
-  - Scene state lives at `game.airEntry`; the once-per-run flag at `game.airEntryPlayed`.
+  - Scene state lives at `game.airEntry`; the arm flag at `game.airEntryArmed`.
+
+**Arm-flag contract (load-bearing — read before Task 5).** `airEntryArmed` is set `true` in exactly one place, `enterAirAct()`, and cleared when the scene finishes. It is NOT a "has it played" flag. The distinction matters: `js/game.js:331` (`devGotoWave`) and `js/game.js:2005` (Church return) both set `JH.Background.airOn` **without** going through `enterAirAct()`, so any gate that keys off `airOn` plus a falsy played-flag will fire the cutscene when the player dev-warps to wave 32 or returns from the Church mid-act. Gate on `airEntryArmed` being explicitly true and nothing else.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -524,7 +526,7 @@ git commit -m "feat(air-act): civilian + collie painters with procedural fallbac
 - Consumes: `phaseAt`/`totalDur`/`ORDER` (Task 3), painters `"assmanPlain"` and `"collie"` (Task 4).
 - Produces:
   - `game.airEntry` — `null` when inactive, else `{t, phase, hydrantX, stranger, dog, flashT, revealed}`.
-  - `game.airEntryPlayed` — `boolean`, set true on finish; blocks replay.
+  - `game.airEntryArmed` — `boolean`. Set true only by `enterAirAct()`; cleared on finish. See the arm-flag contract in Task 3.
   - `AirEntry.actors(game)` → `[]` when inactive.
   - Actor `facing` is semantic ("which way is he looking"), never a mirror flag — the painters own the mirror decision per Task 4, because the two art sets have opposite native facings.
 
@@ -536,14 +538,14 @@ Append to `tests/airentry.test.js`:
 // Minimal game stub: the module only touches these fields.
 function makeGame() {
   return {
-    airEntry: null, airEntryPlayed: false,
+    airEntry: null, airEntryArmed: true,
     waveIndex: 28, checkpointWave: 29, waveActive: false, sigils: [],
     player: { x: C.triggerX, y: 51, z: 0, facing: 1 },
     input: { _buf: {}, buffered(a) { return !!this._buf[a]; }, consume(a) { this._buf[a] = false; } },
   };
 }
 
-test("enter() stages both actors and arms the scene", () => {
+test("enter() stages both actors and starts the scene", () => {
   const g = makeGame();
   AirEntry.enter(g);
   assert.ok(g.airEntry, "scene state exists");
@@ -551,20 +553,24 @@ test("enter() stages both actors and arms the scene", () => {
   assert.strictEqual(AirEntry.actors(g).length, 2);
 });
 
-test("enter() is idempotent once the scene has played", () => {
-  const g = makeGame();
-  g.airEntryPlayed = true;
-  AirEntry.enter(g);
-  assert.strictEqual(g.airEntry, null, "a replayed run must not re-arm");
+test("enter() is a no-op unless explicitly armed", () => {
+  // Regression: devGotoWave and the Church return both set Background.airOn
+  // without going through enterAirAct, so an unset flag must NOT arm.
+  for (const armed of [false, undefined]) {
+    const g = makeGame();
+    g.airEntryArmed = armed;
+    AirEntry.enter(g);
+    assert.strictEqual(g.airEntry, null, "must not arm when airEntryArmed is " + armed);
+  }
 });
 
-test("running to the end releases control and marks the run", () => {
+test("running to the end releases control and disarms", () => {
   const g = makeGame();
   AirEntry.enter(g);
   const steps = Math.ceil(AirEntry.totalDur(C) / (1 / 60)) + 2;
   for (let i = 0; i < steps; i++) AirEntry.update(1 / 60, g);
   assert.strictEqual(g.airEntry, null, "scene cleared");
-  assert.strictEqual(g.airEntryPlayed, true);
+  assert.strictEqual(g.airEntryArmed, false);
   assert.strictEqual(AirEntry.actors(g).length, 0);
 });
 
@@ -581,7 +587,7 @@ test("skip() from any phase lands in the same end state", () => {
     g.airEntry.t = acc + C.phases[phase] / 2;
     AirEntry.skip(g);
     assert.strictEqual(g.airEntry, null, "skipped from " + phase);
-    assert.strictEqual(g.airEntryPlayed, true);
+    assert.strictEqual(g.airEntryArmed, false);
   }
 });
 
@@ -635,10 +641,11 @@ Expected: FAIL — `AirEntry.enter is not a function`.
 In `js/airentry.js`, add these members to the `AirEntry` object (after `phaseAt`):
 
 ```js
-    // Arm the scene. No-op if it already played this run — death/respawn and
-    // Church returns re-enter the area and must not replay it.
+    // Start the scene. Requires an explicit arm from enterAirAct(): dev warps
+    // and Church returns turn Background.airOn on without arriving, and must
+    // not trigger the beat.
     enter(game) {
-      if (game.airEntryPlayed || game.airEntry) return;
+      if (game.airEntryArmed !== true || game.airEntry) return;
       const C = JH.AIRENTRY;
       const hydrantX = JH.HYDRANTS[JH.HYDRANTS.length - 1].x;
       const self = this;
@@ -684,7 +691,7 @@ In `js/airentry.js`, add these members to the `AirEntry` object (after `phaseAt`
 
     _finish(game) {
       game.airEntry = null;
-      game.airEntryPlayed = true;
+      game.airEntryArmed = false;
     },
 
     update(dt, game) {
@@ -792,7 +799,7 @@ with:
 Then, inside `enterAirAct()`, immediately before the `this.banner(...)` call, add:
 
 ```js
-      this.airEntry = null; this.airEntryPlayed = false;   // arrival re-arms the entry beat
+      this.airEntry = null; this.airEntryArmed = true;   // only real arrival arms the entry beat
 ```
 
 - [ ] **Step 6: Add the update hook and trigger check**
@@ -809,9 +816,10 @@ Replace it with:
       if (this.arrival) { this.updateArrival(dt); return; }
 
       // Air entry beat: owns play input/logic while it runs (same idiom as
-      // `arrival` above). Armed once per run by walking past triggerX.
-      if (!this.airEntry && !this.airEntryPlayed && JH.AirEntry &&
-          JH.Background && JH.Background.airOn &&
+      // `arrival` above). Gated on airEntryArmed, which only enterAirAct()
+      // sets — devGotoWave and the Church return flip Background.airOn on
+      // without arriving, and must not trigger the scene.
+      if (!this.airEntry && this.airEntryArmed === true && JH.AirEntry &&
           this.player.x >= JH.AIRENTRY.triggerX) {
         JH.AirEntry.enter(this);
       }
@@ -937,14 +945,15 @@ Write `tmp/airentry-verify.mjs` asserting, against live game state:
 1. `devGotoAirEntry()` then hold Right → `game.airEntry` becomes non-null.
 2. While `game.airEntry` is set, holding Right does not change `game.player.x` (control is locked).
 3. `game.airEntry.phase` passes through every entry in `JH.AirEntry.ORDER` in order.
-4. After release, `game.airEntry` is `null`, `game.airEntryPlayed` is `true`, and Right moves Jon again.
+4. After release, `game.airEntry` is `null`, `game.airEntryArmed` is `false`, and Right moves Jon again.
 5. Continuing right rolls WAVE 30: `game.waveIndex === 29` and `game.waveActive === true`.
 6. A confirm press mid-scene reaches the same end state as running it out.
-7. Zero `pageerror` events for the whole run.
+7. **Regression:** `devGotoWave(31)` (a mid-air-act wave, `airOn` true) followed by holding Right does NOT start the scene — `game.airEntry` stays `null`.
+8. Zero `pageerror` events for the whole run.
 
 Capture one screenshot per phase to `tmp/airentry-<phase>.png`.
 
-Expected: 7/7 checks green, 7 screenshots, zero pageerrors.
+Expected: 8/8 checks green, 7 screenshots, zero pageerrors.
 
 - [ ] **Step 6: Show the user the captures**
 
@@ -961,7 +970,7 @@ git commit -m "dev(air-act): AIR ENTRY dev-menu warp for the arrival beat"
 
 ## Done criteria
 
-- The scene plays once on Air World arrival, is skippable, and does not replay after death or a Church return.
+- The scene plays once on Air World arrival, is skippable, and does not replay after death or a Church return; a dev warp into the air act never triggers it.
 - WAVE 30 still rolls at x 11810; `waveIndex`, `checkpointWave`, `waveActive`, `sigils` untouched by the scene.
 - Full suite green; zero pageerrors headlessly.
 - Branch `air-act` **HELD FOR USER PLAYTEST** — no merge, no release.
