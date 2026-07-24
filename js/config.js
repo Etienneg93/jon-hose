@@ -1238,6 +1238,7 @@
       walkSpeed: 90,                           // px/s Jon walks the walkway
       walkMinX: 24,                            // left clamp on the walkway
       enterFade: 0.6,                          // s blue-white fade entering the gate
+      airWhiteIn: 0.9,                         // s the Air World fades IN from that same blue-white (portal's second half)
     },
   };
 
@@ -1323,7 +1324,7 @@
         gusts: [{ yMin: 24, yMax: 62, dirs: [1, -1] }],
         spawns: [{ type: "plunger", count: 2 }, { type: "tpmummy", count: 2 }, { type: "gasbag", count: 2 }] },
       // Two pre-placed Bidets + superElite reserve three of eight: five
-      // regulars open. Currently the last wave — clearing it calls win().
+      // regulars open. Last pre-boss wave — clearing it opens the walk to ASS MAN.
       { name: "FOUL WEATHER", tough: true, superElite: "gasbag",
         // The squeeze: opposed lanes, offset phases, rolled depth + band.
         gusts: [{ yMin: 14, yMax: 40, dirs: [1] },

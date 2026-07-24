@@ -82,7 +82,7 @@
     showDmgNumbers: true,  // ON by default; dev-menu KeyN still toggles (enemy tally + player -N)
     dyingBoss: null, deathSeqT: 0,
     checkpointWave: 0,
-    diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0,
+    diedWave: 0, lastHydrantX: 0, worldFadeT: 0, warpInT: 0, airWhiteInT: 0,
     victoryPortal: null,   // post-Slayer exit portal {x, y, t, near}
 
     // ------------------------------------------------------------- setup
@@ -949,8 +949,9 @@
       // any left unpicked). Slayer isn't the final wave: its cutscene
       // early-return below fires before the win() check, so win() never
       // runs synchronously here and the sigils are pickable in the
-      // post-cutscene free-walk. The true final wave (AssMan) has no
-      // cutscene, so it's excluded explicitly — no sigils under win().
+      // post-cutscene free-walk. The final wave (AssMan) plays its own outro
+      // cutscene (who:"assman") whose phase-3 advance calls win() — and is
+      // still excluded here (waveIndex === length-1): no benediction at the end.
       if (clearedWave && (clearedWave.boss || clearedWave.garden || clearedWave.wall || clearedWave.holdout || clearedWave.douse) &&
           this.waveIndex < JH.LEVEL1.waves.length - 1) {
         const offers = JH.Benedictions.pickOffers({
@@ -999,6 +1000,19 @@
         JH.Camera.unlock();
         this.state = "cutscene";
         this.cutscene = { phase: 0, nextWave: slayerIdx + 1, who: "slayer" };
+        document.getElementById("hud").classList.add("hidden");
+        document.getElementById("banner").classList.add("hidden");
+        return;
+      }
+
+      // Ass Man is the final boss: play his defeat outro, then WIN. Unlike the
+      // mid-campaign ally beats, its phase-3 advance routes to win() (see the
+      // cutscene handler in update()), not afterCutscene — this is the ending.
+      const assmanIdx = JH.LEVEL1.waves.findIndex((w) => w.bossType === "assman");
+      if (assmanIdx >= 0 && this.waveIndex === assmanIdx) {
+        JH.Camera.unlock();
+        this.state = "cutscene";
+        this.cutscene = { phase: 0, who: "assman" };
         document.getElementById("hud").classList.add("hidden");
         document.getElementById("banner").classList.add("hidden");
         return;
@@ -1127,6 +1141,9 @@
       this.enemies = []; this.embers = []; this.firePatches = [];
       this.stinkClouds = []; this.gustLanes = []; this.cloudlineEdge = null; this.windHazards = [];
       if (JH.Background) JH.Background.airOn = true;   // cloudline art turns on
+      // Portal transition: the truck gate faded TO blue-white (truck.js enterFade);
+      // the Air World now fades IN from that same colour — one continuous whiteout→whitein.
+      this.airWhiteInT = JH.TRUCKRUN.finale.airWhiteIn;
       this.waveTriggerX = this.gatedTriggerX(airStart, p.x);
       this.bounds = { minX: JH.ZONE4_START + 8, maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = 0;
@@ -1145,6 +1162,7 @@
       const cs = this.cutscene;
       if (!cs) return;
       if (cs.who === "slayer") { this.drawSlayerCutscene(ctx, cs); return; }
+      if (cs.who === "assman") { this.drawAssManCutscene(ctx, cs); return; }
       const lines = [
         ["...You're stronger than I expected.", "I underestimated you."],
         ["The quake in my heart...", "You've silenced it."],
@@ -1292,6 +1310,76 @@
 
       for (let i = 0; i < lines.length; i++) {
         ctx.fillStyle = i <= phase ? JH.PAL.slayerEmber : "#3a2010";
+        ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
+      }
+    },
+
+    // Ass Man — the final boss's defeat outro (same MGS idiom as Quake/Slayer).
+    // PLACEHOLDER dialogue + a procedural portrait until a baked one lands;
+    // phase-3 advance calls win() (see update()'s cutscene handler), not a wave.
+    drawAssManCutscene(ctx, cs) {
+      const lines = [
+        ["...You actually hosed me down.", "Nobody's done that. Nobody."],
+        ["The whole Sanitation Department...", "it answers to YOU now."],
+        ["Go on, hero.", "Keep the skies clean."],
+      ];
+      const phase = clamp(cs.phase, 0, lines.length - 1);
+
+      ctx.fillStyle = "rgba(0,0,0,0.88)";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+
+      const PX = 10, PY = 10, PW = 96, PH = 108;
+      ctx.fillStyle = "#141017";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = "#e8b23a";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      // Procedural portrait: brawny brute, dark cap + brow, glowing gold eyes
+      // (matching his in-game eyes), mouth flaps for the first 2s of each beat.
+      const talking = (cs.timer || 0) < 2.0;
+      const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
+      const cx = PX + PW / 2, cy = PY + PH - 4;
+      const f = (lx, ly, w, h, col) => {
+        ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+      };
+      f(-26, 0, 52, 58, "#c98a5a");                       // shoulders/chest (flesh)
+      f(-26, 0, 52, 8, "#8a5a34");                        // chest shadow
+      f(-18, 40, 36, 6, "#241812");                       // chest plate
+      f(-14, 58, 28, 34, "#c98a5a");                      // head
+      f(-14, 84, 28, 10, "#241812");                      // cap
+      f(-14, 74, 28, 5, "#3a281a");                       // brow band
+      f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
+      f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
+
+      ctx.fillStyle = "#e8b23a";
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("ASS MAN", PX, PY + PH + 9);
+
+      const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
+      ctx.fillStyle = "#0b0810";
+      ctx.fillRect(DX, DY, DW, DH);
+      ctx.strokeStyle = "#3a2e12";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(DX, DY, DW, DH);
+
+      ctx.fillStyle = "#f0e0c0";
+      ctx.font = "6px monospace";
+      const dl = lines[phase];
+      ctx.fillText(dl[0], DX + 6, DY + 18);
+      if (dl[1]) ctx.fillText(dl[1], DX + 6, DY + 30);
+
+      if (Math.floor(performance.now() / 500) % 2) {
+        ctx.fillStyle = "#7a6020";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ E ]  ADVANCE", DX + DW - 4, DY + DH - 5);
+        ctx.textAlign = "left";
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillStyle = i <= phase ? "#e8b23a" : "#3a2e12";
         ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
       }
     },
@@ -1944,7 +2032,7 @@
       // frozen until it finishes. Jon starts high (z) and eases to the ground.
       this.arrival = { t: 0, blackDur: 0.4, fallDur: 0.6, splashDur: 0.4, height: 240, splashed: false };
       p.z = this.arrival.height;
-      this.worldFadeT = 0; this.warpInT = 0;
+      this.worldFadeT = 0; this.warpInT = 0; this.airWhiteInT = 0;
       this.state = "play";
       this.showScreen("hud");
       JH.Music.reset(); JH.Music.start();
@@ -2126,6 +2214,7 @@
       if (this.lootVacuumT > 0) this.lootVacuumT -= dt;
       if (this.worldFadeT > 0) this.worldFadeT = Math.max(0, this.worldFadeT - dt);
       if (this.warpInT > 0) this.warpInT = Math.max(0, this.warpInT - dt);
+      if (this.airWhiteInT > 0) this.airWhiteInT = Math.max(0, this.airWhiteInT - dt);
       if (this.state === "play" || this.state === "bossDeathSeq") this.tickDeferred(dt);
 
       if (this.state === "bossDeathSeq") {
@@ -2165,10 +2254,10 @@
             cs.phase++;
             cs.timer = 0;
             if (cs.phase >= 3) {
-              if (this.cutscene && this.cutscene.who === "slayer")
-                this.afterSlayerCutscene(this.cutscene.nextWave);
-              else
-                this.afterCutscene(this.cutscene ? this.cutscene.nextWave : 10);
+              const who = this.cutscene && this.cutscene.who;
+              if (who === "assman") this.win();                        // final boss: the outro ends the game
+              else if (who === "slayer") this.afterSlayerCutscene(this.cutscene.nextWave);
+              else this.afterCutscene(this.cutscene ? this.cutscene.nextWave : 10);
             }
           }
         }
@@ -3058,6 +3147,16 @@
           ctx2.fillRect(sx + 6, 0, 2, jonSy);
           ctx2.restore();
         }
+      }
+
+      // Air World portal: fade IN from the gate's blue-white (second half of the
+      // truck→air transition; truck.js enterFade faded TO this same colour).
+      if (this.state === "play" && this.airWhiteInT > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.airWhiteInT / JH.TRUCKRUN.finale.airWhiteIn);
+        ctx.fillStyle = "rgb(214,235,255)";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        ctx.restore();
       }
 
       // Essence dim: darken the world, then re-draw the cross(es) above the

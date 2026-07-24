@@ -138,7 +138,7 @@ test("air act placements: every pre-placed enemy is a Bidet inside the 440px are
   }
 });
 
-test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily does", () => {
+test("air act: wave 32 clearing doesn't win; the final wave enters Ass Man's outro, not win() directly", () => {
   const prevMusic = JH.Music;
   JH.Music = Object.assign({}, prevMusic, { setTrack() {} });
   const doc = global.document;
@@ -154,14 +154,45 @@ test("air act: wave 32 clearing no longer wins; wave 35 clearing temporarily doe
       g.win = function () { wonAt = this.waveIndex; };
       g.waveIndex = waveIndex; g.waveActive = true;
       g.waveCleared_();
-      return wonAt;
+      return { wonAt, state: g.state, cutscene: g.cutscene };
     };
-    assert.strictEqual(runClear(31), null, "clearing wave 32 (index 31) must not win anymore");
+    assert.strictEqual(runClear(31).wonAt, null, "clearing wave 32 (index 31) must not win");
+
     const lastIdx = JH.LEVEL1.waves.length - 1;
-    const last = JH.LEVEL1.waves[lastIdx];
-    assert.strictEqual(last.bossType, "assman", "last wave is the Ass Man boss");
-    assert.strictEqual(runClear(lastIdx), lastIdx, "clearing the last wave calls win()");
+    assert.strictEqual(JH.LEVEL1.waves[lastIdx].bossType, "assman", "last wave is the Ass Man boss");
+
+    // Clearing the final wave does NOT win synchronously — it opens Ass Man's
+    // outro cutscene; win() fires only when that cutscene advances to phase 3.
+    const r = runClear(lastIdx);
+    assert.strictEqual(r.wonAt, null, "the final wave enters the outro, not win() directly");
+    assert.strictEqual(r.state, "cutscene", "final wave clears into a cutscene state");
+    assert.strictEqual(r.cutscene && r.cutscene.who, "assman", "the cutscene is Ass Man's outro");
   } finally { global.document = doc; JH.Music = prevMusic; }
+});
+
+test("air act: Ass Man outro renders all three beats without throwing (stub ctx)", () => {
+  const g = Object.create(JH.Game);
+  const texts = [];
+  const ctx = {
+    fillStyle: "", strokeStyle: "", lineWidth: 0, font: "", textAlign: "",
+    fillRect() {}, strokeRect() {}, save() {}, restore() {},
+    fillText(s) { texts.push(String(s)); },
+  };
+  // Each dialogue beat must draw its first line — exercises every ctx path,
+  // catching an undefined ref (a bad palette/handle) that --check can't see.
+  for (let phase = 0; phase < 3; phase++) {
+    texts.length = 0;
+    g.cutscene = { phase, timer: 0 };
+    assert.doesNotThrow(() => g.drawAssManCutscene(ctx, g.cutscene));
+    assert.ok(texts.some((t) => t.length > 4 && t !== "ASS MAN" && !t.includes("[ E ]")),
+      "beat " + phase + " draws a dialogue line");
+  }
+});
+
+test("air act: the truck->air portal has a whitein duration paired with the gate's fade", () => {
+  const f = JH.TRUCKRUN.finale;
+  assert.ok(f.airWhiteIn > 0, "airWhiteIn is a positive duration (the portal's second half)");
+  assert.ok(f.enterFade > 0, "enterFade (the gate's blue-white) still exists");
 });
 
 test("holdout cadence: Cloudline (wave 33) reads CLOUDLINE_HOLDOUT's cap; the older holdout keeps JH.WALL's", () => {
