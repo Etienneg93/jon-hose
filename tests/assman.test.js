@@ -570,15 +570,15 @@ test("assman pose reads: glide for movement, slam-then-exhaust landing", () => {
 test("assman kneel: no death VFX, beat, then onEnemyKilled — and Slayer gated too", () => {
   const D = JH.ASSMAN;
   const g = makeThinkGame(0, 40);
-  let killed = null; let fxPushed = 0;
+  let killed = null;
   g.onEnemyKilled = (e) => { killed = e; };
-  g.embers = { push: () => { fxPushed++; } };
+  g.embers = [];   // real array: die() filters it, and a corpse/explosion would push here
   const b = JH.makeEnemy("assman", 200, 40);
   b.phase = 3;
   b.takeDamage(b.hp + 10, g, 1, 0);               // lethal
   assert.ok(b._kneeling, "kneels instead of dying");
   assert.strictEqual(b.dead, false);
-  assert.strictEqual(fxPushed, 0, "no corpse/explosion VFX");
+  assert.strictEqual(g.embers.length, 0, "no corpse/explosion VFX");
   for (let t = 0; t < D.kneelBeat + 0.1; t += 1 / 60) b.think(1 / 60, g);
   assert.strictEqual(b.dead, true);
   assert.strictEqual(killed, b, "routed through onEnemyKilled (ally path)");

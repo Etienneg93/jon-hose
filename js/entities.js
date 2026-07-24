@@ -6621,6 +6621,13 @@
       this.def.touchDmg = 0;
       this.move = null; this._storm = null; this._slamRing = null;
       if (game.gustLanes) game.gustLanes = game.gustLanes.filter((l) => !l._bossLane);
+      // Clear his summons so the win gate (enemies empty → waveCleared_) can
+      // trip: a standing bidet turret keeps enemies.length ≥ 1 and would hang
+      // the outro forever; an in-flight toilet bomb would land AFTER the kneel
+      // and spawn a fresh turret, re-blocking it. Kill both (field-clears-on-
+      // victory idiom, like the wall/holdout/garden waves).
+      if (game.enemies) game.enemies.forEach((e) => { if (e._bossTurret) e.dead = true; });
+      if (game.embers) game.embers = game.embers.filter((e) => !(e instanceof JH.ToiletBomb));
       game.audio.play("win");
       // survivesDefeat: NO FxBurst, no corpse sequence — the kneel IS the beat.
     }
@@ -7324,7 +7331,10 @@
         }
         this.z -= this.def.driftSpeed * dt;
         this.x += Math.sin(this.t * 2.2) * 14 * dt;
-        if (this.z <= 0) { this.z = 0; this.dropping = false; this.spawnGrace = 0.3; }
+        // Both grants matter: spawnGrace gates the wrap windup, but the shared
+        // contact-damage block (Enemy.update) reads contactTimer — set both, or a
+        // mummy landing on Jon touch-hits him the instant it lands (gasbag-mini idiom).
+        if (this.z <= 0) { this.z = 0; this.dropping = false; this.spawnGrace = 0.3; this.contactTimer = 0.3; }
         return;
       }
       super.update(dt, game);

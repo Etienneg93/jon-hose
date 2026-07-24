@@ -3169,3 +3169,42 @@ test("split stream rank II: bigger arc share reaches splitTargetsII secondaries"
     "farther (still within-cap) secondary's arc share also matches BENE_TUNE.splitArcFracII");
   B.reset();
 });
+
+// Regression: Ass Man's Toilet Toss spawns bidet turrets (into game.enemies)
+// and in-flight toilet bombs (into game.embers). The win gate is
+// "enemies empty", so a turret surviving the kneel — or an in-flight bomb
+// landing after it and spawning a fresh one — would hang the outro forever.
+// die() must clear both.
+test("assman defeat clears his bidet turrets + in-flight toilet bombs (win gate can trip)", () => {
+  const g = makeThinkGame(200, 40);
+  const boss = JH.makeEnemy("assman", 100, 40);
+  g.enemies.push(boss);
+
+  const turret = JH.makeEnemy("bidet", 120, 40); turret._bossTurret = true;
+  const bystander = JH.makeEnemy("plunger", 130, 40);   // a normal enemy must NOT be cleared
+  g.enemies.push(turret, bystander);
+
+  const bomb = new JH.ToiletBomb(100, 40, 200, 40, JH.ASSMAN.toss, { turret: true });
+  const otherEmber = { keepMe: true };                  // a non-bomb ember must survive
+  g.embers.push(bomb, otherEmber);
+
+  boss.die(g);
+
+  assert.strictEqual(turret.dead, true, "the boss turret is culled on defeat");
+  assert.ok(!bystander.dead, "a normal enemy is left alone");
+  assert.ok(!g.embers.some((e) => e instanceof JH.ToiletBomb), "in-flight toilet bombs are removed");
+  assert.ok(g.embers.includes(otherEmber), "non-bomb embers are preserved");
+});
+
+// Regression: a TP Mummy dropping onto Jon must not touch-hit him the instant
+// it lands. The shared contact-damage block gates on contactTimer (not
+// spawnGrace), so the landing has to set contactTimer too.
+test("TP Mummy landing grants contact grace (no instant touch-hit on drop-in)", () => {
+  const g = makeThinkGame(100, 40);
+  const m = JH.makeEnemy("tpmummy", 100, 40);
+  m.beginDrop(0);
+  assert.ok(m.dropping, "starts in the drop-in");
+  for (let i = 0; i < 600 && m.dropping; i++) m.update(1 / 60, g);
+  assert.ok(!m.dropping, "lands within the frame budget");
+  assert.ok(m.contactTimer > 0, "contactTimer grace is set on landing (gates the contact-damage block)");
+});
