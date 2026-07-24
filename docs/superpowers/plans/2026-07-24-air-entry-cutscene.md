@@ -388,23 +388,46 @@ git commit -m "feat(air-act): air entry phase machine + JH.AIRENTRY tunables"
 Append to `tests/airentry.test.js`:
 
 ```js
-test("assmanPlain and collie painters are registered", () => {
+// Records paint calls so the test can prove a painter actually ran.
+// Assets.draw's p() helper sinks to ctx.fillRect (js/assets.js:344-350).
+function mkCtx() {
+  const noop = () => {};
+  const c = {
+    calls: 0, fillStyle: "", globalAlpha: 1, globalCompositeOperation: "",
+    save: noop, restore: noop, translate: noop, scale: noop, rotate: noop,
+    drawImage: noop, clearRect: noop, setTransform: noop, beginPath: noop,
+    arc: noop, ellipse: noop, fill: noop, stroke: noop, closePath: noop,
+    fillText: noop, measureText: () => ({ width: 0 }), putImageData: noop,
+    getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    fillRect() { c.calls++; },
+  };
+  return c;
+}
+
+test("assmanPlain and collie painters are registered and paint", () => {
   // assets.js builds an offscreen canvas at eval time — same document stub
   // pattern as tests/air.test.js and tests/juice.test.js.
   global.window.JH.Loader = { img: () => ({}) };
   global.document = global.document || {
-    createElement: () => ({
-      width: 0, height: 0,
-      getContext: () => ({
-        save() {}, restore() {}, translate() {}, scale() {}, drawImage() {},
-        fillRect() {}, clearRect() {}, setTransform() {},
-        getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-      }),
-    }),
+    createElement: () => ({ width: 0, height: 0, getContext: mkCtx }),
     getElementById: () => ({ style: {} }),
   };
   require("../js/assets.js");
-  assert.ok(typeof global.window.JH.Assets.airEntryReady === "function");
+  const Assets = global.window.JH.Assets;
+  assert.strictEqual(typeof Assets.airEntryReady, "function");
+
+  // The stub Loader returns bare {} handles, so neither painter has usable
+  // art and both must take their procedural fallback — which paints.
+  for (const key of ["assmanPlain", "collie"]) {
+    const ctx = mkCtx();
+    Assets.draw(ctx, key, 100, 100, 1, { state: "idle" });
+    assert.ok(ctx.calls > 0, key + " must be registered and paint a fallback");
+  }
+  // Control: Assets.draw returns early on an unregistered key. Without this,
+  // the assertions above would pass even if draw() were a no-op.
+  const ctl = mkCtx();
+  Assets.draw(ctl, "notAPainter", 100, 100, 1, {});
+  assert.strictEqual(ctl.calls, 0, "unregistered key must paint nothing");
 });
 ```
 
