@@ -68,13 +68,11 @@ Invoke the `codex-image` skill. Follow its postprocess exactly: 4-connected floo
 
 **All four stranger frames are generated LEFT-facing** (toward Jon, who approaches from the left). The rip frames expose emerging chest lettering and can never be mirrored at draw time — the same constraint that forced generated `_l` bakes for the hero poses instead of flips.
 
-**Gotcha, already paid for once:** gpt-image-2 follows the REFERENCE image's facing over prompt text, and `sprites/assman/ass-man.png` faces right. Do not fight it with words. Instead, mirror the reference first:
+**Reference: use `sprites/assman/ass-man.png` unmodified for all four frames.**
 
-```bash
-node -e "const{PNG}=require('pngjs'),fs=require('fs');const p=PNG.sync.read(fs.readFileSync('sprites/assman/ass-man.png'));const o=new PNG({width:p.width,height:p.height});for(let y=0;y<p.height;y++)for(let x=0;x<p.width;x++){const s=(y*p.width+x)<<2,d=(y*p.width+(p.width-1-x))<<2;for(let i=0;i<4;i++)o.data[d+i]=p.data[s+i];}fs.writeFileSync('tmp/assman-ref-left.png',PNG.sync.write(o));"
-```
+The documented gotcha — gpt-image-2 follows the REFERENCE image's facing over prompt text — was expected to force a pre-mirrored reference here. It does not apply: `ass-man.png` is a FRONT-facing standing pose, not a profile, so it carries no facing signal to inherit and mirroring it changes nothing except making the chest lettering read backwards ("22A / MAM"). Feeding that to the two frames where the lettering emerges would invite the exact mirrored-text failure this task must avoid.
 
-Use `tmp/assman-ref-left.png` as the reference so the model's facing-follows-reference behaviour works *for* you. The mirrored reference has backwards chest lettering — every prompt that shows lettering must state that it reads correctly left-to-right.
+The baked `idle.png` these frames swap into is front-facing too, and the engine mirrors it at draw time, so "left-facing" here means a front-ish stance turned slightly toward viewer-left — not a profile. Ask for that in words; the reference supplies the character, not the angle.
 
 - [ ] **Step 2: Write the `plain_idle` prompt file**
 
@@ -82,7 +80,7 @@ Write `tmp/plain-idle-prompt.txt` (UTF-8):
 
 ```text
 Call the built-in image_gen tool (gpt-image-2) directly to create exactly one image.
-Use the reference image at tmp/assman-ref-left.png — the EXACT character (short tousled salt-and-pepper dark hair, trimmed stubble). Keep his EXACT head-to-body proportions (small head, ~1/7 of body height) and pixel-art rendering IDENTICAL. Same camera distance — do not zoom in. He must FACE VIEWER-LEFT, the same direction as the reference.
+Use the reference image at sprites/assman/ass-man.png — the EXACT character (short tousled salt-and-pepper dark hair, trimmed stubble). Keep his EXACT head-to-body proportions (small head, ~1/7 of body height) and pixel-art rendering IDENTICAL. Same camera distance — do not zoom in. Front-ish stance turned slightly toward VIEWER-LEFT (not a profile), matching the reference's framing.
 Prompt: The same man standing at ease FACING VIEWER-LEFT in a BAD DISGUISE over his superhero costume: a baggy grey hooded sweatshirt zipped up over the navy suit, hood down, cheap black sunglasses on. The disguise is obviously failing — GOLD SUPERHERO BOOTS still on his feet below plain grey sweatpants, and a corner of the navy cape hanging out below the hem of the hoodie behind him. Relaxed standing pose, weight on one leg, one hand holding a slack dog leash. No chest lettering visible — the hoodie covers it completely. Retro PIXEL ART matching the reference: hard pixel edges, dark outline, no anti-aliasing, flat lighting, no drop shadow, no ground. Whole body inside frame with margin, feet at the bottom edge. TRANSPARENT background (PNG alpha), no checkerboard.
 Save it to: tmp/plain-idle-raw.png
 ```
