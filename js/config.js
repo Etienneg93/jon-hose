@@ -489,6 +489,33 @@
   // kept between the rightmost benediction sigil and that trigger.
   JH.WAVE_GATE = { minWalk: 170, maxOver: 90, sigilGap: 110 };
 
+  // Air World entry cutscene (airentry.js). Staged on existing geometry:
+  // HYDRANTS[10] (x 11740) is the hydrant the dog uses; Jon arrives at
+  // ZONE4_START+40 = 11540 and WAVE 30 gates at 11810 (gatedTriggerX with
+  // WAVE_GATE.minWalk 170), so the scripted beat sits inside a 270px corridor.
+  // Actor x offsets are relative to the hydrant; +x is right (toward wave 30).
+  JH.AIRENTRY = {
+    triggerX: 11630,          // player x that starts the scene
+    strangerDX: -34,          // stranger x, relative to the hydrant
+    dogStartDX: -20,          // collie x at scene start
+    dogLiftDX: -7,            // collie x once it reaches the hydrant
+    actorY: JH.DEPTH_MAX - 12, // both actors share the hydrant's depth row
+    phases: {                 // seconds; sum is the full scripted length
+      notice: 1.2, desecrate: 2.4, rage: 1.4,
+      reveal: 1.8, feud: 2.6, depart: 1.6,
+    },
+    dogTrotSpeed: 26,         // px/s while walking to the hydrant
+    dogFrameStep: 0.12,       // s per trot frame
+    ripFrameStep: 0.30,       // s per rip frame (3 frames over `reveal`)
+    leashSag: 7,              // px of slack at the leash curve's midpoint
+    riseSpeed: 150,           // px/s upward during depart
+    soarSpeed: 210,           // px/s rightward once airborne
+    departRiseFrac: 0.45,     // fraction of `depart` spent rising before soaring
+    dogCarryDX: -6,           // collie offset from the carrier's centre while held
+    dogCarryDY: -22,          // …and above his feet
+    flashDur: 0.18,           // rage red flash + reveal white flash
+  };
+
   // Fraction of a `tough` wave's enemies that spawn elite, indexed
   // actLevel+1 (Act1..Fire; actLevelForWave returns -1..4). Elites are
   // INTRODUCED as a minority and grow common across acts, so a tough wave
