@@ -2234,6 +2234,14 @@
     const _open   = JH.Loader.img("sprites/dog/mario-portrait-mouthopen.png");
     JH.getMarioPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
   }
+  // Jon speaks in the air-entry codec. Note this is the only portrait of the
+  // PLAYER in the game — the Quake/Slayer/Ass Man boxes show only the other
+  // character.
+  {
+    const _closed = JH.Loader.img("sprites/jon/jon-portrait-mouthclosed.png");
+    const _open   = JH.Loader.img("sprites/jon/jon-portrait-mouthopen.png");
+    JH.getJonPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
 
   // =================== CHURCH OF THE HOSE ART =======================
   // Transparent PNGs; church.js renderScene falls back to ctx-rects if a

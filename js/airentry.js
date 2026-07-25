@@ -18,27 +18,24 @@
   // PLACEHOLDER dialogue pending the user's writing pass (same convention as
   // drawAssManCutscene's placeholder lines in game.js).
   //
-  // Split by speaker, matching the existing codec convention: NPCs talk
-  // through portrait boxes, the player never has a portrait and shouts
-  // in-world instead.
-  const BARKS = {                       // in-world, over the player's head
-    rage: { player: "NOT THE HYDRANT!" },
-    feud: { player: "NOT ON MY WATCH." },
-  };
-
-  // Codec beats: portrait + name + lines, keyed by phase. `who` selects the
-  // portrait accessor; the casual wardrobe is used before the reveal and the
-  // costumed one after, so the box tracks what the player can currently see.
+  // ALL speech in this beat is codec dialogue — there is no in-world text.
+  // A phase may hold SEVERAL beats, played in order across equal slices of the
+  // phase's duration, which is how `feud` reads as a back-and-forth. `who`
+  // selects a portrait accessor; the Ass Man wardrobe tracks what the player
+  // can currently see (casual before the reveal, costumed after).
   const CODEC = {
-    notice:    { who: "assmanCasual", name: "???",     lines: ["Nice day for it.", "Go on, Mario."] },
-    desecrate: { who: "mario",        name: "MARIO",   lines: ["BARK BARK"] },
-    feud:      { who: "assman",       name: "ASS MAN", lines: ["These skies are mine,", "hose boy."] },
+    notice:    [{ who: "assmanCasual", name: "???",     lines: ["Nice day for it.", "Go on, Mario."] }],
+    desecrate: [{ who: "mario",        name: "MARIO",   lines: ["BARK BARK"] }],
+    rage:      [{ who: "jon",          name: "JON",     lines: ["NOT THE HYDRANT!"] }],
+    feud:      [{ who: "assman",       name: "ASS MAN", lines: ["These skies are mine,", "hose boy."] },
+                { who: "jon",          name: "JON",     lines: ["NOT ON MY WATCH."] }],
   };
 
   const PORTRAIT_FN = {
     assman:       (m) => JH.getAssManPortrait && JH.getAssManPortrait(m),
     assmanCasual: (m) => JH.getAssManCasualPortrait && JH.getAssManCasualPortrait(m),
     mario:        (m) => JH.getMarioPortrait && JH.getMarioPortrait(m),
+    jon:          (m) => JH.getJonPortrait && JH.getJonPortrait(m),
   };
 
   const AirEntry = {
@@ -223,34 +220,10 @@
         ctx.restore();
       }
 
-      this._drawBarks(ctx, cam, sc, game);
       this._drawVignette(ctx, C);
       this.drawCodec(ctx, game);   // last: the box sits over the fx and barks
     },
 
-    // PLACEHOLDER bark lines (see BARKS above) drawn above the speaking
-    // actor. Same readable-label idiom as the HUD's "E  SHOP" prompt and
-    // hold-timer readout in game.js: dark 1px drop-shadow, gold fill on top.
-    _drawBarks(ctx, cam, sc, game) {
-      const set = BARKS[sc.phase];
-      if (!set) return;
-      if (set.stranger) this._drawBark(ctx, cam, sc.stranger, set.stranger);
-      if (set.player && game.player) this._drawBark(ctx, cam, game.player, set.player);
-    },
-
-    _drawBark(ctx, cam, actor, text) {
-      const C = JH.AIRENTRY;
-      const sx = Math.round(actor.x - cam);
-      const sy = Math.round(JH.Geo.feetScreenY(actor.y, actor.z) + C.barkDY);
-      ctx.save();
-      ctx.font = "bold 6px monospace";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#0a0e18";
-      ctx.fillText(text, sx + 1, sy + 1);
-      ctx.fillStyle = "#ffd23f";
-      ctx.fillText(text, sx, sy);
-      ctx.restore();
-    },
 
     // Jump straight to the end state. Reachable from any phase.
     skip(game) {
@@ -443,6 +416,16 @@
       ctx.restore();
     },
 
+    // Which codec beat is on screen, and how far into it we are. Beats split
+    // their phase into equal slices. Null when the phase has no lines.
+    codecBeat(C, phase, el) {
+      const beats = CODEC[phase];
+      if (!beats || !beats.length) return null;
+      const slice = C.phases[phase] / beats.length;
+      const idx = Math.max(0, Math.min(beats.length - 1, Math.floor(el / slice)));
+      return { beat: beats[idx], idx, elInBeat: el - idx * slice, slice };
+    },
+
     // True while a scripted codec beat is on screen. game.js reads this to
     // suppress the stat panel, which shares the portrait's top-left rect.
     codecActive(game) {
@@ -459,8 +442,9 @@
       const sc = game.airEntry;
       if (!sc) return;
       const C = JH.AIRENTRY;
-      const beat = CODEC[sc.phase];
-      if (!beat) return;
+      const sel = this.codecBeat(C, sc.phase, this._phaseElapsed(C, sc.t, sc.phase));
+      if (!sel) return;
+      const beat = sel.beat;
 
       const PX = 10, PY = 10, PW = 96, PH = 108;
 
@@ -478,9 +462,10 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(PX, PY, PW, PH);
 
-      const el = this._phaseElapsed(C, sc.t, sc.phase);
-      const talking = el < C.phases[sc.phase] * C.codecTalkFrac;
-      const mouth = talking && (Math.floor(el * C.codecMouthHz) & 1);
+      // Mouth flaps per BEAT, not per phase, so a second speaker animates when
+      // their line comes up instead of sitting frozen.
+      const talking = sel.elInBeat < sel.slice * C.codecTalkFrac;
+      const mouth = talking && (Math.floor(sel.elInBeat * C.codecMouthHz) & 1);
       const fn = PORTRAIT_FN[beat.who];
       const img = fn ? fn(mouth) : null;
       if (img && img.complete && img.naturalWidth) {

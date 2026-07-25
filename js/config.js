@@ -547,7 +547,6 @@
     flashDur: 0.18,           // rage red flash + reveal white flash
     flashRedPeak: 0.35,       // rage flash starting alpha (0..1), eases to 0 over flashDur
     flashWhitePeak: 0.55,     // reveal flash starting alpha (0..1), eases to 0 over flashDur
-    barkDY: -68,              // px above an actor's feet-anchor Y where bark text draws (screen-space, up is negative)
     hoodieSpawnZ: 34,         // px, hoodie prop's spawn height (chest-ish) when the rip completes
     hoodieOutSpeed: 40,       // px/s the hoodie prop drifts sideways, away from the stranger's facing
     hoodiePopSpeed: 70,       // px/s initial upward velocity on spawn

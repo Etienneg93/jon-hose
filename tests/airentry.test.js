@@ -285,44 +285,7 @@ test("drawOverlay is a no-op with no live scene", () => {
   assert.strictEqual(ctx.calls, 0);
 });
 
-// ---- placeholder bark lines ----
-
-test("rage bark line draws above the player only", () => {
-  const g = makeGame();
-  AirEntry.enter(g);
-  g.airEntry.phase = "rage";
-  const ctx = mkCtx();
-  AirEntry.drawOverlay(ctx, g);
-  assert.ok(ctx.texts.includes("NOT THE HYDRANT!"), "player's rage line drawn");
-  // The codec box paints its own text; count only this bark's strings.
-  assert.strictEqual(ctx.texts.filter((t) => t === "NOT THE HYDRANT!").length, 2,
-    "one bark = outline + fill fillText calls");
-});
-
-test("feud: the player barks in-world, the stranger speaks through the codec", () => {
-  // Speaker split: NPCs get portrait boxes, the player never has a portrait
-  // (same convention as the Quake/Slayer/Ass Man codecs) and shouts in-world.
-  const g = makeGame();
-  AirEntry.enter(g);
-  g.airEntry.phase = "feud";
-  const ctx = mkCtx();
-  AirEntry.drawOverlay(ctx, g);
-  assert.strictEqual(ctx.texts.filter((t) => t === "NOT ON MY WATCH.").length, 2,
-    "player's feud bark = outline + fill fillText calls");
-  assert.ok(ctx.texts.includes("ASS MAN"), "the codec names the speaker");
-});
-
-test("no bark line outside rage/feud", () => {
-  const g = makeGame();
-  AirEntry.enter(g);   // phase stays "notice"
-  const ctx = mkCtx();
-  AirEntry.drawOverlay(ctx, g);
-  const barkLines = ["NOT THE HYDRANT!", "NOT ON MY WATCH."];
-  assert.strictEqual(ctx.texts.filter((t) => barkLines.includes(t)).length, 0,
-    "no in-world bark outside rage/feud (codec text is separate)");
-});
-
-// ---- reveal props: hoodie prop, storm ring, camera push ----
+// ---- codec dialogue ----
 
 test("reveal completion spawns the hoodie prop and storm ring, and pushes the camera", () => {
   const g = makeGame();
@@ -559,7 +522,7 @@ test("Mario barks, and only during the desecration", () => {
 });
 
 test("codec phases with no scripted beat draw no box", () => {
-  for (const phase of ["rage", "reveal", "depart"]) {
+  for (const phase of ["reveal", "depart"]) {
     const g = makeGame();
     AirEntry.enter(g);
     g.airEntry.phase = phase;
@@ -573,7 +536,7 @@ test("codec phases with no scripted beat draw no box", () => {
 test("codecActive marks exactly the phases that speak", () => {
   // game.js hides the stat panel on this flag; the panel shares the portrait's
   // top-left rect and would otherwise draw over the face.
-  const speaking = new Set(["notice", "desecrate", "feud"]);
+  const speaking = new Set(["notice", "desecrate", "rage", "feud"]);
   const g = makeGame();
   AirEntry.enter(g);
   for (const phase of AirEntry.ORDER) {
@@ -629,4 +592,49 @@ test("drawOverlay paints the edge vignette", () => {
   assert.ok(madeGradient, "vignette uses a radial gradient");
   assert.ok(ctx.fills.some((f) => f.x === 0 && f.y === 0 && f.w === JH.VIEW_W && f.h === JH.VIEW_H),
     "vignette covers the frame");
+});
+
+test("every scripted line is codec dialogue, spoken by the right portrait", () => {
+  const expected = {
+    notice:    [["???", "Nice day for it."]],
+    desecrate: [["MARIO", "BARK BARK"]],
+    rage:      [["JON", "NOT THE HYDRANT!"]],
+    feud:      [["ASS MAN", "These skies are mine,"], ["JON", "NOT ON MY WATCH."]],
+  };
+  for (const [phase, beats] of Object.entries(expected)) {
+    for (let i = 0; i < beats.length; i++) {
+      const [name, line] = beats[i];
+      const g = makeGame();
+      AirEntry.enter(g);
+      // Land in the middle of beat i's slice.
+      const before = AirEntry.ORDER.slice(0, AirEntry.ORDER.indexOf(phase))
+        .reduce((sum, k) => sum + C.phases[k], 0);
+      const slice = C.phases[phase] / beats.length;
+      g.airEntry.t = before + i * slice + slice / 2;
+      g.airEntry.phase = phase;
+      const ctx = mkCtx();
+      AirEntry.drawOverlay(ctx, g);
+      assert.ok(ctx.texts.includes(name), `${phase} beat ${i} names ${name}`);
+      assert.ok(ctx.texts.includes(line), `${phase} beat ${i} speaks "${line}"`);
+    }
+  }
+});
+
+test("feud runs two beats in order, splitting the phase evenly", () => {
+  const slice = C.phases.feud / 2;
+  const first = AirEntry.codecBeat(C, "feud", slice * 0.5);
+  const second = AirEntry.codecBeat(C, "feud", slice * 1.5);
+  assert.strictEqual(first.idx, 0, "Ass Man speaks first");
+  assert.strictEqual(second.idx, 1, "Jon answers");
+  assert.strictEqual(first.beat.name, "ASS MAN");
+  assert.strictEqual(second.beat.name, "JON");
+  // elInBeat restarts per beat so the mouth animates on the second speaker too.
+  assert.ok(second.elInBeat < slice, "elapsed time is relative to the beat");
+  // Clamped at the tail rather than falling off the end.
+  assert.strictEqual(AirEntry.codecBeat(C, "feud", C.phases.feud * 5).idx, 1);
+});
+
+test("phases with no dialogue select no beat", () => {
+  for (const phase of ["reveal", "depart", "release"])
+    assert.strictEqual(AirEntry.codecBeat(C, phase, 0), null, phase);
 });
