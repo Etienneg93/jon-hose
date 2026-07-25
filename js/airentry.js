@@ -116,7 +116,7 @@
         } else {
           dog.state = "lift";
         }
-        st.facing = 1;   // looking away down the street — oblivious
+        st.facing = 1;   // holds right through desecrate/rage; reveal flips it to -1
       } else if (sc.phase === "rage") {
         dog.state = "idle";
         if (game.player) game.player.facing = 1;
@@ -131,7 +131,7 @@
       } else if (sc.phase === "depart") {
         const riseT = C.phases.depart * C.departRiseFrac;
         if (el < riseT) {
-          // Still holding Jon's eye as he lifts off — facing stays left.
+          // facing unchanged here (still -1 from reveal/feud).
           st.state = "riseup";
           st.z += C.riseSpeed * dt;
         } else {
@@ -139,7 +139,7 @@
           // flies backwards.
           st.state = "soar";
           st.facing = 1;
-          st.z += C.riseSpeed * 0.35 * dt;
+          st.z += C.riseSpeed * C.soarRiseFrac * dt;
           st.x += C.soarSpeed * dt;
         }
         // Carried under the free arm — riseup leaves the left arm down and

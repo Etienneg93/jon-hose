@@ -511,6 +511,7 @@
     riseSpeed: 150,           // px/s upward during depart
     soarSpeed: 210,           // px/s rightward once airborne
     departRiseFrac: 0.45,     // fraction of `depart` spent rising before soaring
+    soarRiseFrac: 0.35,       // fraction of riseSpeed still applied once soaring starts
     dogCarryDX: -6,           // collie offset from the carrier's centre while held
     dogCarryDY: -22,          // …and above his feet
     flashDur: 0.18,           // rage red flash + reveal white flash

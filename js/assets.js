@@ -1146,12 +1146,12 @@
   });
 
   // ================= AIR ENTRY CUTSCENE ACTORS ========================
-  // Ass Man in civilian disguise + his border collie (airentry.js). Plain
-  // Assets.register (not registerBaked — neither is an Enemy, no elite
-  // variant, no pose function). PLAIN_H matches AM_POSE_H.idle so the
-  // reveal's swap to the baked idle does not jump. Frames can land one at a
-  // time during art generation, so every path falls back to its first frame
-  // and then to a procedural body.
+  // Painters for airentry.js's two actors: assmanPlain (the stranger) and
+  // collie (the dog). Plain Assets.register (not registerBaked — neither is
+  // an Enemy, no elite variant, no pose function). PLAIN_H matches
+  // AM_POSE_H.idle so the reveal's swap to the baked idle does not jump.
+  // Frames can land one at a time during art generation, so every path
+  // falls back to its first frame and then to a procedural body.
   const PLAIN_H = 58, DOG_H = 18;
   const _plainImgs = {
     idle: JH.Loader.img("sprites/assman/plain_idle.png"),
@@ -1184,12 +1184,12 @@
     ctx.restore();
   };
 
-  // plain_* art is generated LEFT-facing (toward Jon, where the rip plays),
-  // so facing -1 draws unmirrored and facing +1 mirrors — inverted from the
-  // usual right-native convention. Rip frames NEVER mirror: their emerging
-  // chest lettering cannot be flipped (same constraint that forced generated
-  // _l bakes for the hero poses). The hoodie covers the lettering on idle,
-  // so idle mirrors freely for the oblivious look-away.
+  // plain_* art is generated LEFT-facing: facing -1 draws unmirrored and
+  // facing +1 mirrors — inverted from the usual right-native convention.
+  // Rip frames NEVER mirror: their emerging chest lettering cannot be
+  // flipped (same constraint that forced generated _l bakes for the hero
+  // poses). The hoodie covers the lettering on idle, so idle can mirror
+  // freely.
   Assets.register("assmanPlain", (p, opt, ctx, x, y, facing) => {
     const rip = opt.state === "rip";
     const key = rip ? "rip" + Math.max(0, Math.min(2, opt.frame | 0)) : "idle";
