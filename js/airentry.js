@@ -35,6 +35,22 @@
       return "release";
     },
 
+    // Quadratic curve for the leash cord between the stranger's hand and the
+    // dog's collar. Sags C.leashSag below the straight hand-collar line at
+    // rest, easing linearly to 0 as the hand-to-collar distance reaches
+    // C.leashTautLen; clamped so it never sags upward past taut.
+    leashCurve(C, handX, handY, collarX, collarY) {
+      const dx = collarX - handX, dy = collarY - handY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const slack = Math.max(0, 1 - dist / C.leashTautLen);
+      return {
+        x0: handX, y0: handY,
+        cx: (handX + collarX) / 2,
+        cy: (handY + collarY) / 2 + C.leashSag * slack,
+        x1: collarX, y1: collarY,
+      };
+    },
+
     // Start the scene. Requires an explicit arm from enterAirAct(): dev warps
     // and Church returns turn Background.airOn on without arriving, and must
     // not trigger the beat.
@@ -50,6 +66,11 @@
           JH.Assets.draw(ctx, self._strangerKey(game), this.x - cam,
             JH.Geo.feetScreenY(this.y, this.z), this.facing,
             { state: this.state, frame: this.frame });
+          // He holds the leash through notice/desecrate/rage; reveal onward
+          // he's let go to tear the hoodie open, and it never shows carried.
+          const sc = game.airEntry;
+          const held = sc && (sc.phase === "notice" || sc.phase === "desecrate" || sc.phase === "rage");
+          if (held && !dog.held) self._drawLeash(ctx, cam, this, dog);
         },
       };
       const dog = {
@@ -71,6 +92,32 @@
     _strangerKey(game) {
       const sc = game.airEntry;
       return (sc && sc.revealed) ? "assman" : "assmanPlain";
+    },
+
+    // Cord from the stranger's hand to the dog's collar. Drawn after his
+    // sprite so it sits over his hand; dark 2px underlay + 1px lighter core
+    // (same two-pass idiom as the rest of the codebase's thin lines) so it
+    // reads against the pale cloud deck.
+    _drawLeash(ctx, cam, stranger, dog) {
+      const C = JH.AIRENTRY;
+      const handX = (stranger.x - cam) + C.leashHandDX * stranger.facing;
+      const handY = JH.Geo.feetScreenY(stranger.y, stranger.z) + C.leashHandDY;
+      const collarX = dog.x - cam;
+      const collarY = JH.Geo.feetScreenY(dog.y, dog.z) + C.leashCollarDY;
+      const curve = this.leashCurve(C, handX, handY, collarX, collarY);
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(curve.x0, curve.y0);
+      ctx.quadraticCurveTo(curve.cx, curve.cy, curve.x1, curve.y1);
+      ctx.strokeStyle = "#241a12"; ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(curve.x0, curve.y0);
+      ctx.quadraticCurveTo(curve.cx, curve.cy, curve.x1, curve.y1);
+      ctx.strokeStyle = "#c9a874"; ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
     },
 
     actors(game) {

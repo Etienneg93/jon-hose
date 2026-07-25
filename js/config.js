@@ -508,6 +508,10 @@
     dogFrameStep: 0.12,       // s per trot frame
     ripFrameStep: 0.30,       // s per rip frame (3 frames over `reveal`)
     leashSag: 7,              // px of slack at the leash curve's midpoint
+    leashHandDX: 6,           // px, x-facing hand anchor fwd of the stranger's feet-anchor X
+    leashHandDY: -24,         // px, hand anchor above the stranger's feet-anchor Y (screen-space, up is negative)
+    leashCollarDY: -12,       // px, collar anchor above the dog's feet-anchor Y (screen-space, up is negative)
+    leashTautLen: 28,         // px hand-to-collar distance at which leash sag reaches 0
     riseSpeed: 150,           // px/s upward during depart
     soarSpeed: 210,           // px/s rightward once airborne
     departRiseFrac: 0.45,     // fraction of `depart` spent rising before soaring

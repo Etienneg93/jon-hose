@@ -162,6 +162,35 @@ test("depart soars in the direction he faces, carrying the dog", () => {
   assert.strictEqual(dog.x, st.x + C.dogCarryDX, "dog rides the carrier");
 });
 
+test("leashCurve: sag equals leashSag at zero hand-to-collar distance", () => {
+  const curve = AirEntry.leashCurve(C, 100, 50, 100, 50);
+  assert.strictEqual(curve.cy - 50, C.leashSag);
+});
+
+test("leashCurve: sag is 0 once distance reaches leashTautLen", () => {
+  const curve = AirEntry.leashCurve(C, 0, 0, C.leashTautLen, 0);
+  assert.strictEqual(curve.cy, 0);
+});
+
+test("leashCurve: sag stays 0 (never negative) well past leashTautLen", () => {
+  const curve = AirEntry.leashCurve(C, 0, 0, C.leashTautLen * 5, 0);
+  assert.strictEqual(curve.cy, 0);
+});
+
+test("leashCurve: sag eases down between rest and taut, always >= 0", () => {
+  const half = AirEntry.leashCurve(C, 0, 0, C.leashTautLen / 2, 0);
+  assert.ok(half.cy > 0, "still sagging at half the taut length");
+  assert.ok(half.cy < C.leashSag, "sag eased down from the at-rest value");
+});
+
+test("leashCurve: endpoints match the inputs exactly", () => {
+  const curve = AirEntry.leashCurve(C, 12, 34, 56, 78);
+  assert.strictEqual(curve.x0, 12);
+  assert.strictEqual(curve.y0, 34);
+  assert.strictEqual(curve.x1, 56);
+  assert.strictEqual(curve.y1, 78);
+});
+
 test("the scene never mutates wave state", () => {
   const g = makeGame();
   const before = { waveIndex: g.waveIndex, checkpointWave: g.checkpointWave,
