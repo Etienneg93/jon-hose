@@ -246,7 +246,7 @@
           this.banner("DMG NUMBERS " + (this.showDmgNumbers ? "ON" : "OFF"), 1.0);
           return;
         }
-        const count = JH.LEVEL1.waves.length + 5;  // +cutscene +range +wall boss +post-firewall +truck escape
+        const count = JH.LEVEL1.waves.length + 6;  // +cutscene +range +wall boss +post-firewall +truck escape +air entry
         if (e.code === "ArrowUp")                     { e.preventDefault(); this.devCursor = (this.devCursor - 1 + count) % count; }
         if (e.code === "ArrowDown")                   { e.preventDefault(); this.devCursor = (this.devCursor + 1) % count; }
         if (e.code === "Enter" || e.code === "NumpadEnter") {
@@ -256,6 +256,7 @@
           else if (this.devCursor === JH.LEVEL1.waves.length + 2) this.devGotoWallBoss();
           else if (this.devCursor === JH.LEVEL1.waves.length + 3) this.devGotoPostFirewall();
           else if (this.devCursor === JH.LEVEL1.waves.length + 4) this.devGotoTruck();
+          else if (this.devCursor === JH.LEVEL1.waves.length + 5) this.devGotoAirEntry();
           else this.devGotoWave(this.devCursor);
         }
         if (e.code === "Escape")                      { e.preventDefault(); this.devMenu = false; }
@@ -533,6 +534,17 @@
     // the Firewall break (devGotoPostFirewall skips straight to the break).
     devGotoTruck() {
       this.debugEnterTruck();
+      this.devMenu = false;
+    },
+
+    // Jump to the Air World arrival with Jon parked just short of the entry
+    // beat's trigger, so a single right-hold starts the scene.
+    devGotoAirEntry() {
+      if (!this.player) this.startGame();
+      this.deepdiving = false;
+      this.enterAirAct();
+      this.player.x = JH.AIRENTRY.triggerX - 24;
+      JH.Camera.snapTo(this.player);
       this.devMenu = false;
     },
 
@@ -3297,7 +3309,7 @@
 
     drawDevMenu(ctx) {
       const waves = JH.LEVEL1.waves;
-      const count = waves.length + 5;          // +cutscene +range +firewall +post-firewall +truck
+      const count = waves.length + 6;          // +cutscene +range +firewall +post-firewall +truck +air entry
       const W = 224, ROW = 11, PAD = 14;
       // Fit inside the canvas: cap the visible rows and scroll so the cursor
       // stays shown. maxRows is how many ROW-tall lines fit between the header
@@ -3417,6 +3429,18 @@
         ctx.fillText("»  TRUCK ESCAPE", PX + 8, teRy + ROW - 3);
         ctx.fillStyle = teSel ? "#ffc850" : "#445566"; ctx.textAlign = "right";
         ctx.fillText("DEV", PX + W - 6, teRy + ROW - 3);
+      }
+
+      // Air World entry beat (arrival cutscene, parked short of the trigger)
+      const aeRy = rowY(waves.length + 5);
+      if (aeRy !== null) {
+        const aeSel = this.devCursor === waves.length + 5;
+        if (aeSel) { ctx.fillStyle = "rgba(160,220,255,0.18)"; ctx.fillRect(PX + 3, aeRy, W - 6, ROW - 1); }
+        ctx.fillStyle = aeSel ? "#a0dcff" : "#667788";
+        ctx.font = (aeSel ? "bold " : "") + "6px monospace"; ctx.textAlign = "left";
+        ctx.fillText("★  AIR ENTRY", PX + 8, aeRy + ROW - 3);
+        ctx.fillStyle = aeSel ? "#a0dcff" : "#445566"; ctx.textAlign = "right";
+        ctx.fillText("DEV", PX + W - 6, aeRy + ROW - 3);
       }
 
       // Scroll indicators when the list overflows the window (right edge, clear
