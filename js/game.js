@@ -1121,9 +1121,10 @@
       this.enterAirAct();
     },
 
-    // Air World arrival (post-Gate Crash). Banner-beat stub of the Ass Man
-    // entry cutscene (bookends pass replaces it): Jon steps onto the cloudline
-    // street, vendor at the act boundary, free-walk to WAVE 30.
+    // Air World arrival (post-Gate Crash): Jon steps onto the cloudline
+    // street, walks into the Ass Man entry beat (airentry.js, armed by the
+    // JH.AIRENTRY.triggerX proximity check in update()), then free-walks to
+    // WAVE 30 past the vendor at the act boundary.
     enterAirAct() {
       const airStart = JH.ACT_STARTS[JH.ACT_STARTS.length - 1];
       const p = this.player;
@@ -1148,6 +1149,7 @@
       this.bounds = { minX: JH.ZONE4_START + 8, maxX: this.waveTriggerX + 30 };
       this.clearsSinceVendor = 0;
       this.spawnVendor(WAVE_TRIGGERS[airStart] - 150);
+      this.airEntry = null; this.airEntryArmed = true;   // only real arrival arms the entry beat
       this.banner("THE AIR WORLD", 2.6);
     },
 
@@ -2269,6 +2271,16 @@
       // Church-return landing sequence owns play input/logic until it finishes.
       if (this.arrival) { this.updateArrival(dt); return; }
 
+      // Air entry beat: owns play input/logic while it runs (same idiom as
+      // `arrival` above). Gated on airEntryArmed, which only enterAirAct()
+      // sets — devGotoWave and the Church return flip Background.airOn on
+      // without arriving, and must not trigger the scene.
+      if (!this.airEntry && this.airEntryArmed === true && JH.AirEntry &&
+          this.player.x >= JH.AIRENTRY.triggerX) {
+        JH.AirEntry.enter(this);
+      }
+      if (this.airEntry) { JH.AirEntry.update(dt, this); return; }
+
       // Hitstop: freeze entities briefly on impact; embers + particles keep running.
       if (this.hitStopTimer > 0) {
         this.hitStopTimer -= dt;
@@ -3009,6 +3021,7 @@
         if (!(this.truckBoard && this.truckBoard.departing)) actors.push(this.player);
         if (this.shopNpc) actors.push(this.shopNpc);
         if (this.deepdiveTV) actors.push(this.deepdiveTV);
+        if (this.airEntry) for (const a of JH.AirEntry.actors(this)) actors.push(a);
         actors.sort((m, n) => m.y - n.y);
         for (const e of actors) {
           // Dead entities can linger in the list while a death sequence has
