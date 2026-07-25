@@ -505,6 +505,7 @@
       reveal: 1.8, feud: 2.6, depart: 1.6,
     },
     dogTrotSpeed: 26,         // px/s while walking to the hydrant
+    dogTrotFrames: 2,         // trot cycle length (contact, passing)
     dogFrameStep: 0.12,       // s per trot frame
     ripFrameStep: 0.30,       // s per rip frame (3 frames over `reveal`)
     leashSag: 7,              // px of slack at the leash curve's midpoint

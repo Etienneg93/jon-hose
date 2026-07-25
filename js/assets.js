@@ -1163,8 +1163,6 @@
     idle:  JH.Loader.img("sprites/dog/idle.png"),
     trot0: JH.Loader.img("sprites/dog/trot0.png"),
     trot1: JH.Loader.img("sprites/dog/trot1.png"),
-    trot2: JH.Loader.img("sprites/dog/trot2.png"),
-    trot3: JH.Loader.img("sprites/dog/trot3.png"),
     lift:  JH.Loader.img("sprites/dog/lift.png"),
   };
   const _usable = (im) => !!(im && im.complete && im.naturalWidth);
@@ -1206,7 +1204,7 @@
 
   Assets.register("collie", (p, opt, ctx, x, y, facing) => {
     const key = opt.state === "lift" ? "lift"
-              : opt.state === "trot" ? "trot" + Math.max(0, Math.min(3, opt.frame | 0))
+              : opt.state === "trot" ? "trot" + Math.max(0, Math.min(1, opt.frame | 0))
               : "idle";
     const img = _usable(_dogImgs[key]) ? _dogImgs[key] : _dogImgs.idle;
     // Collie art is RIGHT-facing native (the repo default): mirror on facing -1.

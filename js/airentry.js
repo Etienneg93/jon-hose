@@ -266,7 +266,7 @@
         if (dog.x < targetX) {
           dog.x = Math.min(targetX, dog.x + C.dogTrotSpeed * dt);
           dog.state = "trot";
-          dog.frame = Math.floor(el / C.dogFrameStep) & 3;
+          dog.frame = Math.floor(el / C.dogFrameStep) % C.dogTrotFrames;
         } else {
           dog.state = "lift";
         }

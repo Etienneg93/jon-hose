@@ -451,3 +451,22 @@ test("the scene never mutates wave state", () => {
   assert.strictEqual(g.waveActive, before.waveActive);
   assert.strictEqual(g.sigils.length, before.sigils);
 });
+
+test("the trot cycles over exactly JH.AIRENTRY.dogTrotFrames frames", () => {
+  // The collie's contact and passing poses are the only two distinct beats the
+  // generator produced; frames must stay inside that set or the painter falls
+  // back to idle mid-stride.
+  const g = makeGame();
+  AirEntry.enter(g);
+  const seen = new Set();
+  const steps = Math.ceil((C.phases.notice + C.phases.desecrate) / (1 / 60));
+  for (let i = 0; i < steps; i++) {
+    AirEntry.update(1 / 60, g);
+    const d = g.airEntry && g.airEntry.dog;
+    if (d && d.state === "trot") seen.add(d.frame);
+  }
+  assert.ok(seen.size > 1, "the trot must actually advance frames");
+  for (const f of seen)
+    assert.ok(f >= 0 && f < C.dogTrotFrames,
+      `frame ${f} outside 0..${C.dogTrotFrames - 1}`);
+});
