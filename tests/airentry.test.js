@@ -4,6 +4,12 @@ const assert = require("node:assert");
 
 global.window = global.window || {};
 require("../js/config.js");
+// world.js preloads a debris sprite via JH.Loader at script eval; node has no
+// Image, so stub the loader (same pattern as tests/entities.test.js).
+// drawOverlay's props/wind-gust reads JH.Camera.x, so world.js must load
+// before any test calls it.
+global.window.JH.Loader = { img: () => ({}) };
+require("../js/world.js");
 require("../js/airentry.js");
 const JH = global.window.JH;
 const AirEntry = JH.AirEntry;
@@ -40,14 +46,16 @@ test("every phase duration is positive", () => {
 
 // Records paint calls so the test can prove a painter actually ran.
 // Assets.draw's p() helper sinks to ctx.fillRect (js/assets.js:344-350).
+// texts[] records every fillText string (bark lines).
 function mkCtx() {
   const noop = () => {};
   const c = {
-    calls: 0, fillStyle: "", globalAlpha: 1, globalCompositeOperation: "",
+    calls: 0, texts: [], fillStyle: "", globalAlpha: 1, globalCompositeOperation: "",
     save: noop, restore: noop, translate: noop, scale: noop, rotate: noop,
     drawImage: noop, clearRect: noop, setTransform: noop, beginPath: noop,
     arc: noop, ellipse: noop, fill: noop, stroke: noop, closePath: noop,
-    fillText: noop, measureText: () => ({ width: 0 }), putImageData: noop,
+    fillText(text) { c.texts.push(text); },
+    measureText: () => ({ width: 0 }), putImageData: noop,
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
     fillRect() { c.calls++; },
   };
@@ -87,6 +95,7 @@ function makeGame() {
     waveIndex: 28, checkpointWave: 29, waveActive: false, sigils: [],
     player: { x: C.triggerX, y: 51, z: 0, facing: 1 },
     input: { _buf: {}, buffered(a) { return !!this._buf[a]; }, consume(a) { this._buf[a] = false; } },
+    shake() {},   // camera push on reveal — a real JH.Game method in production
   };
 }
 
@@ -258,6 +267,124 @@ test("drawOverlay is a no-op with no live scene", () => {
   assert.strictEqual(ctx.calls, 0);
 });
 
+// ---- placeholder bark lines ----
+
+test("rage bark line draws above the player only", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.phase = "rage";
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.ok(ctx.texts.includes("NOT THE HYDRANT!"), "player's rage line drawn");
+  assert.strictEqual(ctx.texts.length, 2, "one line = outline + fill fillText calls");
+});
+
+test("feud bark lines draw for both the stranger and the player", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.phase = "feud";
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.ok(ctx.texts.includes("MY SKY NOW."), "stranger's feud line drawn");
+  assert.ok(ctx.texts.includes("NOT ON MY WATCH."), "player's feud line drawn");
+  assert.strictEqual(ctx.texts.length, 4, "two lines x (outline + fill) fillText calls");
+});
+
+test("no bark line outside rage/feud", () => {
+  const g = makeGame();
+  AirEntry.enter(g);   // phase stays "notice"
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.strictEqual(ctx.texts.length, 0);
+});
+
+// ---- reveal props: hoodie prop, storm ring, camera push ----
+
+test("reveal completion spawns the hoodie prop and storm ring, and pushes the camera", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  let shookWith = null;
+  g.shake = (n) => { shookWith = n; };
+  const dt = 1 / 60;
+  const revealStart = C.phases.notice + C.phases.desecrate + C.phases.rage;
+  g.airEntry.t = revealStart + C.ripFrameStep * 2 + 0.01 - dt;
+  AirEntry.update(dt, g);
+  assert.ok(g.airEntry.hoodieProp, "hoodie prop spawned");
+  assert.ok(g.airEntry.stormRing, "storm ring spawned");
+  assert.strictEqual(shookWith, C.revealShakeMag, "camera push uses the configured magnitude");
+});
+
+test("hoodie prop tumbles (translate + rotate) then despawns after hoodieLife", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const dt = 1 / 60;
+  g.airEntry.hoodieProp = { x: 0, y: 0, z: C.hoodieSpawnZ, vx: 10, vz: 0, rot: 0, rotSpeed: C.hoodieRotSpeed, t: 0 };
+  AirEntry.update(dt, g);
+  let hp = g.airEntry.hoodieProp;
+  assert.ok(hp, "still alive after one tick");
+  assert.ok(hp.rot > 0, "rotates over time");
+  assert.strictEqual(hp.x, 10 * dt, "moves by vx*dt");
+  g.airEntry.hoodieProp.t = C.hoodieLife - dt / 2;   // about to cross the life boundary
+  AirEntry.update(dt, g);
+  assert.strictEqual(g.airEntry.hoodieProp, null, "despawns once its life elapses");
+});
+
+test("hoodie prop draws without any non-uniform scale (rotation only)", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.hoodieProp = { x: 0, y: 0, z: 10, vx: 5, vz: 0, rot: 0.3, rotSpeed: 1, t: 0 };
+  const ctx = mkCtx();
+  let scaleCalls = 0;
+  ctx.scale = () => { scaleCalls++; };
+  AirEntry.drawOverlay(ctx, g);
+  assert.strictEqual(scaleCalls, 0, "hoodie prop must never be scaled, only rotated/translated");
+  assert.ok(ctx.calls > 0, "hoodie prop paints a fillRect");
+});
+
+test("storm ring grows then despawns after stormRingDur", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const dt = 1 / 60;
+  g.airEntry.stormRing = { cx: 0, cy: 0, t: 0 };
+  AirEntry.update(dt, g);
+  assert.ok(g.airEntry.stormRing, "still alive after one tick");
+  g.airEntry.stormRing.t = C.stormRingDur - dt / 2;
+  AirEntry.update(dt, g);
+  assert.strictEqual(g.airEntry.stormRing, null, "despawns once its duration elapses");
+});
+
+test("storm ring never touches game.enemies (cosmetic only, no hit test)", () => {
+  const g = makeGame();   // deliberately has no `enemies` field
+  AirEntry.enter(g);
+  const dt = 1 / 60;
+  const revealStart = C.phases.notice + C.phases.desecrate + C.phases.rage;
+  g.airEntry.t = revealStart + C.ripFrameStep * 2 + 0.01 - dt;
+  assert.doesNotThrow(() => AirEntry.update(dt, g), "reveal fx must never read game.enemies");
+  assert.ok(g.airEntry.stormRing, "ring spawned");
+  const ctx = mkCtx();
+  assert.doesNotThrow(() => AirEntry.drawOverlay(ctx, g));
+});
+
+// ---- wind gust (depart) ----
+
+test("depart spawns wind-gust streaks at the configured cadence", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const before = AirEntry.ORDER.slice(0, -1)
+    .filter((k) => k !== "depart")
+    .reduce((sum, k) => sum + C.phases[k], 0);
+  g.airEntry.t = before;
+  const dt = 1 / 240;   // fine steps so the spawn accumulator isn't skipped over
+  // Stop one tick short of depart's own end: windGustCount streaks are spread
+  // evenly across the phase, so the last one lands on the same frame the
+  // scene releases (game.airEntry goes null) and is unobservable here.
+  const steps = Math.floor((C.phases.depart - dt) / dt);
+  for (let i = 0; i < steps; i++) AirEntry.update(dt, g);
+  assert.strictEqual(g.airEntry.windSpawnedCount, C.windGustCount - 1,
+    "every gust but the final phase-boundary one has spawned");
+  assert.ok(g.airEntry.windParticles.length > 0, "the most recent streaks are still live");
+});
+
 test("leashCurve: sag equals leashSag at zero hand-to-collar distance", () => {
   const curve = AirEntry.leashCurve(C, 100, 50, 100, 50);
   assert.strictEqual(curve.cy - 50, C.leashSag);
@@ -294,8 +421,7 @@ test("leashCurve: endpoints match the inputs exactly", () => {
 // chain startGame touches (Camera, Player, Upgrades); JH.Music is unguarded
 // in startGame so it's stubbed directly rather than loading real audio.
 test("startGame clears a stale armed air-entry scene", () => {
-  global.window.JH.Loader = global.window.JH.Loader || { img: () => ({}) };
-  require("../js/world.js");
+  // world.js is already loaded (top of file); startGame also needs these.
   require("../js/upgrades.js");
   require("../js/entities.js");
   require("../js/game.js");

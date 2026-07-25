@@ -524,6 +524,25 @@
     flashDur: 0.18,           // rage red flash + reveal white flash
     flashRedPeak: 0.35,       // rage flash starting alpha (0..1), eases to 0 over flashDur
     flashWhitePeak: 0.55,     // reveal flash starting alpha (0..1), eases to 0 over flashDur
+    barkDY: -68,              // px above an actor's feet-anchor Y where bark text draws (screen-space, up is negative)
+    hoodieSpawnZ: 34,         // px, hoodie prop's spawn height (chest-ish) when the rip completes
+    hoodieOutSpeed: 40,       // px/s the hoodie prop drifts sideways, away from the stranger's facing
+    hoodiePopSpeed: 70,       // px/s initial upward velocity on spawn
+    hoodieGrav: 220,          // px/s^2 pulling the hoodie prop back down
+    hoodieRotSpeed: 6,        // rad/s the hoodie prop tumbles (rotation only, never non-uniform scale)
+    hoodieSize: 6,            // px, drawn square side (uniform — rotation must not distort it)
+    hoodieLife: 0.9,          // s before the hoodie prop despawns
+    stormRingMaxR: 46,        // px, storm ring's radius at the end of its growth
+    stormRingDur: 0.5,        // s for the storm ring to grow to stormRingMaxR and fully fade
+    stormRingAlpha: 0.6,      // storm ring peak alpha (0..1), fading to 0 as it grows
+    stormRingWidth: 2,        // px, storm ring stroke width
+    windGustCount: 5,         // wind-streak particles spawned over the `depart` phase
+    windGustSpeed: 60,        // px/s each streak trails behind the travel direction
+    windGustLife: 0.4,        // s each streak particle lives
+    windGustSpread: 10,       // px random depth/height jitter applied at spawn
+    windGustStreakLen: 8,     // px, drawn length of each streak
+    windGustAlpha: 0.5,       // wind streak peak alpha (0..1), fading over its life
+    revealShakeMag: 5,        // camera-push magnitude (game.shake(n) units) when the reveal lands
   };
 
   // Fraction of a `tough` wave's enemies that spawn elite, indexed

@@ -15,6 +15,14 @@
   // JH.AIRENTRY.phases; "release" is the terminal state and has no duration.
   const ORDER = ["notice", "desecrate", "rage", "reveal", "feud", "depart", "release"];
 
+  // PLACEHOLDER bark lines pending the user's writing pass (same convention
+  // as drawAssManCutscene's placeholder dialogue in game.js). One line per
+  // actor per phase, keyed by phase then speaker.
+  const BARKS = {
+    rage: { player: "NOT THE HYDRANT!" },
+    feud: { stranger: "MY SKY NOW.", player: "NOT ON MY WATCH." },
+  };
+
   const AirEntry = {
     ORDER,
 
@@ -85,6 +93,8 @@
       game.airEntry = {
         t: 0, phase: "notice", hydrantX,
         stranger, dog, flashT: 0, flashColor: null, revealed: false,
+        hoodieProp: null, stormRing: null,
+        windParticles: [], windSpawnT: 0, windSpawnedCount: 0,
       };
     },
 
@@ -125,20 +135,100 @@
       return sc ? [sc.stranger, sc.dog] : [];
     },
 
-    // Full-screen scene fx: rage red wash + reveal white wash. Both share
-    // flashT/flashColor (armed in update()) so one timer drives either
-    // colour; alpha eases from the configured peak to 0 over flashDur.
-    // Screen-space wash — not translated by camera shake (same convention
-    // as the essence-dim veil in game.js's render()).
+    // Scene-level fx: full-screen washes, then every world-space prop, then
+    // bark text on top. Called once per frame after the world/actor passes.
     drawOverlay(ctx, game) {
       const sc = game.airEntry;
-      if (!sc || sc.flashT <= 0) return;
+      if (!sc) return;
       const C = JH.AIRENTRY;
-      const peak = sc.flashColor === "reveal" ? C.flashWhitePeak : C.flashRedPeak;
+
+      // Rage red wash + reveal white wash. Both share flashT/flashColor
+      // (armed in update()) so one timer drives either colour; alpha eases
+      // from the configured peak to 0 over flashDur. Screen-space — not
+      // translated by camera shake (same convention as game.js's essence-dim
+      // veil).
+      if (sc.flashT > 0) {
+        const peak = sc.flashColor === "reveal" ? C.flashWhitePeak : C.flashRedPeak;
+        ctx.save();
+        ctx.globalAlpha = peak * (sc.flashT / C.flashDur);
+        ctx.fillStyle = sc.flashColor === "reveal" ? "#ffffff" : "#ff2020";
+        ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+        ctx.restore();
+      }
+
+      const cam = JH.Camera.x;
+
+      // Storm ring: expanding, fading ellipse centred on where the stranger
+      // stood at reveal. Cosmetic only — no hit test, unlike game.js's other
+      // rings (pulseRings/sermonWaves), whose drawn rim doubles as a hitbox.
+      if (sc.stormRing) {
+        const ring = sc.stormRing;
+        const k = ring.t / C.stormRingDur;
+        const sx = ring.cx - cam, sy = JH.Geo.feetScreenY(ring.cy, 0);
+        ctx.save();
+        ctx.globalAlpha = C.stormRingAlpha * Math.max(0, 1 - k);
+        ctx.strokeStyle = "#cfe0ff";
+        ctx.lineWidth = C.stormRingWidth;
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, C.stormRingMaxR * k, C.stormRingMaxR * k * JH.GROUND_RY, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Tumbling hoodie scrap: uniform square, rotation only (non-uniform
+      // scale is the blit-distortion bug fixed in f145c3d — never repeat it).
+      if (sc.hoodieProp) {
+        const hp = sc.hoodieProp;
+        const sx = hp.x - cam, sy = JH.Geo.feetScreenY(hp.y, hp.z);
+        const s = C.hoodieSize;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - hp.t / C.hoodieLife);
+        ctx.translate(Math.round(sx), Math.round(sy));
+        ctx.rotate(hp.rot);
+        ctx.fillStyle = "#3a4a66";
+        ctx.fillRect(-s / 2, -s / 2, s, s);
+        ctx.restore();
+      }
+
+      // Wind gust: a handful of streak particles trailing the exit.
+      for (const p of sc.windParticles) {
+        const sx = p.x - cam, sy = JH.Geo.feetScreenY(p.y, p.z);
+        const dir = Math.sign(p.vx) || -1;
+        ctx.save();
+        ctx.globalAlpha = C.windGustAlpha * Math.max(0, 1 - p.t / C.windGustLife);
+        ctx.strokeStyle = "#eaf4ff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(sx - dir * C.windGustStreakLen, sy);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      this._drawBarks(ctx, cam, sc, game);
+    },
+
+    // PLACEHOLDER bark lines (see BARKS above) drawn above the speaking
+    // actor. Same readable-label idiom as the HUD's "E  SHOP" prompt and
+    // hold-timer readout in game.js: dark 1px drop-shadow, gold fill on top.
+    _drawBarks(ctx, cam, sc, game) {
+      const set = BARKS[sc.phase];
+      if (!set) return;
+      if (set.stranger) this._drawBark(ctx, cam, sc.stranger, set.stranger);
+      if (set.player && game.player) this._drawBark(ctx, cam, game.player, set.player);
+    },
+
+    _drawBark(ctx, cam, actor, text) {
+      const C = JH.AIRENTRY;
+      const sx = Math.round(actor.x - cam);
+      const sy = Math.round(JH.Geo.feetScreenY(actor.y, actor.z) + C.barkDY);
       ctx.save();
-      ctx.globalAlpha = peak * (sc.flashT / C.flashDur);
-      ctx.fillStyle = sc.flashColor === "reveal" ? "#ffffff" : "#ff2020";
-      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+      ctx.font = "bold 6px monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#0a0e18";
+      ctx.fillText(text, sx + 1, sy + 1);
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillText(text, sx, sy);
       ctx.restore();
     },
 
@@ -192,6 +282,15 @@
         if (st.frame >= 2 && !sc.revealed) {
           sc.revealed = true;
           sc.flashT = C.flashDur; sc.flashColor = "reveal";
+          // Hoodie scrap tumbles off opposite his facing (away from Jon);
+          // storm ring centres on where he's standing at this instant.
+          sc.hoodieProp = {
+            x: st.x, y: st.y, z: C.hoodieSpawnZ,
+            vx: -st.facing * C.hoodieOutSpeed, vz: C.hoodiePopSpeed,
+            rot: 0, rotSpeed: C.hoodieRotSpeed, t: 0,
+          };
+          sc.stormRing = { cx: st.x, cy: st.y, t: 0 };
+          if (game.shake) game.shake(C.revealShakeMag);
         }
       } else if (sc.phase === "feud") {
         st.state = "idle";
@@ -217,6 +316,39 @@
         dog.state = "idle";
         dog.x = st.x + C.dogCarryDX;
         dog.z = st.z - (st.state === "soar" ? C.dogCarrySoarDY : C.dogCarryDY);
+        // Wind gust: windGustCount streaks spread evenly across depart's
+        // duration, spawned at his current position and trailing behind.
+        sc.windSpawnT += dt;
+        const windInterval = C.phases.depart / C.windGustCount;
+        if (sc.windSpawnT >= windInterval && sc.windSpawnedCount < C.windGustCount) {
+          sc.windSpawnT -= windInterval;
+          sc.windSpawnedCount++;
+          sc.windParticles.push({
+            x: st.x, y: st.y + (Math.random() - 0.5) * C.windGustSpread,
+            z: st.z + (Math.random() - 0.5) * C.windGustSpread,
+            vx: -st.facing * C.windGustSpeed, t: 0,
+          });
+        }
+      }
+
+      // Reveal/depart cosmetic props: ticked every frame regardless of phase
+      // so a prop spawned in one phase keeps animating into the next.
+      if (sc.hoodieProp) {
+        const hp = sc.hoodieProp;
+        hp.t += dt;
+        hp.vz -= C.hoodieGrav * dt;
+        hp.x += hp.vx * dt;
+        hp.z = Math.max(0, hp.z + hp.vz * dt);
+        hp.rot += hp.rotSpeed * dt;
+        if (hp.t >= C.hoodieLife) sc.hoodieProp = null;
+      }
+      if (sc.stormRing) {
+        sc.stormRing.t += dt;
+        if (sc.stormRing.t >= C.stormRingDur) sc.stormRing = null;
+      }
+      if (sc.windParticles.length) {
+        for (const p of sc.windParticles) { p.t += dt; p.x += p.vx * dt; }
+        sc.windParticles = sc.windParticles.filter((p) => p.t < C.windGustLife);
       }
 
       if (sc.phase === "release") this._finish(game);
