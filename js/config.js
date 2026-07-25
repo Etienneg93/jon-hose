@@ -519,6 +519,8 @@
     dogCarryDX: -6,           // collie offset from the carrier's centre while held
     dogCarryDY: -22,          // …and above his feet
     flashDur: 0.18,           // rage red flash + reveal white flash
+    flashRedPeak: 0.35,       // rage flash starting alpha (0..1), eases to 0 over flashDur
+    flashWhitePeak: 0.55,     // reveal flash starting alpha (0..1), eases to 0 over flashDur
   };
 
   // Fraction of a `tough` wave's enemies that spawn elite, indexed

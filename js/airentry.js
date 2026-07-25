@@ -84,7 +84,7 @@
       };
       game.airEntry = {
         t: 0, phase: "notice", hydrantX,
-        stranger, dog, flashT: 0, revealed: false,
+        stranger, dog, flashT: 0, flashColor: null, revealed: false,
       };
     },
 
@@ -123,6 +123,23 @@
     actors(game) {
       const sc = game.airEntry;
       return sc ? [sc.stranger, sc.dog] : [];
+    },
+
+    // Full-screen scene fx: rage red wash + reveal white wash. Both share
+    // flashT/flashColor (armed in update()) so one timer drives either
+    // colour; alpha eases from the configured peak to 0 over flashDur.
+    // Screen-space wash — not translated by camera shake (same convention
+    // as the essence-dim veil in game.js's render()).
+    drawOverlay(ctx, game) {
+      const sc = game.airEntry;
+      if (!sc || sc.flashT <= 0) return;
+      const C = JH.AIRENTRY;
+      const peak = sc.flashColor === "reveal" ? C.flashWhitePeak : C.flashRedPeak;
+      ctx.save();
+      ctx.globalAlpha = peak * (sc.flashT / C.flashDur);
+      ctx.fillStyle = sc.flashColor === "reveal" ? "#ffffff" : "#ff2020";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+      ctx.restore();
     },
 
     // Jump straight to the end state. Reachable from any phase.
@@ -167,12 +184,15 @@
       } else if (sc.phase === "rage") {
         dog.state = "idle";
         if (game.player) game.player.facing = 1;
-        if (el < dt) sc.flashT = C.flashDur;     // one red flash on entry
+        if (el < dt) { sc.flashT = C.flashDur; sc.flashColor = "rage"; }   // one red flash on entry
       } else if (sc.phase === "reveal") {
         st.facing = -1;
         st.state = "rip";
         st.frame = Math.min(2, Math.floor(el / C.ripFrameStep));
-        if (st.frame >= 2 && !sc.revealed) { sc.revealed = true; sc.flashT = C.flashDur; }
+        if (st.frame >= 2 && !sc.revealed) {
+          sc.revealed = true;
+          sc.flashT = C.flashDur; sc.flashColor = "reveal";
+        }
       } else if (sc.phase === "feud") {
         st.state = "idle";
       } else if (sc.phase === "depart") {

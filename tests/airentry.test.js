@@ -162,6 +162,72 @@ test("depart soars in the direction he faces, carrying the dog", () => {
   assert.strictEqual(dog.x, st.x + C.dogCarryDX, "dog rides the carrier");
 });
 
+test("rage phase arms a red flash on entry", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const dt = 1 / 60;
+  const rageStart = C.phases.notice + C.phases.desecrate;
+  g.airEntry.t = rageStart - dt;   // one tick short of the rage boundary
+  AirEntry.update(dt, g);
+  assert.strictEqual(g.airEntry.phase, "rage");
+  assert.strictEqual(g.airEntry.flashColor, "rage");
+  assert.ok(g.airEntry.flashT > 0);
+});
+
+test("reveal completion arms a white flash exactly once", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const dt = 1 / 60;
+  const revealStart = C.phases.notice + C.phases.desecrate + C.phases.rage;
+  // A small margin past the frame-2 boundary (rather than landing exactly on
+  // it) so float rounding in the t/dt roundtrip can't floor it back to 1.
+  g.airEntry.t = revealStart + C.ripFrameStep * 2 + 0.01 - dt;
+  AirEntry.update(dt, g);
+  assert.strictEqual(g.airEntry.revealed, true);
+  assert.strictEqual(g.airEntry.flashColor, "reveal");
+  assert.ok(g.airEntry.flashT > 0);
+});
+
+test("drawOverlay paints a full-screen wash while a rage flash is active", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.flashT = C.flashDur;
+  g.airEntry.flashColor = "rage";
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.ok(ctx.calls > 0, "must paint the wash");
+  assert.strictEqual(ctx.fillStyle, "#ff2020");
+  assert.strictEqual(ctx.globalAlpha, C.flashRedPeak, "full timer -> full peak alpha");
+});
+
+test("drawOverlay uses the white peak for a reveal flash", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.flashT = C.flashDur;
+  g.airEntry.flashColor = "reveal";
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.ok(ctx.calls > 0);
+  assert.strictEqual(ctx.fillStyle, "#ffffff");
+  assert.strictEqual(ctx.globalAlpha, C.flashWhitePeak);
+});
+
+test("drawOverlay is a no-op once the flash timer elapses", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.flashT = 0;
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.strictEqual(ctx.calls, 0, "no flash left to paint");
+});
+
+test("drawOverlay is a no-op with no live scene", () => {
+  const g = makeGame();
+  const ctx = mkCtx();
+  AirEntry.drawOverlay(ctx, g);
+  assert.strictEqual(ctx.calls, 0);
+});
+
 test("leashCurve: sag equals leashSag at zero hand-to-collar distance", () => {
   const curve = AirEntry.leashCurve(C, 100, 50, 100, 50);
   assert.strictEqual(curve.cy - 50, C.leashSag);

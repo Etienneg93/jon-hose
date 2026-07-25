@@ -3268,6 +3268,9 @@
         ctx.textAlign = "left";
         ctx.restore();
       }
+      // Air-entry scene fx (flash washes, bark lines, reveal/depart props):
+      // drawn after every world/actor pass, before the HUD reads below.
+      if (this.airEntry) JH.AirEntry.drawOverlay(ctx, this);
       // Stat panel: always on in play (collapsed), named near the vendor,
       // full character sheet when Tab-toggled.
       if (this.state === "play" && !this.rangeCatalogOpen)
