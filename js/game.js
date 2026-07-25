@@ -1330,13 +1330,13 @@
     },
 
     // Ass Man — the final boss's defeat outro (same MGS idiom as Quake/Slayer).
-    // PLACEHOLDER dialogue + a procedural portrait until a baked one lands;
-    // phase-3 advance calls win() (see update()'s cutscene handler), not a wave.
+    // Phase-3 advance calls win() (see update()'s cutscene handler), not a wave.
+    // Mario stays HIS dog: the fight ends in mutual respect, not a handover.
     drawAssManCutscene(ctx, cs) {
       const lines = [
         ["...You actually hosed me down.", "Nobody's done that. Nobody."],
-        ["The whole Sanitation Department...", "it answers to YOU now."],
-        ["Go on, hero.", "Keep the skies clean."],
+        ["There's others like us up here.", "Cleaner. Angrier. Worse dressed."],
+        ["When they call, you answer.", "Keep the skies clean."],
       ];
       const phase = clamp(cs.phase, 0, lines.length - 1);
 
