@@ -107,6 +107,8 @@
       };
       game.airEntry = {
         t: 0, phase: "notice", hydrantX,
+        codecIdx: 0, codecT: 0,   // dialogue cursor + hold timer (player-paced)
+        actedPhase: null,         // last phase whose ACTION has begun (see update)
         stranger, dog, flashT: 0, flashColor: null, revealed: false,
         hoodieProp: null, stormRing: null,
         windParticles: [], windSpawnT: 0, windSpawnedCount: 0,
@@ -240,17 +242,48 @@
       if (!sc) return;
       const C = JH.AIRENTRY;
 
-      // Confirm skips the whole beat; consume it so it can't leak into play.
-      // Confirm is SWALLOWED but does not skip: the arrival beat plays once
-      // per run and is not skippable. Still consumed so a press during the
-      // locked scene cannot leak into resumed play.
-      if (game.input && game.input.buffered("confirm")) game.input.consume("confirm");
+      const confirmed = !!(game.input && game.input.buffered("confirm"));
+      if (confirmed) game.input.consume("confirm");   // never leaks into resumed play
+
+      // Dialogue GATES the clock. A phase plays its codec lines first — one at
+      // a time, each waiting on confirm, exactly like the Quake/Slayer/Ass Man
+      // boxes — and only then runs its staged action. The scene clock is frozen
+      // meanwhile, so a line can never be missed or race the choreography, and
+      // confirm advances one line rather than skipping the beat.
+      const beats = CODEC[sc.phase];
+      if (beats && (sc.codecIdx || 0) < beats.length) {
+        sc.codecT = (sc.codecT || 0) + dt;           // drives the mouth flap
+        if (confirmed && sc.codecT >= C.codecMinHold) {
+          sc.codecIdx = (sc.codecIdx || 0) + 1;
+          sc.codecT = 0;
+        }
+        return;                                       // clock and staging held
+      }
 
       sc.t += dt;
-      sc.phase = this.phaseAt(C, sc.t);
+      const nextPhase = this.phaseAt(C, sc.t);
+      if (nextPhase !== sc.phase) {
+        // Crossing into a phase resets its dialogue cursor and yields, so the
+        // new phase's lines play BEFORE its action. Resetting here (rather than
+        // at the top of the next frame) is load-bearing: sc.phase is assigned
+        // in this half, so a top-of-frame comparison would always find them
+        // equal and silently skip that phase's dialogue.
+        sc.phase = nextPhase;
+        sc.codecIdx = 0;
+        sc.codecT = 0;
+        return;
+      }
       // Jon holds the outrage pose from the desecration through the face-off.
       sc.playerShock = (sc.phase === "rage" || sc.phase === "feud");
       if (sc.flashT > 0) sc.flashT = Math.max(0, sc.flashT - dt);
+      // First ACTION frame of this phase — i.e. the frame after its dialogue is
+      // answered. Phase-entry effects hang off this rather than an `el < dt`
+      // edge: the frame that crosses a boundary returns early to show the
+      // phase's lines, so by the time action resumes `el` has already stepped
+      // past zero and such an edge never fires.
+      const firstActionFrame = sc.actedPhase !== sc.phase;
+      sc.actedPhase = sc.phase;
+
       const el = this._phaseElapsed(C, sc.t, sc.phase);
       const st = sc.stranger, dog = sc.dog;
 
@@ -269,7 +302,7 @@
       } else if (sc.phase === "rage") {
         dog.state = "idle";
         if (game.player) game.player.facing = 1;
-        if (el < dt) { sc.flashT = C.flashDur; sc.flashColor = "rage"; }   // one red flash on entry
+        if (firstActionFrame) { sc.flashT = C.flashDur; sc.flashColor = "rage"; }   // one red flash
       } else if (sc.phase === "reveal") {
         st.facing = -1;
         st.state = "rip";
@@ -416,21 +449,20 @@
       ctx.restore();
     },
 
-    // Which codec beat is on screen, and how far into it we are. Beats split
-    // their phase into equal slices. Null when the phase has no lines.
-    codecBeat(C, phase, el) {
+    // The beat a phase shows at cursor `idx`, or null once its lines are spent
+    // (or if it has none). Dialogue is player-paced, so the cursor — not
+    // elapsed time — decides what is on screen.
+    codecBeat(phase, idx) {
       const beats = CODEC[phase];
-      if (!beats || !beats.length) return null;
-      const slice = C.phases[phase] / beats.length;
-      const idx = Math.max(0, Math.min(beats.length - 1, Math.floor(el / slice)));
-      return { beat: beats[idx], idx, elInBeat: el - idx * slice, slice };
+      if (!beats || idx >= beats.length) return null;
+      return { beat: beats[idx], idx, remaining: beats.length - idx - 1 };
     },
 
     // True while a scripted codec beat is on screen. game.js reads this to
     // suppress the stat panel, which shares the portrait's top-left rect.
     codecActive(game) {
       const sc = game.airEntry;
-      return !!(sc && CODEC[sc.phase]);
+      return !!(sc && this.codecBeat(sc.phase, sc.codecIdx || 0));
     },
 
     // Intro codec box. Same geometry and palette as the Quake/Slayer/Ass Man
@@ -442,9 +474,10 @@
       const sc = game.airEntry;
       if (!sc) return;
       const C = JH.AIRENTRY;
-      const sel = this.codecBeat(C, sc.phase, this._phaseElapsed(C, sc.t, sc.phase));
-      if (!sel) return;
-      const beat = sel.beat;
+      const beats = CODEC[sc.phase];
+      const idx = sc.codecIdx || 0;
+      if (!beats || idx >= beats.length) return;
+      const beat = beats[idx];
 
       const PX = 10, PY = 10, PW = 96, PH = 108;
 
@@ -462,10 +495,11 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(PX, PY, PW, PH);
 
-      // Mouth flaps per BEAT, not per phase, so a second speaker animates when
-      // their line comes up instead of sitting frozen.
-      const talking = sel.elInBeat < sel.slice * C.codecTalkFrac;
-      const mouth = talking && (Math.floor(sel.elInBeat * C.codecMouthHz) & 1);
+      // Mouth flaps for a moment after the line appears, then settles — the
+      // line itself waits on the player, so this cannot be tied to a slice.
+      const held = sc.codecT || 0;
+      const talking = held < C.codecTalkDur;
+      const mouth = talking && (Math.floor(held * C.codecMouthHz) & 1);
       const fn = PORTRAIT_FN[beat.who];
       const img = fn ? fn(mouth) : null;
       if (img && img.complete && img.naturalWidth) {
@@ -491,6 +525,16 @@
       ctx.font = "6px monospace";
       for (let i = 0; i < beat.lines.length; i++)
         ctx.fillText(beat.lines[i], DX + 6, DY + 18 + i * 12);
+
+      // Blinking advance prompt, same idiom and wording as the Quake/Slayer/
+      // Ass Man boxes. Only once the line can actually be advanced.
+      if ((sc.codecT || 0) >= C.codecMinHold && Math.floor(performance.now() / 500) % 2) {
+        ctx.fillStyle = "#7a6a3a";
+        ctx.font = "5px monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("[ E ]  ADVANCE", DX + DW - 4, DY + DH - 5);
+        ctx.textAlign = "left";
+      }
     },
 
     _phaseElapsed(C, t, phase) {

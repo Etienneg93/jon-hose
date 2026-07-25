@@ -103,6 +103,46 @@ test("assmanPlain and collie painters are registered and paint", () => {
 });
 
 // Minimal game stub: the module only touches these fields.
+
+// Drive the scene the way a player does: pump frames, and confirm through any
+// codec line that is waiting. Dialogue GATES the clock now, so a bare
+// update() loop parks on the first line and never advances.
+function pump(g, seconds, dt) {
+  dt = dt || 1 / 60;
+  // Loop on the SCENE clock, not a frame count: gated dialogue burns frames
+  // without advancing sc.t, so a fixed step budget stops short.
+  for (let i = 0; i < 20000; i++) {
+    if (!g.airEntry) break;
+    if (g.airEntry.t >= seconds) break;
+    clearGate(g);
+    AirEntry.update(dt, g);
+  }
+}
+
+// Answer whatever codec line is waiting, if any.
+function clearGate(g) {
+  if (!g.airEntry || !AirEntry.codecActive(g)) return;
+  g.airEntry.codecT = C.codecMinHold;   // satisfy the double-advance guard
+  g.input._buf.confirm = true;
+}
+
+// Park the scene at an absolute time with its dialogue already answered, so a
+// single update() exercises the phase's ACTION rather than its first line.
+function seek(g, t) {
+  g.airEntry.t = t;
+  g.airEntry.phase = AirEntry.phaseAt(C, t);
+  openGate(g);
+}
+
+// Mark the current phase's dialogue as answered without moving the clock, so
+// the next update() runs its ACTION. Every phase gates on its lines first.
+function openGate(g) {
+  let n = 0;
+  while (AirEntry.codecBeat(g.airEntry.phase, n)) n++;   // ask the module
+  g.airEntry.codecIdx = n;
+  g.airEntry.codecT = 0;
+}
+
 function makeGame() {
   return {
     airEntry: null, airEntryArmed: true,
@@ -135,8 +175,7 @@ test("enter() is a no-op unless explicitly armed", () => {
 test("running to the end releases control and disarms", () => {
   const g = makeGame();
   AirEntry.enter(g);
-  const steps = Math.ceil(AirEntry.totalDur(C) / (1 / 60)) + 2;
-  for (let i = 0; i < steps; i++) AirEntry.update(1 / 60, g);
+  pump(g, AirEntry.totalDur(C) + 1);   // past release, so the scene finishes
   assert.strictEqual(g.airEntry, null, "scene cleared");
   assert.strictEqual(g.airEntryArmed, false);
   assert.strictEqual(AirEntry.actors(g).length, 0);
@@ -152,7 +191,7 @@ test("skip() from any phase lands in the same end state", () => {
       if (k === phase) break;
       acc += C.phases[k];
     }
-    g.airEntry.t = acc + C.phases[phase] / 2;
+    seek(g, acc + C.phases[phase] / 2);
     AirEntry.skip(g);
     assert.strictEqual(g.airEntry, null, "skipped from " + phase);
     assert.strictEqual(g.airEntryArmed, false);
@@ -177,7 +216,7 @@ test("depart soars in the direction he faces, carrying the dog", () => {
   const before = AirEntry.ORDER.slice(0, -1)
     .filter((k) => k !== "depart")
     .reduce((sum, k) => sum + C.phases[k], 0);
-  g.airEntry.t = before + C.phases.depart * (C.departRiseFrac + 0.01);
+  seek(g, before + C.phases.depart * (C.departRiseFrac + 0.01));
   const x0 = g.airEntry.stranger.x;
   AirEntry.update(1 / 60, g);
   const st = g.airEntry.stranger, dog = g.airEntry.dog;
@@ -197,7 +236,7 @@ test("depart carries the dog at the riseup offset while rising", () => {
   const before = AirEntry.ORDER.slice(0, -1)
     .filter((k) => k !== "depart")
     .reduce((sum, k) => sum + C.phases[k], 0);
-  g.airEntry.t = before + C.phases.depart * (C.departRiseFrac / 2);   // well inside riseup
+  seek(g, before + C.phases.depart * (C.departRiseFrac / 2));   // well inside riseup
   AirEntry.update(1 / 60, g);
   const st = g.airEntry.stranger, dog = g.airEntry.dog;
   assert.strictEqual(st.state, "riseup");
@@ -210,7 +249,7 @@ test("depart switches the dog to the soar offset once he's soaring", () => {
   const before = AirEntry.ORDER.slice(0, -1)
     .filter((k) => k !== "depart")
     .reduce((sum, k) => sum + C.phases[k], 0);
-  g.airEntry.t = before + C.phases.depart * (C.departRiseFrac + 0.01);
+  seek(g, before + C.phases.depart * (C.departRiseFrac + 0.01));
   AirEntry.update(1 / 60, g);
   const st = g.airEntry.stranger, dog = g.airEntry.dog;
   assert.strictEqual(st.state, "soar");
@@ -218,12 +257,15 @@ test("depart switches the dog to the soar offset once he's soaring", () => {
   assert.notStrictEqual(C.dogCarrySoarDY, C.dogCarryDY, "the two offsets must actually differ");
 });
 
-test("rage phase arms a red flash on entry", () => {
+test("rage phase arms a red flash on its first action frame", () => {
   const g = makeGame();
   AirEntry.enter(g);
   const dt = 1 / 60;
   const rageStart = C.phases.notice + C.phases.desecrate;
-  g.airEntry.t = rageStart - dt;   // one tick short of the rage boundary
+  // Land inside rage with its line already answered — dialogue gates the
+  // clock, so the flash arms on the first ACTION frame, not the phase boundary.
+  seek(g, rageStart + dt);
+  g.airEntry.actedPhase = null;   // as if rage's action has not started yet
   AirEntry.update(dt, g);
   assert.strictEqual(g.airEntry.phase, "rage");
   assert.strictEqual(g.airEntry.flashColor, "rage");
@@ -237,7 +279,7 @@ test("reveal completion arms a white flash exactly once", () => {
   const revealStart = C.phases.notice + C.phases.desecrate + C.phases.rage;
   // A small margin past the frame-2 boundary (rather than landing exactly on
   // it) so float rounding in the t/dt roundtrip can't floor it back to 1.
-  g.airEntry.t = revealStart + C.ripFrameStep * 2 + 0.01 - dt;
+  seek(g, revealStart + C.ripFrameStep * 2 + 0.01 - dt);
   AirEntry.update(dt, g);
   assert.strictEqual(g.airEntry.revealed, true);
   assert.strictEqual(g.airEntry.flashColor, "reveal");
@@ -294,7 +336,7 @@ test("reveal completion spawns the hoodie prop and storm ring, and pushes the ca
   g.shake = (n) => { shookWith = n; };
   const dt = 1 / 60;
   const revealStart = C.phases.notice + C.phases.desecrate + C.phases.rage;
-  g.airEntry.t = revealStart + C.ripFrameStep * 2 + 0.01 - dt;
+  seek(g, revealStart + C.ripFrameStep * 2 + 0.01 - dt);
   AirEntry.update(dt, g);
   assert.ok(g.airEntry.hoodieProp, "hoodie prop spawned");
   assert.ok(g.airEntry.stormRing, "storm ring spawned");
@@ -305,6 +347,7 @@ test("hoodie prop tumbles (translate + rotate) then despawns after hoodieLife", 
   const g = makeGame();
   AirEntry.enter(g);
   const dt = 1 / 60;
+  openGate(g);   // notice gates on its line; the prop only ticks in the action path
   g.airEntry.hoodieProp = { x: 0, y: 0, z: C.hoodieSpawnZ, vx: 10, vz: 0, rot: 0, rotSpeed: C.hoodieRotSpeed, t: 0 };
   AirEntry.update(dt, g);
   let hp = g.airEntry.hoodieProp;
@@ -332,6 +375,7 @@ test("storm ring grows then despawns after stormRingDur", () => {
   const g = makeGame();
   AirEntry.enter(g);
   const dt = 1 / 60;
+  openGate(g);   // as above — dialogue gates the clock
   g.airEntry.stormRing = { cx: 0, cy: 0, t: 0 };
   AirEntry.update(dt, g);
   assert.ok(g.airEntry.stormRing, "still alive after one tick");
@@ -345,7 +389,7 @@ test("storm ring never touches game.enemies (cosmetic only, no hit test)", () =>
   AirEntry.enter(g);
   const dt = 1 / 60;
   const revealStart = C.phases.notice + C.phases.desecrate + C.phases.rage;
-  g.airEntry.t = revealStart + C.ripFrameStep * 2 + 0.01 - dt;
+  seek(g, revealStart + C.ripFrameStep * 2 + 0.01 - dt);
   assert.doesNotThrow(() => AirEntry.update(dt, g), "reveal fx must never read game.enemies");
   assert.ok(g.airEntry.stormRing, "ring spawned");
   const ctx = mkCtx();
@@ -360,7 +404,7 @@ test("depart spawns wind-gust streaks at the configured cadence", () => {
   const before = AirEntry.ORDER.slice(0, -1)
     .filter((k) => k !== "depart")
     .reduce((sum, k) => sum + C.phases[k], 0);
-  g.airEntry.t = before;
+  seek(g, before);
   const dt = 1 / 240;   // fine steps so the spawn accumulator isn't skipped over
   // Stop one tick short of depart's own end: windGustCount streaks are spread
   // evenly across the phase, so the last one lands on the same frame the
@@ -431,8 +475,7 @@ test("the scene never mutates wave state", () => {
   const before = { waveIndex: g.waveIndex, checkpointWave: g.checkpointWave,
                    waveActive: g.waveActive, sigils: g.sigils.length };
   AirEntry.enter(g);
-  const steps = Math.ceil(AirEntry.totalDur(C) / (1 / 60)) + 2;
-  for (let i = 0; i < steps; i++) AirEntry.update(1 / 60, g);
+  pump(g, AirEntry.totalDur(C));
   assert.strictEqual(g.waveIndex, before.waveIndex);
   assert.strictEqual(g.checkpointWave, before.checkpointWave);
   assert.strictEqual(g.waveActive, before.waveActive);
@@ -446,8 +489,11 @@ test("the trot cycles over exactly JH.AIRENTRY.dogTrotFrames frames", () => {
   const g = makeGame();
   AirEntry.enter(g);
   const seen = new Set();
-  const steps = Math.ceil((C.phases.notice + C.phases.desecrate) / (1 / 60));
-  for (let i = 0; i < steps; i++) {
+  // Generous frame budget: gated dialogue burns frames without advancing the
+  // scene clock, so this cannot be sized from phase durations alone.
+  for (let i = 0; i < 4000; i++) {
+    if (!g.airEntry || g.airEntry.t >= C.phases.notice + C.phases.desecrate) break;
+    clearGate(g);
     AirEntry.update(1 / 60, g);
     const d = g.airEntry && g.airEntry.dog;
     if (d && d.state === "trot") seen.add(d.frame);
@@ -467,8 +513,7 @@ test("the dog parks so its cocked leg aims at the hydrant, and streams", () => {
   const g = makeGame();
   g.particles = [];
   AirEntry.enter(g);
-  const steps = Math.ceil((C.phases.notice + C.phases.desecrate) / (1 / 60));
-  for (let i = 0; i < steps; i++) AirEntry.update(1 / 60, g);
+  pump(g, C.phases.notice + C.phases.desecrate);
 
   const sc = g.airEntry;
   assert.strictEqual(sc.dog.state, "lift", "dog should have reached the hydrant and lifted");
@@ -572,7 +617,7 @@ test("zoom frames the player and the dog, and is inert with no scene", () => {
   const g = makeGame();
   assert.strictEqual(AirEntry.zoom(g).k, 1, "no scene = no zoom");
   AirEntry.enter(g);
-  g.airEntry.t = AirEntry.totalDur(C) / 2;
+  seek(g, AirEntry.totalDur(C) / 2);
   const z = AirEntry.zoom(g);
   assert.ok(Math.abs(z.k - C.zoomMax) < 1e-9);
   // Focal x sits between the two subjects in screen space.
@@ -606,12 +651,9 @@ test("every scripted line is codec dialogue, spoken by the right portrait", () =
       const [name, line] = beats[i];
       const g = makeGame();
       AirEntry.enter(g);
-      // Land in the middle of beat i's slice.
-      const before = AirEntry.ORDER.slice(0, AirEntry.ORDER.indexOf(phase))
-        .reduce((sum, k) => sum + C.phases[k], 0);
-      const slice = C.phases[phase] / beats.length;
-      g.airEntry.t = before + i * slice + slice / 2;
       g.airEntry.phase = phase;
+      g.airEntry.codecIdx = i;      // the cursor decides what is on screen
+      g.airEntry.codecT = 0;
       const ctx = mkCtx();
       AirEntry.drawOverlay(ctx, g);
       assert.ok(ctx.texts.includes(name), `${phase} beat ${i} names ${name}`);
@@ -620,21 +662,79 @@ test("every scripted line is codec dialogue, spoken by the right portrait", () =
   }
 });
 
-test("feud runs two beats in order, splitting the phase evenly", () => {
-  const slice = C.phases.feud / 2;
-  const first = AirEntry.codecBeat(C, "feud", slice * 0.5);
-  const second = AirEntry.codecBeat(C, "feud", slice * 1.5);
-  assert.strictEqual(first.idx, 0, "Ass Man speaks first");
-  assert.strictEqual(second.idx, 1, "Jon answers");
-  assert.strictEqual(first.beat.name, "ASS MAN");
-  assert.strictEqual(second.beat.name, "JON");
-  // elInBeat restarts per beat so the mouth animates on the second speaker too.
-  assert.ok(second.elInBeat < slice, "elapsed time is relative to the beat");
-  // Clamped at the tail rather than falling off the end.
-  assert.strictEqual(AirEntry.codecBeat(C, "feud", C.phases.feud * 5).idx, 1);
+test("feud holds two beats, advanced by the player in order", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  seek(g, AirEntry.totalDur(C) - C.phases.depart - C.phases.feud / 2);
+  g.airEntry.phase = "feud";
+  g.airEntry.codecIdx = 0;
+
+  const first = AirEntry.codecBeat("feud", 0);
+  assert.strictEqual(first.beat.name, "ASS MAN", "Ass Man speaks first");
+  assert.strictEqual(first.remaining, 1, "one line still queued behind him");
+
+  const second = AirEntry.codecBeat("feud", 1);
+  assert.strictEqual(second.beat.name, "JON", "Jon answers");
+  assert.strictEqual(second.remaining, 0, "last line of the phase");
+
+  // Past the end the phase has nothing more to say, which is what opens the
+  // clock gate and lets the action run.
+  assert.strictEqual(AirEntry.codecBeat("feud", 2), null);
 });
 
-test("phases with no dialogue select no beat", () => {
+test("phases with no dialogue never gate the clock", () => {
   for (const phase of ["reveal", "depart", "release"])
-    assert.strictEqual(AirEntry.codecBeat(C, phase, 0), null, phase);
+    assert.strictEqual(AirEntry.codecBeat(phase, 0), null, phase);
+});
+
+test("dialogue gates the clock: the scene will not advance unanswered", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const t0 = g.airEntry.t;
+  for (let i = 0; i < 600; i++) AirEntry.update(1 / 60, g);   // ten seconds, no input
+  assert.strictEqual(g.airEntry.t, t0, "clock frozen while a line waits");
+  assert.strictEqual(g.airEntry.phase, "notice", "still on the opening beat");
+  assert.ok(g.airEntry, "and the scene has NOT skipped itself");
+});
+
+test("confirm advances one line, never two", () => {
+  // A press buffered on the previous line must not blow through the next one,
+  // which is what codecMinHold guards.
+  const g = makeGame();
+  AirEntry.enter(g);
+  g.airEntry.phase = "feud";
+  g.airEntry.codecIdx = 0;
+  g.airEntry.codecT = 0;
+
+  g.input._buf.confirm = true;
+  AirEntry.update(1 / 60, g);
+  assert.strictEqual(g.airEntry.codecIdx, 0, "too soon — the hold guard blocks it");
+
+  g.airEntry.codecT = C.codecMinHold;
+  g.input._buf.confirm = true;
+  AirEntry.update(1 / 60, g);
+  assert.strictEqual(g.airEntry.codecIdx, 1, "one line advanced");
+  assert.strictEqual(g.airEntry.codecT, 0, "hold timer restarts for the new line");
+});
+
+test("every phase with dialogue plays it before its action", () => {
+  // Regression: an earlier gate compared the phase at the TOP of update, but
+  // sc.phase is assigned in the bottom half — so the comparison always matched
+  // and that phase's lines were silently skipped.
+  const g = makeGame();
+  AirEntry.enter(g);
+  const spoken = [];
+  for (let i = 0; i < 6000; i++) {
+    if (!g.airEntry) break;
+    if (AirEntry.codecActive(g)) {
+      const sel = AirEntry.codecBeat(g.airEntry.phase, g.airEntry.codecIdx);
+      const tag = g.airEntry.phase + ":" + sel.beat.name;
+      if (spoken[spoken.length - 1] !== tag) spoken.push(tag);
+      clearGate(g);
+    }
+    AirEntry.update(1 / 60, g);
+  }
+  assert.deepStrictEqual(spoken, [
+    "notice:???", "desecrate:MARIO", "rage:JON", "feud:ASS MAN", "feud:JON",
+  ], "every scripted line is reached, in order");
 });

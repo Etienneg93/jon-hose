@@ -520,7 +520,10 @@
     codecDim: 0.45,           // veil alpha behind the intro codec box: dims the HUD
                               // and the live scene without hiding the staging
     codecMouthHz: 7,          // mouth-flap rate while a codec line is speaking
-    codecTalkFrac: 0.7,       // fraction of a phase the speaker's mouth animates
+    codecTalkDur: 1.1,        // s the speaker's mouth animates after a line appears
+    codecMinHold: 0.25,       // s a line must be up before confirm can advance it,
+                              // so a press buffered on the previous line cannot
+                              // skip two at once
     actorY: JH.DEPTH_MAX - 12, // both actors share the hydrant's depth row
     phases: {                 // seconds; sum is the full scripted length
       notice: 1.2, desecrate: 2.4, rage: 1.4,
