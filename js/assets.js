@@ -1687,16 +1687,25 @@
     if (opt.state === "walk") { const a = JH.QUAKE_FRAMES.anims.walk; return F[a[(opt.frame | 0) % a.length]]; }
     return F.idle;
   }
+  // Quake Walker draws QUAKE_H logical px tall. The sheet is authored at 4x
+  // that (tools/quake-pack.py), matching every other character — Jon is 247
+  // source px for JON_H 53, Ass Man 232 for 58. The old sheet was 64px tall and
+  // blitted 1:1, so on a 4x device scale it was UPSCALED while the rest
+  // downscaled, which is why he read soft beside them. Frame ax/ay are in
+  // SOURCE px and scale by the same factor.
+  const QUAKE_H = 64;
   Assets.register("quake", (p, opt, ctx, x, y, facing) => {
     const img = quakeImg();
     if (img && img._ready) {
       const fr = quakeFrame(opt);
       if (fr) {
+        const s = QUAKE_H / fr.h;
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         ctx.translate(Math.round(x), Math.round(y));
         if (facing < 0) ctx.scale(-1, 1);
-        ctx.drawImage(img, fr.x, fr.y, fr.w, fr.h, Math.round(-fr.ax), -fr.h, fr.w, fr.h);
+        ctx.drawImage(img, fr.x, fr.y, fr.w, fr.h,
+          Math.round(-fr.ax * s), -QUAKE_H, Math.round(fr.w * s), QUAKE_H);
         ctx.restore();
         return;
       }
