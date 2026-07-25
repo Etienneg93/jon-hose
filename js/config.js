@@ -511,6 +511,12 @@
     streamLife: 0.55,         // s per droplet
     streamJitter: 1.6,        // +/- spread on speed and depth, keeps it from looking like a rod
     streamSize: 2,            // px per droplet; 1px reads as noise at this resolution
+    zoomMax: 1.30,            // cinematic push-in during the beat (uniform scale
+                              // on the WORLD pass only; overlay/HUD draw after it)
+    zoomInDur: 1.0,           // s to ease the push-in at scene start
+    zoomOutDur: 0.8,          // s to ease back out before control returns
+    vignetteAlpha: 0.55,      // edge darkness at the corners
+    vignetteInner: 0.42,      // fraction of the half-diagonal left untouched
     codecDim: 0.45,           // veil alpha behind the intro codec box: dims the HUD
                               // and the live scene without hiding the staging
     codecMouthHz: 7,          // mouth-flap rate while a codec line is speaking

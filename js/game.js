@@ -2947,6 +2947,18 @@
       const so = this.shakeOffset();
       if (so.x || so.y) ctx.translate(so.x, so.y);
       ctx.clearRect(-12, -12, JH.VIEW_W + 24, JH.VIEW_H + 24);
+      // Air-entry beat: cinematic push-in. Uniform scale about a focal point,
+      // applied AFTER the clear so the frame still wipes edge to edge, and to
+      // the WORLD pass only — drawOverlay and the HUD draw after this save is
+      // restored, so the codec box, washes and vignette stay at native scale.
+      if (this.airEntry && JH.AirEntry.zoom) {
+        const z = JH.AirEntry.zoom(this);
+        if (z.k !== 1) {
+          ctx.translate(z.fx, z.fy);
+          ctx.scale(z.k, z.k);
+          ctx.translate(-z.fx, -z.fy);
+        }
+      }
 
       JH.Background.draw(ctx);
 

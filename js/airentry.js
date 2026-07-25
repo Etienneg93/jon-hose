@@ -224,6 +224,7 @@
       }
 
       this._drawBarks(ctx, cam, sc, game);
+      this._drawVignette(ctx, C);
       this.drawCodec(ctx, game);   // last: the box sits over the fx and barks
     },
 
@@ -267,11 +268,10 @@
       const C = JH.AIRENTRY;
 
       // Confirm skips the whole beat; consume it so it can't leak into play.
-      if (game.input && game.input.buffered("confirm")) {
-        game.input.consume("confirm");
-        this.skip(game);
-        return;
-      }
+      // Confirm is SWALLOWED but does not skip: the arrival beat plays once
+      // per run and is not skippable. Still consumed so a press during the
+      // locked scene cannot leak into resumed play.
+      if (game.input && game.input.buffered("confirm")) game.input.consume("confirm");
 
       sc.t += dt;
       sc.phase = this.phaseAt(C, sc.t);
@@ -402,6 +402,45 @@
           size: C.streamSize,
         }));
       }
+    },
+
+    // Cinematic push-in factor at elapsed time t. Eases up over zoomInDur,
+    // holds, then eases back to 1 across the last zoomOutDur so the world is
+    // at native scale by the time control returns. Pure — unit-tested.
+    zoomK(C, t) {
+      const total = this.totalDur(C);
+      const inK = C.zoomInDur > 0 ? Math.min(1, t / C.zoomInDur) : 1;
+      const outK = C.zoomOutDur > 0 ? Math.min(1, Math.max(0, total - t) / C.zoomOutDur) : 1;
+      const ease = (u) => u * u * (3 - 2 * u);        // smoothstep
+      return 1 + (C.zoomMax - 1) * ease(Math.min(inK, outK));
+    },
+
+    // Screen-space focal point + scale for the world pass. Framed on the
+    // midpoint of the player and the dog so both stay in shot as it tightens.
+    zoom(game) {
+      const sc = game.airEntry;
+      const C = JH.AIRENTRY;
+      if (!sc) return { k: 1, fx: JH.VIEW_W / 2, fy: JH.VIEW_H / 2 };
+      const cam = JH.Camera.x;
+      const px = game.player ? game.player.x : sc.dog.x;
+      const midX = (px + sc.dog.x) / 2 - cam;
+      const midY = JH.Geo.feetScreenY(sc.dog.y, 0);
+      return { k: this.zoomK(C, sc.t), fx: midX, fy: midY };
+    },
+
+    // Edge dim. Screen-space (drawOverlay runs after the world transform is
+    // restored), so the zoom never stretches it.
+    _drawVignette(ctx, C) {
+      if (!(C.vignetteAlpha > 0) || !ctx.createRadialGradient) return;
+      const cx = JH.VIEW_W / 2, cy = JH.VIEW_H / 2;
+      const outer = Math.sqrt(cx * cx + cy * cy);
+      const g = ctx.createRadialGradient(cx, cy, outer * C.vignetteInner, cx, cy, outer);
+      g.addColorStop(0, "rgba(0,0,0,0)");
+      g.addColorStop(1, `rgba(0,0,0,${C.vignetteAlpha})`);
+      ctx.save();
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+      ctx.restore();
     },
 
     // True while a scripted codec beat is on screen. game.js reads this to

@@ -159,12 +159,15 @@ test("skip() from any phase lands in the same end state", () => {
   }
 });
 
-test("a buffered confirm during the scene skips it", () => {
+test("a buffered confirm does NOT skip the scene, but is swallowed", () => {
+  // User call: the arrival beat is not skippable. Confirm must still be
+  // consumed so a press during the locked scene cannot leak into resumed play.
   const g = makeGame();
   AirEntry.enter(g);
   g.input._buf.confirm = true;
   AirEntry.update(1 / 60, g);
-  assert.strictEqual(g.airEntry, null);
+  assert.ok(g.airEntry, "scene must still be running");
+  assert.strictEqual(g.input.buffered("confirm"), false, "confirm consumed, not leaked");
 });
 
 test("depart soars in the direction he faces, carrying the dog", () => {
@@ -579,4 +582,51 @@ test("codecActive marks exactly the phases that speak", () => {
   }
   g.airEntry = null;
   assert.strictEqual(AirEntry.codecActive(g), false, "no scene = no codec");
+});
+
+test("zoomK pushes in, holds, and returns to native scale by the end", () => {
+  const total = AirEntry.totalDur(C);
+  assert.strictEqual(AirEntry.zoomK(C, 0), 1, "starts at native scale");
+  assert.ok(Math.abs(AirEntry.zoomK(C, total) - 1) < 1e-9,
+    "back to native scale as control returns");
+  // Held at full push through the middle of the beat.
+  assert.ok(Math.abs(AirEntry.zoomK(C, total / 2) - C.zoomMax) < 1e-9, "holds at zoomMax");
+  // Monotonic on the way in.
+  let prev = 0;
+  for (let t = 0; t <= C.zoomInDur; t += C.zoomInDur / 8) {
+    const k = AirEntry.zoomK(C, t);
+    assert.ok(k >= prev - 1e-9, "push-in never reverses");
+    prev = k;
+  }
+  // Never below native scale, never past the cap, at any point in the beat.
+  for (let t = 0; t <= total; t += total / 40) {
+    const k = AirEntry.zoomK(C, t);
+    assert.ok(k >= 1 - 1e-9 && k <= C.zoomMax + 1e-9, `zoom ${k} out of range at t=${t}`);
+  }
+});
+
+test("zoom frames the player and the dog, and is inert with no scene", () => {
+  const g = makeGame();
+  assert.strictEqual(AirEntry.zoom(g).k, 1, "no scene = no zoom");
+  AirEntry.enter(g);
+  g.airEntry.t = AirEntry.totalDur(C) / 2;
+  const z = AirEntry.zoom(g);
+  assert.ok(Math.abs(z.k - C.zoomMax) < 1e-9);
+  // Focal x sits between the two subjects in screen space.
+  const cam = JH.Camera.x;
+  const lo = Math.min(g.player.x, g.airEntry.dog.x) - cam;
+  const hi = Math.max(g.player.x, g.airEntry.dog.x) - cam;
+  assert.ok(z.fx >= lo && z.fx <= hi, "focal point framed between player and dog");
+});
+
+test("drawOverlay paints the edge vignette", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const ctx = mkCtx();
+  let madeGradient = false;
+  ctx.createRadialGradient = () => { madeGradient = true; return { addColorStop() {} }; };
+  AirEntry.drawOverlay(ctx, g);
+  assert.ok(madeGradient, "vignette uses a radial gradient");
+  assert.ok(ctx.fills.some((f) => f.x === 0 && f.y === 0 && f.w === JH.VIEW_W && f.h === JH.VIEW_H),
+    "vignette covers the frame");
 });
