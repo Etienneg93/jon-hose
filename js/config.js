@@ -531,8 +531,11 @@
     dogFrameStep: 0.12,       // s per trot frame
     ripFrameStep: 0.30,       // s per rip frame (3 frames over `reveal`)
     leashSag: 11,              // px of slack at the leash curve's midpoint
-    leashHandDX: 6,           // px, x-facing hand anchor fwd of the stranger's feet-anchor X
-    leashHandDY: -24,         // px, hand anchor above the stranger's feet-anchor Y (screen-space, up is negative)
+    leashHandDX: 9,           // hand anchor from the stranger's feet-anchor, along
+                              // facing. MEASURED from plain_idle.png: his closed fist
+                              // centres at logical +8.5 across, 29.1 above the feet.
+    leashHandDY: -29,         // …and its height above the feet-anchor (screen-space,
+                              // up is negative). Was -24, which hung the cord off his hip.
     leashCollarDY: -12,       // px, collar anchor above the dog's feet-anchor Y (screen-space, up is negative)
     leashTautLen: 78,         // px hand-to-collar distance at which leash sag reaches 0
     riseSpeed: 150,           // px/s upward during depart
