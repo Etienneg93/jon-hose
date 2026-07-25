@@ -191,6 +191,32 @@ test("leashCurve: endpoints match the inputs exactly", () => {
   assert.strictEqual(curve.y1, 78);
 });
 
+// Regression: startGame() (run reset, also called by devGotoWave) must clear
+// a scene armed by a prior run — otherwise a dev-warp into AIR ENTRY followed
+// by a warp elsewhere leaves the flag set and the beat fires on top of the
+// new wave. Exercises the real Game.startGame(), so it needs the module
+// chain startGame touches (Camera, Player, Upgrades); JH.Music is unguarded
+// in startGame so it's stubbed directly rather than loading real audio.
+test("startGame clears a stale armed air-entry scene", () => {
+  global.window.JH.Loader = global.window.JH.Loader || { img: () => ({}) };
+  require("../js/world.js");
+  require("../js/upgrades.js");
+  require("../js/entities.js");
+  require("../js/game.js");
+  const Game = global.window.JH.Game;
+  global.window.JH.Music = { reset() {}, start() {} };
+  // Unconditional: an earlier test in this file (assmanPlain/collie painters)
+  // stubs document with a classList-less element, which showScreen() needs.
+  global.document = {
+    getElementById: () => ({ classList: { add() {}, remove() {}, toggle() {} }, style: {}, textContent: "" }),
+  };
+  Game.airEntry = { phase: "notice" };
+  Game.airEntryArmed = true;
+  Game.startGame();
+  assert.strictEqual(Game.airEntry, null, "a stale armed scene must not survive a run reset");
+  assert.strictEqual(Game.airEntryArmed, false);
+});
+
 test("the scene never mutates wave state", () => {
   const g = makeGame();
   const before = { waveIndex: g.waveIndex, checkpointWave: g.checkpointWave,

@@ -646,6 +646,7 @@
       this.gardensCleared = 0; this.concertaUnlocked = false;
       this.cutscene = null; this.victoryPortal = null;
       this.truckBoard = null; this.worldCrumble = null; this.slayerBeneBeat = false;
+      this.airEntry = null; this.airEntryArmed = false;   // clear any stale armed scene from a prior run
       this.rangeStations = null;
       this.rangeCatalogOpen = false; this.rangeCatalogTab = 0; this.rangeCatalogCursor = 0;
       this.rangeSpawnX = 0; this.rangeSpawnY = 0;
