@@ -211,10 +211,12 @@
         }
         // Carried under the free arm — riseup leaves the left arm down and
         // soar tucks it to the chest, so the offset reads as held in both.
+        // Picked from st.state (not elapsed time) so a retuned riseT still
+        // matches whichever pose is actually on screen this frame.
         dog.held = true;
         dog.state = "idle";
         dog.x = st.x + C.dogCarryDX;
-        dog.z = st.z - C.dogCarryDY;
+        dog.z = st.z - (st.state === "soar" ? C.dogCarrySoarDY : C.dogCarryDY);
       }
 
       if (sc.phase === "release") this._finish(game);

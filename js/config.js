@@ -517,7 +517,10 @@
     departRiseFrac: 0.45,     // fraction of `depart` spent rising before soaring
     soarRiseFrac: 0.35,       // fraction of riseSpeed still applied once soaring starts
     dogCarryDX: -6,           // collie offset from the carrier's centre while held
-    dogCarryDY: -22,          // …and above his feet
+    dogCarryDY: -22,          // …and above his feet during the `riseup` half of depart
+    dogCarrySoarDY: 9,        // …and above his feet during the `soar` half — the soar pose
+                              // is only AM_POSE_H.soar (19px) tall vs. riseup's 66px, so it
+                              // needs a much shallower lift to stay tucked against the body
     flashDur: 0.18,           // rage red flash + reveal white flash
     flashRedPeak: 0.35,       // rage flash starting alpha (0..1), eases to 0 over flashDur
     flashWhitePeak: 0.55,     // reveal flash starting alpha (0..1), eases to 0 over flashDur

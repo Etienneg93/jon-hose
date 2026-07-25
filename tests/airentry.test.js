@@ -162,6 +162,36 @@ test("depart soars in the direction he faces, carrying the dog", () => {
   assert.strictEqual(dog.x, st.x + C.dogCarryDX, "dog rides the carrier");
 });
 
+// Regression: riseup (AM_POSE_H 66px tall) and soar (19px) are very
+// different heights — one dY offset for the whole depart phase floated the
+// dog above the soar body for roughly half the exit.
+test("depart carries the dog at the riseup offset while rising", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const before = AirEntry.ORDER.slice(0, -1)
+    .filter((k) => k !== "depart")
+    .reduce((sum, k) => sum + C.phases[k], 0);
+  g.airEntry.t = before + C.phases.depart * (C.departRiseFrac / 2);   // well inside riseup
+  AirEntry.update(1 / 60, g);
+  const st = g.airEntry.stranger, dog = g.airEntry.dog;
+  assert.strictEqual(st.state, "riseup");
+  assert.strictEqual(dog.z, st.z - C.dogCarryDY, "riseup uses the tall-pose offset");
+});
+
+test("depart switches the dog to the soar offset once he's soaring", () => {
+  const g = makeGame();
+  AirEntry.enter(g);
+  const before = AirEntry.ORDER.slice(0, -1)
+    .filter((k) => k !== "depart")
+    .reduce((sum, k) => sum + C.phases[k], 0);
+  g.airEntry.t = before + C.phases.depart * (C.departRiseFrac + 0.01);
+  AirEntry.update(1 / 60, g);
+  const st = g.airEntry.stranger, dog = g.airEntry.dog;
+  assert.strictEqual(st.state, "soar");
+  assert.strictEqual(dog.z, st.z - C.dogCarrySoarDY, "soar uses the shallow-pose offset");
+  assert.notStrictEqual(C.dogCarrySoarDY, C.dogCarryDY, "the two offsets must actually differ");
+});
+
 test("rage phase arms a red flash on entry", () => {
   const g = makeGame();
   AirEntry.enter(g);
