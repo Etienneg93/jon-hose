@@ -15,12 +15,30 @@
   // JH.AIRENTRY.phases; "release" is the terminal state and has no duration.
   const ORDER = ["notice", "desecrate", "rage", "reveal", "feud", "depart", "release"];
 
-  // PLACEHOLDER bark lines pending the user's writing pass (same convention
-  // as drawAssManCutscene's placeholder dialogue in game.js). One line per
-  // actor per phase, keyed by phase then speaker.
-  const BARKS = {
+  // PLACEHOLDER dialogue pending the user's writing pass (same convention as
+  // drawAssManCutscene's placeholder lines in game.js).
+  //
+  // Split by speaker, matching the existing codec convention: NPCs talk
+  // through portrait boxes, the player never has a portrait and shouts
+  // in-world instead.
+  const BARKS = {                       // in-world, over the player's head
     rage: { player: "NOT THE HYDRANT!" },
-    feud: { stranger: "MY SKY NOW.", player: "NOT ON MY WATCH." },
+    feud: { player: "NOT ON MY WATCH." },
+  };
+
+  // Codec beats: portrait + name + lines, keyed by phase. `who` selects the
+  // portrait accessor; the casual wardrobe is used before the reveal and the
+  // costumed one after, so the box tracks what the player can currently see.
+  const CODEC = {
+    notice:    { who: "assmanCasual", name: "???",     lines: ["Nice day for it.", "Go on, Mario."] },
+    desecrate: { who: "mario",        name: "MARIO",   lines: ["BARK BARK"] },
+    feud:      { who: "assman",       name: "ASS MAN", lines: ["These skies are mine,", "hose boy."] },
+  };
+
+  const PORTRAIT_FN = {
+    assman:       (m) => JH.getAssManPortrait && JH.getAssManPortrait(m),
+    assmanCasual: (m) => JH.getAssManCasualPortrait && JH.getAssManCasualPortrait(m),
+    mario:        (m) => JH.getMarioPortrait && JH.getMarioPortrait(m),
   };
 
   const AirEntry = {
@@ -206,6 +224,7 @@
       }
 
       this._drawBarks(ctx, cam, sc, game);
+      this.drawCodec(ctx, game);   // last: the box sits over the fx and barks
     },
 
     // PLACEHOLDER bark lines (see BARKS above) drawn above the speaking
@@ -383,6 +402,71 @@
           size: C.streamSize,
         }));
       }
+    },
+
+    // True while a scripted codec beat is on screen. game.js reads this to
+    // suppress the stat panel, which shares the portrait's top-left rect.
+    codecActive(game) {
+      const sc = game.airEntry;
+      return !!(sc && CODEC[sc.phase]);
+    },
+
+    // Intro codec box. Same geometry and palette as the Quake/Slayer/Ass Man
+    // boxes in game.js, but drawn over the LIVE scene behind a partial veil
+    // instead of a full blackout — the staged action is the point of this beat,
+    // so it must stay visible. Box sits in the upper band; both actors render
+    // below it at this camera.
+    drawCodec(ctx, game) {
+      const sc = game.airEntry;
+      if (!sc) return;
+      const C = JH.AIRENTRY;
+      const beat = CODEC[sc.phase];
+      if (!beat) return;
+
+      const PX = 10, PY = 10, PW = 96, PH = 108;
+
+      ctx.save();
+      ctx.globalAlpha = C.codecDim;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
+      ctx.restore();
+
+      // Portrait, with the procedural fallback the other boxes use: an
+      // undecoded PNG must not leave an empty frame.
+      ctx.fillStyle = "#141017";
+      ctx.fillRect(PX, PY, PW, PH);
+      ctx.strokeStyle = "#e8b23a";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(PX, PY, PW, PH);
+
+      const el = this._phaseElapsed(C, sc.t, sc.phase);
+      const talking = el < C.phases[sc.phase] * C.codecTalkFrac;
+      const mouth = talking && (Math.floor(el * C.codecMouthHz) & 1);
+      const fn = PORTRAIT_FN[beat.who];
+      const img = fn ? fn(mouth) : null;
+      if (img && img.complete && img.naturalWidth) {
+        ctx.drawImage(img, PX, PY, PW, PH);
+      } else {
+        ctx.fillStyle = "#2a2438";
+        ctx.fillRect(PX + 8, PY + 8, PW - 16, PH - 16);
+      }
+
+      ctx.fillStyle = "#e8b23a";
+      ctx.font = "bold 7px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(beat.name, PX, PY + PH + 9);
+
+      const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
+      ctx.fillStyle = "#0b0810";
+      ctx.fillRect(DX, DY, DW, DH);
+      ctx.strokeStyle = "#3a2e12";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(DX, DY, DW, DH);
+
+      ctx.fillStyle = "#f0e0c0";
+      ctx.font = "6px monospace";
+      for (let i = 0; i < beat.lines.length; i++)
+        ctx.fillText(beat.lines[i], DX + 6, DY + 18 + i * 12);
     },
 
     _phaseElapsed(C, t, phase) {

@@ -50,16 +50,30 @@ test("every phase duration is positive", () => {
 function mkCtx() {
   const noop = () => {};
   const c = {
-    calls: 0, texts: [], fillStyle: "", globalAlpha: 1, globalCompositeOperation: "",
+    calls: 0, texts: [], fills: [], fillStyle: "", globalAlpha: 1, globalCompositeOperation: "",
     save: noop, restore: noop, translate: noop, scale: noop, rotate: noop,
     drawImage: noop, clearRect: noop, setTransform: noop, beginPath: noop,
     arc: noop, ellipse: noop, fill: noop, stroke: noop, closePath: noop,
+    strokeRect: noop, strokeStyle: "", lineWidth: 1, lineCap: "",
+    quadraticCurveTo: noop, moveTo: noop, lineTo: noop,
     fillText(text) { c.texts.push(text); },
     measureText: () => ({ width: 0 }), putImageData: noop,
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-    fillRect() { c.calls++; },
+    fillRect(x, y, w, h) {
+      c.calls++;
+      c.fills.push({ style: c.fillStyle, alpha: c.globalAlpha, x, y, w, h });
+    },
   };
   return c;
+}
+
+// A full-screen wash of the given colour, if one was painted. Asserting on the
+// recorded op rather than the trailing ctx.fillStyle keeps these tests honest
+// when later passes (the codec box) paint after the wash.
+function findWash(ctx, style) {
+  return ctx.fills.find((f) =>
+    f.style === style && f.x === 0 && f.y === 0 &&
+    f.w === JH.VIEW_W && f.h === JH.VIEW_H);
 }
 
 test("assmanPlain and collie painters are registered and paint", () => {
@@ -234,9 +248,9 @@ test("drawOverlay paints a full-screen wash while a rage flash is active", () =>
   g.airEntry.flashColor = "rage";
   const ctx = mkCtx();
   AirEntry.drawOverlay(ctx, g);
-  assert.ok(ctx.calls > 0, "must paint the wash");
-  assert.strictEqual(ctx.fillStyle, "#ff2020");
-  assert.strictEqual(ctx.globalAlpha, C.flashRedPeak, "full timer -> full peak alpha");
+  const wash = findWash(ctx, "#ff2020");
+  assert.ok(wash, "must paint a full-screen red wash");
+  assert.strictEqual(wash.alpha, C.flashRedPeak, "full timer -> full peak alpha");
 });
 
 test("drawOverlay uses the white peak for a reveal flash", () => {
@@ -246,9 +260,9 @@ test("drawOverlay uses the white peak for a reveal flash", () => {
   g.airEntry.flashColor = "reveal";
   const ctx = mkCtx();
   AirEntry.drawOverlay(ctx, g);
-  assert.ok(ctx.calls > 0);
-  assert.strictEqual(ctx.fillStyle, "#ffffff");
-  assert.strictEqual(ctx.globalAlpha, C.flashWhitePeak);
+  const wash = findWash(ctx, "#ffffff");
+  assert.ok(wash, "must paint a full-screen white wash");
+  assert.strictEqual(wash.alpha, C.flashWhitePeak);
 });
 
 test("drawOverlay is a no-op once the flash timer elapses", () => {
@@ -257,7 +271,8 @@ test("drawOverlay is a no-op once the flash timer elapses", () => {
   g.airEntry.flashT = 0;
   const ctx = mkCtx();
   AirEntry.drawOverlay(ctx, g);
-  assert.strictEqual(ctx.calls, 0, "no flash left to paint");
+  assert.ok(!findWash(ctx, "#ff2020"), "no red flash wash");
+  assert.ok(!findWash(ctx, "#ffffff"), "no white flash wash");
 });
 
 test("drawOverlay is a no-op with no live scene", () => {
@@ -276,18 +291,22 @@ test("rage bark line draws above the player only", () => {
   const ctx = mkCtx();
   AirEntry.drawOverlay(ctx, g);
   assert.ok(ctx.texts.includes("NOT THE HYDRANT!"), "player's rage line drawn");
-  assert.strictEqual(ctx.texts.length, 2, "one line = outline + fill fillText calls");
+  // The codec box paints its own text; count only this bark's strings.
+  assert.strictEqual(ctx.texts.filter((t) => t === "NOT THE HYDRANT!").length, 2,
+    "one bark = outline + fill fillText calls");
 });
 
-test("feud bark lines draw for both the stranger and the player", () => {
+test("feud: the player barks in-world, the stranger speaks through the codec", () => {
+  // Speaker split: NPCs get portrait boxes, the player never has a portrait
+  // (same convention as the Quake/Slayer/Ass Man codecs) and shouts in-world.
   const g = makeGame();
   AirEntry.enter(g);
   g.airEntry.phase = "feud";
   const ctx = mkCtx();
   AirEntry.drawOverlay(ctx, g);
-  assert.ok(ctx.texts.includes("MY SKY NOW."), "stranger's feud line drawn");
-  assert.ok(ctx.texts.includes("NOT ON MY WATCH."), "player's feud line drawn");
-  assert.strictEqual(ctx.texts.length, 4, "two lines x (outline + fill) fillText calls");
+  assert.strictEqual(ctx.texts.filter((t) => t === "NOT ON MY WATCH.").length, 2,
+    "player's feud bark = outline + fill fillText calls");
+  assert.ok(ctx.texts.includes("ASS MAN"), "the codec names the speaker");
 });
 
 test("no bark line outside rage/feud", () => {
@@ -295,7 +314,9 @@ test("no bark line outside rage/feud", () => {
   AirEntry.enter(g);   // phase stays "notice"
   const ctx = mkCtx();
   AirEntry.drawOverlay(ctx, g);
-  assert.strictEqual(ctx.texts.length, 0);
+  const barkLines = ["NOT THE HYDRANT!", "NOT ON MY WATCH."];
+  assert.strictEqual(ctx.texts.filter((t) => barkLines.includes(t)).length, 0,
+    "no in-world bark outside rage/feud (codec text is separate)");
 });
 
 // ---- reveal props: hoodie prop, storm ring, camera push ----
@@ -503,4 +524,59 @@ test("the dog parks so its cocked leg aims at the hydrant, and streams", () => {
   const originDX = g.particles[0].x - sc.dog.x;
   assert.ok(originDX * sc.dog.facing < 0, "stream must originate at the rear, not the head");
   assert.ok(sc.hydrantX < sc.dog.x, "hydrant must be behind the dog for the stream to land on it");
+});
+
+test("the intro codec speaks in its scripted phases, with a portrait", () => {
+  const beats = { notice: "???", desecrate: "MARIO", feud: "ASS MAN" };
+  for (const [phase, name] of Object.entries(beats)) {
+    const g = makeGame();
+    AirEntry.enter(g);
+    g.airEntry.phase = phase;
+    const ctx = mkCtx();
+    AirEntry.drawOverlay(ctx, g);
+    assert.ok(ctx.texts.includes(name), `${phase} codec names ${name}`);
+    // The veil is what keeps the live scene readable behind the box; without
+    // it the staged action competes with the text.
+    assert.ok(ctx.fills.some((f) => f.style === "#000" && f.alpha === C.codecDim),
+      `${phase} codec dims the scene behind it`);
+  }
+});
+
+test("Mario barks, and only during the desecration", () => {
+  for (const phase of AirEntry.ORDER) {
+    const g = makeGame();
+    AirEntry.enter(g);
+    g.airEntry.phase = phase;
+    const ctx = mkCtx();
+    AirEntry.drawOverlay(ctx, g);
+    const barked = ctx.texts.includes("BARK BARK");
+    assert.strictEqual(barked, phase === "desecrate",
+      `BARK BARK should ${phase === "desecrate" ? "" : "not "}appear in ${phase}`);
+  }
+});
+
+test("codec phases with no scripted beat draw no box", () => {
+  for (const phase of ["rage", "reveal", "depart"]) {
+    const g = makeGame();
+    AirEntry.enter(g);
+    g.airEntry.phase = phase;
+    const ctx = mkCtx();
+    AirEntry.drawOverlay(ctx, g);
+    assert.ok(!ctx.fills.some((f) => f.style === "#000" && f.alpha === C.codecDim),
+      `${phase} must not dim for a codec box it does not have`);
+  }
+});
+
+test("codecActive marks exactly the phases that speak", () => {
+  // game.js hides the stat panel on this flag; the panel shares the portrait's
+  // top-left rect and would otherwise draw over the face.
+  const speaking = new Set(["notice", "desecrate", "feud"]);
+  const g = makeGame();
+  AirEntry.enter(g);
+  for (const phase of AirEntry.ORDER) {
+    g.airEntry.phase = phase;
+    assert.strictEqual(AirEntry.codecActive(g), speaking.has(phase), phase);
+  }
+  g.airEntry = null;
+  assert.strictEqual(AirEntry.codecActive(g), false, "no scene = no codec");
 });

@@ -3289,8 +3289,11 @@
       // drawn after every world/actor pass, before the HUD reads below.
       if (this.airEntry) JH.AirEntry.drawOverlay(ctx, this);
       // Stat panel: always on in play (collapsed), named near the vendor,
-      // full character sheet when Tab-toggled.
-      if (this.state === "play" && !this.rangeCatalogOpen)
+      // full character sheet when Tab-toggled. Suppressed while the air-entry
+      // codec box is up — the panel occupies the same top-left rect as the
+      // portrait and would draw over it.
+      if (this.state === "play" && !this.rangeCatalogOpen &&
+          !(this.airEntry && JH.AirEntry.codecActive(this)))
         this.drawStatPanel(this.ctx);
       // Hover shop panel — drawn outside shake transform so it stays stable.
       // Walk-up prompt over the vendor while the shop is closed.

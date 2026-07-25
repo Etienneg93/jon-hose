@@ -2229,6 +2229,11 @@
     const _open   = JH.Loader.img("sprites/assman/assman-portrait-casual-mouthopen.png");
     JH.getAssManCasualPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
   }
+  {
+    const _closed = JH.Loader.img("sprites/dog/mario-portrait-mouthclosed.png");
+    const _open   = JH.Loader.img("sprites/dog/mario-portrait-mouthopen.png");
+    JH.getMarioPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
 
   // =================== CHURCH OF THE HOSE ART =======================
   // Transparent PNGs; church.js renderScene falls back to ctx-rects if a

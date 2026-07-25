@@ -511,6 +511,10 @@
     streamLife: 0.55,         // s per droplet
     streamJitter: 1.6,        // +/- spread on speed and depth, keeps it from looking like a rod
     streamSize: 2,            // px per droplet; 1px reads as noise at this resolution
+    codecDim: 0.45,           // veil alpha behind the intro codec box: dims the HUD
+                              // and the live scene without hiding the staging
+    codecMouthHz: 7,          // mouth-flap rate while a codec line is speaking
+    codecTalkFrac: 0.7,       // fraction of a phase the speaker's mouth animates
     actorY: JH.DEPTH_MAX - 12, // both actors share the hydrant's depth row
     phases: {                 // seconds; sum is the full scripted length
       notice: 1.2, desecrate: 2.4, rage: 1.4,
