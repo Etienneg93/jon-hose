@@ -269,6 +269,7 @@
           dog.frame = Math.floor(el / C.dogFrameStep) % C.dogTrotFrames;
         } else {
           dog.state = "lift";
+          this._emitStream(dt, sc, game, C);
         }
         st.facing = 1;   // holds right through desecrate/rage; reveal flips it to -1
       } else if (sc.phase === "rage") {
@@ -355,6 +356,33 @@
     },
 
     // Seconds elapsed inside the current phase.
+    // Dog stream. Built from the same JH.Particle the player's hose emits, so
+    // it reads as a miniature of that mechanic; only the palette and scale
+    // differ. Particle bounces at z=0, which gives the splash at the hydrant
+    // base for free. Emits along -facing (out the cocked rear leg).
+    _emitStream(dt, sc, game, C) {
+      if (!game.particles || !JH.Particle) return;
+      sc.streamT = (sc.streamT || 0) + dt;
+      const dog = sc.dog;
+      const back = -dog.facing;
+      while (sc.streamT >= C.streamRate) {
+        sc.streamT -= C.streamRate;
+        const j = () => (Math.random() - 0.5) * C.streamJitter;
+        game.particles.push(new JH.Particle({
+          x: dog.x + dog.facing * C.streamDX,
+          y: dog.y + j(),
+          z: C.streamDZ + j(),
+          vx: back * (C.streamSpeed + j() * 4),
+          vy: 0,
+          vz: C.streamRise + j() * 2,
+          grav: C.streamGrav,
+          life: C.streamLife,
+          color: Math.random() > 0.45 ? JH.PAL.peeHi : JH.PAL.pee,
+          size: C.streamSize,
+        }));
+      }
+    },
+
     _phaseElapsed(C, t, phase) {
       let acc = 0;
       for (let i = 0; i < ORDER.length - 1; i++) {

@@ -2292,7 +2292,15 @@
           this.player.x >= JH.AIRENTRY.triggerX) {
         JH.AirEntry.enter(this);
       }
-      if (this.airEntry) { JH.AirEntry.update(dt, this); return; }
+      if (this.airEntry) {
+        JH.AirEntry.update(dt, this);
+        // Particles keep ticking through the scene — the same carve-out
+        // hitstop makes below. The dog's stream is emitted into this.particles
+        // and the main particle tick sits AFTER this early return, so without
+        // this the droplets freeze at the emission point instead of arcing.
+        this.particles = this.particles.filter((p) => p.update(dt));
+        return;
+      }
 
       // Hitstop: freeze entities briefly on impact; embers + particles keep running.
       if (this.hitStopTimer > 0) {

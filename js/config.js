@@ -194,6 +194,7 @@
     rubble: "#6a5f52", rubbleDk: "#473f36",
     dummy: "#cc5c18",
     suds: "#ffd23f", hpPk: "#ff5a5a",
+    pee: "#e3c534", peeHi: "#ffef7a",   // air-entry dog stream (airentry.js)
     shadow: "rgba(0,0,0,0.35)",
     gkBody: "#1e2535", gkDk: "#0c0f18", gkFace: "#8a7a6a", gkStubble: "#5a5050",
     gkLed: "#ff3a3a",
@@ -496,9 +497,20 @@
   // Actor x offsets are relative to the hydrant; +x is right (toward wave 30).
   JH.AIRENTRY = {
     triggerX: 11630,          // player x that starts the scene
-    strangerDX: -34,          // stranger x, relative to the hydrant
+    strangerDX: -24,          // stranger x, relative to the hydrant
     dogStartDX: -20,          // collie x at scene start
-    dogLiftDX: -7,            // collie x once it reaches the hydrant
+    dogLiftDX: 16,            // collie x once it reaches the hydrant: the lift
+                              // pose cocks its rear leg ~5px LEFT of centre, so
+                              // the dog parks RIGHT of the hydrant to aim at it
+    streamDX: -5,             // stream origin from dog centre, along -facing (the cocked leg)
+    streamDZ: 10,             // …and its height above the dog's feet
+    streamRate: 0.020,        // s between droplets
+    streamSpeed: 26,          // px/s, opposite the dog's facing
+    streamRise: 8,            // initial upward vz, so it arcs rather than jets flat
+    streamGrav: 150,          // px/s^2 droplet fall (Particle bounces at z=0 = splash)
+    streamLife: 0.55,         // s per droplet
+    streamJitter: 1.6,        // +/- spread on speed and depth, keeps it from looking like a rod
+    streamSize: 2,            // px per droplet; 1px reads as noise at this resolution
     actorY: JH.DEPTH_MAX - 12, // both actors share the hydrant's depth row
     phases: {                 // seconds; sum is the full scripted length
       notice: 1.2, desecrate: 2.4, rage: 1.4,
@@ -508,11 +520,11 @@
     dogTrotFrames: 2,         // trot cycle length (contact, passing)
     dogFrameStep: 0.12,       // s per trot frame
     ripFrameStep: 0.30,       // s per rip frame (3 frames over `reveal`)
-    leashSag: 7,              // px of slack at the leash curve's midpoint
+    leashSag: 11,              // px of slack at the leash curve's midpoint
     leashHandDX: 6,           // px, x-facing hand anchor fwd of the stranger's feet-anchor X
     leashHandDY: -24,         // px, hand anchor above the stranger's feet-anchor Y (screen-space, up is negative)
     leashCollarDY: -12,       // px, collar anchor above the dog's feet-anchor Y (screen-space, up is negative)
-    leashTautLen: 28,         // px hand-to-collar distance at which leash sag reaches 0
+    leashTautLen: 78,         // px hand-to-collar distance at which leash sag reaches 0
     riseSpeed: 150,           // px/s upward during depart
     soarSpeed: 210,           // px/s rightward once airborne
     departRiseFrac: 0.45,     // fraction of `depart` spent rising before soaring

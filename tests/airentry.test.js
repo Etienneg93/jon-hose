@@ -470,3 +470,37 @@ test("the trot cycles over exactly JH.AIRENTRY.dogTrotFrames frames", () => {
     assert.ok(f >= 0 && f < C.dogTrotFrames,
       `frame ${f} outside 0..${C.dogTrotFrames - 1}`);
 });
+
+test("the dog parks so its cocked leg aims at the hydrant, and streams", () => {
+  // The lift pose faces right with the raised rear leg LEFT of centre, so the
+  // dog must stop to the RIGHT of the hydrant — a negative dogLiftDX would aim
+  // the stream away from it.
+  assert.ok(C.dogLiftDX > 0, "dog must park right of the hydrant to aim back at it");
+
+  const g = makeGame();
+  g.particles = [];
+  AirEntry.enter(g);
+  const steps = Math.ceil((C.phases.notice + C.phases.desecrate) / (1 / 60));
+  for (let i = 0; i < steps; i++) AirEntry.update(1 / 60, g);
+
+  const sc = g.airEntry;
+  assert.strictEqual(sc.dog.state, "lift", "dog should have reached the hydrant and lifted");
+  assert.ok(g.particles.length > 0, "the lift must emit stream particles");
+
+  // Every droplet leaves the cocked leg travelling AWAY from the dog's facing,
+  // i.e. toward the hydrant it is parked beside.
+  for (const p of g.particles) {
+    assert.ok(p.vx * sc.dog.facing < 0, "stream must travel opposite the dog's facing");
+  }
+  // Every droplet must be renderable: Particle.draw sizes its fillRect from
+  // `size`, so an undefined tunable silently draws NaN-sized rects — visible
+  // in no screenshot and caught by no phase assertion.
+  for (const p of g.particles) {
+    assert.ok(Number.isFinite(p.size) && p.size > 0, "droplet size must be a positive number");
+    assert.ok(Number.isFinite(p.x) && Number.isFinite(p.z), "droplet position must be finite");
+  }
+
+  const originDX = g.particles[0].x - sc.dog.x;
+  assert.ok(originDX * sc.dog.facing < 0, "stream must originate at the rear, not the head");
+  assert.ok(sc.hydrantX < sc.dog.x, "hydrant must be behind the dog for the stream to land on it");
+});
