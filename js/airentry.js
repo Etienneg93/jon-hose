@@ -256,6 +256,8 @@
 
       sc.t += dt;
       sc.phase = this.phaseAt(C, sc.t);
+      // Jon holds the outrage pose from the desecration through the face-off.
+      sc.playerShock = (sc.phase === "rage" || sc.phase === "feud");
       if (sc.flashT > 0) sc.flashT = Math.max(0, sc.flashT - dt);
       const el = this._phaseElapsed(C, sc.t, sc.phase);
       const st = sc.stranger, dog = sc.dog;

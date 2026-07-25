@@ -714,7 +714,7 @@
   // ============================ JON ===================================
   // ---- Jon sprite image cache (preloaded at startup)
   const _jonImgs = {};
-  ["idle", "fire", "walk0", "walk1", "walk2", "walk3", "walk4"].forEach(name => {
+  ["idle", "fire", "shock", "walk0", "walk1", "walk2", "walk3", "walk4"].forEach(name => {
     _jonImgs[name] = JH.Loader.img(`sprites/jon/${name}.png`);
   });
 
@@ -745,7 +745,8 @@
 
     const f = (opt.frame | 0) % 5;
 
-    const imgName = state === "fire" ? "fire" : state === "walk" ? `walk${f}` : "idle";
+    const imgName = state === "fire" ? "fire" : state === "shock" ? "shock"
+                  : state === "walk" ? `walk${f}` : "idle";
     const img = _jonImgs[imgName];
     if (!img || !img.complete || !img.naturalWidth) return;
 

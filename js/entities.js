@@ -1314,6 +1314,10 @@
       if (JH.Game && JH.Game.deepdiving) {
         // Seated pose while watching the deepdive TV (hand-supplied frame).
         Assets.draw(ctx, "jonSit", sx, spriteSy, this.facing, { t: this.t });
+      } else if (JH.Game && JH.Game.airEntry && JH.Game.airEntry.playerShock) {
+        // Air-entry beat: scripted outrage pose. The player's update is skipped
+        // while the scene runs, so `state` never advances on its own here.
+        Assets.draw(ctx, "jon", sx, spriteSy, this.facing, { state: "shock", t: this.t });
       } else {
         Assets.draw(ctx, "jon", sx, spriteSy, this.facing, {
           state: this.state, frame: this.frame, t: this.t,
