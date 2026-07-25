@@ -1145,6 +1145,83 @@
     ctx.restore();
   });
 
+  // ================= AIR ENTRY CUTSCENE ACTORS ========================
+  // Ass Man in civilian disguise + his border collie (airentry.js). Plain
+  // Assets.register (not registerBaked — neither is an Enemy, no elite
+  // variant, no pose function). PLAIN_H matches AM_POSE_H.idle so the
+  // reveal's swap to the baked idle does not jump. Frames can land one at a
+  // time during art generation, so every path falls back to its first frame
+  // and then to a procedural body.
+  const PLAIN_H = 58, DOG_H = 18;
+  const _plainImgs = {
+    idle: JH.Loader.img("sprites/assman/plain_idle.png"),
+    rip0: JH.Loader.img("sprites/assman/plain_rip0.png"),
+    rip1: JH.Loader.img("sprites/assman/plain_rip1.png"),
+    rip2: JH.Loader.img("sprites/assman/plain_rip2.png"),
+  };
+  const _dogImgs = {
+    idle:  JH.Loader.img("sprites/dog/idle.png"),
+    trot0: JH.Loader.img("sprites/dog/trot0.png"),
+    trot1: JH.Loader.img("sprites/dog/trot1.png"),
+    trot2: JH.Loader.img("sprites/dog/trot2.png"),
+    trot3: JH.Loader.img("sprites/dog/trot3.png"),
+    lift:  JH.Loader.img("sprites/dog/lift.png"),
+  };
+  const _usable = (im) => !!(im && im.complete && im.naturalWidth);
+  Assets.airEntryReady = () => _usable(_plainImgs.idle);
+
+  // Feet-anchored blit at a fixed logical height, honest aspect (width
+  // follows the source ratio — never stretched; see the f145c3d blit bug).
+  // `mirror` is explicit: the two actor sets have opposite native facings.
+  const _sceneBlit = (ctx, img, x, y, mirror, drawH) => {
+    const scale = drawH / img.naturalHeight;
+    const dw = Math.round(img.naturalWidth * scale);
+    ctx.save();
+    ctx.translate(x, y);
+    if (mirror) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, -Math.round(dw / 2), -drawH, dw, drawH);
+    ctx.restore();
+  };
+
+  // plain_* art is generated LEFT-facing (toward Jon, where the rip plays),
+  // so facing -1 draws unmirrored and facing +1 mirrors — inverted from the
+  // usual right-native convention. Rip frames NEVER mirror: their emerging
+  // chest lettering cannot be flipped (same constraint that forced generated
+  // _l bakes for the hero poses). The hoodie covers the lettering on idle,
+  // so idle mirrors freely for the oblivious look-away.
+  Assets.register("assmanPlain", (p, opt, ctx, x, y, facing) => {
+    const rip = opt.state === "rip";
+    const key = rip ? "rip" + Math.max(0, Math.min(2, opt.frame | 0)) : "idle";
+    const img = _usable(_plainImgs[key]) ? _plainImgs[key] : _plainImgs.idle;
+    if (_usable(img) && ctx) { _sceneBlit(ctx, img, x, y, !rip && facing > 0, PLAIN_H); return; }
+    // Procedural fallback: grey hoodie over navy legs, gold boots.
+    p(-8, 0, 7, 5, "#d9a520"); p(1, 0, 7, 5, "#d9a520");   // gold boots
+    p(-7, 5, 14, 16, "#3a4a6a");                            // sweatpants
+    p(-9, 21, 18, 22, "#8a8f96");                           // hoodie
+    p(-9, 21, 18, 3, "#6d727a");
+    p(-4, 43, 9, 9, PAL.skin);                              // head
+    p(-4, 47, 9, 2, "#15181d");                             // sunglasses
+  });
+
+  Assets.register("collie", (p, opt, ctx, x, y, facing) => {
+    const key = opt.state === "lift" ? "lift"
+              : opt.state === "trot" ? "trot" + Math.max(0, Math.min(3, opt.frame | 0))
+              : "idle";
+    const img = _usable(_dogImgs[key]) ? _dogImgs[key] : _dogImgs.idle;
+    // Collie art is RIGHT-facing native (the repo default): mirror on facing -1.
+    if (_usable(img) && ctx) { _sceneBlit(ctx, img, x, y, facing < 0, DOG_H); return; }
+    // Procedural fallback: black-and-white body, white blaze, up ears.
+    p(-7, 0, 2, 5, "#f2f2f2"); p(-3, 0, 2, 5, "#f2f2f2");   // front legs
+    p(2, 0, 2, 5, "#f2f2f2");  p(5, 0, 2, 5, "#f2f2f2");    // rear legs
+    p(-7, 5, 14, 7, "#1b1b1f");                             // body
+    p(-7, 5, 6, 4, "#f2f2f2");                              // white chest
+    p(7, 7, 4, 3, "#1b1b1f");                               // tail
+    p(-10, 10, 5, 6, "#1b1b1f");                            // head
+    p(-10, 10, 2, 5, "#f2f2f2");                            // blaze
+    p(-8, 15, 2, 3, "#1b1b1f");                             // ear
+  });
+
   // ========================== CHARGER ================================
   const chargerFallback = (p, opt) => {
     const f = opt.frame | 0;
