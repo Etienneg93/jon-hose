@@ -1350,6 +1350,14 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(PX, PY, PW, PH);
 
+      // Baked portrait when it has decoded; the procedural body below is the
+      // fallback (same chain as Quake/Slayer).
+      const _amTalking = (cs.timer || 0) < 2.0;
+      const _amMouth = _amTalking && (Math.floor((cs.timer || 0) * 7) & 1);
+      const _amImg = JH.getAssManPortrait ? JH.getAssManPortrait(_amMouth) : null;
+      if (_amImg && _amImg.complete && _amImg.naturalWidth) {
+        ctx.drawImage(_amImg, PX, PY, PW, PH);
+      } else {
       // Procedural portrait: brawny brute, dark cap + brow, glowing gold eyes
       // (matching his in-game eyes), mouth flaps for the first 2s of each beat.
       const talking = (cs.timer || 0) < 2.0;
@@ -1366,6 +1374,7 @@
       f(-14, 74, 28, 5, "#3a281a");                       // brow band
       f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
       f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
+      }
 
       ctx.fillStyle = "#e8b23a";
       ctx.font = "bold 7px monospace";

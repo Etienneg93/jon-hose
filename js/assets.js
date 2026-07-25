@@ -2217,6 +2217,19 @@
     JH.getSlayerPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
   }
 
+  // Ass Man talks in two wardrobes: costumed for the defeat outro, casual
+  // (hoodie + shades) for any beat before the reveal. Same mouth-pair idiom.
+  {
+    const _closed = JH.Loader.img("sprites/assman/assman-portrait-mouthclosed.png");
+    const _open   = JH.Loader.img("sprites/assman/assman-portrait-mouthopen.png");
+    JH.getAssManPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
+  {
+    const _closed = JH.Loader.img("sprites/assman/assman-portrait-casual-mouthclosed.png");
+    const _open   = JH.Loader.img("sprites/assman/assman-portrait-casual-mouthopen.png");
+    JH.getAssManCasualPortrait = (mouthOpen) => mouthOpen ? _open : _closed;
+  }
+
   // =================== CHURCH OF THE HOSE ART =======================
   // Transparent PNGs; church.js renderScene falls back to ctx-rects if a
   // file is missing/unloaded (the documented neighbor blit+fallback seam).
