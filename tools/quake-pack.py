@@ -11,17 +11,25 @@ from PIL import Image
 import json, os
 
 SRC = "tmp/norm/quake"
+# The four walk beats come from their own strip: a mirrored walk has near-
+# identical SILHOUETTES by nature, so the alternation is carried by shading the
+# FAR limbs darker. Both strips were normalised against their own idle at the
+# same subject height (105 vs 106px wide), so they share a scale and splice
+# without rescaling.
+WALK_SRC = "tmp/norm/quakewalk"
 # Two walk beats, not four. gpt-image-2 will not mirror near/far legs in a
 # side profile — asked twice, both times the two "contact" poses came back
 # ~8-15% apart while contact-vs-passing measured 61-64%. So the honest cycle is
 # the two poses it CAN draw. Same conclusion as the collie trot.
-ORDER = [("walk0", "quake-k0"), ("walk1", "quake-k1"), ("idle", "quake-k2"),
-         ("stompUp", "quake-k3"), ("stompDown", "quake-k4")]
-WALK = ["walk0", "walk1"]
+ORDER = [("walk0", "quake-w1", WALK_SRC), ("walk1", "quake-w2", WALK_SRC),
+         ("walk2", "quake-w3", WALK_SRC), ("walk3", "quake-w4", WALK_SRC),
+         ("idle", "quake-k2", SRC),
+         ("stompUp", "quake-k3", SRC), ("stompDown", "quake-k4", SRC)]
+WALK = ["walk0", "walk1", "walk2", "walk3"]
 OUT_PNG = "sprites/quake_walker/quake-frames.png"
 OUT_JS = "js/quake-frames.js"
 
-ims = [(name, Image.open(os.path.join(SRC, f + ".png")).convert("RGBA")) for name, f in ORDER]
+ims = [(name, Image.open(os.path.join(d, f + ".png")).convert("RGBA")) for name, f, d in ORDER]
 
 # Trim each frame to its own content so the sheet isn't mostly empty, but keep
 # every frame's FEET on the same bottom row — the anchor contract is ay = h.
