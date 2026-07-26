@@ -15,8 +15,8 @@ SRC = "tmp/norm/quake"
 # side profile — asked twice, both times the two "contact" poses came back
 # ~8-15% apart while contact-vs-passing measured 61-64%. So the honest cycle is
 # the two poses it CAN draw. Same conclusion as the collie trot.
-ORDER = [("walk0", "quake-h0"), ("walk1", "quake-h1"), ("idle", "quake-h2"),
-         ("stompUp", "quake-h3"), ("stompDown", "quake-h4")]
+ORDER = [("walk0", "quake-k0"), ("walk1", "quake-k1"), ("idle", "quake-k2"),
+         ("stompUp", "quake-k3"), ("stompDown", "quake-k4")]
 WALK = ["walk0", "walk1"]
 OUT_PNG = "sprites/quake_walker/quake-frames.png"
 OUT_JS = "js/quake-frames.js"
