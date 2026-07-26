@@ -760,3 +760,29 @@ test("quake sheet: every frame plants its feet on the baseline", () => {
   for (const need of ["idle", "stompUp", "stompDown"])
     assert.ok(M.frames[need], `required frame present: ${need}`);
 });
+
+test("quake atlas declares its footfall frames for the step shake", () => {
+  // entities.js reads stepFrames off the atlas instead of hardcoding indices,
+  // so reordering the walk cycle cannot silently desync the camera jolt from
+  // the frame where his boot actually lands.
+  const M = JH.QUAKE_FRAMES;
+  assert.ok(Array.isArray(M.stepFrames) && M.stepFrames.length > 0,
+    "atlas must declare which walk frames plant a boot");
+  const walk = M.anims.walk;
+  for (const i of M.stepFrames) {
+    assert.ok(Number.isInteger(i) && i >= 0 && i < walk.length,
+      `step frame ${i} must index into the walk cycle (0..${walk.length - 1})`);
+  }
+  assert.ok(M.stepFrames.length < walk.length,
+    "not every frame can be a footfall, or the shake never stops");
+  // Assert the RENDERED amplitude, not the raw arg: shake is quadratic
+  // ((n/traumaDiv)^2 * shakeMax), so a sensible-looking number can still land
+  // sub-pixel and show nothing at all.
+  const J = JH.JUICE;
+  const px = (n) => Math.pow(n / J.traumaDiv, 2) * J.shakeMax;
+  const step = px(JH.QUAKE.stepShake);
+  assert.ok(step >= 0.4, `a footfall must be visible, got ${step.toFixed(2)}px`);
+  assert.ok(step <= 1.5, `a footfall must stay SLIGHT, got ${step.toFixed(2)}px`);
+  assert.ok(step < px(11) / 3,
+    "a footfall must stay well under the charged stomp's jolt");
+});

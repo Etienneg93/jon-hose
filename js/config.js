@@ -1036,6 +1036,11 @@
     stompWind: 0.8, stompDmg: 26, stompRadius: 36,   // direct hit around his feet
     waveDmg: 18, waveSpeed: 150, waveRange: 340, enrageAt: 0.4,
     leapWind: 0.65, leapDur: 0.38, leapDmg: 32, leapRadius: 52, leapPeak: 58,
+    stepShake: 3.6,   // shake() arg per footfall — he stomps rather than strides, so
+                      // every planted boot jolts the camera. TUNE BY AMPLITUDE, NOT BY
+                      // THIS NUMBER: shake amplitude is (n/traumaDiv)^2 * shakeMax, so
+                      // it is QUADRATIC. 3.6 renders ~0.7px against the charged stomp's
+                      // ~6.6px; a linear-feeling 2.2 came out at 0.26px, i.e. invisible.
   };
 
   // The Slayer — Fire boss (pool cue, charge-dash movement, fireball volley).

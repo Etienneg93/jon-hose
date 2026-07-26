@@ -4627,7 +4627,21 @@
       this.windTimer = 0; this.atkDur = 0; this.cdTimer = 1.2; this.strikeFx = 0;
       this._atkPhase = 0; this.leapTarget = null;
       this._leapStartX = 0; this._leapStartY = 0; this._leapProgress = 0;
+      this._lastStepFrame = -1;   // footfall edge-detect (see _stepShake)
     }
+    // He does not stride, he stomps: each planted boot jolts the camera. The
+    // contact frames come from the atlas (QUAKE_FRAMES.stepFrames) rather than
+    // being hardcoded, so reordering the cycle cannot desync the shake from the
+    // art. Fires on the frame CHANGE, not every tick, or one footfall would
+    // shake for its whole 0.12s.
+    _stepShake(game, d) {
+      const meta = JH.QUAKE_FRAMES;
+      if (!d.stepShake || !meta || !meta.stepFrames) return;
+      if (this.frame === this._lastStepFrame) return;
+      this._lastStepFrame = this.frame;
+      if (meta.stepFrames.indexOf(this.frame) >= 0) game.shake(d.stepShake);
+    }
+
     think(dt, game) {
       // Keep boss inside the wave arena — spray knockback uses global level bounds.
       this.x = clamp(this.x, game.bounds.minX + 24, game.bounds.maxX - 24);
@@ -4716,6 +4730,7 @@
         this.x += (dx / (dist || 1)) * spd * dt;
         this.y += (dy / (dist || 1)) * spd * dt * 0.6;
         this.state = "walk";
+        this._stepShake(game, d);
         return;
       }
 
