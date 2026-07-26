@@ -16,7 +16,7 @@ SRC = "tmp/norm/quake"
 # FAR limbs darker. Both strips were normalised against their own idle at the
 # same subject height (105 vs 106px wide), so they share a scale and splice
 # without rescaling.
-WALK_SRC = "tmp/norm/quakewalk2"
+WALK_SRC = "tmp/norm/quakewalk3"
 # Two walk beats, not four. gpt-image-2 will not mirror near/far legs in a
 # side profile — asked twice, both times the two "contact" poses came back
 # ~8-15% apart while contact-vs-passing measured 61-64%. So the honest cycle is
