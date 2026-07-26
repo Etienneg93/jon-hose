@@ -16,13 +16,13 @@ SRC = "tmp/norm/quake"
 # FAR limbs darker. Both strips were normalised against their own idle at the
 # same subject height (105 vs 106px wide), so they share a scale and splice
 # without rescaling.
-WALK_SRC = "tmp/norm/quakewalk"
+WALK_SRC = "tmp/norm/quakewalk2"
 # Two walk beats, not four. gpt-image-2 will not mirror near/far legs in a
 # side profile — asked twice, both times the two "contact" poses came back
 # ~8-15% apart while contact-vs-passing measured 61-64%. So the honest cycle is
 # the two poses it CAN draw. Same conclusion as the collie trot.
-ORDER = [("walk0", "quake-w1", WALK_SRC), ("walk1", "quake-w2", WALK_SRC),
-         ("walk2", "quake-w3", WALK_SRC), ("walk3", "quake-w4", WALK_SRC),
+ORDER = [("walk0", "walk0", WALK_SRC), ("walk1", "walk1", WALK_SRC),
+         ("walk2", "walk2", WALK_SRC), ("walk3", "walk3", WALK_SRC),
          ("idle", "quake-k2", SRC),
          ("stompUp", "quake-k3", SRC), ("stompDown", "quake-k4", SRC)]
 WALK = ["walk0", "walk1", "walk2", "walk3"]
