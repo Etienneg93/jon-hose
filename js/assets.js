@@ -1699,13 +1699,22 @@
     if (img && img._ready) {
       const fr = quakeFrame(opt);
       if (fr) {
-        const s = QUAKE_H / fr.h;
+        // Scale by the sheet's declared SOURCE-px-per-logical-px when it has
+        // one. Frame height cannot serve: the stomp wind-up raises both fists
+        // overhead so its canvas is taller than the idle's, and dividing by it
+        // would shrink every other pose. Sheets without `scale` (the original
+        // 1:1 art) fall back to the old frame-height ratio unchanged.
+        const meta = JH.QUAKE_FRAMES;
+        const s = (meta && meta.scale) ? 1 / meta.scale : QUAKE_H / fr.h;
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         ctx.translate(Math.round(x), Math.round(y));
         if (facing < 0) ctx.scale(-1, 1);
+        // Anchored by ax/ay (SOURCE px), so a taller pose extends UPWARD from
+        // the feet rather than being squashed into a fixed box.
         ctx.drawImage(img, fr.x, fr.y, fr.w, fr.h,
-          Math.round(-fr.ax * s), -QUAKE_H, Math.round(fr.w * s), QUAKE_H);
+          Math.round(-fr.ax * s), Math.round(-fr.ay * s),
+          Math.round(fr.w * s), Math.round(fr.h * s));
         ctx.restore();
         return;
       }

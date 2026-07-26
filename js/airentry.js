@@ -271,7 +271,11 @@
         sc.phase = nextPhase;
         sc.codecIdx = 0;
         sc.codecT = 0;
-        return;
+        // Yield ONLY if the new phase actually speaks. Returning
+        // unconditionally would stall a frame on every silent transition —
+        // including the terminal `release`, which must finish the scene the
+        // moment it is reached rather than lingering a frame as a live phase.
+        if (CODEC[nextPhase]) return;
       }
       // Jon holds the outrage pose from the desecration through the face-off.
       sc.playerShock = (sc.phase === "rage" || sc.phase === "feud");

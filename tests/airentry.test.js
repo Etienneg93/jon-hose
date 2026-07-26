@@ -10,6 +10,7 @@ require("../js/config.js");
 // before any test calls it.
 global.window.JH.Loader = { img: () => ({}) };
 require("../js/world.js");
+require("../js/quake-frames.js");
 require("../js/airentry.js");
 const JH = global.window.JH;
 const AirEntry = JH.AirEntry;
@@ -737,4 +738,25 @@ test("every phase with dialogue plays it before its action", () => {
   assert.deepStrictEqual(spoken, [
     "notice:???", "desecrate:MARIO", "rage:JON", "feud:ASS MAN", "feud:JON",
   ], "every scripted line is reached, in order");
+});
+
+test("quake sheet: every frame plants its feet on the baseline", () => {
+  // The stomp wind-up raises both fists overhead, so its art is TALLER than the
+  // idle. assets.js anchors by ay in source px and scales by the sheet's
+  // declared `scale`, which is what lets a tall pose extend upward instead of
+  // being squashed — or, worse, shrinking every other pose to fit.
+  const M = JH.QUAKE_FRAMES;
+  assert.ok(M && M.frames, "frame atlas present");
+  assert.ok(M.scale > 1, "sheet declares its source-px-per-logical-px");
+  for (const [name, f] of Object.entries(M.frames)) {
+    const s = 1 / M.scale;
+    const feet = (-f.ay * s) + (f.h * s);
+    assert.ok(Math.abs(feet) < 1e-6, `${name} must land its feet at y=0, got ${feet}`);
+    assert.strictEqual(f.ay, f.h, `${name}: ay must be the frame's bottom row`);
+  }
+  const walk = M.anims.walk;
+  assert.ok(walk.length >= 2, "walk cycle needs at least two beats");
+  for (const n of walk) assert.ok(M.frames[n], `walk references a real frame: ${n}`);
+  for (const need of ["idle", "stompUp", "stompDown"])
+    assert.ok(M.frames[need], `required frame present: ${need}`);
 });
