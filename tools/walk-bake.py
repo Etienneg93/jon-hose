@@ -13,77 +13,9 @@
 #
 #   python tools/walk-bake.py <strip.png> <out_dir> <target_standing_h>
 from PIL import Image
-from collections import deque
 import sys, os
-
-SAT_TOL, LUM_MIN = 26, 200
-
-
-def key_ground(im):
-    """4-connected flood from the border over neutral-light pixels."""
-    w, h = im.size
-    px = im.load()
-    if sum(1 for i in range(0, w * h, 997) if px[i % w, i // w][3] < 16) > (w * h // 997) * 0.05:
-        return im                                   # already has real alpha
-    seen = bytearray(w * h)
-    q = deque()
-
-    def ground(x, y):
-        r, g, b, a = px[x, y]
-        if a < 16:
-            return True
-        return (max(r, g, b) - min(r, g, b)) <= SAT_TOL and min(r, g, b) >= LUM_MIN
-
-    for x in range(w):
-        for y in (0, h - 1):
-            if not seen[y * w + x] and ground(x, y):
-                seen[y * w + x] = 1; q.append((x, y))
-    for y in range(h):
-        for x in (0, w - 1):
-            if not seen[y * w + x] and ground(x, y):
-                seen[y * w + x] = 1; q.append((x, y))
-    while q:
-        x, y = q.popleft()
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < w and 0 <= ny < h and not seen[ny * w + nx] and ground(nx, ny):
-                seen[ny * w + nx] = 1; q.append((nx, ny))
-    for i in range(w * h):
-        if seen[i]:
-            px[i % w, i // w] = (0, 0, 0, 0)
-    return im
-
-
-def cull_strays(im, frac=0.03):
-    w, h = im.size
-    px = im.load()
-    seen = bytearray(w * h)
-    comps = []
-    for sy in range(h):
-        for sx in range(w):
-            if seen[sy * w + sx] or px[sx, sy][3] < 128:
-                continue
-            q = deque([(sx, sy)]); seen[sy * w + sx] = 1; cells = []
-            while q:
-                x, y = q.popleft(); cells.append((x, y))
-                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < w and 0 <= ny < h and not seen[ny * w + nx] and px[nx, ny][3] >= 128:
-                        seen[ny * w + nx] = 1; q.append((nx, ny))
-            comps.append(cells)
-    if len(comps) < 2:
-        return im
-    comps.sort(key=len, reverse=True)
-    floor = len(comps[0]) * frac
-    killed = 0
-    for c in comps[1:]:
-        if len(c) < floor:
-            for x, y in c:
-                px[x, y] = (0, 0, 0, 0)
-            killed += len(c)
-    if killed:
-        print(f"    culled {killed}px of neighbouring-figure fragments")
-    return im
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from spritekey import key_ground, enclosed_ground_kill, cull_strays
 
 
 strip = key_ground(Image.open(sys.argv[1]).convert("RGBA"))
@@ -149,7 +81,12 @@ for i, ((a, b), bb) in enumerate(zip(spans, boxes)):
     # Splitting a merged span can leave a sliver of the NEIGHBOURING figure at
     # the cut edge (a boot tip, typically). Keep only the largest connected
     # body; anything under 3% of it is a fragment, not this pose.
-    sub = cull_strays(sub)
+    # BOTH passes: cull_strays drops a neighbour's fragment left by a span
+    # split; enclosed_ground_kill drops background trapped BETWEEN his legs,
+    # which the border flood can never reach. Omitting the latter is exactly
+    # how a walk frame shipped with 219px of grey stuck between the boots.
+    sub = cull_strays(sub, label=f"walk{i}: ")
+    sub = enclosed_ground_kill(sub, label=f"walk{i}: ")
     canvas = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
     canvas.paste(sub, ((cw - sw) // 2, ch - sh), sub)   # bottom = the shared ground row
     canvas.save(os.path.join(out_dir, f"walk{i}.png"))
