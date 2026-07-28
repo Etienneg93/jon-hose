@@ -1336,22 +1336,28 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(PX, PY, PW, PH);
 
-      // Procedural portrait: brawny brute, dark cap + brow, glowing gold eyes
-      // (matching his in-game eyes), mouth flaps for the first 2s of each beat.
+      // Baked bust when the portrait PNGs exist (drop-in via getAssManPortrait,
+      // same seam as Slayer/Quake); procedural brute until they land — dark
+      // cap + brow, glowing gold eyes, mouth flaps for the first 2s per beat.
       const talking = (cs.timer || 0) < 2.0;
       const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
-      const cx = PX + PW / 2, cy = PY + PH - 4;
-      const f = (lx, ly, w, h, col) => {
-        ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
-      };
-      f(-26, 0, 52, 58, "#c98a5a");                       // shoulders/chest (flesh)
-      f(-26, 0, 52, 8, "#8a5a34");                        // chest shadow
-      f(-18, 40, 36, 6, "#241812");                       // chest plate
-      f(-14, 58, 28, 34, "#c98a5a");                      // head
-      f(-14, 84, 28, 10, "#241812");                      // cap
-      f(-14, 74, 28, 5, "#3a281a");                       // brow band
-      f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
-      f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
+      const img = JH.getAssManPortrait ? JH.getAssManPortrait(mouthOpen) : null;
+      if (img && img._ready) {
+        ctx.drawImage(img, PX, PY, PW, PH);
+      } else {
+        const cx = PX + PW / 2, cy = PY + PH - 4;
+        const f = (lx, ly, w, h, col) => {
+          ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+        };
+        f(-26, 0, 52, 58, "#c98a5a");                       // shoulders/chest (flesh)
+        f(-26, 0, 52, 8, "#8a5a34");                        // chest shadow
+        f(-18, 40, 36, 6, "#241812");                       // chest plate
+        f(-14, 58, 28, 34, "#c98a5a");                      // head
+        f(-14, 84, 28, 10, "#241812");                      // cap
+        f(-14, 74, 28, 5, "#3a281a");                       // brow band
+        f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
+        f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
+      }
 
       ctx.fillStyle = "#e8b23a";
       ctx.font = "bold 7px monospace";
