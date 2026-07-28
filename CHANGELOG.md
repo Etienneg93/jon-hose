@@ -7,7 +7,87 @@ comes from the branch's main addition. The deployed build tag shows
 
 ---
 
-## v0.31.0 — Deepdive (2026-07-14)
+## v0.40.0 — Air to the Throne (2026-07-28)
+
+The gate at the end of the fire truck run wasn't a victory screen. It was a
+door. Jon steps through it onto a street paved with clouds, lined with
+six-story porcelain monuments, ruled by a caped man with ASS MAN written
+across his chest — and the biggest update this game has ever shipped begins
+with a dog peeing on a holy hydrant.
+
+### The Air World (Act 4, waves 30–36)
+- **A whole new act above the clouds**: the cloudline street, six golden
+  porcelain monuments, act-themed skylines and per-zone sky bands, and a
+  continuous whiteout portal from the truck gate into the sky.
+- **An unskippable arrival cutscene**: a plain-clothes stranger walks his
+  collie past the holy hydrant. The dog does what dogs do. Jon's eye
+  twitches. The stranger drops the leash and SUITS UP — full codec dialogue
+  with hand-drawn portraits for Ass Man (costumed *and* casual), Jon, and
+  MARIO the dog.
+- **A defeat outro to match**: a multi-voice codec exchange, an Assvengers
+  tease, and Ass Man leaving with his dog and his dignity — "The skies are
+  yours, hose boy."
+
+### ASS MAN — the final boss (wave 36)
+- **Phase 1, groundwork**: the Big Clap sucks you in before the blast front
+  erupts (dash breaks the pull), hip checks launch with a sonic boom and a
+  wind wake, and Toilet Toss artillery leaves porcelain standing — as live
+  **Bidet Turrets**.
+- **Phase 2, air superiority**: he FLIES — waypoint patrol, marked bolt
+  volleys and a chasing beam that you outrun, dive slams onto a telegraph
+  that chases you until the dive commits, exhaust-recovery openings after.
+- **Phase 3, the storm ceremony**: he plants center-stage wrapped in a
+  tornado (that's the immunity tell), rings with rotating gaps expand out,
+  and the openings between storms are where the damage goes.
+- He doesn't die at zero — he kneels. Heroes get outros.
+
+### The air roster
+- **Plunger Fiend**: lunges, latches onto your NOZZLE, and siphons water —
+  the attack targets the weapon, not the HP bar. Dash pops it off. The
+  super telegraphs a locked vacuum wedge that *drags* you in continuously —
+  walk against it, step out of the wedge, or dash to break it.
+- **TP Mummy**: streamer drop-in harasser with a paper-roll snare.
+- **Gasbag**: a floating sack of regret venting poison clouds — gas now
+  lingers like burn (damage, range, and regen suffer). The super bursts
+  into a mega-cloud and two angry minis.
+- **Sky vents & gust lanes**: stationary wind hazards that chip you and
+  shove enemies, and slotted gust lanes that reshuffle mid-fight.
+- **Cloudline Holdout (wave 33)**: survive on a walkway whose edge is a
+  real DROP — get pushed over and Jon falls into the void, plummets back
+  in from the sky on the far side, and pays 12 HP on impact. Enemies are
+  bounded by the lip; nothing stands on air.
+
+### Benedictions, reworked
+- **Scald scales with your damage** and Boilover spreads it as a rolling
+  contagion; Trial by Fire now honestly requires a Scald source.
+- **Gravel Spray fires an actual rock** down the stream — launch kick,
+  trail, impact shake. Ash Walk became hazard boots for every ground
+  hazard. Overflow, Baptize, Sure Grip, Bedrock, Tailwind, and Eye of the
+  Storm all retuned; duos redesigned (Steam Sermon vents, Mud Spray,
+  Steam Devil).
+- **Every description rewritten in one clear grammar** — trigger first,
+  effect second, numbers highlighted — across benedictions, relics, and
+  church pillars. The stat panel now shows full descriptions inline with
+  rank-II upgrades always visible on their own gold line.
+
+### Elsewhere in Hosetown
+- **Quake Walker got a real walk**: four honest leg positions, footfall
+  ground-shakes, and a rebuilt sheet.
+- **The Deepdive TV respects short attention spans**: small kibble banks
+  get an unskippable KIBBLE KING(tm) ad first (the bank pauses — ads don't
+  fast-forward), and an empty bank ends on static and an "UP NEXT: touch
+  grass" card instead of cutting the gag short.
+- **Damage numbers** (dev toggle): per-enemy running tallies with tick
+  punch, crit flash, and kill slam; damage you take floats in red.
+- **Big Drip** trades summons for an hp-gated heavy-rain phase. **Relic
+  wheel** shows full names; icon set and elemental frames regenerated;
+  the shop got a slot machine.
+- **Leaderboard** now records waves cleared and sorts newest version →
+  most waves → fastest time, on both the client and the redeployed
+  backend (guarded by a test that runs the server comparator against the
+  client's).
+
+
 
 There's a TV at the shop now. Sit down, log on, melt your kibble into
 health. The algorithm thanks you for your engagement.

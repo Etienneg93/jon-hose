@@ -21,7 +21,7 @@
   JH.TELEMETRY = {
     endpoint: "https://script.google.com/macros/s/AKfycbyFboznlhgCeQxyGTSM76G2FtGVlZJsbFYuNZ9jqWnYoYHghOkV5Iwn2-n10-XKBQkM/exec",       // e.g. "https://script.google.com/macros/s/AKfy.../exec"
     enabled: true,
-    version: "0.29.0",
+    version: "0.40.0",
   };
 
   // ---- The walkable depth band (2.5-D floor plane) --------------------
