@@ -8,6 +8,19 @@
   const JH = (window.JH = window.JH || {});
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+  // Ass Man defeat-outro codec script. One beat per E-advance; the advance
+  // past the LAST beat routes to win() (the cutscene handler reads
+  // cs.phases). Speaker portraits swap per beat, same as the entry scene.
+  // Mario stays HIS dog — the fight ends in mutual respect, not a handover.
+  const ASSMAN_OUTRO = [
+    { who: "assman", name: "ASS MAN", lines: ["...You actually hosed me down.", "In front of my dog."] },
+    { who: "mario",  name: "MARIO",   lines: ["BARK BARK BARK"] },
+    { who: "assman", name: "ASS MAN", lines: ["There's others like us up here.", "Cleaner. Angrier. Worse dressed."] },
+    { who: "assman", name: "ASS MAN", lines: ["The skies are yours, hose boy.", "Mario! We're going."] },
+    { who: "jon",    name: "JON",     lines: ["...I'm gonna need a bigger hose."] },
+  ];
+  JH.ASSMAN_OUTRO = ASSMAN_OUTRO;
+
   const RANGE_CATALOG_TABS = ["boons", "relics", "enemies"];
   const RANGE_CATALOG_ENEMIES = [
     { id: "mook", name: "Mook" },
@@ -1026,7 +1039,7 @@
       if (assmanIdx >= 0 && this.waveIndex === assmanIdx) {
         JH.Camera.unlock();
         this.state = "cutscene";
-        this.cutscene = { phase: 0, who: "assman" };
+        this.cutscene = { phase: 0, who: "assman", phases: JH.ASSMAN_OUTRO.length };
         document.getElementById("hud").classList.add("hidden");
         document.getElementById("banner").classList.add("hidden");
         return;
@@ -1330,16 +1343,14 @@
       }
     },
 
-    // Ass Man — the final boss's defeat outro (same MGS idiom as Quake/Slayer).
-    // Phase-3 advance calls win() (see update()'s cutscene handler), not a wave.
-    // Mario stays HIS dog: the fight ends in mutual respect, not a handover.
+    // Ass Man — the final boss's defeat outro (same MGS codec idiom as the
+    // Quake/Slayer beats and the act's entry scene, incl. per-beat speaker
+    // swaps). Script: JH.ASSMAN_OUTRO; the advance past the last beat calls
+    // win() (see update()'s cutscene handler).
     drawAssManCutscene(ctx, cs) {
-      const lines = [
-        ["...You actually hosed me down.", "Nobody's done that. Nobody."],
-        ["There's others like us up here.", "Cleaner. Angrier. Worse dressed."],
-        ["When they call, you answer.", "Keep the skies clean."],
-      ];
-      const phase = clamp(cs.phase, 0, lines.length - 1);
+      const beats = JH.ASSMAN_OUTRO;
+      const phase = clamp(cs.phase, 0, beats.length - 1);
+      const beat = beats[phase];
 
       ctx.fillStyle = "rgba(0,0,0,0.88)";
       ctx.fillRect(0, 0, JH.VIEW_W, JH.VIEW_H);
@@ -1351,15 +1362,17 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(PX, PY, PW, PH);
 
-      // Baked bust when the portrait PNGs exist (drop-in via getAssManPortrait,
-      // same seam as Slayer/Quake); procedural brute until they land — dark
-      // cap + brow, glowing gold eyes, mouth flaps for the first 2s per beat.
+      // Speaker bust for the current beat (mouth flaps the first 2s of each).
+      // Ass Man keeps his procedural-brute fallback; other speakers show a
+      // dark silhouette until their PNG loads.
       const talking = (cs.timer || 0) < 2.0;
       const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
-      const img = JH.getAssManPortrait ? JH.getAssManPortrait(mouthOpen) : null;
+      const getP = { assman: JH.getAssManPortrait, mario: JH.getMarioPortrait,
+                     jon: JH.getJonPortrait }[beat.who];
+      const img = getP ? getP(mouthOpen) : null;
       if (img && img._ready) {
         ctx.drawImage(img, PX, PY, PW, PH);
-      } else {
+      } else if (beat.who === "assman") {
         const cx = PX + PW / 2, cy = PY + PH - 4;
         const f = (lx, ly, w, h, col) => {
           ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
@@ -1372,12 +1385,15 @@
         f(-14, 74, 28, 5, "#3a281a");                       // brow band
         f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
         f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
+      } else {
+        ctx.fillStyle = "#241f2e";
+        ctx.fillRect(PX + 8, PY + 20, PW - 16, PH - 24);
       }
 
       ctx.fillStyle = "#e8b23a";
       ctx.font = "bold 7px monospace";
       ctx.textAlign = "left";
-      ctx.fillText("ASS MAN", PX, PY + PH + 9);
+      ctx.fillText(beat.name, PX, PY + PH + 9);
 
       const DX = PX + PW + 8, DY = PY, DW = JH.VIEW_W - DX - 10, DH = PH;
       ctx.fillStyle = "#0b0810";
@@ -1388,7 +1404,7 @@
 
       ctx.fillStyle = "#f0e0c0";
       ctx.font = "6px monospace";
-      const dl = lines[phase];
+      const dl = beat.lines;
       ctx.fillText(dl[0], DX + 6, DY + 18);
       if (dl[1]) ctx.fillText(dl[1], DX + 6, DY + 30);
 
@@ -1400,7 +1416,7 @@
         ctx.textAlign = "left";
       }
 
-      for (let i = 0; i < lines.length; i++) {
+      for (let i = 0; i < beats.length; i++) {
         ctx.fillStyle = i <= phase ? "#e8b23a" : "#3a2e12";
         ctx.fillRect(PX + i * 7, PY + PH + 13, 5, 5);
       }
@@ -2307,7 +2323,7 @@
             this.input.consume("confirm");
             cs.phase++;
             cs.timer = 0;
-            if (cs.phase >= 3) {
+            if (cs.phase >= (cs.phases || 3)) {
               const who = this.cutscene && this.cutscene.who;
               if (who === "assman") this.win();                        // final boss: the outro ends the game
               else if (who === "slayer") this.afterSlayerCutscene(this.cutscene.nextWave);

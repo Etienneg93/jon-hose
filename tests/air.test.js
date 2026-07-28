@@ -162,7 +162,7 @@ test("air act: wave 32 clearing doesn't win; the final wave enters Ass Man's out
     assert.strictEqual(JH.LEVEL1.waves[lastIdx].bossType, "assman", "last wave is the Ass Man boss");
 
     // Clearing the final wave does NOT win synchronously — it opens Ass Man's
-    // outro cutscene; win() fires only when that cutscene advances to phase 3.
+    // outro cutscene; win() fires only when it advances past its last beat.
     const r = runClear(lastIdx);
     assert.strictEqual(r.wonAt, null, "the final wave enters the outro, not win() directly");
     assert.strictEqual(r.state, "cutscene", "final wave clears into a cutscene state");
@@ -170,8 +170,10 @@ test("air act: wave 32 clearing doesn't win; the final wave enters Ass Man's out
   } finally { global.document = doc; JH.Music = prevMusic; }
 });
 
-test("air act: Ass Man outro renders all three beats without throwing (stub ctx)", () => {
+test("air act: Ass Man outro renders every scripted beat without throwing (stub ctx)", () => {
   const g = Object.create(JH.Game);
+  const beats = JH.ASSMAN_OUTRO;
+  assert.ok(Array.isArray(beats) && beats.length >= 3, "outro script exists");
   const texts = [];
   const ctx = {
     fillStyle: "", strokeStyle: "", lineWidth: 0, font: "", textAlign: "",
@@ -180,12 +182,14 @@ test("air act: Ass Man outro renders all three beats without throwing (stub ctx)
   };
   // Each dialogue beat must draw its first line — exercises every ctx path,
   // catching an undefined ref (a bad palette/handle) that --check can't see.
-  for (let phase = 0; phase < 3; phase++) {
+  for (let phase = 0; phase < beats.length; phase++) {
     texts.length = 0;
     g.cutscene = { phase, timer: 0 };
     assert.doesNotThrow(() => g.drawAssManCutscene(ctx, g.cutscene));
-    assert.ok(texts.some((t) => t.length > 4 && t !== "ASS MAN" && !t.includes("[ E ]")),
-      "beat " + phase + " draws a dialogue line");
+    assert.ok(texts.includes(beats[phase].lines[0]),
+      "beat " + phase + " draws its scripted first line");
+    assert.ok(texts.includes(beats[phase].name),
+      "beat " + phase + " labels its speaker");
   }
 });
 
