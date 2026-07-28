@@ -56,6 +56,7 @@
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
     hydrants: [], shopNpc: null, deepdiveTV: null, nearShop: false, nearVendor: false, shopOpen: false,
     timeScale: 1, deepdiving: false,   // Deepdive TV: world fixed-step rate; ramped by Balance.deepdiveRamp
+    ddAdT: 0, ddOutroT: 0,             // seated sub-phases (real-s countdowns): ad pre-roll / bank-empty outro
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     cloudlineEdge: null,   // wave 33's walkway-edge hazard (JH.CloudlineEdge); live only during that holdout
     windHazards: [],
@@ -1350,30 +1351,27 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(PX, PY, PW, PH);
 
-      // Baked portrait when it has decoded; the procedural body below is the
-      // fallback (same chain as Quake/Slayer).
-      const _amTalking = (cs.timer || 0) < 2.0;
-      const _amMouth = _amTalking && (Math.floor((cs.timer || 0) * 7) & 1);
-      const _amImg = JH.getAssManPortrait ? JH.getAssManPortrait(_amMouth) : null;
-      if (_amImg && _amImg.complete && _amImg.naturalWidth) {
-        ctx.drawImage(_amImg, PX, PY, PW, PH);
-      } else {
-      // Procedural portrait: brawny brute, dark cap + brow, glowing gold eyes
-      // (matching his in-game eyes), mouth flaps for the first 2s of each beat.
+      // Baked bust when the portrait PNGs exist (drop-in via getAssManPortrait,
+      // same seam as Slayer/Quake); procedural brute until they land — dark
+      // cap + brow, glowing gold eyes, mouth flaps for the first 2s per beat.
       const talking = (cs.timer || 0) < 2.0;
       const mouthOpen = talking && (Math.floor((cs.timer || 0) * 7) & 1);
-      const cx = PX + PW / 2, cy = PY + PH - 4;
-      const f = (lx, ly, w, h, col) => {
-        ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
-      };
-      f(-26, 0, 52, 58, "#c98a5a");                       // shoulders/chest (flesh)
-      f(-26, 0, 52, 8, "#8a5a34");                        // chest shadow
-      f(-18, 40, 36, 6, "#241812");                       // chest plate
-      f(-14, 58, 28, 34, "#c98a5a");                      // head
-      f(-14, 84, 28, 10, "#241812");                      // cap
-      f(-14, 74, 28, 5, "#3a281a");                       // brow band
-      f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
-      f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
+      const img = JH.getAssManPortrait ? JH.getAssManPortrait(mouthOpen) : null;
+      if (img && img._ready) {
+        ctx.drawImage(img, PX, PY, PW, PH);
+      } else {
+        const cx = PX + PW / 2, cy = PY + PH - 4;
+        const f = (lx, ly, w, h, col) => {
+          ctx.fillStyle = col; ctx.fillRect(Math.round(cx + lx), Math.round(cy - ly - h), w, h);
+        };
+        f(-26, 0, 52, 58, "#c98a5a");                       // shoulders/chest (flesh)
+        f(-26, 0, 52, 8, "#8a5a34");                        // chest shadow
+        f(-18, 40, 36, 6, "#241812");                       // chest plate
+        f(-14, 58, 28, 34, "#c98a5a");                      // head
+        f(-14, 84, 28, 10, "#241812");                      // cap
+        f(-14, 74, 28, 5, "#3a281a");                       // brow band
+        f(-9, 71, 5, 4, "#ffd23f"); f(4, 71, 5, 4, "#ffd23f"); // gold eyes
+        f(-10, 65, 8, mouthOpen ? 6 : 3, mouthOpen ? "#000" : "#7a4a2a"); // mouth
       }
 
       ctx.fillStyle = "#e8b23a";
@@ -1816,8 +1814,9 @@
     },
 
     // Deepdive TV interaction: sit (E) to fast-forward the world while banked
-    // kibble drains; any move key or a second E stands Jon back up. Auto-ends
-    // when the kibble bank empties.
+    // kibble drains; any move key or a second E stands Jon back up. A short
+    // bank pre-rolls an unskippable ad (bank paused); an emptied bank plays a
+    // static outro beat, then auto-stands.
     // Random quip, never the same one twice in a row (bump to the next
     // pool slot on a repeat roll).
     pickQuip() {
@@ -1843,10 +1842,48 @@
             && pl.kibbleTimer > JH.DEEPDIVE.threshold) {
           this.input.consume("confirm");
           this.deepdiving = true;
+          // Short bank: an unskippable ad pre-rolls (Player.update pauses the
+          // bank while ddAdT > 0, so the session isn't over before the joke).
+          const D = JH.DEEPDIVE;
+          this.ddAdT = pl.kibbleTimer < D.ad.below ? D.ad.dur : 0;
+          this.ddOutroT = 0;
           this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
-          // First quip fires on sit-down — every session gets at least one.
-          this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
-          this._quipCdT = JH.DEEPDIVE.quipGap;
+          // First quip fires on sit-down — every session gets at least one;
+          // the ad path gripes about the ad instead of reacting to content.
+          const q = this.ddAdT > 0 ? D.ad.quip : this.pickQuip();
+          this.float(pl.x, pl.y - 30, q, "#9be8ff", { life: 1.8 });
+          this._quipCdT = D.quipGap;
+        }
+        return;
+      }
+      // Dash bails and is NOT consumed here: Player.update runs earlier in the
+      // step and consumes the buffered edge itself when the dash fires (dash is
+      // never movement-gated), so a started dash is detected via dashTimer;
+      // buffered("dash") covers a press held off by cooldown. Bail works from
+      // ANY seated sub-phase (ad/outro included) — never trap the seat.
+      const bail = this.input.pressed("up") || this.input.pressed("down")
+                || this.input.pressed("left") || this.input.pressed("right")
+                || this.input.buffered("confirm")
+                || this.input.buffered("dash") || pl.dashTimer > 0;
+      if (bail) {
+        if (this.input.buffered("confirm")) this.input.consume("confirm");
+        this.deepdiving = false; this.ddAdT = 0; this.ddOutroT = 0;
+        this.audio.play("upgrade", { pitch: 1.6 });      // spin-down
+        return;
+      }
+      const D = JH.DEEPDIVE;
+      if (this.ddAdT > 0) {
+        // Ad pre-roll: bank paused (Player.update), no ramp (game.js render
+        // gate), marquee parked — the TV draws the sponsor card off ddAdT.
+        this.ddAdT -= JH.FIXED_DT;
+        return;
+      }
+      if (this.ddOutroT > 0) {
+        // Bank-empty outro: static + up-next card holds, then auto-stand.
+        this.ddOutroT -= JH.FIXED_DT;
+        if (this.ddOutroT <= 0) {
+          this.deepdiving = false; this.ddOutroT = 0;
+          this.audio.play("upgrade", { pitch: 1.6 });    // spin-down
         }
         return;
       }
@@ -1860,18 +1897,10 @@
         this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
         this._quipCdT = JH.DEEPDIVE.quipGap;
       }
-      // Dash bails and is NOT consumed here: Player.update runs earlier in the
-      // step and consumes the buffered edge itself when the dash fires (dash is
-      // never movement-gated), so a started dash is detected via dashTimer;
-      // buffered("dash") covers a press held off by cooldown.
-      const bail = this.input.pressed("up") || this.input.pressed("down")
-                || this.input.pressed("left") || this.input.pressed("right")
-                || this.input.buffered("confirm")
-                || this.input.buffered("dash") || pl.dashTimer > 0;
-      if (bail || pl.kibbleTimer <= 0) {
-        if (this.input.buffered("confirm")) this.input.consume("confirm");
-        this.deepdiving = false;
-        this.audio.play("upgrade", { pitch: 1.6 });      // spin-down
+      if (pl.kibbleTimer <= 0) {
+        // Feed's dead: hold the seat for the punchline instead of insta-standing.
+        this.ddOutroT = D.outro.dur;
+        this.float(pl.x, pl.y - 30, D.outro.quip, "#9be8ff", { life: 1.8 });
       }
     },
 
@@ -2201,7 +2230,8 @@
       // Deepdive's timeScale is COSMETIC only (overlay intensity, marquee
       // race, kibble accel factor) — the world sim always runs at 1x, so
       // none of the 10x edge cases (death seq, church, stalls) can exist.
-      this.timeScale = JH.Balance.deepdiveRamp(this.timeScale, this.deepdiving, dt, JH.DEEPDIVE);
+      this.timeScale = JH.Balance.deepdiveRamp(this.timeScale,
+        this.deepdiving && !(this.ddAdT > 0 || this.ddOutroT > 0), dt, JH.DEEPDIVE);
       this.acc += dt;
       let steps = 0;
       while (this.acc >= JH.FIXED_DT && steps < JH.MAX_STEPS) {
@@ -2901,7 +2931,8 @@
           : "Replaces the previous live specimen and starts its complete encounter AI in the spawn bay.";
       }
       ctx.font = "6px monospace"; ctx.fillStyle = "#aebdd4";
-      wrap(desc, 31).slice(0, 7).forEach((line, i) => ctx.fillText(line, DX, Y + 91 + i * 10));
+      // styledText: boon effectText and relic descs carry {g:}/{i:} markup.
+      wrap(desc, 31).slice(0, 7).forEach((line, i) => JH.Assets.styledText(ctx, line, DX, Y + 91 + i * 10));
       ctx.fillStyle = "#182538"; ctx.fillRect(DX, Y + 171, 190, 29);
       ctx.font = "bold 6px monospace"; ctx.fillStyle = "#80ff80";
       let action;
@@ -3711,8 +3742,11 @@
             id, d, rank,
             name: d.name + tag,
             color: JH.SIGIL_COLORS[el] || "#ffd23f",
-            text: JH.Benedictions.effectText(id, rank),
-            lines: [],
+            base: d.desc || "",
+            // Rank II renders as its OWN gold line(s) so the upgrade text
+            // survives every wrap cap — appended-to-base it truncated first.
+            descII: rank >= 2 && d.descII ? "▲ II: " + d.descII : "",
+            lines: [], ii: [],
           });
         }
       }
@@ -3725,10 +3759,10 @@
       // pips sit at y 13.5..26.5 (drawSigilStrip at Y=16, rank ring ±2.5),
       // so the box top at 30 clears them — the two must never overlap.
       const X = 10, Y = 40, ROW = 9;
-      // Width follows expansion: benediction names + the relic grid need the
-      // full 152 even when the shop suppresses desc text. The shop overlay
-      // starts at PX=280, so the wide panel (x 6..158) never reaches it.
-      const W = expanded ? 152 : named ? 74 : 46;
+      // Width follows expansion: the expanded sheet takes the full column so
+      // benediction descs render WHOLE — no hover, no truncation. The shop
+      // overlay starts at PX=280, so the wide panel (x 6..246) never reaches it.
+      const W = expanded ? 240 : named ? 74 : 46;
       // Relic block: RELICS label (12) + icon rows at 16 pitch + 4 so the
       // last row's gear frame (icon center ±9) clears the panel border.
       const relicH = relicRows ? 12 + relicRows * 16 + 4 : 0;
@@ -3742,33 +3776,31 @@
       const sumIds = (!expanded && JH.Benedictions) ? Object.keys(JH.Benedictions.active) : [];
       const summaryH = sumIds.length ? 11 : 0;
 
-      // Rewraps every benediction desc at maxLines and returns the bene
-      // block height. A name-only row (0 lines) still costs the 24px icon
-      // floor, same as a 1-line row — so degrading below 1 line saves no
-      // space while silently dropping every desc. Never called with 0.
-      const measureBeneH = (maxLines) => {
+      // Wraps every benediction desc IN FULL at the wide panel's line length
+      // (58 visible chars at 5px monospace in the 240 panel; the 4-line cap
+      // is head-room, no live desc reaches it) and returns the block height.
+      // The II delta wraps separately so it always renders whole.
+      const measureBeneH = () => {
         if (!beneRows.length) return 18;   // "no benedictions yet" hint + slack
         let h = 0;
         for (const b of beneRows) {
-          b.lines = (inlineDesc && maxLines) ? this.wrapText(b.text, 34, maxLines) : [];
+          b.lines = inlineDesc ? this.wrapText(b.base, 58, 4) : [];
+          b.ii = (inlineDesc && b.descII) ? this.wrapText(b.descII, 58, 2) : [];
           // Row height clears the framed icon (±9 with seat rim) or the
           // text column, whichever is taller.
-          h += Math.max(24, 16 + b.lines.length * 6);
+          h += Math.max(24, 16 + (b.lines.length + b.ii.length) * 6);
         }
         return h;
       };
 
       // Expanded content starts 6px below the stat block (`by` below), so H
       // must carry statH + 6 + content — dropping the 6 was the clipped-grid
-      // bug. Ladder: 3 desc lines -> 2 -> 1 (never fewer). If 1-line descs +
-      // the full relic grid still overflow, the content block scrolls
-      // instead of dropping info.
+      // bug. Descs always render whole; when the full block outgrows the
+      // screen it scrolls (dwell ping-pong below) instead of dropping text.
       const contentBudget = budget - statH - 6;
       let contentH = 0, scroll = false;
       if (expanded) {
-        contentH = measureBeneH(3) + relicH;
-        if (contentH > contentBudget) contentH = measureBeneH(2) + relicH;
-        if (contentH > contentBudget) contentH = measureBeneH(1) + relicH;
+        contentH = measureBeneH() + relicH;
         if (contentH > contentBudget) scroll = true;
       }
       const H = expanded ? (scroll ? budget : statH + 6 + contentH)
@@ -3834,12 +3866,17 @@
         // Ping-pong auto-scroll the bene+relic block when it's taller than
         // the box (clip is the hard screen-fit guarantee; the scroll just
         // brings the rest into view over time instead of cutting it off).
+        // Dwells at both ends so each screenful holds still long enough to
+        // read before the pan resumes.
         const overflow = Math.max(0, contentH - (contentBottom - contentTop));
         let scrollY = 0;
         if (scroll && overflow > 0) {
-          const period = 3.5;   // seconds one-way, ~7s full up-down cycle
-          const t = (this.elapsed % (period * 2)) / period;
-          scrollY = -overflow * (t < 1 ? t : 2 - t);
+          this._beneScrollT = (this._beneScrollT || 0) + JH.FIXED_DT;
+          const travel = 3.5, dwell = 1.2, seg = travel + dwell;
+          const u = this._beneScrollT % (seg * 2);
+          const leg = u < seg ? Math.min(1, Math.max(0, (u - dwell) / travel))
+                              : 1 - Math.min(1, Math.max(0, (u - seg - dwell) / travel));
+          scrollY = -overflow * leg;
         }
         ctx.save();
         ctx.beginPath();
@@ -3859,12 +3896,15 @@
           ctx.font = "6px monospace"; ctx.textAlign = "left";
           ctx.fillStyle = b.color;
           ctx.fillText(b.name, X + 24, rowStart + 4);
-          if (b.lines.length) {
-            ctx.font = "5px monospace"; ctx.fillStyle = "#8090a4";
+          if (b.lines.length || b.ii.length) {
+            ctx.font = "5px monospace";
             let ly = rowStart + 12;
+            ctx.fillStyle = "#8090a4";
             for (const ln of b.lines) { JH.Assets.styledText(ctx, ln, X + 24, ly); ly += 6; }
+            ctx.fillStyle = "#ffd23f";   // the II delta always reads as the upgrade
+            for (const ln of b.ii) { JH.Assets.styledText(ctx, ln, X + 24, ly); ly += 6; }
           }
-          by = rowStart + Math.max(24, 16 + b.lines.length * 6);
+          by = rowStart + Math.max(24, 16 + (b.lines.length + b.ii.length) * 6);
         }
         if (beneRows.length === 0) {
           ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
@@ -3922,7 +3962,7 @@
       ctx.fillText(rd.name, tx + 5, ty + 9);
       ctx.font = "5px monospace"; ctx.fillStyle = "#aebdd4";
       let ly = ty + 17;
-      for (const ln of lines) { ctx.fillText(ln, tx + 5, ly); ly += lineH; }
+      for (const ln of lines) { JH.Assets.styledText(ctx, ln, tx + 5, ly); ly += lineH; }
       ctx.restore();
     },
 
@@ -3943,11 +3983,14 @@
       const el = def.element || (def.needs && def.needs.join("+")) || "";
       const kind = def.kind === "duo" ? "DUO" : def.kind === "legendary" ? "LEGENDARY" : el.toUpperCase();
       const deep = near.offer.deepen;
-      // Rank II keeps the base effect text so the upgrade is never a blind
-      // pick — "base effect  II: what changes".
-      const desc = ((def.desc || "") +
-        (deep && def.descII ? "  II: " + def.descII : "")) || "";
-      const W = 300, H = 34, X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
+      // Rank II is never a blind pick: the card shows the full effect you
+      // already have (NOW:) plus a gold II: line with exactly what deepening
+      // changes — each wrapped on its own lines, never truncating the other.
+      const baseLines = this.wrapText((deep ? "NOW: " : "") + (def.desc || ""), 52, 3);
+      const iiLines = deep && def.descII ? this.wrapText("II: " + def.descII, 52, 2) : [];
+      const lineH = 8, nLines = baseLines.length + iiLines.length;
+      const W = 300, H = 26 + nLines * lineH,
+            X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.92)";
       ctx.fillRect(X, Y, W, H);
@@ -3961,15 +4004,13 @@
       ctx.fillText(kind, X + W - 6, Y + 10);
       ctx.textAlign = "left";
       ctx.font = "6px monospace";
+      // Markup-aware wrap ({g:}/{i:} tokens render styled); the II delta
+      // draws gold so current-vs-upgrade reads at a glance.
+      let ly = Y + 20;
       ctx.fillStyle = "#aebdd4";
-      // Markup-aware two-line wrap ({g:}/{i:} tokens render styled).
-      const dlines = this.wrapText(desc, 52, 2);
-      if (dlines.length > 1) {
-        JH.Assets.styledText(ctx, dlines[0], X + 6, Y + 20);
-        JH.Assets.styledText(ctx, dlines[1], X + 6, Y + 28);
-      } else {
-        JH.Assets.styledText(ctx, desc, X + 6, Y + 22);
-      }
+      for (const ln of baseLines) { JH.Assets.styledText(ctx, ln, X + 6, ly); ly += lineH; }
+      ctx.fillStyle = "#ffd23f";
+      for (const ln of iiLines) { JH.Assets.styledText(ctx, ln, X + 6, ly); ly += lineH; }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
       ctx.fillText("E: CHOOSE BENEDICTION", X + W - 6, Y + H - 6);
       ctx.restore();
@@ -4276,7 +4317,8 @@
         ctx.font = "5px monospace";
         // 3 lines is the vertical budget between separator and footer; 48
         // chars/line greedy-wraps every rank-II benediction text untruncated.
-        this.wrapText(desc, 48, 3).forEach((ln, i) => ctx.fillText(ln, PX + 5, dy + 6 + i * 6));
+        // styledText: relic descs carry {g:}/{i:} markup.
+        this.wrapText(desc, 48, 3).forEach((ln, i) => JH.Assets.styledText(ctx, ln, PX + 5, dy + 6 + i * 6));
       }
 
       // Footer hint

@@ -151,6 +151,17 @@
     tvCollideR: 14,   // solid feet radius (Balance.propPushout, player-only) — matches the bigger cabinet
     matIn:  0.35,     // s to materialize (CRT tune-in) once any kibble is banked; prompt + collision gate on full mat
     matOut: 0.5,      // s to dematerialize when the bank empties (an active dive pins it solid)
+    ad: {             // unskippable pre-roll when the bank is short; the bank PAUSES (drain + heal) while it runs
+      below: 8,       // s of banked kibble at sit-down under which the ad plays first
+      dur: 2.0,       // s of REAL time; plays at 1x (no cosmetic ramp, marquee parked)
+      brand: ["KIBBLE", "KING(tm)"],   // sponsor-card lines, drawn big + centered on the screen
+      quip: "3 unskippable ads?? fine",   // guaranteed sit-down quip on the ad path
+    },
+    outro: {          // bank-empty beat: seat holds, screen cuts to static + up-next card, then auto-stand
+      dur: 1.2,       // s of REAL time before the auto-stand (manual bail still exits instantly)
+      upNext: "touch grass",
+      quip: "aw. out of kibble.",
+    },
     titles: [
       "Are FIRE HYDRANTS conscious? (they answered)",
       "I ate only KIBBLE for 30 days",
@@ -169,7 +180,6 @@
       "the algorithm knows me",
       "he's literally me",
       "skipping the intro (again)",
-      "3 unskippable ads?? fine",
       "the comments are FERAL",
       "watching at 2x like a pro",
       "this is research, actually",
@@ -642,42 +652,45 @@
   // null/absent = available from Act 1; a number = actLevel must be >= it
   // (actLevelForWave returns -1..4, so minAct: 0 means "Act 2 on").
   JH.RELICS = [
+    // Copy style matches benedictions.js: trigger first, effect second,
+    // magnitudes in {g:}, stats as {i:} icons. Every surface that renders
+    // these descs must be markup-aware (styledText).
     // -- common (steel frame, 60-100): one honest felt effect --------------
-    { id: "dowsing_rod",   tier: "common", name: "Dowsing Rod",    cost: 80,  desc: "Pickups magnet from farther away; water cans +50% value" },
-    { id: "alarm_bell",    tier: "common", name: "Alarm Bell",     cost: 80,  desc: "Non-elite wave clears also roll the bonus item drop" },
-    { id: "spigot_key",    tier: "common", name: "Spigot Key",     cost: 90,  desc: "A hydrant refill also restores 15 HP/s while filling" },
-    { id: "brass_nozzle",  tier: "common", name: "Brass Nozzle",   cost: 90,  desc: "+10 spray dmg to the first enemy the stream hits" },
-    { id: "loaded_sponge", tier: "common", name: "Loaded Sponge",  cost: 100, desc: "GUSH refund doubled and regen windows +2s" },
+    { id: "dowsing_rod",   tier: "common", name: "Dowsing Rod",    cost: 80,  desc: "Pickups magnet to you from farther away; water cans are worth {g:+50%}" },
+    { id: "alarm_bell",    tier: "common", name: "Alarm Bell",     cost: 80,  desc: "Clearing a non-elite wave also rolls the bonus item drop" },
+    { id: "spigot_key",    tier: "common", name: "Spigot Key",     cost: 90,  desc: "Refilling at a hydrant also restores {g:15} {i:hp} per second" },
+    { id: "brass_nozzle",  tier: "common", name: "Brass Nozzle",   cost: 90,  desc: "{g:+10} {i:dmg} to the first enemy your stream hits" },
+    { id: "loaded_sponge", tier: "common", name: "Loaded Sponge",  cost: 100, desc: "GUSH refunds are {g:doubled} and regen windows last {g:+2s}" },
     { id: "rubber_boots",  tier: "common", name: "Rubber Boots",   cost: 90,
-      desc: "+20 max HP; slow zones and puddles don't slow you",
+      desc: "{g:+20} max {i:hp}; slow zones and puddles don't slow you",
       apply: (s) => { s.maxHp += JH.RELIC_TUNE.bootsHp; } },
-    { id: "asbestos_socks", tier: "common", name: "Asbestos Socks", cost: 80,  desc: "Burn ticks hurt less; burn i-frames last +1s" },
-    { id: "squeegee",      tier: "common", name: "Squeegee",       cost: 80,  desc: "An enemy killed on a fire patch douses the patch" },
+    { id: "asbestos_socks", tier: "common", name: "Asbestos Socks", cost: 80,  desc: "Burn ticks hurt {g:less}; burn i-frames last {g:+1s}" },
+    { id: "squeegee",      tier: "common", name: "Squeegee",       cost: 80,  desc: "Killing an enemy on a fire patch douses the patch" },
     // -- rare (brass frame, 250-350): a combat-moment mechanic -------------
-    { id: "punch_card",    tier: "rare", name: "Punch Card",       cost: 250, desc: "All shop prices are 20% cheaper" },
-    { id: "censer",        tier: "rare", name: "Censer",           cost: 270, desc: "Sigil offers include an extra choice" },
-    { id: "dog_leash",     tier: "rare", name: "Dog Leash",        cost: 270, desc: "+15 spray dmg to charging or lunging enemies" },
+    { id: "punch_card",    tier: "rare", name: "Punch Card",       cost: 250, desc: "All shop prices are {g:20%} cheaper" },
+    { id: "censer",        tier: "rare", name: "Censer",           cost: 270, desc: "Sigil offers include {g:1} extra choice" },
+    { id: "dog_leash",     tier: "rare", name: "Dog Leash",        cost: 270, desc: "{g:+15} {i:dmg} to charging or lunging enemies" },
     { id: "hydro_dash",    tier: "rare", name: "Hydro-Dash",       cost: 270,
-      desc: "-0.2s dash cooldown; dash boosts speed +28 for 3s",
+      desc: "Dash cooldown {g:-0.2s}; dashing boosts your speed {g:+28} for {g:3s}",
       apply: (s) => { s.dashCd = Math.max(0.2, s.dashCd - 0.2); s.dashBoost = 28; s.dashBoostDur = 3; } },
-    { id: "sunday_suit",   tier: "rare", name: "Sunday Suit",      cost: 300, desc: "Bosses drop a second Holy Essence cross" },
+    { id: "sunday_suit",   tier: "rare", name: "Sunday Suit",      cost: 300, desc: "Bosses drop a {g:second} Holy Essence cross" },
     { id: "fire_marshal",  tier: "rare", name: "Fire-Marshal Spec", cost: 300,
-      desc: "+30 range, +30 knockback",
+      desc: "{g:+30} {i:range} and {g:+30} {i:knockback}",
       apply: (s) => { s.sprayRange += 30; s.knockback += 30; } },
-    { id: "prayer_bead",   tier: "rare", name: "Prayer Bead",      cost: 300, desc: "Boss enrages AND super-elite arrivals grant an 8s pressure buff" },
-    { id: "collection_plate", tier: "rare", name: "Collection Plate", cost: 320, desc: "+2 bonus suds per kill" },
-    { id: "rosary_chain",  tier: "rare", name: "Rosary Chain",     cost: 320, desc: "Each GUSH combo kill: +1 spray dmg (max +10) until the chain breaks" },
-    { id: "backdraft_valve", tier: "rare", name: "Backdraft Valve", cost: 320, desc: "GUSH milestones blast a knockback ring that douses fires" },
+    { id: "prayer_bead",   tier: "rare", name: "Prayer Bead",      cost: 300, desc: "A boss enraging or a super-elite arriving grants an {g:8s} pressure buff" },
+    { id: "collection_plate", tier: "rare", name: "Collection Plate", cost: 320, desc: "{g:+2} bonus suds per kill" },
+    { id: "rosary_chain",  tier: "rare", name: "Rosary Chain",     cost: 320, desc: "Each GUSH combo kill grants {g:+1} {i:dmg} (max {g:+10}) until the chain breaks" },
+    { id: "backdraft_valve", tier: "rare", name: "Backdraft Valve", cost: 320, desc: "GUSH milestones blast a {i:knockback} ring that douses fires" },
     // -- relic-grade (gold frame, 500+, minAct-gated build-arounds) --------
     { id: "deputy_sprinkler", tier: "relic", name: "Deputy Sprinkler", cost: 500, minAct: 0,
       desc: "A tank-mounted sprinkler auto-sprays the nearest enemy" },
     { id: "hydro_lance",   tier: "relic", name: "Hydro Lance",     cost: 580, minAct: 0,
-      desc: "+18 dmg; a cutting beam that pierces ONE enemy behind its target",
+      desc: "{g:+18} {i:dmg}; your stream cuts through its target into {g:1} enemy behind it",
       apply: (s) => { s.sprayDamage += 18; s.beam = 3; s.pierceMax = 2; s.knockback += 20; } },
     { id: "big_spigot",    tier: "relic", name: "The Big Spigot",  cost: 540, minAct: 0,
-      desc: "GUSH milestones detonate a 360° water blast around Jon" },
+      desc: "GUSH milestones detonate a {g:360°} water blast around you" },
     { id: "boiler_coil",   tier: "relic", name: "Boiler Coil",     cost: 560, minAct: 1,
-      desc: "2s of focused spray superheats: +30 dmg and splash to neighbors" },
+      desc: "Spraying the same target for {g:2s} superheats it: {g:+30} {i:dmg} and splash to its neighbors" },
   ];
 
   // Relic behavior tunables (flat-gear rule: adders only, no multipliers).
@@ -976,17 +989,20 @@
   // Locked pillars render dark with the nemesis silhouette.
   JH.PILLARS = {
     defs: [
+      // Copy style: "Each rank: <per-rank effects>. Rank III: <capstone>."
+      // PLAIN TEXT ONLY — church.js renders these through otext/wrapText,
+      // which has no {g:}/{i:} markup support. Two 190px lines max.
       { element: "water", name: "Pillar of Water", gateBoss: null, maxRank: 3,
-        desc: "+15 max water, +3 regen / rank · III: pressure never drops below mid tier",
+        desc: "Each rank: +15 max water, +3 water regen. Rank III: pressure never drops below mid tier",
         apply: (s, r) => { s.maxWater += 15 * r; s.waterRegen += 3 * r; if (r >= 3) s.pressureFloor = true; } },
       { element: "earth", name: "Pillar of Earth", gateBoss: "quake", maxRank: 3,
-        desc: "+12 max HP, +15 knockback / rank · III: wall-slammed enemies stagger",
+        desc: "Each rank: +12 max HP, +15 knockback. Rank III: wall-slammed enemies stagger",
         apply: (s, r) => { s.maxHp += 12 * r; s.knockback += 15 * r; if (r >= 3) s.wallSlamStagger = true; } },
       { element: "fire", name: "Pillar of Fire", gateBoss: "slayer", maxRank: 3,
-        desc: "+3 spray dmg, burn on you -25%·rank/3 · III: full pressure Scalds",
+        desc: "Each rank: +3 spray dmg; burn taken up to -25%. Rank III: full-pressure spray Scalds",
         apply: (s, r) => { s.sprayDamage += 3 * r; s.burnTakenMult = 1 - 0.25 * (r / 3); if (r >= 3) s.baselineScald = true; } },
       { element: "air", name: "Pillar of Air", gateBoss: "assman", maxRank: 3,
-        desc: "+5 move speed, -0.05s dash cd / rank · III: +0.1s dash i-frames",
+        desc: "Each rank: +5 move speed, -0.05s dash cooldown. Rank III: +0.1s of dash i-frames",
         apply: (s, r) => { s.moveSpeed += 5 * r; s.dashCd = Math.max(0.2, s.dashCd - 0.05 * r); if (r >= 3) s.dashIframeBonus = 0.1; } },
     ],
   };

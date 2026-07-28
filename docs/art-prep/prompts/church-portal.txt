@@ -1,0 +1,15 @@
+The return rift/portal in the Church of the Holy Hose: a vertical oval rift of
+swirling blue-cyan light standing in a stone archway — the doorway back to the
+world after a visit to Father Jon. Glowing, ethereal, gently rippling.
+
+Portal light cyan #6cd3ff / pale #d6f6ff, dark stone arch #11141f. Reads as a
+"walk into it to return" exit. (Animated shimmer is procedural — one clean
+frame is enough.)
+
+— 2D pixel-art game sprite prop, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), single subject centered with clear
+margin, no text, no drop shadow, flat even lighting, must read at very low
+resolution. Background: flat solid magenta (#FF00FF) for clean cutout.
+Generate ~200px tall (portal/archway, ~40–48px logical).
+
+TARGET FILE: sprites/church/portal.png (transparent, hard-alpha cutout)

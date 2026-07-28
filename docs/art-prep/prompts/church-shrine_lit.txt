@@ -1,0 +1,17 @@
+The SAME side-shrine niche as church-shrine_dim, now AWAKENED/lit: the carved
+hose-and-droplet emblem pours a warm holy glow, the stone is illuminated from
+within, faint motes/light rising. Sacred, activated.
+
+Same stone form as the dim version, now lit — amber-to-cyan holy glow
+(#e0902f warm core or #6cd3ff cyan — match the church's blessing light),
+illuminated stone, rising motes.
+
+— 2D pixel-art game sprite prop, crisp hard-edged pixels, no anti-aliasing, no
+gradients, limited palette (16–32 colors), single subject centered with clear
+margin, no text, no drop shadow, flat even lighting, must read at very low
+resolution. Background: flat solid magenta (#FF00FF) for clean cutout.
+Generate ~180px tall (shrine niche, ~32–40px logical).
+
+TARGET FILE: sprites/church/shrine_lit.png (transparent, hard-alpha cutout)
+PAIR: keep the silhouette/size IDENTICAL to church-shrine_dim so the two swap
+cleanly.

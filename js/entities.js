@@ -469,8 +469,10 @@
         // Deepdive: the world sim stays 1x — the "fast-forward" is the
         // KIBBLE running at kibbleMult while seated (drain + heal together),
         // with healing past full HP converting to overshield (soaks damage
-        // first, never recharges) — capped at max HP.
-        const kMult = game.deepdiving ? JH.DEEPDIVE.kibbleMult : 1;
+        // first, never recharges) — capped at max HP. The unskippable ad
+        // pauses the bank entirely (kMult 0: no drain, no heal).
+        const kMult = game.deepdiving
+          ? (game.ddAdT > 0 ? 0 : JH.DEEPDIVE.kibbleMult) : 1;
         const kdt = Math.min(this.kibbleTimer, dt * kMult);   // never burn past the bank
         this.kibbleTimer -= kdt;
         const before = this.hp;
@@ -3856,38 +3858,71 @@
       ctx.fillStyle = "#0b2530";
       ctx.fillRect(screenX, screenY, screenW, screenH - 6);   // video pane above the scrub row
 
-      // Title marquee: full string scrolls right-to-left on marqueeT (scaled
-      // time — races at ramp, which is the joke), looping with a gap; two
-      // copies one period apart keep the loop seamless under the clip.
-      ctx.textAlign = "left";
-      ctx.font = "bold 5px monospace"; ctx.fillStyle = "#eafcff";
-      const title = D.titles[this.titleIdx] || "";
-      const tw = ctx.measureText(title).width;
-      const period = tw + 24;                               // 24px inter-loop gap
-      const mx = screenX + screenW - ((this.marqueeT * 40) % period);
-      ctx.fillText(title, mx, screenY + 7);
-      ctx.fillText(title, mx + period, screenY + 7);
+      const g = JH.Game;
+      const ad = on && g.ddAdT > 0, outro = on && g.ddOutroT > 0;
+      if (ad) {
+        // Unskippable ad: sponsor card drawn BIG and static — the one screen
+        // state that must read at a glance (the marquee's 5px scroll can't).
+        ctx.fillStyle = "#2e2008";
+        ctx.fillRect(screenX, screenY, screenW, screenH - 6);
+        ctx.textAlign = "center";
+        ctx.font = "bold 8px monospace"; ctx.fillStyle = "#ffd23b";
+        ctx.fillText(D.ad.brand[0], sx, screenY + 12);
+        ctx.fillText(D.ad.brand[1], sx, screenY + 21);
+        ctx.textAlign = "left";
+        ctx.font = "bold 5px monospace";
+        ctx.fillText("AD", screenX + 2, screenY + 7);
+        // Yellow ad progress replaces the red scrub while it runs.
+        const af = 1 - Math.max(0, Math.min(1, g.ddAdT / D.ad.dur));
+        ctx.fillStyle = "#1a3a44"; ctx.fillRect(screenX + 1, screenY + screenH - 4, screenW - 2, 2);
+        ctx.fillStyle = "#ffd23b"; ctx.fillRect(screenX + 1, screenY + screenH - 4, (screenW - 2) * af, 2);
+      } else if (outro) {
+        // Feed's dead: static bands + the up-next card (guaranteed punchline).
+        for (let yy = 0; yy < screenH - 6; yy += 2) {
+          ctx.fillStyle = "rgba(210,235,245," + (0.08 + Math.random() * 0.22).toFixed(3) + ")";
+          const w = 5 + Math.random() * (screenW - 10);
+          ctx.fillRect(screenX + Math.random() * (screenW - w), screenY + yy, w, 2);
+        }
+        ctx.textAlign = "center";
+        ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
+        ctx.fillText("UP NEXT:", sx, screenY + 10);
+        ctx.font = "bold 6px monospace"; ctx.fillStyle = "#eafcff";
+        ctx.fillText(D.outro.upNext, sx, screenY + 19);
+        ctx.textAlign = "left";
+      } else {
+        // Title marquee: full string scrolls right-to-left on marqueeT (scaled
+        // time — races at ramp, which is the joke), looping with a gap; two
+        // copies one period apart keep the loop seamless under the clip.
+        ctx.textAlign = "left";
+        ctx.font = "bold 5px monospace"; ctx.fillStyle = "#eafcff";
+        const title = D.titles[this.titleIdx] || "";
+        const tw = ctx.measureText(title).width;
+        const period = tw + 24;                               // 24px inter-loop gap
+        const mx = screenX + screenW - ((this.marqueeT * 40) % period);
+        ctx.fillText(title, mx, screenY + 7);
+        ctx.fillText(title, mx + period, screenY + 7);
 
-      const views = (3 + this.titleIdx * 7) % 9 + 1;   // stable-per-title, no RNG, never 0M
-      ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
-      ctx.fillText(views + "M views", screenX + 1, screenY + 14);
+        const views = (3 + this.titleIdx * 7) % 9 + 1;   // stable-per-title, no RNG, never 0M
+        ctx.font = "5px monospace"; ctx.fillStyle = "#9be8ff";
+        ctx.fillText(views + "M views", screenX + 1, screenY + 14);
 
-      // Scrub bar races over D.titleSwap scaled seconds — visible proof the
-      // video (and the world behind it) is running fast.
-      const frac = Math.max(0, Math.min(1, this.videoT / D.titleSwap));
-      ctx.fillStyle = "#1a3a44"; ctx.fillRect(screenX + 1, screenY + screenH - 4, screenW - 2, 2);
-      ctx.fillStyle = "#ff3b3b"; ctx.fillRect(screenX + 1, screenY + screenH - 4, (screenW - 2) * frac, 2);
+        // Scrub bar races over D.titleSwap scaled seconds — visible proof the
+        // video (and the world behind it) is running fast.
+        const frac = Math.max(0, Math.min(1, this.videoT / D.titleSwap));
+        ctx.fillStyle = "#1a3a44"; ctx.fillRect(screenX + 1, screenY + screenH - 4, screenW - 2, 2);
+        ctx.fillStyle = "#ff3b3b"; ctx.fillRect(screenX + 1, screenY + screenH - 4, (screenW - 2) * frac, 2);
 
-      // Up-next nub: bottom-right, below the title band so it never overdraws
-      // the marquee; sits just above the scrub row.
-      const nx = screenX + screenW - 9, ny = screenY + screenH - 11;
-      ctx.fillStyle = "#1a2230"; ctx.fillRect(nx, ny, 8, 6);
-      ctx.fillStyle = on ? "#7ff0ff" : "#4a8a9a";
-      ctx.beginPath();
-      ctx.moveTo(nx + 3, ny + 1.5);
-      ctx.lineTo(nx + 3, ny + 4.5);
-      ctx.lineTo(nx + 6, ny + 3);
-      ctx.closePath(); ctx.fill();
+        // Up-next nub: bottom-right, below the title band so it never overdraws
+        // the marquee; sits just above the scrub row.
+        const nx = screenX + screenW - 9, ny = screenY + screenH - 11;
+        ctx.fillStyle = "#1a2230"; ctx.fillRect(nx, ny, 8, 6);
+        ctx.fillStyle = on ? "#7ff0ff" : "#4a8a9a";
+        ctx.beginPath();
+        ctx.moveTo(nx + 3, ny + 1.5);
+        ctx.lineTo(nx + 3, ny + 4.5);
+        ctx.lineTo(nx + 6, ny + 3);
+        ctx.closePath(); ctx.fill();
+      }
       ctx.restore();
 
       ctx.fillStyle = "#0d1420";
@@ -6193,6 +6228,15 @@
   }
   JH.SlayerBoss = SlayerBoss;
 
+  // Ass Man ranged-muzzle offsets by pose (logical px): dx from body center in
+  // facing units, dz above the feet line. ONE anchor for the beam and the bolt
+  // volley so both emit from the outstretched hand (was: beam from the hand,
+  // bolts from body center 30px lower with no facing offset — visibly split).
+  const AM_MUZZLE = {
+    airclap: { dx: 8, dz: 30 },   // shooting pose (volley + held beam frame)
+    _default: { dx: 8, dz: 30 },
+  };
+
   // ---- Ass Man (wave 36): three-phase duel. Phases fill in over the ----
   // ---- fight-plan tasks; this skeleton walks + contact only.        ----
   class AssManBoss extends Boss {
@@ -6376,7 +6420,8 @@
               P.ranged.t = d.airfire.burstGap;
               P.ranged.n--;
               this.strikeFx = 0.2;
-              game.embers.push(new AirBolt(this.x, this.y, this.z, pl.x, pl.y, d.airfire));
+              const m = this.muzzle();
+              game.embers.push(new AirBolt(m.x, m.y, m.z, pl.x, pl.y, d.airfire));
               game.audio.play("jump");
               if (P.ranged.n <= 0) P.ranged = null;
             }
@@ -6687,8 +6732,9 @@
       // sustained beam: hand -> chasing ground spot (spot rim = hit rim)
       if (this._beam) {
         const B = this._beam;
-        const hx = this.x - cam + this.facing * 8;
-        const hy = Geo.feetScreenY(this.y, this.z) - 30;
+        const m = this.muzzle();
+        const hx = m.x - cam;
+        const hy = Geo.feetScreenY(m.y, m.z);
         const gx = B.tx - cam, gy = Geo.feetScreenY(B.ty, 0);
         ctx.save();
         if (B.mode === "charge") {
@@ -6917,6 +6963,13 @@
         ctx.stroke();
       }
       ctx.restore();
+    }
+
+    // Ranged origin: the outstretched hand for the current pose, feet-anchored
+    // and facing-mirrored. Shared by the beam draw and the AirBolt volley.
+    muzzle() {
+      const M = AM_MUZZLE[this.poseKey()] || AM_MUZZLE._default;
+      return { x: this.x + this.facing * M.dx, y: this.y, z: (this.z || 0) + M.dz };
     }
 
     // Maps internal fight state -> baked pose key (js/assets.js "assman" painter).
