@@ -3694,10 +3694,10 @@
       // pips sit at y 13.5..26.5 (drawSigilStrip at Y=16, rank ring ±2.5),
       // so the box top at 30 clears them — the two must never overlap.
       const X = 10, Y = 40, ROW = 9;
-      // Width follows expansion: benediction names + the relic grid need the
-      // full 152 even when the shop suppresses desc text. The shop overlay
-      // starts at PX=280, so the wide panel (x 6..158) never reaches it.
-      const W = expanded ? 152 : named ? 74 : 46;
+      // Width follows expansion: the expanded sheet takes the full column so
+      // benediction descs render WHOLE — no hover, no truncation. The shop
+      // overlay starts at PX=280, so the wide panel (x 6..246) never reaches it.
+      const W = expanded ? 240 : named ? 74 : 46;
       // Relic block: RELICS label (12) + icon rows at 16 pitch + 4 so the
       // last row's gear frame (icon center ±9) clears the panel border.
       const relicH = relicRows ? 12 + relicRows * 16 + 4 : 0;
@@ -3711,18 +3711,16 @@
       const sumIds = (!expanded && JH.Benedictions) ? Object.keys(JH.Benedictions.active) : [];
       const summaryH = sumIds.length ? 11 : 0;
 
-      // Rewraps every benediction desc at maxLines and returns the bene
-      // block height. A name-only row (0 lines) still costs the 24px icon
-      // floor, same as a 1-line row — so degrading below 1 line saves no
-      // space while silently dropping every desc. Never called with 0.
-      const measureBeneH = (maxLines) => {
+      // Wraps every benediction desc IN FULL at the wide panel's line length
+      // (58 visible chars at 5px monospace in the 240 panel; the 4-line cap
+      // is head-room, no live desc reaches it) and returns the block height.
+      // The II delta wraps separately so it always renders whole.
+      const measureBeneH = () => {
         if (!beneRows.length) return 18;   // "no benedictions yet" hint + slack
         let h = 0;
         for (const b of beneRows) {
-          b.lines = (inlineDesc && maxLines) ? this.wrapText(b.base, 34, maxLines) : [];
-          // The II line rides OUTSIDE the ladder cap — it must show at every
-          // degradation level (it's the terse one; the base pays the cost).
-          b.ii = (inlineDesc && maxLines && b.descII) ? this.wrapText(b.descII, 34, 2) : [];
+          b.lines = inlineDesc ? this.wrapText(b.base, 58, 4) : [];
+          b.ii = (inlineDesc && b.descII) ? this.wrapText(b.descII, 58, 2) : [];
           // Row height clears the framed icon (±9 with seat rim) or the
           // text column, whichever is taller.
           h += Math.max(24, 16 + (b.lines.length + b.ii.length) * 6);
@@ -3732,15 +3730,12 @@
 
       // Expanded content starts 6px below the stat block (`by` below), so H
       // must carry statH + 6 + content — dropping the 6 was the clipped-grid
-      // bug. Ladder: 3 desc lines -> 2 -> 1 (never fewer). If 1-line descs +
-      // the full relic grid still overflow, the content block scrolls
-      // instead of dropping info.
+      // bug. Descs always render whole; when the full block outgrows the
+      // screen it scrolls (dwell ping-pong below) instead of dropping text.
       const contentBudget = budget - statH - 6;
       let contentH = 0, scroll = false;
       if (expanded) {
-        contentH = measureBeneH(3) + relicH;
-        if (contentH > contentBudget) contentH = measureBeneH(2) + relicH;
-        if (contentH > contentBudget) contentH = measureBeneH(1) + relicH;
+        contentH = measureBeneH() + relicH;
         if (contentH > contentBudget) scroll = true;
       }
       const H = expanded ? (scroll ? budget : statH + 6 + contentH)
@@ -3803,21 +3798,17 @@
       let by = Y + 6 + rows.length * ROW + 6;
       if (expanded) {
         const contentTop = by, contentBottom = Y - 10 + H;
-        const mouse = JH.Input && JH.Input.mouse && JH.Input.mouse.inside ? JH.Input.mouse : null;
         // Ping-pong auto-scroll the bene+relic block when it's taller than
         // the box (clip is the hard screen-fit guarantee; the scroll just
         // brings the rest into view over time instead of cutting it off).
-        // Dwells at both ends, and FREEZES while the mouse is over the panel
-        // (reading/hovering) — the clock is panel-local so unfreezing never
-        // jumps the content.
+        // Dwells at both ends so each screenful holds still long enough to
+        // read before the pan resumes.
         const overflow = Math.max(0, contentH - (contentBottom - contentTop));
         let scrollY = 0;
         if (scroll && overflow > 0) {
-          const mouseIn = mouse && mouse.x >= X - 4 && mouse.x <= X - 4 + W
-                       && mouse.y >= Y - 10 && mouse.y <= Y - 10 + H;
-          if (!mouseIn) this._beneScrollT = (this._beneScrollT || 0) + JH.FIXED_DT;
+          this._beneScrollT = (this._beneScrollT || 0) + JH.FIXED_DT;
           const travel = 3.5, dwell = 1.2, seg = travel + dwell;
-          const u = (this._beneScrollT || 0) % (seg * 2);
+          const u = this._beneScrollT % (seg * 2);
           const leg = u < seg ? Math.min(1, Math.max(0, (u - dwell) / travel))
                               : 1 - Math.min(1, Math.max(0, (u - seg - dwell) / travel));
           scrollY = -overflow * leg;
@@ -3831,7 +3822,6 @@
         ctx.clip();
         ctx.translate(0, scrollY);
 
-        let hoverBene = null, hoverBeneY = 0;
         for (const b of beneRows) {
           const rowStart = by;
           // Icon rail on the left; name + desc share the right column so the
@@ -3850,15 +3840,6 @@
             for (const ln of b.ii) { JH.Assets.styledText(ctx, ln, X + 24, ly); ly += 6; }
           }
           by = rowStart + Math.max(24, 16 + (b.lines.length + b.ii.length) * 6);
-          // Hover-test the row band post-scroll (same idiom as the relic
-          // grid) — gates the full-text tooltip, never a click.
-          if (mouse) {
-            const vy0 = rowStart - 5 + scrollY, vy1 = by - 5 + scrollY;
-            if (mouse.x >= X - 4 && mouse.x <= X - 4 + W && mouse.y >= vy0 && mouse.y < vy1
-                && mouse.y >= contentTop - 6 && mouse.y <= contentBottom) {
-              hoverBene = b; hoverBeneY = rowStart + scrollY;
-            }
-          }
         }
         if (beneRows.length === 0) {
           ctx.font = "5px monospace"; ctx.fillStyle = "#556070"; ctx.textAlign = "left";
@@ -3868,6 +3849,7 @@
         // Mouse hover-tests the relic grid while the panel is open (read-only:
         // gates a tooltip, never a click). Position compared post-scroll so
         // the hit box tracks the icon actually on screen.
+        const mouse = JH.Input && JH.Input.mouse && JH.Input.mouse.inside ? JH.Input.mouse : null;
         let hoverRelic = null, hoverX = 0, hoverY = 0;
         if (relicIds.length) {
           ctx.font = "5px monospace"; ctx.fillStyle = "#667788"; ctx.textAlign = "left";
@@ -3890,37 +3872,7 @@
         ctx.restore();   // drop the clip before the tooltip so it can spill past the panel box
 
         if (hoverRelic) this.drawRelicTooltip(ctx, hoverRelic, hoverX, hoverY);
-        else if (hoverBene) this.drawBeneTooltip(ctx, hoverBene, X + 24, hoverBeneY);
       }
-      ctx.restore();
-    },
-
-    // Benediction-row mouseover: the FULL effect text — base desc untruncated
-    // plus the gold II delta — for when the panel's wrap ladder squeezed the
-    // inline lines. Same clamp/box idiom as drawRelicTooltip, markup-aware.
-    drawBeneTooltip(ctx, b, x, y) {
-      const lines = this.wrapText(b.base, 44, 4);
-      const ii = b.descII ? this.wrapText(b.descII, 44, 2) : [];
-      const W = 150, lineH = 7, H = 13 + (lines.length + ii.length) * lineH + 3;
-      let tx = x + 10, ty = y - H - 4;
-      if (tx + W > JH.VIEW_W - 2) tx = JH.VIEW_W - 2 - W;
-      if (tx < 2) tx = 2;
-      if (ty < 2) ty = y + 12;
-      if (ty + H > JH.VIEW_H - 2) ty = JH.VIEW_H - 2 - H;
-      ctx.save();
-      ctx.fillStyle = "rgba(10,14,24,0.95)";
-      ctx.fillRect(tx, ty, W, H);
-      ctx.strokeStyle = b.color;
-      ctx.strokeRect(tx, ty, W, H);
-      ctx.font = "bold 6px monospace"; ctx.textAlign = "left";
-      ctx.fillStyle = "#dfe8f5";
-      ctx.fillText(b.name, tx + 5, ty + 9);
-      ctx.font = "5px monospace";
-      let ly = ty + 17;
-      ctx.fillStyle = "#aebdd4";
-      for (const ln of lines) { JH.Assets.styledText(ctx, ln, tx + 5, ly); ly += lineH; }
-      ctx.fillStyle = "#ffd23f";
-      for (const ln of ii) { JH.Assets.styledText(ctx, ln, tx + 5, ly); ly += lineH; }
       ctx.restore();
     },
 
