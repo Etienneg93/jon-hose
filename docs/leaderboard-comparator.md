@@ -20,6 +20,13 @@ Mirrors `JH.Balance.lbCompare` (js/balance.js), which is the unit-tested
 source of truth. Old rows without `wavesCleared` sort as 0 waves — they age
 out under version priority anyway.
 
-Release checklist: redeploy the Apps Script with this comparator BEFORE
-shipping the 36-wave build — the client sort is defense-in-depth, not a
-substitute (the server may truncate rows before the client sees them).
+Release checklist: redeploy the Apps Script BEFORE shipping the 36-wave
+build — the client sort is defense-in-depth, not a substitute (the server
+may truncate rows before the client sees them).
+
+`tools/telemetry.gs` carries the full current script (comparator included,
+plus the wavesCleared column appended tail-safe for existing sheets) — paste
+the WHOLE file over the deployed one, then Deploy → Manage deployments →
+edit ✎ → Version: New version → Deploy (same deployment = /exec URL stays).
+tests/assman.test.js runs the .gs comparator against JH.Balance.lbCompare,
+so a drifted mirror fails the suite.

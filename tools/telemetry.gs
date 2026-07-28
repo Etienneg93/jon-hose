@@ -4,14 +4,20 @@
 // See docs/telemetry-setup.md. Column order MUST match the client payload.
 
 var SHEET = "runs";
+// wavesCleared is APPEND-ONLY at the tail: existing sheets keep their column
+// order, old rows read it as undefined -> 0.
 var HEADERS = ["ts", "handle", "runId", "gameVersion", "outcome",
   "finalWaveIndex", "finalWaveName", "deaths", "kills", "timeSec",
-  "sudsEarned", "wavesReached", "deathsByWave", "benedictions", "items"];
+  "sudsEarned", "wavesReached", "deathsByWave", "benedictions", "items",
+  "wavesCleared"];
 
 function sheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET);
   if (!sh) { sh = ss.insertSheet(SHEET); sh.appendRow(HEADERS); }
+  // Heal the header row when HEADERS grew since the sheet was created.
+  else if (sh.getLastColumn() < HEADERS.length)
+    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   return sh;
 }
 
@@ -23,10 +29,19 @@ function doPost(e) {
       d.finalWaveIndex, d.finalWaveName || "", d.deaths || 0, d.kills || 0,
       d.timeSec || 0, d.sudsEarned || 0,
       JSON.stringify(d.wavesReached || []), JSON.stringify(d.deathsByWave || {}),
-      JSON.stringify(d.benedictions || []), JSON.stringify(d.items || [])
+      JSON.stringify(d.benedictions || []), JSON.stringify(d.items || []),
+      d.wavesCleared || 0
     ]);
   } catch (err) { /* drop malformed */ }
   return ContentService.createTextOutput("ok").setMimeType(ContentService.MimeType.TEXT);
+}
+
+// Newer version first, then waves cleared desc, then time asc — MUST mirror
+// JH.Balance.lbCompare (js/balance.js), the unit-tested source of truth.
+function semverCmp(a, b) {
+  var pa = String(a || "0").split(".").map(Number), pb = String(b || "0").split(".").map(Number);
+  for (var i = 0; i < 3; i++) { var d = (pa[i] || 0) - (pb[i] || 0); if (d) return d < 0 ? -1 : 1; }
+  return 0;
 }
 
 function doGet(e) {
@@ -39,10 +54,19 @@ function doGet(e) {
     for (var i = 1; i < rows.length; i++) {
       var r = rows[i];
       if (r[idx.outcome] === "win") {
-        wins.push({ handle: r[idx.handle], timeSec: Number(r[idx.timeSec]), deaths: Number(r[idx.deaths]) });
+        wins.push({
+          handle: r[idx.handle], timeSec: Number(r[idx.timeSec]), deaths: Number(r[idx.deaths]),
+          wavesCleared: Number(r[idx.wavesCleared]) || 0, gameVersion: String(r[idx.gameVersion] || "0"),
+        });
       }
     }
-    wins.sort(function (a, b) { return a.timeSec - b.timeSec; });
+    wins.sort(function (a, b) {
+      var v = semverCmp(b.gameVersion, a.gameVersion);
+      if (v) return v;
+      var w = (b.wavesCleared || 0) - (a.wavesCleared || 0);
+      if (w) return w;
+      return (a.timeSec != null ? a.timeSec : 1e9) - (b.timeSec != null ? b.timeSec : 1e9);
+    });
     top = wins.slice(0, 10);
   } catch (err) { /* empty board on error */ }
   var json = JSON.stringify(top);

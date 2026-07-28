@@ -67,6 +67,28 @@ test("assman helpers: leaderboard comparator — version, waves, time", () => {
   assert.ok(B.lbCompare(mk("0.32.0", 36, 100), {}) < 0);
 });
 
+test("telemetry.gs comparator mirrors JH.Balance.lbCompare on the same fixtures", () => {
+  // The Apps Script sort ships by copy-paste (docs/telemetry-setup.md); this
+  // extracts and RUNS its actual code so a drifted mirror fails the suite.
+  const fs = require("fs"), path = require("path");
+  const gs = fs.readFileSync(path.join(__dirname, "..", "tools", "telemetry.gs"), "utf8");
+  const semverSrc = gs.match(/function semverCmp[\s\S]*?\n}/);
+  const sortSrc = gs.match(/wins\.sort\((function \(a, b\) \{[\s\S]*?\n    \})\);/);
+  assert.ok(semverSrc && sortSrc, "telemetry.gs carries semverCmp and the wins.sort comparator");
+  const gsCompare = new Function(
+    "a", "b", semverSrc[0] + "\nreturn (" + sortSrc[1] + ")(a, b);");
+  const mk = (v, w, t) => ({ gameVersion: v, wavesCleared: w, timeSec: t });
+  const fixtures = [
+    mk("0.40.0", 36, 900), mk("0.40.0", 36, 100), mk("0.40.0", 12, 50),
+    mk("0.31.0", 36, 10), mk("0.31.0", 29, 500), mk("0", 0, 1e9),
+    mk("0.40.0", 0, 30), mk("0.9.9", 36, 1),
+  ];
+  for (const a of fixtures) for (const b of fixtures) {
+    assert.strictEqual(Math.sign(gsCompare(a, b)), Math.sign(JH.Balance.lbCompare(a, b)),
+      "gs vs lbCompare disagree on " + JSON.stringify([a, b]));
+  }
+});
+
 // ---- Phase 1 think() tests ----
 
 function makePlayer() {
