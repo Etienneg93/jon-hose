@@ -3045,6 +3045,47 @@
       const sx = this.x - cam;
       const yT = Geo.feetScreenY(JH.DEPTH_MIN, 0) - 10;
       const yB = Geo.feetScreenY(JH.DEPTH_MAX, 0) + 6;
+      const R = JH.VIEW_W + 8;
+      // 0. THE DROP: the whole ground band past the hit line is open sky —
+      // the walkway visibly ENDS at the lip instead of a line drawn on more
+      // street. Ground-pass layering keeps actors above it (fliers entering
+      // from the sky side read as airborne). Hit rim unchanged: crossed()
+      // still tests exactly this.x.
+      if (sx < R) {
+        ctx.save();
+        // Deep-atmosphere gradient: bright haze at the deck line falling to
+        // dark altitude blue — darker-than-any-floor is what sells "no
+        // ground here", against the white cloud pavement especially.
+        const grad = ctx.createLinearGradient(0, yT - 4, 0, yB + 8);
+        grad.addColorStop(0, "#8fb4d8");
+        grad.addColorStop(0.35, "#4a6c96");
+        grad.addColorStop(1, "#22385a");
+        ctx.fillStyle = grad;
+        ctx.fillRect(sx, yT - 4, R - sx, yB - yT + 12);
+        // Vertical fall-streaks: thin light lines streaming DOWN the void.
+        for (let i = 0; i < 8; i++) {
+          const k = (this.t * 0.9 + i * 0.37) % 1;
+          const px = sx + 6 + ((i * 61) % Math.max(1, R - sx - 10));
+          const py = yT + k * (yB - yT);
+          ctx.globalAlpha = 0.25 * (1 - k);
+          ctx.fillStyle = "#cfe4f6";
+          ctx.fillRect(Math.round(px), Math.round(py), 1, 7 + 5 * (1 - k));
+        }
+        // Clouds falling away: they SHRINK and dim as they drop (depth read,
+        // not bubbles).
+        for (let i = 0; i < 10; i++) {
+          const k = (this.t * 0.22 + i * 0.618) % 1;
+          const px = sx + 12 + ((i * 47) % Math.max(1, R - sx - 20)) + k * 8;
+          const py = yT + 6 + k * (yB - yT);
+          const s = 1 - k * 0.75;
+          ctx.globalAlpha = 0.55 * (1 - k) + 0.05;
+          ctx.fillStyle = i % 2 ? "#eef6fd" : "#c7d8e9";
+          ctx.beginPath();
+          ctx.ellipse(px, py, (10 + (i % 3) * 4) * s, (4 + (i % 3)) * s, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
       // 1. walkway lip (baked strip or two-tone fallback) at the hit line
       Assets.drawCloudlineLip(ctx, sx);
       // 2. cloud churn, sky side only (scald-pass wisp idiom)
@@ -3087,6 +3128,39 @@
         ctx.fillRect(Math.round(lx), Math.round(ly), 10, 1);
       }
       ctx.restore();
+      // 4. Urgency ramp: a red wash bleeding off the rim plus deck chevrons
+      // pointing BACK to safety, both scaling with Jon's proximity to the
+      // lip (silent 110px out, loudest at the rim). Visual only — the reset
+      // and damage still key off crossed() alone.
+      const pl = JH.Game && JH.Game.player;
+      const prox = pl && pl.alive
+        ? clamp(1 - (this.x - (pl.x + (pl.bodyW || 12) * 0.5)) / 110, 0, 1) : 0;
+      if (prox > 0 && sx < R) {
+        ctx.save();
+        const pulse = 0.5 + 0.5 * Math.sin(this.t * (4 + prox * 6));
+        ctx.globalAlpha = (0.18 + 0.34 * prox) * (0.6 + 0.4 * pulse);
+        const rg = ctx.createLinearGradient(sx, 0, Math.min(R, sx + 46), 0);
+        rg.addColorStop(0, "rgba(255,70,50,1)");
+        rg.addColorStop(1, "rgba(255,70,50,0)");
+        ctx.fillStyle = rg;
+        ctx.fillRect(sx, yT - 4, Math.min(R - sx, 46), yB - yT + 12);
+        ctx.globalAlpha = (0.25 + 0.55 * prox) * (0.7 + 0.3 * pulse);
+        ctx.strokeStyle = "#ffd23b";
+        ctx.lineWidth = 2;
+        const rows = 3, march = (this.t * 26) % 14;
+        for (let r = 0; r < rows; r++) {
+          const cy = yT + 8 + (r + 0.5) * ((yB - yT - 12) / rows);
+          for (let c = 0; c < 3; c++) {
+            const cx = sx - 8 - c * 14 + (14 - march);
+            ctx.beginPath();
+            ctx.moveTo(cx + 5, cy - 4);
+            ctx.lineTo(cx, cy);
+            ctx.lineTo(cx + 5, cy + 4);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
     }
   }
   JH.CloudlineEdge = CloudlineEdge;
