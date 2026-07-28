@@ -56,6 +56,7 @@
     relics: {}, relicStock: [],   // relics: id -> true, survives death; relicStock: current vendor's rotation
     hydrants: [], shopNpc: null, deepdiveTV: null, nearShop: false, nearVendor: false, shopOpen: false,
     timeScale: 1, deepdiving: false,   // Deepdive TV: world fixed-step rate; ramped by Balance.deepdiveRamp
+    ddAdT: 0, ddOutroT: 0,             // seated sub-phases (real-s countdowns): ad pre-roll / bank-empty outro
     wall: null, wallSpawnTimer: 0, wallPool: [], holdoutTimer: 0,
     cloudlineEdge: null,   // wave 33's walkway-edge hazard (JH.CloudlineEdge); live only during that holdout
     windHazards: [],
@@ -1792,8 +1793,9 @@
     },
 
     // Deepdive TV interaction: sit (E) to fast-forward the world while banked
-    // kibble drains; any move key or a second E stands Jon back up. Auto-ends
-    // when the kibble bank empties.
+    // kibble drains; any move key or a second E stands Jon back up. A short
+    // bank pre-rolls an unskippable ad (bank paused); an emptied bank plays a
+    // static outro beat, then auto-stands.
     // Random quip, never the same one twice in a row (bump to the next
     // pool slot on a repeat roll).
     pickQuip() {
@@ -1819,10 +1821,48 @@
             && pl.kibbleTimer > JH.DEEPDIVE.threshold) {
           this.input.consume("confirm");
           this.deepdiving = true;
+          // Short bank: an unskippable ad pre-rolls (Player.update pauses the
+          // bank while ddAdT > 0, so the session isn't over before the joke).
+          const D = JH.DEEPDIVE;
+          this.ddAdT = pl.kibbleTimer < D.ad.below ? D.ad.dur : 0;
+          this.ddOutroT = 0;
           this.audio.play("upgrade", { pitch: 0.55 });   // spin-up
-          // First quip fires on sit-down — every session gets at least one.
-          this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
-          this._quipCdT = JH.DEEPDIVE.quipGap;
+          // First quip fires on sit-down — every session gets at least one;
+          // the ad path gripes about the ad instead of reacting to content.
+          const q = this.ddAdT > 0 ? D.ad.quip : this.pickQuip();
+          this.float(pl.x, pl.y - 30, q, "#9be8ff", { life: 1.8 });
+          this._quipCdT = D.quipGap;
+        }
+        return;
+      }
+      // Dash bails and is NOT consumed here: Player.update runs earlier in the
+      // step and consumes the buffered edge itself when the dash fires (dash is
+      // never movement-gated), so a started dash is detected via dashTimer;
+      // buffered("dash") covers a press held off by cooldown. Bail works from
+      // ANY seated sub-phase (ad/outro included) — never trap the seat.
+      const bail = this.input.pressed("up") || this.input.pressed("down")
+                || this.input.pressed("left") || this.input.pressed("right")
+                || this.input.buffered("confirm")
+                || this.input.buffered("dash") || pl.dashTimer > 0;
+      if (bail) {
+        if (this.input.buffered("confirm")) this.input.consume("confirm");
+        this.deepdiving = false; this.ddAdT = 0; this.ddOutroT = 0;
+        this.audio.play("upgrade", { pitch: 1.6 });      // spin-down
+        return;
+      }
+      const D = JH.DEEPDIVE;
+      if (this.ddAdT > 0) {
+        // Ad pre-roll: bank paused (Player.update), no ramp (game.js render
+        // gate), marquee parked — the TV draws the sponsor card off ddAdT.
+        this.ddAdT -= JH.FIXED_DT;
+        return;
+      }
+      if (this.ddOutroT > 0) {
+        // Bank-empty outro: static + up-next card holds, then auto-stand.
+        this.ddOutroT -= JH.FIXED_DT;
+        if (this.ddOutroT <= 0) {
+          this.deepdiving = false; this.ddOutroT = 0;
+          this.audio.play("upgrade", { pitch: 1.6 });    // spin-down
         }
         return;
       }
@@ -1836,18 +1876,10 @@
         this.float(pl.x, pl.y - 30, this.pickQuip(), "#9be8ff", { life: 1.8 });
         this._quipCdT = JH.DEEPDIVE.quipGap;
       }
-      // Dash bails and is NOT consumed here: Player.update runs earlier in the
-      // step and consumes the buffered edge itself when the dash fires (dash is
-      // never movement-gated), so a started dash is detected via dashTimer;
-      // buffered("dash") covers a press held off by cooldown.
-      const bail = this.input.pressed("up") || this.input.pressed("down")
-                || this.input.pressed("left") || this.input.pressed("right")
-                || this.input.buffered("confirm")
-                || this.input.buffered("dash") || pl.dashTimer > 0;
-      if (bail || pl.kibbleTimer <= 0) {
-        if (this.input.buffered("confirm")) this.input.consume("confirm");
-        this.deepdiving = false;
-        this.audio.play("upgrade", { pitch: 1.6 });      // spin-down
+      if (pl.kibbleTimer <= 0) {
+        // Feed's dead: hold the seat for the punchline instead of insta-standing.
+        this.ddOutroT = D.outro.dur;
+        this.float(pl.x, pl.y - 30, D.outro.quip, "#9be8ff", { life: 1.8 });
       }
     },
 
@@ -2177,7 +2209,8 @@
       // Deepdive's timeScale is COSMETIC only (overlay intensity, marquee
       // race, kibble accel factor) — the world sim always runs at 1x, so
       // none of the 10x edge cases (death seq, church, stalls) can exist.
-      this.timeScale = JH.Balance.deepdiveRamp(this.timeScale, this.deepdiving, dt, JH.DEEPDIVE);
+      this.timeScale = JH.Balance.deepdiveRamp(this.timeScale,
+        this.deepdiving && !(this.ddAdT > 0 || this.ddOutroT > 0), dt, JH.DEEPDIVE);
       this.acc += dt;
       let steps = 0;
       while (this.acc >= JH.FIXED_DT && steps < JH.MAX_STEPS) {
@@ -3870,11 +3903,14 @@
       const el = def.element || (def.needs && def.needs.join("+")) || "";
       const kind = def.kind === "duo" ? "DUO" : def.kind === "legendary" ? "LEGENDARY" : el.toUpperCase();
       const deep = near.offer.deepen;
-      // Rank II keeps the base effect text so the upgrade is never a blind
-      // pick — "base effect  II: what changes".
-      const desc = ((def.desc || "") +
-        (deep && def.descII ? "  II: " + def.descII : "")) || "";
-      const W = 300, H = 34, X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
+      // Rank II is never a blind pick: the card shows the full effect you
+      // already have (NOW:) plus a gold II: line with exactly what deepening
+      // changes — each wrapped on its own lines, never truncating the other.
+      const baseLines = this.wrapText((deep ? "NOW: " : "") + (def.desc || ""), 52, 3);
+      const iiLines = deep && def.descII ? this.wrapText("II: " + def.descII, 52, 2) : [];
+      const lineH = 8, nLines = baseLines.length + iiLines.length;
+      const W = 300, H = 26 + nLines * lineH,
+            X = Math.round((JH.VIEW_W - W) / 2), Y = JH.VIEW_H - H - 8;
       ctx.save();
       ctx.fillStyle = "rgba(10,14,24,0.92)";
       ctx.fillRect(X, Y, W, H);
@@ -3888,15 +3924,13 @@
       ctx.fillText(kind, X + W - 6, Y + 10);
       ctx.textAlign = "left";
       ctx.font = "6px monospace";
+      // Markup-aware wrap ({g:}/{i:} tokens render styled); the II delta
+      // draws gold so current-vs-upgrade reads at a glance.
+      let ly = Y + 20;
       ctx.fillStyle = "#aebdd4";
-      // Markup-aware two-line wrap ({g:}/{i:} tokens render styled).
-      const dlines = this.wrapText(desc, 52, 2);
-      if (dlines.length > 1) {
-        JH.Assets.styledText(ctx, dlines[0], X + 6, Y + 20);
-        JH.Assets.styledText(ctx, dlines[1], X + 6, Y + 28);
-      } else {
-        JH.Assets.styledText(ctx, desc, X + 6, Y + 22);
-      }
+      for (const ln of baseLines) { JH.Assets.styledText(ctx, ln, X + 6, ly); ly += lineH; }
+      ctx.fillStyle = "#ffd23f";
+      for (const ln of iiLines) { JH.Assets.styledText(ctx, ln, X + 6, ly); ly += lineH; }
       ctx.fillStyle = "#80ff80"; ctx.textAlign = "right";
       ctx.fillText("E: CHOOSE BENEDICTION", X + W - 6, Y + H - 6);
       ctx.restore();

@@ -116,6 +116,12 @@ test("DEEPDIVE config shape", () => {
   assert.ok(Array.isArray(D.titles) && D.titles.length >= 5);
   assert.ok(Array.isArray(D.quips) && D.quips.length >= 3);
   assert.ok(D.laneGap > JH.SHOP.range + 22, "TV interact zone must clear the shop-open zone");
+  assert.ok(D.ad.below > 0 && D.ad.dur > 0, "ad pre-roll numbers");
+  assert.ok(Array.isArray(D.ad.brand) && D.ad.brand.length === 2, "two sponsor-card lines");
+  assert.strictEqual(typeof D.ad.quip, "string");
+  assert.ok(D.outro.dur > 0, "outro hold");
+  assert.strictEqual(typeof D.outro.upNext, "string");
+  assert.strictEqual(typeof D.outro.quip, "string");
 });
 
 test("propPushout: inside pushed to rim, outside null, depth flattened 2.4x", () => {

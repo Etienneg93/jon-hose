@@ -2953,6 +2953,55 @@ test("deepdive: TV always spawns down-lane; SITTING is gated on kibble > thresho
   assert.strictEqual(sit(D.threshold + 1), true, "banked: sits");
 });
 
+test("deepdive ad: short bank pre-rolls the ad and pauses the bank; big bank skips it", () => {
+  const D = JH.DEEPDIVE;
+  const mkInput = (buffered) => ({ buffered: (k) => buffered.includes(k), consume: () => {}, pressed: () => false });
+  const sit = (kib) => {
+    const s = { deepdiving: false, ddAdT: 0, ddOutroT: 0,
+                deepdiveTV: { x: 0, y: 0, near: true, videoT: 0, mat: 1 },
+                player: { x: 0, y: 0, kibbleTimer: kib },
+                input: mkInput(["confirm"]), audio: { play() {} },
+                pickQuip: () => "", float() {} };
+    JH.Game.tickDeepdive.call(s);
+    return s;
+  };
+  assert.strictEqual(sit(D.ad.below - 1).ddAdT, D.ad.dur, "short bank arms the ad");
+  assert.strictEqual(sit(D.ad.below + 1).ddAdT, 0, "big bank goes straight to content");
+  // While the ad runs, kibble neither drains nor heals (kMult 0).
+  const p = makePlayer();
+  const g = dashStubGame(makeBufferedInput().In);
+  g.deepdiving = true; g.ddAdT = 1;
+  p.kibbleRegen = 2; p.kibbleTimer = 5; p.hp = p.stats.maxHp - 10;
+  p.update(0.016, g);
+  assert.strictEqual(p.kibbleTimer, 5, "ad: no drain");
+  assert.strictEqual(p.hp, p.stats.maxHp - 10, "ad: no heal");
+});
+
+test("deepdive outro: empty bank holds the seat ~outro.dur then auto-stands; bail exits instantly", () => {
+  const D = JH.DEEPDIVE;
+  const mkState = (input) => ({
+    deepdiving: true, ddAdT: 0, ddOutroT: 0, timeScale: 1,
+    deepdiveTV: { x: 0, y: 0, near: true, videoT: 0, mat: 1 },
+    player: { x: 0, y: 0, kibbleTimer: 0, dashTimer: 0 },
+    input, audio: { play() {} }, pickQuip: () => "", float() {},
+  });
+  const noInput = { buffered: () => false, consume: () => {}, pressed: () => false };
+  const s = mkState(noInput);
+  JH.Game.tickDeepdive.call(s);
+  assert.strictEqual(s.ddOutroT, D.outro.dur, "empty bank enters the outro");
+  assert.strictEqual(s.deepdiving, true, "still seated for the punchline");
+  let t = 0;
+  while (s.deepdiving && t < 5) { JH.Game.tickDeepdive.call(s); t += JH.FIXED_DT; }
+  assert.ok(Math.abs(t - D.outro.dur) < 0.1, "auto-stand ~outro.dur later, got " + t.toFixed(2));
+  // Manual bail: movement stands up instantly from the ad and the outro alike.
+  const walkInput = { buffered: () => false, consume: () => {}, pressed: (k) => k === "right" };
+  const s2 = mkState(walkInput);
+  s2.ddAdT = D.ad.dur;
+  JH.Game.tickDeepdive.call(s2);
+  assert.strictEqual(s2.deepdiving, false, "bail exits the ad");
+  assert.strictEqual(s2.ddAdT, 0, "ad timer cleared on bail");
+});
+
 test("deepdive TV materializes with banked kibble, dematerializes when it empties", () => {
   const D = JH.DEEPDIVE;
   const tv = new JH.DeepdiveTV(0, 0);
@@ -3016,17 +3065,20 @@ test("deepdive drain: heals first — shield only accrues once HP is full", () =
     "every drained kibble-second converts to shield at kibbleRegen rate");
 });
 
-test("deepdive: auto-ends when kibble empties; move key bails", () => {
+test("deepdive: empty kibble routes through the outro; move key bails", () => {
   const mkInput = (bufferedKeys, pressedKeys) => ({
     buffered: (k) => bufferedKeys.includes(k), consume: () => {},
     pressed: (k) => pressedKeys.includes(k),
   });
-  const g = { deepdiving: true, deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
+  const g = { deepdiving: true, ddAdT: 0, ddOutroT: 0, timeScale: 1,
+              deepdiveTV: { x: 0, y: 0, near: true, videoT: 0 },
               player: { x: 0, y: 0, kibbleTimer: 0 },
-              input: mkInput([], []), audio: { play() {} } };
+              input: mkInput([], []), audio: { play() {} },
+              pickQuip: () => "", float() {} };
   JH.Game.tickDeepdive.call(g);
-  assert.strictEqual(g.deepdiving, false, "kibble 0 auto-ends");
-  g.deepdiving = true; g.player.kibbleTimer = 5; g.input = mkInput([], ["left"]);
+  assert.strictEqual(g.deepdiving, true, "kibble 0 holds the seat for the outro");
+  assert.strictEqual(g.ddOutroT, JH.DEEPDIVE.outro.dur, "outro armed");
+  g.deepdiving = true; g.ddOutroT = 0; g.player.kibbleTimer = 5; g.input = mkInput([], ["left"]);
   JH.Game.tickDeepdive.call(g);
   assert.strictEqual(g.deepdiving, false, "move key bails");
   g.deepdiving = true; g.input = mkInput(["confirm"], []);

@@ -151,6 +151,17 @@
     tvCollideR: 14,   // solid feet radius (Balance.propPushout, player-only) — matches the bigger cabinet
     matIn:  0.35,     // s to materialize (CRT tune-in) once any kibble is banked; prompt + collision gate on full mat
     matOut: 0.5,      // s to dematerialize when the bank empties (an active dive pins it solid)
+    ad: {             // unskippable pre-roll when the bank is short; the bank PAUSES (drain + heal) while it runs
+      below: 8,       // s of banked kibble at sit-down under which the ad plays first
+      dur: 2.0,       // s of REAL time; plays at 1x (no cosmetic ramp, marquee parked)
+      brand: ["KIBBLE", "KING(tm)"],   // sponsor-card lines, drawn big + centered on the screen
+      quip: "3 unskippable ads?? fine",   // guaranteed sit-down quip on the ad path
+    },
+    outro: {          // bank-empty beat: seat holds, screen cuts to static + up-next card, then auto-stand
+      dur: 1.2,       // s of REAL time before the auto-stand (manual bail still exits instantly)
+      upNext: "touch grass",
+      quip: "aw. out of kibble.",
+    },
     titles: [
       "Are FIRE HYDRANTS conscious? (they answered)",
       "I ate only KIBBLE for 30 days",
@@ -169,7 +180,6 @@
       "the algorithm knows me",
       "he's literally me",
       "skipping the intro (again)",
-      "3 unskippable ads?? fine",
       "the comments are FERAL",
       "watching at 2x like a pro",
       "this is research, actually",
