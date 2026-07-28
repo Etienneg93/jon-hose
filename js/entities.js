@@ -7610,12 +7610,14 @@
       if (this.state === "latch") return;   // suction holds through spray shove
       super.applyKnockback(dirX, force, dirY);
     }
-    // Super only: fires one locked-wedge vacuum pulse. Deals no damage and
-    // drains no water. Dash i-frames dodge it (same counter-verb as the
-    // lunge grab). A landed pulse pulls Jon at most pullStep toward the
-    // Plunger, clamped to arena/depth bounds, capped at the remaining
-    // distance so it can never pull through/past the Plunger.
-    firePulse(game) {
+    // Super only: continuous vacuum drag while the locked wedge holds Jon —
+    // a steady SUCK toward the Plunger, never a teleport. Deals no damage,
+    // drains no water. Counterplay is continuous too: walking fights the
+    // drag (pullSpeed sits under move speed), stepping out of the wedge
+    // ends it, and a dash breaks the hold outright (same counter-verb as
+    // the lunge grab). Capped at the remaining distance so it can never
+    // drag through/past the Plunger.
+    applyPull(dt, game) {
       const pl = game.player, SP = JH.SUPER_PLUNGER;
       if (pl.dashTimer > 0) return;
       if (!Geo.inGroundWedge(pl.x, pl.y, this.x, this.y, this.aimAng,
@@ -7623,7 +7625,7 @@
       const dx = this.x - pl.x, dy = this.y - pl.y;
       const dist = Math.hypot(dx, dy);
       if (dist <= 0) return;
-      const step = Math.min(SP.pullStep, dist);
+      const step = Math.min(SP.pullSpeed * dt, dist);
       pl.x = clamp(pl.x + (dx / dist) * step, game.bounds.minX, game.bounds.maxX);
       pl.y = Geo.clampDepth(pl.y + (dy / dist) * step);
     }
@@ -7678,21 +7680,11 @@
           this.state = "idle"; this.cdTimer = d.lungeCd; this.usingTicket = false;
           return;
         }
-        const SP = JH.SUPER_PLUNGER;
         this.pullT -= dt;
-        const pulseDur = SP.pullWind / SP.pullPulses;
-        const elapsed = SP.pullWind - this.pullT;
-        // Epsilon guards float error at exact pulse boundaries (dt steps
-        // landing precisely on 0.4/0.8/1.2 must not floor short a pulse).
-        const targetIdx = Math.min(SP.pullPulses, Math.floor(elapsed / pulseDur + 1e-9));
-        while (this.pulseIdx < targetIdx) {
-          this.pulseIdx++;
-          this.firePulse(game);
-        }
-        // Pulse count (not the float timer) gates the transition: the third
-        // pulse always ends the windup, even if float error leaves pullT a
-        // hair above zero on the exact tick it should complete.
-        if (this.pulseIdx >= SP.pullPulses) { this.state = "lunge"; this.attackTimer = d.lungeDur; }
+        this.applyPull(dt, game);
+        // Epsilon guards float error: dt steps summing exactly to pullWind
+        // can leave pullT a hair above zero and must still end the windup.
+        if (this.pullT <= 1e-9) { this.state = "lunge"; this.attackTimer = d.lungeDur; }
         return;
       }
       if (this.windTimer > 0) {
@@ -7701,7 +7693,7 @@
         if (this.windTimer <= 0) {
           if (this.superElite) {
             // Ticket stays held: the pull windup continues the same attack.
-            this.state = "pull"; this.pullT = JH.SUPER_PLUNGER.pullWind; this.pulseIdx = 0;
+            this.state = "pull"; this.pullT = JH.SUPER_PLUNGER.pullWind;
           } else {
             this.state = "lunge"; this.attackTimer = d.lungeDur;
           }
@@ -7748,14 +7740,14 @@
         this.y + Math.sin(this.aimAng) * SP.pullRange);
       ctx.strokeStyle = "rgba(220,245,255,0.55)";
       ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
-      // Three pulse beats along the streak; lit ones mark pulses already fired.
-      for (let i = 1; i <= SP.pullPulses; i++) {
-        const frac = i / SP.pullPulses;
-        const b = toScreen(this.x + Math.cos(this.aimAng) * SP.pullRange * frac,
-          this.y + Math.sin(this.aimAng) * SP.pullRange * frac);
-        const lit = (this.pulseIdx || 0) >= i;
-        ctx.fillStyle = lit ? "#dff2ff" : "rgba(220,245,255,0.3)";
-        ctx.beginPath(); ctx.arc(b.x, b.y, lit ? 2.6 : 1.8, 0, Math.PI * 2); ctx.fill();
+      // Suction motes flowing INWARD along the streak — the continuous-drag
+      // read (brighter and bigger as they near the mouth).
+      for (let i = 0; i < 5; i++) {
+        const k = 1 - ((this.t * 0.9 + i / 5) % 1);   // wedge mouth -> Plunger
+        const b = toScreen(this.x + Math.cos(this.aimAng) * SP.pullRange * k,
+          this.y + Math.sin(this.aimAng) * SP.pullRange * k);
+        ctx.fillStyle = "rgba(223,242,255," + (0.35 + 0.45 * (1 - k)).toFixed(2) + ")";
+        ctx.beginPath(); ctx.arc(b.x, b.y, 1.6 + (1 - k) * 1.2, 0, Math.PI * 2); ctx.fill();
       }
       ctx.restore();
     }
