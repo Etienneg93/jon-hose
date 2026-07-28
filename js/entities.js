@@ -3064,7 +3064,9 @@
           // Far-left re-entry: clear of the edge, so a landing never bleeds
           // straight into a second fall under gust pressure.
           pl.x = clamp(game.bounds.minX + C.reentryInset, game.bounds.minX, game.bounds.maxX);
-          pl.z = 110;                    // re-enter from above the skyline
+          // Drop in from OFF the top of the screen (mummy-style): feet start
+          // 24px above screen-top regardless of his depth row.
+          pl.z = Geo.feetScreenY(pl.y, 0) + 24;
         }
       } else {                           // "in"
         F.zv += 640 * dt;
