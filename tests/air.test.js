@@ -783,7 +783,16 @@ test("cloudline edge rim: front rim one epsilon inside does not cross; touching 
   assert.strictEqual(edge.crossed(p), true, "front rim touching the line crosses");
 });
 
-test("cloudline edge: crossing resets Jon inward and the 12 HP penalty routes through takeHit only", () => {
+// Drive an armed fall sequence to completion (out -> gap -> in -> landing).
+// Returns the frame count; the guard fails the test on a stuck sequence.
+function runFall(g, edge) {
+  let frames = 0;
+  while (edge.fall && frames++ < 600) edge.tickFall(1 / 60, g);
+  assert.ok(frames < 600, "fall sequence terminates");
+  return frames;
+}
+
+test("cloudline edge: crossing runs the fall sequence — lands at resetDist, edge damage via takeHit only", () => {
   const C = JH.CLOUDLINE_HOLDOUT;
   const g = stubHazardGame(400, 40);
   const edge = new JH.CloudlineEdge(400);
@@ -791,8 +800,12 @@ test("cloudline edge: crossing resets Jon inward and the 12 HP penalty routes th
   const hp0 = g.player.hp;
   g.player.x = edge.x;   // touching the line -> crossed
   edge.update(1 / 60, g);
+  assert.ok(edge.fall, "crossing arms the fall sequence (no instant teleport)");
+  assert.strictEqual(g.player.hp, hp0, "no damage at the crossing moment — it lands with the re-entry impact");
+  runFall(g, edge);
   assert.ok(Math.abs(g.player.x - (edge.x - C.resetDist)) < 0.001,
-    "crossing resets to edge.x - resetDist");
+    "landing puts Jon at edge.x - resetDist");
+  assert.strictEqual(g.player.z, 0, "landed on the deck");
   assert.strictEqual(hp0 - g.player.hp, C.edgeDmg,
     "exactly the configured edge damage lands, through Player.takeHit");
   assert.ok(g.player.alive, "never an instant kill by a special path — normal takeHit owns HP/death");
@@ -806,21 +819,26 @@ test("cloudline edge: positional reset happens even when takeHit negates the hit
   const hp0 = g.player.hp;
   g.player.x = edge.x;
   edge.update(1 / 60, g);
+  runFall(g, edge);
   assert.ok(Math.abs(g.player.x - (edge.x - C.resetDist)) < 0.001,
     "positional reset is unconditional, independent of takeHit's landed/negated result");
   assert.strictEqual(g.player.hp, hp0, "a negated hit costs no HP");
 });
 
-test("cloudline edge: repeated update after reset cannot multi-hit on adjacent frames", () => {
+test("cloudline edge: one crossing, one sequence — no re-arm mid-fall or multi-hit after landing", () => {
   const g = stubHazardGame(400, 40);
   const edge = new JH.CloudlineEdge(400);
   g.player.x = edge.x;
   edge.update(1 / 60, g);
-  const hpAfterFirst = g.player.hp;
-  const xAfterFirst = g.player.x;
-  edge.update(1 / 60, g);   // very next fixed-step frame
-  assert.strictEqual(g.player.hp, hpAfterFirst, "no second HP hit lands on the adjacent frame");
-  assert.strictEqual(g.player.x, xAfterFirst, "no second reset displaces Jon further on the adjacent frame");
+  const fallRef = edge.fall;
+  edge.update(1 / 60, g);   // very next fixed-step frame, still past the line
+  assert.strictEqual(edge.fall, fallRef, "the live sequence is never re-armed");
+  runFall(g, edge);
+  const hpAfterLanding = g.player.hp, xAfterLanding = g.player.x;
+  edge.update(1 / 60, g);   // Jon landed inside — no new crossing
+  assert.strictEqual(edge.fall, null, "no new sequence arms after the inward landing");
+  assert.strictEqual(g.player.hp, hpAfterLanding, "no second HP hit lands");
+  assert.strictEqual(g.player.x, xAfterLanding, "no second reset displaces Jon further");
 });
 
 test("cloudline edge: crossing arms the visual poof at the crossing depth", () => {
@@ -830,7 +848,7 @@ test("cloudline edge: crossing arms the visual poof at the crossing depth", () =
   edge.update(1 / 60, g);
   assert.ok(edge.poofT > 0, "crossing arms the poof timer");
   assert.strictEqual(edge.poofY, 52, "poof remembers the crossing depth");
-  assert.ok(g.player.x < 200, "reset still happens (mechanic untouched)");
+  assert.ok(edge.fall, "the fall sequence is armed alongside the poof");
 });
 
 test("wind hazard rim: drawn ellipse IS the hit ellipse; chip + cooldown; enemies shoved not hurt", () => {

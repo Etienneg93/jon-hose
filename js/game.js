@@ -2339,6 +2339,18 @@
       // Church-return landing sequence owns play input/logic until it finishes.
       if (this.arrival) { this.updateArrival(dt); return; }
 
+      // Cloudline fall: the edge owns play while Jon is off the walkway —
+      // same freeze idiom as `arrival` (no cheap hits during the re-entry
+      // drop). update() keeps the void/flash clocks running; its crossing
+      // check no-ops while fall is set.
+      if (this.cloudlineEdge && this.cloudlineEdge.fall) {
+        this.cloudlineEdge.update(dt, this);
+        this.cloudlineEdge.tickFall(dt, this);
+        this.particles = this.particles.filter((p) => p.update(dt));
+        this.updateHUD();
+        return;
+      }
+
       // Air entry beat: owns play input/logic while it runs (same idiom as
       // `arrival` above). Gated on airEntryArmed, which only enterAirAct()
       // sets — devGotoWave and the Church return flip Background.airOn on

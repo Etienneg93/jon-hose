@@ -3017,6 +3017,7 @@
       this.t = 0;
       this.flashT = 0;   // post-crossing rim flash / gust-burst window (cosmetic)
       this.poofT = 0; this.poofY = 0;   // crossing poof: visual-only, arms on every crossing
+      this.fall = null;  // live fall sequence {phase: out|gap|in, t, zv} — game.update freezes play into tickFall while set
     }
     // Forward rim = the entity's rightward body edge — the edge always
     // sits at the far/right side of the locked arena (Game.startWave).
@@ -3029,17 +3030,53 @@
       if (this.flashT > 0) this.flashT -= dt;
       if (this.poofT > 0) this.poofT -= dt;
       const pl = game.player;
-      if (!pl || !pl.alive || !this.crossed(pl)) return;
-      const C = JH.CLOUDLINE_HOLDOUT;
-      // Positional truth first: reset happens regardless of whether the
-      // HP hit below actually lands.
-      pl.x = clamp(this.x - C.resetDist, game.bounds.minX, game.bounds.maxX);
-      // takeHit already shakes when the hit lands; only add the edge's own
-      // shake when i-frames negate it, so a crossing is never double-shaken.
-      if (!pl.takeHit(C.edgeDmg, game, this.x)) game.shake(5, -1);
+      if (!pl || !pl.alive || this.fall || !this.crossed(pl)) return;
+      // Crossing arms the fall sequence — game.update freezes play into
+      // tickFall while it runs. Reset and damage happen there (on landing),
+      // not here.
+      this.fall = { phase: "out", t: 0, zv: 0 };
+      pl.dashTimer = 0;   // a dash that carried him over doesn't resume mid-air
       this.flashT = 0.35;
       this.poofT = 0.5; this.poofY = pl.y;   // visual-only crossing poof
       burst(game, this.x, pl.y, 14, "#dff2ff", 10, { speed: 140, life: 0.4, up: 60 });
+      game.audio.play("jump", { pitch: 0.55 });   // slip-off whoosh
+    }
+
+    // Fall sequence (the `arrival` freeze idiom — game.update early-returns
+    // into this while fall is set): OUT — Jon is carried past the lip and
+    // drops into the void; GAP — a beat of empty sky; IN — he plummets back
+    // in from above on the safe side, and the edge damage lands with the
+    // impact. Positional reset stays unconditional; HP still routes through
+    // Player.takeHit only.
+    tickFall(dt, game) {
+      const C = JH.CLOUDLINE_HOLDOUT, pl = game.player, F = this.fall;
+      if (!F || !pl) return;
+      F.t += dt;
+      if (F.phase === "out") {
+        F.zv += 520 * dt;
+        pl.x += 55 * dt;                 // momentum carries him out over the void
+        pl.z -= F.zv * dt;               // accelerating drop below the deck
+        pl.facing = -1;                  // looking back at the street he left
+        if (pl.z < -95) { F.phase = "gap"; F.t = 0; }
+      } else if (F.phase === "gap") {
+        if (F.t >= 0.25) {
+          F.phase = "in"; F.t = 0; F.zv = 0;
+          pl.x = clamp(this.x - C.resetDist, game.bounds.minX, game.bounds.maxX);
+          pl.z = 110;                    // re-enter from above the skyline
+        }
+      } else {                           // "in"
+        F.zv += 640 * dt;
+        pl.z -= F.zv * dt;
+        if (pl.z <= 0) {
+          pl.z = 0;
+          this.fall = null;
+          // takeHit already shakes when the hit lands; only add the edge's
+          // own shake when i-frames negate it — never double-shaken.
+          if (!pl.takeHit(C.edgeDmg, game, this.x)) game.shake(5, -1);
+          burst(game, pl.x, pl.y, 12, "#e8f2fb", 8, { speed: 120, life: 0.35, up: 70 });
+          game.audio.play("whack");
+        }
+      }
     }
     draw(ctx, cam) {
       const sx = this.x - cam;
@@ -3128,39 +3165,6 @@
         ctx.fillRect(Math.round(lx), Math.round(ly), 10, 1);
       }
       ctx.restore();
-      // 4. Urgency ramp: a red wash bleeding off the rim plus deck chevrons
-      // pointing BACK to safety, both scaling with Jon's proximity to the
-      // lip (silent 110px out, loudest at the rim). Visual only — the reset
-      // and damage still key off crossed() alone.
-      const pl = JH.Game && JH.Game.player;
-      const prox = pl && pl.alive
-        ? clamp(1 - (this.x - (pl.x + (pl.bodyW || 12) * 0.5)) / 110, 0, 1) : 0;
-      if (prox > 0 && sx < R) {
-        ctx.save();
-        const pulse = 0.5 + 0.5 * Math.sin(this.t * (4 + prox * 6));
-        ctx.globalAlpha = (0.18 + 0.34 * prox) * (0.6 + 0.4 * pulse);
-        const rg = ctx.createLinearGradient(sx, 0, Math.min(R, sx + 46), 0);
-        rg.addColorStop(0, "rgba(255,70,50,1)");
-        rg.addColorStop(1, "rgba(255,70,50,0)");
-        ctx.fillStyle = rg;
-        ctx.fillRect(sx, yT - 4, Math.min(R - sx, 46), yB - yT + 12);
-        ctx.globalAlpha = (0.25 + 0.55 * prox) * (0.7 + 0.3 * pulse);
-        ctx.strokeStyle = "#ffd23b";
-        ctx.lineWidth = 2;
-        const rows = 3, march = (this.t * 26) % 14;
-        for (let r = 0; r < rows; r++) {
-          const cy = yT + 8 + (r + 0.5) * ((yB - yT - 12) / rows);
-          for (let c = 0; c < 3; c++) {
-            const cx = sx - 8 - c * 14 + (14 - march);
-            ctx.beginPath();
-            ctx.moveTo(cx + 5, cy - 4);
-            ctx.lineTo(cx, cy);
-            ctx.lineTo(cx + 5, cy + 4);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-      }
     }
   }
   JH.CloudlineEdge = CloudlineEdge;
