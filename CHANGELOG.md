@@ -87,7 +87,9 @@ with a dog peeing on a holy hydrant.
   backend (guarded by a test that runs the server comparator against the
   client's).
 
+---
 
+## v0.31.0 — Deepdive (2026-07-14)
 
 There's a TV at the shop now. Sit down, log on, melt your kibble into
 health. The algorithm thanks you for your engagement.
