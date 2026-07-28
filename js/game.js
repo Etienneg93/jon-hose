@@ -2898,7 +2898,8 @@
           : "Replaces the previous live specimen and starts its complete encounter AI in the spawn bay.";
       }
       ctx.font = "6px monospace"; ctx.fillStyle = "#aebdd4";
-      wrap(desc, 31).slice(0, 7).forEach((line, i) => ctx.fillText(line, DX, Y + 91 + i * 10));
+      // styledText: boon effectText and relic descs carry {g:}/{i:} markup.
+      wrap(desc, 31).slice(0, 7).forEach((line, i) => JH.Assets.styledText(ctx, line, DX, Y + 91 + i * 10));
       ctx.fillStyle = "#182538"; ctx.fillRect(DX, Y + 171, 190, 29);
       ctx.font = "bold 6px monospace"; ctx.fillStyle = "#80ff80";
       let action;
@@ -3897,7 +3898,7 @@
       ctx.fillText(rd.name, tx + 5, ty + 9);
       ctx.font = "5px monospace"; ctx.fillStyle = "#aebdd4";
       let ly = ty + 17;
-      for (const ln of lines) { ctx.fillText(ln, tx + 5, ly); ly += lineH; }
+      for (const ln of lines) { JH.Assets.styledText(ctx, ln, tx + 5, ly); ly += lineH; }
       ctx.restore();
     },
 
@@ -4252,7 +4253,8 @@
         ctx.font = "5px monospace";
         // 3 lines is the vertical budget between separator and footer; 48
         // chars/line greedy-wraps every rank-II benediction text untruncated.
-        this.wrapText(desc, 48, 3).forEach((ln, i) => ctx.fillText(ln, PX + 5, dy + 6 + i * 6));
+        // styledText: relic descs carry {g:}/{i:} markup.
+        this.wrapText(desc, 48, 3).forEach((ln, i) => JH.Assets.styledText(ctx, ln, PX + 5, dy + 6 + i * 6));
       }
 
       // Footer hint

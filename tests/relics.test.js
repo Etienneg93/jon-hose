@@ -141,8 +141,10 @@ test("overcharge unlocks by act, not node ownership", () => {
 });
 
 test("retuned relic descs match the flat-gear effects", () => {
-  const d = (id) => JH.RELICS.find((r) => r.id === id).desc;
-  assert.match(d("brass_nozzle"), /\+10 spray dmg .* first enemy/i);
+  // Match on VISIBLE text: descs carry {g:}/{i:} styling markup.
+  const strip = (s) => s.replace(/\{[gi]:([^}]*)\}/g, "$1");
+  const d = (id) => strip(JH.RELICS.find((r) => r.id === id).desc);
+  assert.match(d("brass_nozzle"), /\+10 dmg .* first enemy/i);
   assert.match(d("spigot_key"), /hydrant .* (restores|heals)/i);
   assert.match(d("prayer_bead"), /8s|8 s/i);
   assert.match(d("loaded_sponge"), /doubled .* regen window/i);
