@@ -3061,7 +3061,9 @@
       } else if (F.phase === "gap") {
         if (F.t >= 0.25) {
           F.phase = "in"; F.t = 0; F.zv = 0;
-          pl.x = clamp(this.x - C.resetDist, game.bounds.minX, game.bounds.maxX);
+          // Far-left re-entry: clear of the edge, so a landing never bleeds
+          // straight into a second fall under gust pressure.
+          pl.x = clamp(game.bounds.minX + C.reentryInset, game.bounds.minX, game.bounds.maxX);
           pl.z = 110;                    // re-enter from above the skyline
         }
       } else {                           // "in"
@@ -3070,8 +3072,12 @@
         if (pl.z <= 0) {
           pl.z = 0;
           this.fall = null;
-          // takeHit already shakes when the hit lands; only add the edge's
-          // own shake when i-frames negate it — never double-shaken.
+          // The edge cost is unconditional: i-frames from a hit taken just
+          // BEFORE the crossing don't tick down through the freeze and were
+          // silently eating the landing damage — clear them so takeHit
+          // always lands (and re-grants fresh i-frames itself). Any other
+          // negation (e.g. an immunity shield) still shakes instead.
+          pl.invulnTimer = 0;
           if (!pl.takeHit(C.edgeDmg, game, this.x)) game.shake(5, -1);
           burst(game, pl.x, pl.y, 12, "#e8f2fb", 8, { speed: 120, life: 0.35, up: 70 });
           game.audio.play("whack");

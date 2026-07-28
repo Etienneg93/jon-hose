@@ -792,7 +792,7 @@ function runFall(g, edge) {
   return frames;
 }
 
-test("cloudline edge: crossing runs the fall sequence — lands at resetDist, edge damage via takeHit only", () => {
+test("cloudline edge: crossing runs the fall sequence — far-left landing, edge damage via takeHit only", () => {
   const C = JH.CLOUDLINE_HOLDOUT;
   const g = stubHazardGame(400, 40);
   const edge = new JH.CloudlineEdge(400);
@@ -803,26 +803,31 @@ test("cloudline edge: crossing runs the fall sequence — lands at resetDist, ed
   assert.ok(edge.fall, "crossing arms the fall sequence (no instant teleport)");
   assert.strictEqual(g.player.hp, hp0, "no damage at the crossing moment — it lands with the re-entry impact");
   runFall(g, edge);
-  assert.ok(Math.abs(g.player.x - (edge.x - C.resetDist)) < 0.001,
-    "landing puts Jon at edge.x - resetDist");
+  assert.ok(Math.abs(g.player.x - (g.bounds.minX + C.reentryInset)) < 0.001,
+    "landing drops Jon at the far LEFT (bounds.minX + reentryInset), clear of the edge");
   assert.strictEqual(g.player.z, 0, "landed on the deck");
   assert.strictEqual(hp0 - g.player.hp, C.edgeDmg,
     "exactly the configured edge damage lands, through Player.takeHit");
   assert.ok(g.player.alive, "never an instant kill by a special path — normal takeHit owns HP/death");
 });
 
-test("cloudline edge: positional reset happens even when takeHit negates the hit (i-frames)", () => {
+test("cloudline edge: stale i-frames at the crossing never eat the landing damage", () => {
   const C = JH.CLOUDLINE_HOLDOUT;
   const g = stubHazardGame(400, 40);
   const edge = new JH.CloudlineEdge(400);
-  g.player.invulnTimer = 1;   // takeHit will return false and skip HP loss
+  // The shove that pushed Jon over usually left live i-frames; they don't
+  // tick during the fall freeze, so the landing clears them — the edge
+  // cost is unconditional.
+  g.player.invulnTimer = 1;
   const hp0 = g.player.hp;
   g.player.x = edge.x;
   edge.update(1 / 60, g);
   runFall(g, edge);
-  assert.ok(Math.abs(g.player.x - (edge.x - C.resetDist)) < 0.001,
-    "positional reset is unconditional, independent of takeHit's landed/negated result");
-  assert.strictEqual(g.player.hp, hp0, "a negated hit costs no HP");
+  assert.ok(Math.abs(g.player.x - (g.bounds.minX + C.reentryInset)) < 0.001,
+    "positional reset is unconditional");
+  assert.strictEqual(hp0 - g.player.hp, C.edgeDmg,
+    "the edge damage lands despite i-frames that were live at the crossing");
+  assert.ok(g.player.invulnTimer > 0, "landing re-grants fresh i-frames through takeHit");
 });
 
 test("cloudline edge: one crossing, one sequence — no re-arm mid-fall or multi-hit after landing", () => {

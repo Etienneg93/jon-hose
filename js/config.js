@@ -848,14 +848,14 @@
   // ---- Cloudline Holdout: wave 33's walkway-edge hazard + reinforcement
   // cadence. holdDur/spawnEvery/maxAlive feed Game.startWave/holdoutCadence
   // for the cloudlineEdge holdout (the ONLY source — the wave data carries
-  // no holdDur of its own); edgeInset/resetDist/edgeDmg drive JH.CloudlineEdge.
+  // no holdDur of its own); edgeInset/reentryInset/edgeDmg drive JH.CloudlineEdge.
   JH.CLOUDLINE_HOLDOUT = {
     holdDur: 24,
     spawnEvery: 1.35,
     maxAlive: 4,
     edgeInset: 28,     // px inward from bounds.maxX where the edge line sits
-    resetDist: 54,     // px inward from the edge a crossing resets Jon to
-    edgeDmg: 12,       // HP routed through Player.takeHit on every crossing
+    reentryInset: 40,  // px in from bounds.minX where the fall drops Jon back in — the far LEFT, clear of the edge
+    edgeDmg: 12,       // HP routed through Player.takeHit on every crossing (landing impact)
   };
 
   // ---- Wind hazard ("sky vent"): stationary wave terrain gusts blow you
