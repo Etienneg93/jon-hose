@@ -42,6 +42,7 @@ tag shows `v{version} · {sha}` from package.json.
 
 ```
 sed -i 's/"version": "OLD"/"version": "NEW"/' package.json
+sed -i 's/version: "OLD"/version: "NEW"/' js/config.js   # JH.TELEMETRY.version — the gameVersion clients submit; the leaderboard sorts NEWER VERSION FIRST, so a missed bump buries every new run (drifted 0.29->0.31 unnoticed before this line existed)
 # edit CHANGELOG.md
 npm test                                # must pass
 git add -u && git commit -m "release: vNEW - Name ..."   # on working branch
