@@ -792,6 +792,22 @@ function runFall(g, edge) {
   return frames;
 }
 
+test("cloudline edge: enemies are bounded by the lip — grounded clamp, airborne exempt until landing", () => {
+  const g = stubHazardGame(100, 40);
+  const edge = new JH.CloudlineEdge(400);
+  const grounded = { x: 396, y: 40, z: 0, bodyW: 14, dead: false };   // rim 403, past the line
+  const flier    = { x: 440, y: 40, z: 60, bodyW: 14, dead: false };  // mummy-style sky entrant
+  const corpse   = { x: 440, y: 40, z: 0, bodyW: 14, dead: true };
+  g.enemies.push(grounded, flier, corpse);
+  edge.update(1 / 60, g);
+  assert.strictEqual(grounded.x, 400 - 7, "grounded enemy clamped so its forward rim sits on the lip");
+  assert.strictEqual(flier.x, 440, "airborne entrant exempt while z > 0");
+  assert.strictEqual(corpse.x, 440, "corpses untouched");
+  flier.z = 0;
+  edge.update(1 / 60, g);
+  assert.strictEqual(flier.x, 400 - 7, "the entrant is clamped the frame it lands");
+});
+
 test("cloudline edge: crossing runs the fall sequence — far-left landing, edge damage via takeHit only", () => {
   const C = JH.CLOUDLINE_HOLDOUT;
   const g = stubHazardGame(400, 40);

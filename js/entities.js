@@ -3029,6 +3029,16 @@
       this.t += dt;
       if (this.flashT > 0) this.flashT -= dt;
       if (this.poofT > 0) this.poofT -= dt;
+      // Enemies are BOUNDED by the lip — nothing stands on the void. Same
+      // forward-rim math as crossed(); runs after the enemy tick (game.js
+      // update order), so walks and knockbacks can't leave anyone out there.
+      // Airborne entrants (mummy streamer drop-ins from the sky side) are
+      // exempt until they land.
+      for (const en of game.enemies) {
+        if (en.dead || (en.z || 0) > 0) continue;
+        const ehalf = (en.bodyW || 12) * 0.5;
+        if (en.x + ehalf > this.x) en.x = this.x - ehalf;
+      }
       const pl = game.player;
       if (!pl || !pl.alive || this.fall || !this.crossed(pl)) return;
       // Crossing arms the fall sequence — game.update freezes play into
